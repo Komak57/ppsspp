@@ -1339,6 +1339,27 @@ static u32 sceUtilityUnloadUsbModule(u32 module)
 	return hleNoLog(0);
 }
 
+static void sceUtilityPsnInitStart(int param_1)
+{
+	// Related Flag for PSP2i => "JP0177-NPJH50332_00"
+	WARN_LOG_REPORT(Log::sceUtility, "UNIMPL sceUtilityPsnInitStart(%i)", param_1);
+	return hleNoLogVoid();
+}
+
+static int sceUtilityPsnGetStatus()
+{
+	/* PSN Status Codes
+	0: PSN Login Successful
+		Flag at 0x84 calls sceRtcGetCurrentNetworkTick
+	1: PSN Busy
+	2: call sceUtilityPsnUpdate
+	3: call local PsnUpdate? => FUN_08dfce7c
+	4: Special Busy State
+	default: Login Failed
+	*/
+	return hleLogError(Log::sceUtility, 0, "UNIMPL");
+}
+
 const HLEFunction sceUtility[] =
 {
 	{0X1579A159, &WrapU_U<sceUtilityLoadNetModule>,                "sceUtilityLoadNetModule",                'x', "x"  },
@@ -1441,9 +1462,9 @@ const HLEFunction sceUtility[] =
 	{0XCFE7C460, nullptr,                                          "sceUtility_CFE7C460",                    '?', ""   },
 
 	{0XC130D441, nullptr,                                          "sceUtilityPsnShutdownStart",             '?', ""   },
-	{0XA7BB7C67, nullptr,                                          "sceUtilityPsnInitStart",                 '?', ""   },
+	{ 0XA7BB7C67, &WrapV_I<sceUtilityPsnInitStart>,				   "sceUtilityPsnInitStart",                 'v', "x" },
 	{0X0940A1B9, nullptr,                                          "sceUtilityPsnUpdate",                    '?', ""   },
-	{0X094198B8, nullptr,                                          "sceUtilityPsnGetStatus",                 '?', ""   },
+	{ 0X094198B8, &WrapI_V<sceUtilityPsnGetStatus>,				   "sceUtilityPsnGetStatus",                 'i', "" },
 
 	{0X9F313D14, nullptr,                                          "sceUtilityAutoConnectShutdownStart",     '?', ""   },
 	{0X3A15CD0A, nullptr,                                          "sceUtilityAutoConnectInitStart",         '?', ""   },

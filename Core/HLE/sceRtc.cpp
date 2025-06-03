@@ -963,6 +963,13 @@ static int sceRtcFormatRFC3339LocalTime(u32 outPtr, u32 srcTickPtr)
 	return __RtcFormatRFC3339(outPtr, srcTickPtr, tz_seconds / 60);
 }
 
+static int sceRtcGetCurrentNetworkTick(u32 tick)
+{
+	// Should get time from network, but we'll return local time for now
+	tick = 1000000ULL * rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
+	return hleLogWarning(Log::sceNet, 0, "UNIMPL");
+}
+
 const HLEFunction sceRtc[] =
 {
 	{0XC41C2853, &WrapU_V<sceRtcGetTickResolution>,        "sceRtcGetTickResolution",        'x', ""   },
@@ -1006,7 +1013,7 @@ const HLEFunction sceRtc[] =
 	{0X62685E98, &WrapI_U<sceRtcGetLastAdjustedTime>,      "sceRtcGetLastAdjustedTime",      'i', "x"  },
 	{0X203CEB0D, &WrapI_U<sceRtcGetLastReincarnatedTime>,  "sceRtcGetLastReincarnatedTime",  'i', "x"  },
 	{0X7D1FBED3, &WrapI_UU<sceRtcSetAlarmTick>,            "sceRtcSetAlarmTick",             'i', "xx" },
-	{0XF5FCC995, nullptr,                                  "sceRtcGetCurrentNetworkTick",    '?', ""   },
+	{0XF5FCC995, &WrapI_U<sceRtcGetCurrentNetworkTick>,    "sceRtcGetCurrentNetworkTick",    'i', "x"  },
 	{0X81FCDA34, nullptr,                                  "sceRtcIsAlarmed",                '?', ""   },
 	{0XFB3B18CD, nullptr,                                  "sceRtcRegisterCallback",         '?', ""   },
 	{0X6A676D2D, nullptr,                                  "sceRtcUnregisterCallback",       '?', ""   },

@@ -147,4 +147,5 @@ RAPrefs_PPSSPP.cfg
 # For CLion
 cmake-build-*/
 
-/.vscode/
+# git submodule update --init --recursive
+ext/vulkan/

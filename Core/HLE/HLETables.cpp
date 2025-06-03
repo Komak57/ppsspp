@@ -85,7 +85,7 @@
 #include "KUBridge.h"
 #include "sceNetInet.h"
 #include "sceNetResolver.h"
-// #include "sceNp2.h"
+#include "sceNp2.h"
 #include "sceNet_lib.h"
 
 #define N(s) s
@@ -326,7 +326,7 @@ void RegisterAllModules() {
 	Register_sceNet_lib();
 	Register_sceReg();
 	// Not ready to enable this due to apparent softlocks in Patapon 3.
-	// Register_sceNpMatching2();
+	Register_sceNpMatching2();
 
 	// add new modules here.
 }
