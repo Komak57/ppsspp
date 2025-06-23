@@ -141,6 +141,10 @@
 #define SCE_NP_MATCHING2_SIGNALING_ERROR_TERMINATED_BY_MYSELF			0x80550e18
 #define SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND		0x80550e19
 
+#define SCE_NP_MATCHING2_SIGNALING_EVENT_Dead							0x5101
+#define SCE_NP_MATCHING2_SIGNALING_EVENT_Established					0x5102
+#define SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult					0x5103
+
 // Based on https://github.com/RPCS3/rpcs3/blob/master/rpcs3/Emu/Cell/Modules/sceNp2.h (Just as reference, might be slightly different than PSP)
 // Event of request functions
 enum PS3Matching2RequestEvent

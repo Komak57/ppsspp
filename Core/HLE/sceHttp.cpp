@@ -32,6 +32,11 @@
 #include "Common/LogReporting.h"
 #include "Common/Net/URL.h"
 #include "Common/Net/HTTPClient.h"
+ // HTTPS Requirements from OpenSSL 1.1.1
+//#include <openssl/ssl.h>
+//#include <openssl/err.h>
+//#include <openssl/x509.h>
+//#include <openssl/x509_vfy.h>
 
 
 static std::vector<std::shared_ptr<HTTPTemplate>> httpObjects;
@@ -40,6 +45,8 @@ static std::mutex httpLock;
 bool httpInited = false;
 bool httpsInited = false;
 bool httpCacheInited = false;
+
+//static SSL_CTX* pspSslCtx = nullptr;
 
 HTTPTemplate::HTTPTemplate(const char* userAgent, int httpVer, int autoProxyConf) {
 	this->userAgent = userAgent ? userAgent : "";
@@ -522,8 +529,60 @@ static int sceHttpDisableKeepAlive(int id) {
 	return 0;
 }
 
-static int sceHttpsInit(int unknown1, int unknown2, int unknown3, int unknown4) {
-	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpsInit(%d, %d, %d, %x)", unknown1, unknown2, unknown3, unknown4);
+static int sceHttpsInit(int unknown1, int certPtr, int unknown3, int unknown4) {
+	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpsInit(%d, %d, %d, %x)", unknown1, certPtr, unknown3, unknown4);
+	if (httpsInited) {
+		return 0;  // Already initialized
+	}
+
+	const char* certPEM = *(const char**)Memory::GetPointer(certPtr);
+	if (!certPEM) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: certPtr is null");
+		return -1;
+	}
+
+	// TODO: add OpenSSL 1.1.1 for TLS1.0 support for games like PSPo2i
+	
+	//SSL_library_init();
+	//OpenSSL_add_all_algorithms();
+	//SSL_load_error_strings();
+
+	//pspSslCtx = SSL_CTX_new(TLSv1_method());  // TLS 1.0 only
+	//if (!pspSslCtx) {
+	//	ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to create SSL_CTX");
+	//	return -1;
+	//}
+
+	//// Disable everything but TLS 1.0
+	//SSL_CTX_set_options(pspSslCtx,
+	//	SSL_OP_NO_SSLv2 |
+	//	SSL_OP_NO_SSLv3 |
+	//	SSL_OP_NO_TLSv1_1 |
+	//	SSL_OP_NO_TLSv1_2 |
+	//	SSL_OP_NO_TLSv1_3);
+
+	//BIO* bio = BIO_new_mem_buf(certPEM, -1);
+	//if (!bio) {
+	//	ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to create BIO");
+	//	SSL_CTX_free(pspSslCtx);
+	//	pspSslCtx = nullptr;
+	//	return -1;
+	//}
+
+	//X509* cert = PEM_read_bio_X509(bio, nullptr, 0, nullptr);
+	//BIO_free(bio);
+
+	//if (!cert) {
+	//	ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to parse cert");
+	//	SSL_CTX_free(pspSslCtx);
+	//	pspSslCtx = nullptr;
+	//	return -1;
+	//}
+
+	//X509_STORE* store = SSL_CTX_get_cert_store(pspSslCtx);
+	//X509_STORE_add_cert(store, cert);
+	//X509_free(cert);
+
 	httpsInited = true;
 	return 0;
 }
