@@ -248,8 +248,51 @@ struct NpMatching2Handler {
 // Arg5 seems to be boolean (0/1), mostly 0, conditional when Arg1=0x0001
 // Arg7 seems to be integer/state? (0..2), mostly 0, conditional when Arg1=0x0108 (0 on SendRoomMessage, 2 on others), 1 when Arg1=0xa102
 struct NpMatching2Args {
+	// Now allows for optional arguments to be omitted in the sending process.
+	// Maintains the same structure and usage as previosuly, but now contains count as the highest assigned index
+	/*static const size_t MAX_ARGS = 11;
+
+	struct uint32_array {
+		NpMatching2Args& parent;
+
+		uint32_t values[MAX_ARGS] = {};
+		size_t* count = nullptr;
+
+		operator uint32_t* () {
+			return parent.data.values;
+		}
+
+		uint32_t& operator[](size_t index) {
+			if (index >= MAX_ARGS)
+				throw std::out_of_range("NpMatching2Args index out of range");
+			if (index >= *count)
+				*count = index + 1;
+			return values[index];
+		}
+
+		const uint32_t& operator[](size_t index) const {
+			if (index >= MAX_ARGS)
+				throw std::out_of_range("NpMatching2Args index out of range");
+			return values[index];
+		}
+	};
+	size_t count = 0;
+	uint32_array data{ *this };
+
+	NpMatching2Args() {
+		data.count = &count;
+	}*/
 	u32_le data[11]; // 7 elements (excluding optional data)? or may be 11 elements (including optional data)?
 	// May be followed by optional data? since these Args usually created on the stack
+};
+
+// 0x88 bytes
+struct RoomInfo {
+	u16 ID;
+	u16 Port;
+	u8 Status;
+	std::string Host;
+	u32 IPAddr = 910526074; // elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net [54.69.134.122]
 };
 
 #pragma pack(pop)

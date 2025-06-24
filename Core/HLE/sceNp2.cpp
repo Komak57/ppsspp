@@ -24,9 +24,11 @@
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/sceNp.h"
 #include "Core/HLE/sceNp2.h"
+#include "sceNetResolver.cpp"
 
 bool npMatching2Inited = false;
 SceNpAuthMemoryStat npMatching2MemStat = {};
+std::vector<RoomInfo> servers;
 
 std::recursive_mutex npMatching2EvtMtx;
 std::deque<NpMatching2Args> npMatching2Events;
@@ -55,9 +57,9 @@ bool NpMatching2ProcessEvents() {
 
 	auto& args = npMatching2Events.front();
 	auto& ctx = args.data[0];
-	auto& inStructPtr = args.data[3];
+	auto& inStructPtr = args.data[7];
 	auto& event = args.data[5];
-	auto& serverIdPtr = args.data[7];
+	auto& serverIdPtr = args.data[3];
 	//auto& newStat = args.data[5];
 	npMatching2Events.pop_front();
 
@@ -163,7 +165,7 @@ static int sceNpMatching2ContextStart(int ctxId)
 	if (!client.Resolve(url.Host().c_str(), url.Port())) {
 		return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "HTTP failed to resolve %s", url.Resource().c_str());
 	}
-
+	
 	client.SetDataTimeout(20.0);
 	if (client.Connect()) {
 		char requestHeaders[4096];
@@ -208,8 +210,10 @@ static int sceNpMatching2ContextStart(int ctxId)
 		text = entity.substr(ofs, ofs2-ofs);
 		INFO_LOG(Log::sceNet, "%s - Title ID: %s", __FUNCTION__, text.c_str());
 
+		servers = {};
 		int i = 1;
 		while (true) {
+			RoomInfo server = {};
 			ofs = entity.find("<agent-fqdn", ++ofs2);
 			if (ofs == std::string::npos) {
 				if (i == 1)
@@ -226,6 +230,7 @@ static int sceNpMatching2ContextStart(int ctxId)
 			ofs += 4;
 			ofs2 = entity.find('"', ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
+			server.ID = std::stoi(text.c_str());
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d ID: %s", __FUNCTION__, i, text.c_str());
 
 			ofs = entity.find("port=", frontPos);
@@ -235,6 +240,7 @@ static int sceNpMatching2ContextStart(int ctxId)
 			ofs += 6;
 			ofs2 = entity.find('"', ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
+			server.Port = std::stoi(text.c_str());
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Port: %s", __FUNCTION__, i, text.c_str());
 
 			ofs = entity.find("status=", frontPos);
@@ -244,6 +250,10 @@ static int sceNpMatching2ContextStart(int ctxId)
 			ofs += 8;
 			ofs2 = entity.find('"', ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
+			if (strcmp(text.c_str(), "alive"))
+				server.Status = 1;
+			else
+				server.Status = 0;
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Status: %s", __FUNCTION__, i, text.c_str());
 
 			ofs = entity.find('>', ++ofs2);
@@ -252,8 +262,12 @@ static int sceNpMatching2ContextStart(int ctxId)
 
 			ofs2 = entity.find("</agent-fqdn", ++ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
+			server.Host = text.c_str();
+			// TODO: Get IPAddr from DNS
+			//server.IPAddr = std::stoi();
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Host: %s", __FUNCTION__, i, text.c_str());
 
+			servers.push_back(server);
 			i++;
 		}
 	}
@@ -362,6 +376,11 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 	return 0;
 }
 
+static int sceNpMatching2SignalingGetConnectionStatus(int unk) {
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d) at %08x", __FUNCTION__, unk, currentMIPS->pc);
+	return 0;
+}
+
 static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int maxServerIds)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %d) at %08x", __FUNCTION__, ctxId, serverIdsPtr, maxServerIds, currentMIPS->pc);
@@ -371,11 +390,20 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 	if (!Memory::IsValidAddress(serverIdsPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	// Returning dummy Id, a 16-bit variable according to JPCSP
-	for (int i = 0; i < maxServerIds; i++)
-		Memory::Write_U16(1+i, serverIdsPtr+(i*2));
+	//for (int i = 0; i < maxServerIds; i++)
+	// Just write the list or ServerID's, a 16-bit variable according to JPCSP
+	int s = 0;
+	for (const auto& server : servers) {
+		if (s > maxServerIds) {
+			ERROR_LOG(Log::sceNet, "%s(%d, %08x, %d): %d servers allocated > %d servers requested", __FUNCTION__, ctxId, serverIdsPtr, maxServerIds, servers.size(), maxServerIds);
+			break;
+		}
+		Memory::Write_U16(server.ID, serverIdsPtr + (s*2));
+		s++;
+	}
 
-	return maxServerIds; // dummy value
+	//return maxServerIds; // dummy value
+	return servers.size();
 }
 
 // Unknown1 = optParam, unknown2 = assignedReqId according to https://github.com/RPCS3/rpcs3/blob/master/rpcs3/Emu/Cell/Modules/sceNp2.cpp ?
@@ -402,9 +430,52 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 	// 	   0004 32-bit pointer to a struct? (callback args?) 0x09888158 (contains 32-bit (-1) + 32-bit (1) + 16-bit ctxId(0001) + 32bit 0x06913801? + 16-bit serverId(1234), so on), probably only 2x 32-bit struct?
 	// 	   0008 32-bit set to 0
 	// 	   000a 16-bit set to 0
-	//
 	u32 cbFunc = Memory::Read_U32(optParam);
 	u32 cbArg = Memory::Read_U32(optParam + 0x04);
+
+	// Pull struct for debugging
+
+	// Additional values
+	//u16 _member_id = Memory::Read_U16(cbArg + 0x8b0);
+	//u8 _conn_status = Memory::Read_U8(cbArg + 0x903);
+
+	//u16 member_id = 0;
+	//Memory::Write_U16(member_id, cbArg + 0x8b0);
+
+	// Write Server Info
+	//int offset = 0;
+	//for (const auto& server : servers) {
+	//	uint32_t basePtr = cbArg + offset;
+
+	//	Memory::Write_U32(server.IPAddr, basePtr + 0);
+	//	Memory::Write_U16(server.Port, basePtr + 4);
+
+	//	Memory::Write_U16(server.ID, basePtr + 0x08);
+
+	//	// Connection State
+	//	Memory::Write_U32(0, basePtr + 0x50);
+
+	//	offset += 0x88;
+	//}
+
+	int offset = 0;
+	//for (const auto& server : servers) {
+		uint32_t basePtr = cbArg + offset;
+		Memory::Write_U32(-1, basePtr + 0x00);							// Pointer Offset to function table at 0x08e70000
+		Memory::Write_U32(1, basePtr + 0x04);							// Pointer to struct containing server info?
+		Memory::Write_U16(servers.size(), basePtr + 0x08);				// Has Room?
+		Memory::Write_U32(servers[serverId].IPAddr, basePtr + 0x0c);	// ?
+		Memory::Write_U16(servers[serverId].ID, basePtr + 0x10);		// ?
+		Memory::Write_U32(ctxId, basePtr + 0x1e);						// ctxId
+		Memory::Write_U8(0, basePtr + 0x38);							// ?
+		Memory::Write_U32(0, basePtr + 0x40);							// ?
+		Memory::Write_U32(0, basePtr + 0x44);							// ?
+
+		Memory::Write_U32(2, basePtr + 0x50);							// Connection State || 1 == dead, 2 == established
+		Memory::Write_U32(0, basePtr + 0x54);							// Error Flag
+
+		//offset += 0x88;
+	//}
 
 	// Notify callback handler
 	if (Memory::IsValidAddress(cbFunc)) {
@@ -424,11 +495,11 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 		args.data[0] = ctxId;						// ContextID || PSP_NP_MATCHING2_EVENT_0001; // MIPSCompileOp Instruction
 		args.data[1] = PSP_NP_MATCHING2_EVENT_0001;	// Unknown   || PSP_NP_MATCHING2_STATE_1001; // MIPSCompileOp Instruction
 		args.data[2] = PSP_NP_MATCHING2_STATE_1001;	// Unknown   || serverId or was it pointing to optional data at last arg (ie. args[10] where serverId is stored)?
-		args.data[3] = optParam;					// Unknown 
-		args.data[4] = serverId;					// MemberID  || some index matched against the room info to determine if the room exists?
-		args.data[5] = SCE_NP_MATCHING2_SIGNALING_EVENT_Established; // EventCode == arg[5] & 0xffff
+		args.data[3] = serverIdPtr;					// Unknown 
+		args.data[4] = 0;							// MemberID  || some index matched against the room info to determine if the room exists?
+		args.data[5] = SCE_NP_MATCHING2_SIGNALING_EVENT_Established; // EventCode == arg[5] & 0xffff || Established | Dead | NetinfoResult || UNKNOWN_EVENT
 		args.data[6] = 0;							// Error >= 0 || Doesn't seem to be affected by this value directly
-		args.data[7] = serverIdPtr;					// Pointer to struct containing room info
+		args.data[7] = cbArg;						// Pointer to struct containing room info
 		//args.data[8] = 8;// or a pointer to a struct related to context ?
 		//args.data[9] = 9;// or a pointer to a struct related to context and matched serverId ?
 		//args.data[10] = optParam; // pointer to jump address
@@ -474,6 +545,11 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, 
 	}
 
 	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
+	return 0;
+}
+
+static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 callbackFunctionAddr, int unk) {
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x[%08x], %08x[%08x], %d) at %08x", __FUNCTION__, ctxId, reqParamPtr, Memory::Read_U32(reqParamPtr), callbackFunctionAddr, Memory::Read_U32(callbackFunctionAddr), unk, currentMIPS->pc);
 	return 0;
 }
 
@@ -596,7 +672,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0xDFEDB642, nullptr,												"sceNpMatching2SignalingGetPeerNetInfoResult",	'i', "" 	  },
 	{0x9462C05A, nullptr,												"sceNpMatching2SignalingCancelPeerNetInfo",		'i', "" 	  },
 	{0x3892E9A6, nullptr,												"sceNpMatching2SignalingGetConnectionInfo",		'i', "" 	  },
-	{0x6D6D0C75, nullptr,												"sceNpMatching2SignalingGetConnectionStatus",	'i', "" 	  },
+	{0x6D6D0C75, &WrapI_I<sceNpMatching2SignalingGetConnectionStatus>,	"sceNpMatching2SignalingGetConnectionStatus",	'i', "i" 	  },
 
 	{0x2E61F6E1, &WrapI_IIII<sceNpMatching2Init>,						"sceNpMatching2Init",							'i', "iiii"   },
 	{0x8BF37D8C, &WrapI_V<sceNpMatching2Term>,							"sceNpMatching2Term",							'i', ""       },
@@ -610,7 +686,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0xE6C93DBD, nullptr,												"sceNpMatching2SetRoomDataInternal",			'i', "" 	  },
 	{0xE313E586, nullptr,												"sceNpMatching2GetRoomDataInternal",			'i', "" 	  },
 	{0xEF683F4F, nullptr,												"sceNpMatching2GetRoomDataInternalLocal",		'i', "" 	  },
-	{0xD7D4AEB2, nullptr,												"sceNpMatching2SetRoomDataExternal",			'i', "" 	  },
+	{0xD7D4AEB2, &WrapI_IUUI<sceNpMatching2SetRoomDataExternal>,		"sceNpMatching2SetRoomDataExternal",			'i', "ixxi"   },
 	{0x12C5A111, nullptr,												"sceNpMatching2GetRoomDataExternalList",		'i', ""		  },
 	{0xF739BE92, nullptr,												"sceNpMatching2GetRoomPasswordLocal",			'i', "" 	  },
 
