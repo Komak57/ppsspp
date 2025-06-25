@@ -28,12 +28,15 @@
 
 bool npMatching2Inited = false;
 SceNpAuthMemoryStat npMatching2MemStat = {};
-std::map<int, RoomInfo> servers;
+u32 npPoolAddr = 0;
+BlockAllocator np_memory;
 
 std::recursive_mutex npMatching2EvtMtx;
 std::deque<NpMatching2Args> npMatching2Events;
 std::map<int, NpMatching2Handler> npMatching2Handlers;
 //std::map<int, NpMatching2Context> npMatching2Contexts;
+
+std::map<int, RoomInfo> servers;
 
 static int GenerateCallbackInfo(int ctxId, u32 optParam, u32 event_type) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, optParam, event_type, currentMIPS->pc);
@@ -110,11 +113,37 @@ bool NpMatching2ProcessEvents() {
 	return false;
 }
 
+static inline u32 AllocUser(u32 size, bool fromTop, const char* name) {
+	u32 addr = userMemory.Alloc(size, fromTop, name);
+	if (addr == -1)
+		return 0;
+	return addr;
+}
+
+static inline void FreeUser(u32& addr) {
+	if (addr != 0)
+		userMemory.Free(addr);
+	addr = 0;
+}
+
 static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityMask, int threadStackSize)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %d, %d, %d) at %08x", __FUNCTION__, poolSize, threadPriority, cpuAffinityMask, threadStackSize, currentMIPS->pc);
 	//if (npMatching2Inited)
 	//	return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ALREADY_INITIALIZED);
+
+	if (poolSize == 0) {
+		return hleLogError(Log::sceNet, SCE_KERNEL_ERROR_ILLEGAL_MEMSIZE, "invalid pool size");
+	}
+	else if (threadPriority < 0x08 || threadPriority > 0x77) {
+		return hleLogError(Log::sceNet, SCE_KERNEL_ERROR_ILLEGAL_PRIORITY, "invalid init thread priority");
+	}
+
+	npPoolAddr = AllocUser(poolSize, false, "np2pool");
+	if (npPoolAddr == 0) {
+		return hleLogError(Log::sceNet, SCE_KERNEL_ERROR_NO_MEMORY, "unable to allocate pool");
+	}
+	np_memory.Init(npPoolAddr, poolSize, false);
 
 	npMatching2MemStat.npMemSize = poolSize - 0x20;
 	npMatching2MemStat.npMaxMemSize = 0x4050; // Dummy maximum foot print
@@ -132,6 +161,8 @@ static int sceNpMatching2Term()
 	npMatching2Inited = false;
 	npMatching2Handlers.clear();
 	npMatching2Events.clear();
+
+	FreeUser(npPoolAddr);
 
 	return 0;
 }
@@ -453,7 +484,7 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 // Unknown1 = optParam, unknown2 = assignedReqId according to https://github.com/RPCS3/rpcs3/blob/master/rpcs3/Emu/Cell/Modules/sceNp2.cpp ?
 static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam, u32 assignedReqId)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqId, Memory::Read_U32(assignedReqId), currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqId, Memory::Read_U32(assignedReqId), currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -465,7 +496,7 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 	int serverId = Memory::Read_U16(serverIdPtr);
 
 	if (serverId == 0)
-		return hleLogError(Log::sceNet, 0x80550CBF); // Should be SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID ?
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID); // Should be SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID ?
 
 	// Output to unknown1(infoBuffer)? and unknown2(infoLength or flags)?
 	// Patapon 3 is using serverId at 09FFF2F4, unknown1 at 09FFF2E4, unknown2 at 09FFF2E0, which mean unknown1's can only fit upto 16-bytes
@@ -486,12 +517,9 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 	u32 cbFunc = Memory::Read_U32(optParam);			// Callback to a getServerInfo function
 	u32 cbArg = Memory::Read_U32(optParam + 0x04);		// Struct containing data
 	u32 request_id = Memory::Read_U32(optParam + 0x10);		// Request ID in OptParam, suppose to be at 0x0c
-	//u32 _request_id = Memory::Read_U32(assignedReqId);	// Pointer to u32 Request ID
-	// Additional values
-	u32 ptr = Memory::Read_U32(cbArg);
-	u32 val = Memory::Read_U32(cbArg + 0x04);
 
-	WARN_LOG(Log::sceNet, "%s - (cbFunc: %08x, cbArg: %08x, reqId: %08, cbArgs[0]: %08x, cbArgs[1]: %d) at %08x", __FUNCTION__, cbFunc, cbArg, request_id, ptr, val, currentMIPS->pc);
+
+	DEBUG_LOG(Log::sceNet, "%s - (cbFunc: %08x, cbArg: %08x, reqId: %08) at %08x", __FUNCTION__, cbFunc, cbArg, request_id, currentMIPS->pc);
 
 	//int offset = 0;
 	//uint32_t basePtr = cbArg + offset;
@@ -511,7 +539,13 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 
 	// Will only process 1 server request at a time
 	RoomInfo server = servers[serverId];
-	u32 serverInfo = (static_cast<u16>(server.ID) << 16 | static_cast<u8>(server.Status) << 8);
+	//u32 serverInfo = (static_cast<u16>(server.ID) << 16 | static_cast<u8>(server.Status) << 8);
+	u32 infoSize = 4;
+
+	// Allocate space, and write value into the pool
+	u32 serverInfoPtr = np_memory.Alloc(infoSize);
+	Memory::Write_U16(server.ID, serverInfoPtr);
+	Memory::Write_U8(server.Status, serverInfoPtr+2);
 
 	// Notify callback handler
 	if (Memory::IsValidAddress(cbFunc)) {
@@ -543,7 +577,7 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 		args[1] = request_id;					// RequestId || 0 indicates aborted request
 		args[2] = SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo;	// Event
 		args[3] = 0;							// ErrorCode
-		args[4] = serverInfo;					// ServerInfo [ u16 ID, u8 Status, 0x00 ]
+		args[4] = serverInfoPtr;				// ServerInfo struct [ u16 ID, u8 Status, 0x00 ]
 		args[5] = cbArg;						// Struct to some valid information?
 
 		//for (int i = 0; i <= 9; i++) {
@@ -554,7 +588,68 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 		//hleEnqueueCall(cbFunc, 6, args.data);
 		notifyNpMatching2Handlers(ctxId, 6, args);
 		//notifyNpMatching2Handlers(args, ctxId, serverId, cbFunc, cbArg, 0, 0, 0, 1);
-		Memory::Write_U32(PSP_NP_MATCHING2_STATE_1001, assignedReqId);
+		if (Memory::IsValidAddress(assignedReqId))
+			Memory::Write_U32(request_id, assignedReqId);
+	}
+
+	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
+	return 0;
+}
+
+static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optParam, u32 assignedReqId) {
+
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqId, Memory::Read_U32(assignedReqId), currentMIPS->pc);
+	if (!npMatching2Inited)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
+
+	if (!Memory::IsValidAddress(serverIdPtr) || !Memory::IsValidAddress(assignedReqId))
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_MAX); // Should be SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT ?
+
+	// Server ID is a 16-bit variable according to JPCSP
+	// serverIdPtr should be ReadOnly
+	int serverId = Memory::Read_U16(serverIdPtr);
+
+	if (serverId == 0)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID); // Should be SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID ?
+
+	u32 cbFunc = Memory::Read_U32(optParam);			// Callback to a getServerInfo function
+	u32 cbArg = Memory::Read_U32(optParam + 0x04);		// Struct containing data
+	u32 request_id = Memory::Read_U32(optParam + 0x10);		// Request ID in OptParam, suppose to be at 0x0c
+
+	DEBUG_LOG(Log::sceNet, "%s - (cbFunc: %08x, cbArg: %08x, reqId: %08) at %08x", __FUNCTION__, cbFunc, cbArg, request_id, currentMIPS->pc);
+
+	// Will only process 1 server request at a time
+	RoomInfo server = servers[serverId];
+	//u32 infoSize = 4;
+
+	// Allocate space, and write value into the pool
+	//u32 worldInfoPtr = np_memory.Alloc(infoSize);
+	//Memory::Write_U16(server.ID, worldInfoPtr);
+	//Memory::Write_U8(server.Status, worldInfoPtr + 2);
+
+	// Notify callback handler
+	if (Memory::IsValidAddress(cbFunc)) {
+		// TODO: PS3 obtains request_id via optParam->appReqId but value is 0?
+		request_id = GenerateCallbackInfo(ctxId, optParam, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList);
+
+		u32_le args[6];
+		args[0] = ctxId;						// ContextID
+		args[1] = request_id;					// RequestId || 0 indicates aborted request
+		args[2] = SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList;	// Event
+		args[3] = 0;							// ErrorCode
+		args[4] = 0;							// WorldInfo struct [ ??? ]
+		args[5] = cbArg;						// Struct to some valid information?
+
+		//for (int i = 0; i <= 9; i++) {
+		//	Memory::Write_U32(i, optParam +(i*4)); // Clear Params
+		//}
+
+		WARN_LOG(Log::sceNet, "%s - FUN_%08x(%d, %d, %d, %d, %08x, %d)", __FUNCTION__, cbFunc, args[0], args[1], args[2], args[3], args[4], args[5]);
+		//hleEnqueueCall(cbFunc, 6, args.data);
+		notifyNpMatching2Handlers(ctxId, 6, args);
+		//notifyNpMatching2Handlers(args, ctxId, serverId, cbFunc, cbArg, 0, 0, 0, 1);
+		if (Memory::IsValidAddress(assignedReqId))
+			Memory::Write_U32(request_id, assignedReqId);
 	}
 
 	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
@@ -706,7 +801,7 @@ static int sceNpMatching2SendRoomChatMessage(int ctxId, u32 reqParamPtr, u32 opt
 const HLEFunction sceNpMatching2[] = {
 	{0xF47342FC, &WrapI_IUI<sceNpMatching2GetServerIdListLocal>,		"sceNpMatching2GetServerIdListLocal",			'i', "ixi"    },
 	{0x4EE3A8EC, &WrapI_IUUU<sceNpMatching2GetServerInfo>,				"sceNpMatching2GetServerInfo",					'i', "ixxx"   },
-	{0xA53E7C69, nullptr,												"sceNpMatching2GetWorldInfoList",				'i', "" 	  },
+	{0xA53E7C69, &WrapI_IUUU< sceNpMatching2GetWorldInfoList>,			"sceNpMatching2GetWorldInfoList",				'i', "ixxx"   },
 	{0x631682CC, nullptr,												"sceNpMatching2SetDefaultRequestOptParam",		'i', "" 	  },
 	{0x22F38DAF, &WrapI_U<sceNpMatching2GetMemoryStat>,					"sceNpMatching2GetMemoryStat",					'i', "x"      },
 	{0x7D1D5F5E, nullptr,												"sceNpMatching2SetUserInfo",					'i', "" 	  },
