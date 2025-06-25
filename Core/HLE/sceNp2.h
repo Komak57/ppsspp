@@ -16,7 +16,10 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #pragma once
-
+#include <sstream>
+#include <string>
+#include <iomanip>
+#include <cstdint>
 
 #pragma pack(push,1)
 
@@ -235,6 +238,15 @@ enum PS3Matching2RequestEvent
 
 #define PSP_NP_MATCHING2_MAX_CONTEXTID	7;
 
+// Server status
+enum
+{
+	SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE = 1,
+	SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE = 2,
+	SCE_NP_MATCHING2_SERVER_STATUS_BUSY = 3,
+	SCE_NP_MATCHING2_SERVER_STATUS_MAINTENANCE = 4,
+};
+
 struct NpMatching2Handler {
 	u32 entryPoint;
 	u32 argument;
@@ -247,52 +259,44 @@ struct NpMatching2Handler {
 //		0xa102 with 0x120b.
 // Arg5 seems to be boolean (0/1), mostly 0, conditional when Arg1=0x0001
 // Arg7 seems to be integer/state? (0..2), mostly 0, conditional when Arg1=0x0108 (0 on SendRoomMessage, 2 on others), 1 when Arg1=0xa102
+
+// Contains all relevant information for a callback event
 struct NpMatching2Args {
 	// Now allows for optional arguments to be omitted in the sending process.
-	// Maintains the same structure and usage as previosuly, but now contains count as the highest assigned index
-	/*static const size_t MAX_ARGS = 11;
-
-	struct uint32_array {
-		NpMatching2Args& parent;
-
-		uint32_t values[MAX_ARGS] = {};
-		size_t* count = nullptr;
-
-		operator uint32_t* () {
-			return parent.data.values;
-		}
-
-		uint32_t& operator[](size_t index) {
-			if (index >= MAX_ARGS)
-				throw std::out_of_range("NpMatching2Args index out of range");
-			if (index >= *count)
-				*count = index + 1;
-			return values[index];
-		}
-
-		const uint32_t& operator[](size_t index) const {
-			if (index >= MAX_ARGS)
-				throw std::out_of_range("NpMatching2Args index out of range");
-			return values[index];
-		}
-	};
-	size_t count = 0;
-	uint32_array data{ *this };
-
-	NpMatching2Args() {
-		data.count = &count;
-	}*/
-	u32_le data[11]; // 7 elements (excluding optional data)? or may be 11 elements (including optional data)?
+	static const size_t MAX_ARGS = 11;
+	u16 ctxId;
+	//u32 cbFunc;
+	size_t argc = 0;
+	u32_le args[MAX_ARGS]; // 7 elements (excluding optional data)? or may be 11 elements (including optional data)?
 	// May be followed by optional data? since these Args usually created on the stack
+
+	NpMatching2Args(u16 ctxId, size_t argc, u32_le args[]) {
+		this->ctxId = ctxId;
+		this->argc = (argc > MAX_ARGS) ? MAX_ARGS : argc;
+		for (size_t i = 0; i < this->argc; ++i)
+			this->args[i] = args[i];
+	}
+	std::string ToString() {
+		std::ostringstream oss;
+		oss << "";
+
+		for (size_t i = 0; i < argc; ++i) {
+			if (i > 0) oss << ",";
+
+			oss << std::setw(8) << std::setfill('0') << std::hex << args[i];
+		}
+		return oss.str();
+	}
+
 };
 
 // 0x88 bytes
 struct RoomInfo {
-	u16 ID;
+	u16_le ID;
 	u16 Port;
 	u8 Status;
 	std::string Host;
-	u32 IPAddr = 910526074; // elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net [54.69.134.122]
+	u32_le IPAddr = 910526074; // 910526074 || 0x3645867a || 54.69.134.122 || elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net
 };
 
 #pragma pack(pop)
