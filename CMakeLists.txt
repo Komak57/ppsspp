@@ -2932,7 +2932,7 @@ if(TargetBin)
 	else()
 		add_executable(${TargetBin} ${NativeAppSource})
 	endif()
-	target_link_libraries(${TargetBin} ${LinkCommon} Common)
+	target_link_libraries(${TargetBin} ${LinkCommon} Common mbedtls mbedx509 mbedcrypto)
 endif()
 
 # installs

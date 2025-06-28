@@ -26,7 +26,6 @@
 #include "Core/MIPS/MIPS.h"
 
 namespace Memory {
-static u32 nextFreeRam = 0x09000000;
 
 u8 *GetPointerWrite(const u32 address) {
 	if ((address & 0x3E000000) == 0x08000000 || // RAM
@@ -106,9 +105,6 @@ inline void WriteToHardware(u32 address, const T data) {
 		(address & 0xBFFFC000) == 0x00010000 || // Scratchpad
 		((address & 0x3F000000) >= 0x08000000 && (address & 0x3F000000) < 0x08000000 + g_MemorySize)) { // More RAM (remasters, etc.)
 		*(T*)GetPointerUnchecked(address) = data;
-		// Track next free ram for allocation
-		if (IsRAMAddress && address + sizeof(data) > nextFreeRam)
-			nextFreeRam = address + sizeof(data);
 	} else {
 		Core_MemoryException(address, sizeof(T), currentMIPS->pc, MemoryExceptionType::WRITE_WORD);
 	}

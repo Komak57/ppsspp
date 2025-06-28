@@ -37,6 +37,14 @@
 //#include <openssl/err.h>
 //#include <openssl/x509.h>
 //#include <openssl/x509_vfy.h>
+#include "mbedtls/include/mbedtls/platform.h"
+#include "mbedtls/include/mbedtls/net_sockets.h"
+#include "mbedtls/include/mbedtls/ssl.h"
+#include "mbedtls/include/mbedtls/ssl_cache.h"
+#include "mbedtls/include/mbedtls/ssl_ciphersuites.h"
+#include "mbedtls/include/mbedtls/entropy.h"
+#include "mbedtls/include/mbedtls/ctr_drbg.h"
+#include "mbedtls/include/mbedtls/x509_crt.h"
 
 
 static std::vector<std::shared_ptr<HTTPTemplate>> httpObjects;
@@ -47,6 +55,10 @@ bool httpsInited = false;
 bool httpCacheInited = false;
 
 //static SSL_CTX* pspSslCtx = nullptr;
+static mbedtls_ssl_config sslConfig;
+static mbedtls_ctr_drbg_context ctrDrbg;
+static mbedtls_entropy_context entropy;
+static mbedtls_x509_crt caCert;
 
 HTTPTemplate::HTTPTemplate(const char* userAgent, int httpVer, int autoProxyConf) {
 	this->userAgent = userAgent ? userAgent : "";
@@ -534,20 +546,58 @@ static int sceHttpsInit(int unknown1, int certPtr, int unknown3, int unknown4) {
 	if (httpsInited) {
 		return 0;  // Already initialized
 	}
-    // Portable Ops doesn't provide a certPtr
-	if (certPtr == 0) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: No cert provided");
-	}
 
-	else {
-		const char* certPEM = *(const char**)Memory::GetPointer(certPtr);
+    // Portable Ops doesn't provide a certPtr
+	const char* certPEM = nullptr;
+	if (certPtr != 0) {
+		certPEM = *(const char**)Memory::GetPointer(certPtr);
 		if (!certPEM) {
 			ERROR_LOG(Log::sceNet, "sceHttpsInit: certPtr is null");
 			return -1;
 		}
 	}
+	else {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: No cert provided");
+	}
 
-	// TODO: add OpenSSL 1.1.1 for TLS1.0 support for games like PSPo2i
+	// TODO: add OpenSSH 1.1.1 or mbedtls 2.28 for TLS1.0 support for games like PSPo2i
+
+	mbedtls_entropy_init(&entropy);
+	mbedtls_ctr_drbg_init(&ctrDrbg);
+
+	if (mbedtls_ctr_drbg_seed(&ctrDrbg, mbedtls_entropy_func, &entropy, nullptr, 0) != 0) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to seed RNG");
+		return -1;
+	}
+
+	// Initialize CA certificate store
+	mbedtls_x509_crt_init(&caCert);
+	if (certPEM) {
+		int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM, strlen(certPEM) + 1);
+		if (ret < 0) {
+			ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to parse cert: -0x%04x", -ret);
+			return -1;
+		}
+	}
+
+	// Setup SSL config
+	mbedtls_ssl_config_init(&sslConfig);
+	if (mbedtls_ssl_config_defaults(&sslConfig,
+		MBEDTLS_SSL_IS_CLIENT,
+		MBEDTLS_SSL_TRANSPORT_STREAM,
+		MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to set SSL config defaults");
+		return -1;
+	}
+
+	// Limit to TLS 1.0
+	mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
+	mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
+
+	mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_REQUIRED);
+	mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, nullptr);
+	mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
+	
 	
 	//SSL_library_init();
 	//OpenSSL_add_all_algorithms();
@@ -588,6 +638,7 @@ static int sceHttpsInit(int unknown1, int certPtr, int unknown3, int unknown4) {
 	//X509_STORE* store = SSL_CTX_get_cert_store(pspSslCtx);
 	//X509_STORE_add_cert(store, cert);
 	//X509_free(cert);
+
 
 	httpsInited = true;
 	return 0;
