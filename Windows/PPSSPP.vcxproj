@@ -237,7 +237,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>../ffmpeg/Windows/x86/include;../ext;../common;..;../ext/glew;../ext/zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../ffmpeg/Windows/x86/include;../ext;../common;..;../ext/glew;../ext/zlib;../ext/mbedtls/include</AdditionalIncludeDirectories>
       <ForcedIncludeFiles>stdafx.h;Common/DbgNew.h</ForcedIncludeFiles>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
@@ -276,7 +276,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>../ffmpeg/Windows/x86_64/include;../ext;../common;..;../ext/glew;../ext/zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../ffmpeg/Windows/x86_64/include;../ext;../common;..;../ext/glew;../ext/zlib;../ext/mbedtls/include</AdditionalIncludeDirectories>
       <ForcedIncludeFiles>stdafx.h;Common/DbgNew.h</ForcedIncludeFiles>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <OmitFramePointers>false</OmitFramePointers>
@@ -312,7 +312,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>../ffmpeg/Windows/aarch64/include;../ext;../common;..;../ext/glew;../ext/zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../ffmpeg/Windows/aarch64/include;../ext;../common;..;../ext/glew;../ext/zlib;../ext/mbedtls/include</AdditionalIncludeDirectories>
       <ForcedIncludeFiles>stdafx.h;Common/DbgNew.h</ForcedIncludeFiles>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <OmitFramePointers>false</OmitFramePointers>
@@ -347,7 +347,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>../ffmpeg/Windows/arm/include;../ext;../common;..;../ext/glew;../ext/zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../ffmpeg/Windows/arm/include;../ext;../common;..;../ext/glew;../ext/zlib;../ext/mbedtls/include</AdditionalIncludeDirectories>
       <ForcedIncludeFiles>stdafx.h</ForcedIncludeFiles>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <OmitFramePointers>false</OmitFramePointers>
@@ -388,7 +388,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>../ffmpeg/Windows/x86/include;../ext;../common;..;../ext/glew;../ext/zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../ffmpeg/Windows/x86/include;../ext;../common;..;../ext/glew;../ext/zlib;../ext/mbedtls/include</AdditionalIncludeDirectories>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
       <ForcedIncludeFiles>stdafx.h</ForcedIncludeFiles>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -438,7 +438,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>../ffmpeg/Windows/x86_64/include;../ext;../common;..;../ext/glew;../ext/zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../ffmpeg/Windows/x86_64/include;../ext;../common;..;../ext/glew;../ext/zlib;../ext/mbedtls/include</AdditionalIncludeDirectories>
       <ForcedIncludeFiles>stdafx.h</ForcedIncludeFiles>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
@@ -481,7 +481,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>../ffmpeg/Windows/aarch64/include;../ext;../common;..;../ext/glew;../ext/zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../ffmpeg/Windows/aarch64/include;../ext;../common;..;../ext/glew;../ext/zlib;../ext/mbedtls/include</AdditionalIncludeDirectories>
       <ForcedIncludeFiles>stdafx.h</ForcedIncludeFiles>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
@@ -522,7 +522,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>../ffmpeg/Windows/arm/include;../ext;../common;..;../ext/glew;../ext/zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../ffmpeg/Windows/arm/include;../ext;../common;..;../ext/glew;../ext/zlib;../ext/mbedtls/include</AdditionalIncludeDirectories>
       <ForcedIncludeFiles>stdafx.h</ForcedIncludeFiles>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
