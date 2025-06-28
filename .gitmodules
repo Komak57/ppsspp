@@ -65,3 +65,6 @@
 [submodule "ext/lua"]
 	path = ext/lua
 	url = https://github.com/hrydgard/ppsspp-lua.git
+[submodule "ext/mbedtls"]
+	path = ext/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls.git
