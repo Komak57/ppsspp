@@ -1509,6 +1509,9 @@
     <ProjectReference Include="..\ext\libchdr.vcxproj">
       <Project>{956f1f48-b612-46d8-89ee-96996dcd9383}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\ext\mbedtls.vcxproj">
+      <Project>{bdc4a507-b7c8-4fdf-acd4-608656e37445}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\ext\miniupnpc.vcxproj">
       <Project>{d8a71225-178b-424e-96c1-cc3be2c1b047}</Project>
     </ProjectReference>
