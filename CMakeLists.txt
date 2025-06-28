@@ -633,7 +633,11 @@ set(CommonVR
 	Common/VR/VRRenderer.h
 )
 include_directories(ext/OpenXR-SDK/include)
-
+# For TLS/SSL support
+# TODO: Clean up, make optional
+add_subdirectory(ext/mbedtls)
+include_directories(ext/mbedtls/include)
+target_link_libraries(mbedtls)
 # For ext/sol includes, that are usually included as sol/*.hpp
 include_directories(ext)
 
