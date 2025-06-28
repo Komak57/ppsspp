@@ -1434,9 +1434,6 @@
     <Filter Include="ext\sol">
       <UniqueIdentifier>{ec7d8691-bb7f-4689-b66a-cb60c1f48afd}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ext\mbedtls">
-      <UniqueIdentifier>{313fd557-c0e5-432e-8b90-1ec93ae5dff9}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\ext\libpng17\CMakeLists.txt">
