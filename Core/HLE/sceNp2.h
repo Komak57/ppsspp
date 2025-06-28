@@ -366,6 +366,19 @@ struct RoomInfo {
 	u32_le IPAddr = 910526074; // 910526074 || 0x3645867a || 54.69.134.122 || elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net
 };
 
+// World
+struct SceNpMatching2World
+{
+	u16 worldId;
+	u32 numOfLobby;
+	u32 maxNumOfTotalLobbyMember;
+	u32 curNumOfTotalLobbyMember;
+	u32 curNumOfRoom;
+	u32 curNumOfTotalRoomMember;
+	u8 withEntitlementId;
+	SceNpEntitlementId entitlementId;
+	u8 padding[3];
+};
 #pragma pack(pop)
 
 extern std::recursive_mutex npMatching2EvtMtx;

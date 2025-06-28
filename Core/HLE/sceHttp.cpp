@@ -534,11 +534,17 @@ static int sceHttpsInit(int unknown1, int certPtr, int unknown3, int unknown4) {
 	if (httpsInited) {
 		return 0;  // Already initialized
 	}
+    // Portable Ops doesn't provide a certPtr
+	if (certPtr == 0) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: No cert provided");
+	}
 
-	const char* certPEM = *(const char**)Memory::GetPointer(certPtr);
-	if (!certPEM) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: certPtr is null");
-		return -1;
+	else {
+		const char* certPEM = *(const char**)Memory::GetPointer(certPtr);
+		if (!certPEM) {
+			ERROR_LOG(Log::sceNet, "sceHttpsInit: certPtr is null");
+			return -1;
+		}
 	}
 
 	// TODO: add OpenSSL 1.1.1 for TLS1.0 support for games like PSPo2i

@@ -182,6 +182,7 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 
 	SceNpCommunicationPassphrase* passph = (SceNpCommunicationPassphrase*)Memory::GetCharPointer(passPhrasePtr);
 
+	// TODO: Get NPID from RPCN - login(nous),password,token(from email) - RPCS3 @GalCiv
 	SceNpId npid{};
 	int retval = NpGetNpId(&npid);
 	if (retval < 0)
@@ -258,6 +259,8 @@ static int sceNpMatching2ContextStart(int ctxId)
 		std::string entity;
 		size_t readBytes = output.size();
 		output.Take(readBytes, &entity);
+
+		INFO_LOG(Log::sceNet, "Entity Data: %d", entity);
 
 		// TODO: Use XML Parser to get the Tag and it's attributes instead of searching for keywords on the string
 		std::string text;
@@ -489,10 +492,9 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
 	if (!Memory::IsValidAddress(serverIdPtr) || !Memory::IsValidAddress(assignedReqId))
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_MAX); // Should be SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT ?
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT); // Should be SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT ?
 
 	// Server ID is a 16-bit variable according to JPCSP
-	// serverIdPtr should be ReadOnly
 	int serverId = Memory::Read_U16(serverIdPtr);
 
 	if (serverId == 0)
@@ -506,8 +508,7 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 	// 	   0004 32-bit pointer to a struct? (callback args?) 0x09888158 (contains 32-bit (-1) + 32-bit (1) + 16-bit ctxId(0001) + 32bit 0x06913801? + 16-bit serverId(1234), so on), probably only 2x 32-bit struct?
 	// 	   0008 32-bit set to 0
 	// 	   000a 16-bit set to 0
-	// optParam : PSP2i points to 0x17FF500 == 08D40E48
-	// assignedReqId : PSP2i points to 0x6DFFC8
+	// 
 	// OptParam
 	// u32 cbFunc
 	// u32 cbFuncArgs
@@ -518,24 +519,7 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 	u32 cbArg = Memory::Read_U32(optParam + 0x04);		// Struct containing data
 	u32 request_id = Memory::Read_U32(optParam + 0x10);		// Request ID in OptParam, suppose to be at 0x0c
 
-
 	DEBUG_LOG(Log::sceNet, "%s - (cbFunc: %08x, cbArg: %08x, reqId: %08) at %08x", __FUNCTION__, cbFunc, cbArg, request_id, currentMIPS->pc);
-
-	//int offset = 0;
-	//uint32_t basePtr = cbArg + offset;
-	//Memory::Write_U32(0, basePtr + 0x00);							// Pointer Offset to function table at 0x08e70000
-	//Memory::Write_U32(1, basePtr + 0x04);							// Pointer to struct containing server info?
-	//Memory::Write_U16(servers.size(), basePtr + 0x08);				// Has Room?
-	//Memory::Write_U32(0, basePtr + 0x0c);							// ?
-	//Memory::Write_U16(server.ID, basePtr + 0x10);					// ?
-	//Memory::Write_U32(ctxId, basePtr + 0x1e);						// ctxId
-	//Memory::Write_U8(0, basePtr + 0x38);							// ?
-	//Memory::Write_U32(0, basePtr + 0x40);							// ?
-	//Memory::Write_U32(0, basePtr + 0x44);							// ?
-
-	//Memory::Write_U32(2, basePtr + 0x50);							// Connection State || 1 == dead, 2 == established
-	//Memory::Write_U32(0, basePtr + 0x54);							// Error Flag
-	//Memory::Write_U32(0x08CB301C, optParam);
 
 	// Will only process 1 server request at a time
 	RoomInfo server = servers[serverId];
@@ -552,6 +536,9 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 		// TODO: PS3 obtains request_id via optParam->appReqId but value is 0?
 		//Memory::Write_U16(request_id, optParam + 12);
 		request_id = GenerateCallbackInfo(ctxId, optParam, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo);
+
+		if (Memory::IsValidAddress(assignedReqId))
+			Memory::Write_U32(request_id, assignedReqId);
 		// The cbFunc seems to be storing s0~s4(s0 pointing to 0x0996DD58 containing data similar to 0x09888158 above on the 1st 2x 32-bit data, s1 seems to be ctxId, s2~s4=0xdeadbeef) into stack and use a0~t1 (6 args?):
 		//		Arg1(a0) & Arg3(a2) are being masked with 0xffff (16-bit id?)
 		//		This callback tried to load data from address 0x08BD4860+8 (not part of arg? which being set using content of unknown2 not long after returning from sceNpMatching2GetServerInfo, so we may need to give some delay before calling this callback)
@@ -564,14 +551,7 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 		//			0010 8-bit status to indicate not updated from callback yet? initially 0, set to 1 not long after returning from sceNpMatching2GetServerInfo (along with unknown2 content)
 		//
 		// There args are supposed to be constructed in the stack and the data need to be available even after returning from this function, so these args + optional data probably copied to somewhere
-		//args.data[0] = ctxId;						// ContextID || PSP_NP_MATCHING2_EVENT_0001; // MIPSCompileOp Instruction
-		//args.data[1] = PSP_NP_MATCHING2_EVENT_0001;	// Unknown   || PSP_NP_MATCHING2_STATE_1001; // MIPSCompileOp Instruction
-		//args.data[2] = PSP_NP_MATCHING2_STATE_1001;	// Unknown   || serverId or was it pointing to optional data at last arg (ie. args[10] where serverId is stored)?
-		//args.data[3] = serverIdPtr;					// Unknown 
-		//args.data[4] = 0;							// MemberID  || some index matched against the room info to determine if the room exists?
-		//args.data[5] = SCE_NP_MATCHING2_SIGNALING_EVENT_Established; // EventCode == arg[5] & 0xffff || Established | Dead | NetinfoResult || UNKNOWN_EVENT
-		//args.data[6] = 0;							// Error >= 0 || Doesn't seem to be affected by this value directly
-		//args.data[7] = cbArg;						// Pointer to struct containing room info
+
 		u32_le args[6];
 		args[0] = ctxId;						// ContextID
 		args[1] = request_id;					// RequestId || 0 indicates aborted request
@@ -580,16 +560,10 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 		args[4] = serverInfoPtr;				// ServerInfo struct [ u16 ID, u8 Status, 0x00 ]
 		args[5] = cbArg;						// Struct to some valid information?
 
-		//for (int i = 0; i <= 9; i++) {
-		//	Memory::Write_U32(i, optParam +(i*4)); // Clear Params
-		//}
-
 		WARN_LOG(Log::sceNet, "%s - FUN_%08x(%d, %d, %d, %d, %08x, %d)", __FUNCTION__, cbFunc, args[0], args[1], args[2], args[3], args[4], args[5]);
-		//hleEnqueueCall(cbFunc, 6, args.data);
+
 		notifyNpMatching2Handlers(ctxId, 6, args);
 		//notifyNpMatching2Handlers(args, ctxId, serverId, cbFunc, cbArg, 0, 0, 0, 1);
-		if (Memory::IsValidAddress(assignedReqId))
-			Memory::Write_U32(request_id, assignedReqId);
 	}
 
 	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
@@ -606,7 +580,6 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_MAX); // Should be SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT ?
 
 	// Server ID is a 16-bit variable according to JPCSP
-	// serverIdPtr should be ReadOnly
 	int serverId = Memory::Read_U16(serverIdPtr);
 
 	if (serverId == 0)
@@ -618,41 +591,49 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 
 	DEBUG_LOG(Log::sceNet, "%s - (cbFunc: %08x, cbArg: %08x, reqId: %08) at %08x", __FUNCTION__, cbFunc, cbArg, request_id, currentMIPS->pc);
 
-	// Will only process 1 server request at a time
 	RoomInfo server = servers[serverId];
-	//u32 infoSize = 4;
+	// FIXME: Get worldInfo from PSN
+	SceNpMatching2World worldInfo = {};
+	
+	u32 infoSize = sizeof(worldInfo);
 
 	// Allocate space, and write value into the pool
-	//u32 worldInfoPtr = np_memory.Alloc(infoSize);
-	//Memory::Write_U16(server.ID, worldInfoPtr);
-	//Memory::Write_U8(server.Status, worldInfoPtr + 2);
+	u32 worldInfoPtr = np_memory.Alloc(infoSize);
+	Memory::Write_U16(worldInfo.worldId, worldInfoPtr);							// World ID
+	Memory::Write_U32(worldInfo.numOfLobby, worldInfoPtr + 2);					// Lobby Count
+	Memory::Write_U32(worldInfo.maxNumOfTotalLobbyMember, worldInfoPtr + 2);	// Member Limit
+	Memory::Write_U32(worldInfo.curNumOfTotalLobbyMember, worldInfoPtr + 2);	// Member Count
+	Memory::Write_U32(worldInfo.curNumOfRoom, worldInfoPtr + 2);				// Room Count
+	Memory::Write_U32(worldInfo.curNumOfTotalRoomMember, worldInfoPtr + 2);		// Room Member Count
+	Memory::Write_U8(worldInfo.withEntitlementId, worldInfoPtr + 2);			// Uses EntitlementID
+	for(int i = 0; i < 32; i++)
+		Memory::Write_U8(worldInfo.entitlementId.data[i], worldInfoPtr + 2);	// EntitlementID
+	Memory::Write_U8(0, worldInfoPtr + 2);										// Padding
+	Memory::Write_U8(0, worldInfoPtr + 2);										// Padding
+	Memory::Write_U8(0, worldInfoPtr + 2);										// Padding
 
 	// Notify callback handler
 	if (Memory::IsValidAddress(cbFunc)) {
 		// TODO: PS3 obtains request_id via optParam->appReqId but value is 0?
 		request_id = GenerateCallbackInfo(ctxId, optParam, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList);
 
+		if (Memory::IsValidAddress(assignedReqId))
+			Memory::Write_U32(request_id, assignedReqId);
+
 		u32_le args[6];
 		args[0] = ctxId;						// ContextID
 		args[1] = request_id;					// RequestId || 0 indicates aborted request
 		args[2] = SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList;	// Event
 		args[3] = 0;							// ErrorCode
-		args[4] = 0;							// WorldInfo struct [ ??? ]
+		args[4] = worldInfoPtr;					// WorldInfo struct [ ??? ]
 		args[5] = cbArg;						// Struct to some valid information?
 
-		//for (int i = 0; i <= 9; i++) {
-		//	Memory::Write_U32(i, optParam +(i*4)); // Clear Params
-		//}
-
 		WARN_LOG(Log::sceNet, "%s - FUN_%08x(%d, %d, %d, %d, %08x, %d)", __FUNCTION__, cbFunc, args[0], args[1], args[2], args[3], args[4], args[5]);
-		//hleEnqueueCall(cbFunc, 6, args.data);
+
 		notifyNpMatching2Handlers(ctxId, 6, args);
-		//notifyNpMatching2Handlers(args, ctxId, serverId, cbFunc, cbArg, 0, 0, 0, 1);
-		if (Memory::IsValidAddress(assignedReqId))
-			Memory::Write_U32(request_id, assignedReqId);
+
 	}
 
-	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
 	return 0;
 }
 

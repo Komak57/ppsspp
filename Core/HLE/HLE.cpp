@@ -1117,6 +1117,11 @@ void hleDoLogInternal(Log t, LogLevel level, u64 res, const char *file, int line
 	}
 
 	const HLEFunction *hleFunc = g_stack[g_stackSize - 1];
+    // Portable Ops has an empty g_stack, probably caused by previous calls
+	if (hleFunc == nullptr) {
+		ERROR_LOG(Log::HLE, "HLE function stack empty (%s:%d)! stackSize = %d", file, line, stackSize);
+		return;
+	}
 
 	char retmask = hleFunc->retmask;
 	if (stackSize) {
