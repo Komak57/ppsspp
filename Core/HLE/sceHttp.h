@@ -239,6 +239,9 @@ public:
 	HTTPConnection(int templateID, const char* hostString, const char* scheme, u32 port, int enableKeepalive);
 	virtual ~HTTPConnection() = default;
 
+	mbedtls_ssl_context ssl;
+	mbedtls_net_context net;
+
 	virtual const char* className() override { return name_HTTPConnection; }
 
 	int getTemplateID() { return templateID; }

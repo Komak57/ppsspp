@@ -542,23 +542,58 @@ static int sceHttpDisableKeepAlive(int id) {
 }
 
 static int sceHttpsInit(int unknown1, int certPtr, int unknown3, int unknown4) {
-	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpsInit(%d, %d, %d, %x)", unknown1, certPtr, unknown3, unknown4);
+	WARN_LOG(Log::sceNet, "UNTESTED sceHttpsInit(%d, %d, %d, %x)", unknown1, certPtr, unknown3, unknown4);
 	if (httpsInited) {
 		return 0;  // Already initialized
 	}
 
     // Portable Ops doesn't provide a certPtr
-	const char* certPEM = nullptr;
-	if (certPtr != 0) {
-		certPEM = *(const char**)Memory::GetPointer(certPtr);
-		if (!certPEM) {
-			ERROR_LOG(Log::sceNet, "sceHttpsInit: certPtr is null");
+	if (certPtr == 0) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: No cert provided");
+		return -1;
+	}
+
+	u32 memPtr = Memory::Read_U32(certPtr);
+	if (!Memory::IsValidRange(memPtr, 1)) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: certPtr points to invalid address: %08x", certPtr);
+		return -1;
+	}
+
+	u32 certAddr = Memory::Read_U32(memPtr);
+	if (!Memory::IsValidRange(certAddr, 1)) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: certAddrPtr points to invalid address: %08x", memPtr);
+		return -1;
+	}
+
+	// Read 8192 bytes of data until we reach a zero terminal
+	std::string certPEM = "";
+	for (size_t i = 0; i < 8192; ++i) {
+		if (!Memory::IsValidAddress(certAddr + i)) {
+			ERROR_LOG(Log::sceNet, "sceHttpsInit: Invalid memory at PEM offset %08x", certAddr + i);
 			return -1;
 		}
+
+		u8 ch = Memory::Read_U8(certAddr + i);
+		if (ch == 0)
+			break;
+
+		certPEM.push_back(ch);
 	}
-	else {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: No cert provided");
+	INFO_LOG(Log::sceNet, "%s - CERTIFICATE:", __FUNCTION__);
+	size_t i = 0;
+	while (i < certPEM.size()) {
+		size_t newline = certPEM.find('\n', i);
+		size_t end = std::min(i + 64, newline != std::string::npos ? newline + 1 : certPEM.size());
+		INFO_LOG(Log::sceNet, "%s - %s", __FUNCTION__, certPEM.substr(i, end - i).c_str());
+		i = end;
 	}
+
+	// This line will cause an error if certPEM is not a valid pointer to a string
+	//size_t pemLen = strnlen(certPEM, 8192);  // avoid infinite reads
+	//if (pemLen == 8192) {
+	//	ERROR_LOG(Log::sceNet, "sceHttpsInit: PEM string not null-terminated or too long");
+	//	return -1;
+	//}
 
 	// TODO: add OpenSSH 1.1.1 or mbedtls 2.28 for TLS1.0 support for games like PSPo2i
 
@@ -571,9 +606,11 @@ static int sceHttpsInit(int unknown1, int certPtr, int unknown3, int unknown4) {
 	}
 
 	// Initialize CA certificate store
+	// Note: certPEM MUST be pointing to a valid certificate, or it will cause a strlen crash
+	// PSP2i has it at 0x08e73a04
 	mbedtls_x509_crt_init(&caCert);
-	if (certPEM) {
-		int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM, strlen(certPEM) + 1);
+	if (certPEM.size() > 0) {
+		int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to parse cert: -0x%04x", -ret);
 			return -1;
