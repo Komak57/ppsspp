@@ -19,6 +19,14 @@
 
 #include <map>
 #include "Common/Net/HTTPClient.h"
+#include "mbedtls/ssl.h"
+#include "mbedtls/net_sockets.h"
+#include "mbedtls/platform.h"
+#include "mbedtls/ssl_cache.h"
+#include "mbedtls/ssl_ciphersuites.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/ctr_drbg.h"
+#include "mbedtls/x509_crt.h"
 
 // Based on https://docs.vitasdk.org/group__SceHttpUser.html
 #define 	SCE_HTTP_DEFAULT_RESOLVER_TIMEOUT   (1 * 1000 * 1000U)
@@ -156,7 +164,10 @@ enum SceHttpStatusCode {
 	SCE_HTTP_STATUS_CODE_HTTP_VERSION_NOT_SUPPORTED = 505,
 	SCE_HTTP_STATUS_CODE_INSUFFICIENT_STORAGE = 507
 };
-
+enum SceHttpsOptions {
+	SCE_HTTPS_OPTIONS_FLAG_HTTPS = 35,
+	SCE_HTTPS_OPTIONS_FLAG_HTTP = 28,
+};
 enum SceHttpVersion {
 	SCE_HTTP_VERSION_1_0 = 1,
 	SCE_HTTP_VERSION_1_1
@@ -233,17 +244,23 @@ protected:
 	std::string scheme;
 	u16 port = 80;
 	int enableKeepalive = 0;
+	bool tlsEnabled = false;
+	mbedtls_ssl_context ssl;
+	mbedtls_net_context net;
 
 public:
 	HTTPConnection() {}
 	HTTPConnection(int templateID, const char* hostString, const char* scheme, u32 port, int enableKeepalive);
-	virtual ~HTTPConnection() = default;
-
-	mbedtls_ssl_context ssl;
-	mbedtls_net_context net;
+	virtual ~HTTPConnection();
 
 	virtual const char* className() override { return name_HTTPConnection; }
 
+	void enableTLS() {
+		mbedtls_ssl_init(&ssl);
+		mbedtls_net_init(&net);
+		tlsEnabled = true;
+	}
+	bool isTLSEnabled() { return tlsEnabled; }
 	int getTemplateID() { return templateID; }
 	const std::string getHost() { return hostString; }
 	const std::string getScheme() { return scheme; }

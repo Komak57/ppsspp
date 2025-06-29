@@ -32,19 +32,12 @@
 #include "Common/LogReporting.h"
 #include "Common/Net/URL.h"
 #include "Common/Net/HTTPClient.h"
+#include <mbedtls\debug.h>
  // HTTPS Requirements from OpenSSL 1.1.1
 //#include <openssl/ssl.h>
 //#include <openssl/err.h>
 //#include <openssl/x509.h>
 //#include <openssl/x509_vfy.h>
-#include "mbedtls/include/mbedtls/platform.h"
-#include "mbedtls/include/mbedtls/net_sockets.h"
-#include "mbedtls/include/mbedtls/ssl.h"
-#include "mbedtls/include/mbedtls/ssl_cache.h"
-#include "mbedtls/include/mbedtls/ssl_ciphersuites.h"
-#include "mbedtls/include/mbedtls/entropy.h"
-#include "mbedtls/include/mbedtls/ctr_drbg.h"
-#include "mbedtls/include/mbedtls/x509_crt.h"
 
 
 static std::vector<std::shared_ptr<HTTPTemplate>> httpObjects;
@@ -59,6 +52,7 @@ static mbedtls_ssl_config sslConfig;
 static mbedtls_ctr_drbg_context ctrDrbg;
 static mbedtls_entropy_context entropy;
 static mbedtls_x509_crt caCert;
+static std::unordered_map<int, bool> httpsOptions;
 
 HTTPTemplate::HTTPTemplate(const char* userAgent, int httpVer, int autoProxyConf) {
 	this->userAgent = userAgent ? userAgent : "";
@@ -97,6 +91,13 @@ HTTPConnection::HTTPConnection(int templateID, const char* hostString, const cha
 	this->scheme = scheme;
 	this->port = port;
 	this->enableKeepalive = enableKeepalive;
+}
+HTTPConnection::~HTTPConnection() {
+	// Clean up and free SSL resources
+	if (tlsEnabled) {
+		mbedtls_ssl_free(&ssl);
+		mbedtls_net_free(&net);
+	}
 }
 
 HTTPRequest::HTTPRequest(int connectionID, int method, const char* url, u64 contentLength) {
@@ -280,12 +281,19 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 	const char* postData = Memory::GetCharPointer(postDataPtr);
 	if (postDataSize > 0)
 		NotifyMemInfo(MemBlockFlags::READ, postDataPtr, postDataSize, "HttpSendRequest");
-	int err = client.SendRequestWithData(methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
+	if (tlsEnabled) {
+		int err = client.SendSSLRequestWithData(ssl, methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
+		if (err < 0)
+			return err;
+	}
+	else {
+		// Original plain-socket request
+		int err = client.SendRequestWithData(methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
+		if (err < 0)
+			return err;
+	}
 	if (cancelled_) {
 		return SCE_HTTP_ERROR_ABORTED;
-	}
-	if (err < 0) {
-		return err; // SCE_HTTP_ERROR_BAD_RESPONSE;
 	}
 
 	// Retrieve Response's Status Code (and Headers too?)
@@ -626,6 +634,8 @@ static int sceHttpsInit(int unknown1, int certPtr, int unknown3, int unknown4) {
 		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to set SSL config defaults");
 		return -1;
 	}
+	mbedtls_debug_set_threshold(4);
+	mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, nullptr);
 
 	// Limit to TLS 1.0
 	mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
@@ -693,14 +703,38 @@ static int sceHttpsEnd() {
 	return 0;
 }
 
-static int sceHttpsEnableOption(int id) {
+static int sceHttpsEnableOption(int optionId) {
 	// sceHttpsEnableOption accepts the ssl flags, not an id
-	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpsEnableOption(%d)", id);
+	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpsEnableOption(%d)", optionId);
+	switch (optionId) {
+	case SCE_HTTPS_OPTIONS_FLAG_HTTPS:
+		INFO_LOG(Log::sceNet, "%s - HTTPS Enabled", __FUNCTION__);
+		break;
+	case SCE_HTTPS_OPTIONS_FLAG_HTTP:
+		INFO_LOG(Log::sceNet, "%s - HTTP Enabled", __FUNCTION__);
+		break;
+	default:
+		INFO_LOG(Log::sceNet, "%s - UNKNOWN %d Enabled", __FUNCTION__, optionId);
+		break;
+	}
+	httpsOptions[optionId] = true;
 	return 0;
 }
 
-static int sceHttpsDisableOption(int id) {
-	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpsDisableOption(%d)", id);
+static int sceHttpsDisableOption(int optionId) {
+	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpsDisableOption(%d)", optionId);
+	switch (optionId) {
+	case SCE_HTTPS_OPTIONS_FLAG_HTTPS:
+		INFO_LOG(Log::sceNet, "%s - HTTPS Disabled", __FUNCTION__);
+		break;
+	case SCE_HTTPS_OPTIONS_FLAG_HTTP:
+		INFO_LOG(Log::sceNet, "%s - HTTP Disabled", __FUNCTION__);
+		break;
+	default:
+		INFO_LOG(Log::sceNet, "%s - UNKNOWN %d Disabled", __FUNCTION__, optionId);
+		break;
+	}
+	httpsOptions[optionId] = false;
 	return 0;
 }
 
@@ -734,7 +768,12 @@ static int sceHttpCreateConnection(int templateID, const char *hostString, const
 
 	// TODO: Look up hostString in DNS here.
 
-	httpObjects.emplace_back(std::make_shared<HTTPConnection>(templateID, hostString ? hostString : "", scheme ? scheme : "", port, enableKeepalive));
+	auto conn = std::make_shared<HTTPConnection>(templateID, hostString ? hostString : "", scheme ? scheme : "", port, enableKeepalive);
+	// Enable TLS if Flag is set
+	if (httpsOptions[SCE_HTTPS_OPTIONS_FLAG_HTTPS])
+		conn->enableTLS();
+
+	httpObjects.emplace_back(conn);
 	int retid = (int)httpObjects.size();
 	return hleLogDebug(Log::sceNet, retid);
 }

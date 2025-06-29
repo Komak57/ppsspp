@@ -9,6 +9,8 @@
 #include "Common/Net/NetBuffer.h"
 #include "Common/Net/Resolve.h"
 #include "Common/Net/HTTPRequest.h"
+#include "mbedtls/ssl.h"
+#include "mbedtls/net_sockets.h"
 
 namespace net {
 
@@ -69,7 +71,8 @@ public:
 	// HEAD, PUT, DELETE aren't implemented yet, but can be done with SendRequest.
 
 	int SendRequest(const char *method, const RequestParams &req, const char *otherHeaders, net::RequestProgress *progress);
-	int SendRequestWithData(const char *method, const RequestParams &req, std::string_view data, const char *otherHeaders, net::RequestProgress *progress);
+	int SendRequestWithData(const char* method, const RequestParams& req, std::string_view data, const char* otherHeaders, net::RequestProgress* progress);
+	int SendSSLRequestWithData(mbedtls_ssl_context ssl, const char* method, const RequestParams& req, std::string_view data, const char* otherHeaders, net::RequestProgress* progress);
 	int ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &responseHeaders, net::RequestProgress *progress, std::string *statusLine = nullptr);
 	// If your response contains a response, you must read it.
 	int ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::string> &responseHeaders, Buffer *output, net::RequestProgress *progress);

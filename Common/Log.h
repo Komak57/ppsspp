@@ -129,6 +129,15 @@ void GenericLog(Log type, LogLevel level, const char *file, int line, const char
 #define DEBUG_LOG(t,...)   do { GENERIC_LOG(t, LogLevel::LDEBUG,   __VA_ARGS__) } while (false)
 #define VERBOSE_LOG(t,...) do { GENERIC_LOG(t, LogLevel::LVERBOSE, __VA_ARGS__) } while (false)
 
+static void ssl_debug(void* ctx, int level,
+	const char* file, int line,
+	const char* str)
+{
+	((void)level);
+	NOTICE_LOG(Log::sceNet, "%s:%04d: %s", file, line, str);
+	//mbedtls_fprintf((FILE*)ctx, "%s:%04d: %s", file, line, str);
+}
+
 // Currently only actually shows a dialog box on Windows.
 bool HandleAssert(const char *function, const char *file, int line, const char *expression, const char* format, ...)
 #ifdef __GNUC__

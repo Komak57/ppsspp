@@ -353,10 +353,45 @@ int Client::SendRequestWithData(const char *method, const RequestParams &req, st
 		userAgent_.c_str(),
 		req.acceptMime,
 		otherHeaders ? otherHeaders : "");
+
 	buffer.Append(data);
 	bool flushed = buffer.FlushSocket(sock(), dataTimeout_, progress->cancelled);
 	if (!flushed) {
 		return -1;  // TODO error code.
+	}
+	return 0;
+}
+
+int Client::SendSSLRequestWithData(mbedtls_ssl_context ssl, const char* method, const RequestParams& req, std::string_view data, const char* otherHeaders, net::RequestProgress* progress) {
+	progress->Update(0, 0, false);
+
+	net::Buffer buffer;
+	const char* tpl =
+		"%s %s HTTP/%s\r\n"
+		"Host: %s\r\n"
+		"User-Agent: %s\r\n"
+		"Accept: %s\r\n"
+		"Connection: close\r\n"
+		"%s"
+		"\r\n";
+
+	buffer.Printf(tpl,
+		method, req.resource.c_str(), HTTP_VERSION,
+		host_.c_str(),
+		userAgent_.c_str(),
+		req.acceptMime,
+		otherHeaders ? otherHeaders : "");
+
+	buffer.Append(data);
+	int sent = 0;
+	while (sent < (int)data.size()) {
+		int ret;
+		ret = mbedtls_ssl_write(&ssl, (const unsigned char*)data.data() + sent, data.size() - sent);
+		if (ret <= 0) {
+			ERROR_LOG(Log::sceNet, "TLS write failed: -0x%04x", ret < 0 ? -ret : 0);
+			return -1;
+		}
+		sent += ret;
 	}
 	return 0;
 }
