@@ -11,6 +11,12 @@
 #include "Common/Net/HTTPRequest.h"
 #include "mbedtls/ssl.h"
 #include "mbedtls/net_sockets.h"
+#include "mbedtls/platform.h"
+#include "mbedtls/ssl_cache.h"
+#include "mbedtls/ssl_ciphersuites.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/ctr_drbg.h"
+#include "mbedtls/x509_crt.h"
 
 namespace net {
 
@@ -21,7 +27,8 @@ public:
 	// Inits the sockaddr_in.
 	bool Resolve(const char *host, int port, DNSType type = DNSType::ANY);
 
-	bool Connect(int maxTries = 2, double timeout = 20.0f, bool *cancelConnect = nullptr);
+	bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
+	bool SSLConnect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 	void Disconnect();
 
 	// Only to be used for bring-up and debugging.
@@ -34,6 +41,24 @@ protected:
 	int port_ = -1;
 
 	addrinfo *resolved_ = nullptr;
+
+	mbedtls_ssl_context sslCtx;
+	mbedtls_net_context netCtx;
+
+	mbedtls_net_context server_fd;
+	mbedtls_ssl_config sslConfig;
+	mbedtls_ctr_drbg_context ctrDrbg;
+	mbedtls_entropy_context entropy;
+	mbedtls_x509_crt caCert;
+
+	int useCookie = 0;
+	int useKeepAlive = 0;
+	int useCache = 0;
+	int useAuth = 0;
+	int useRedirect = 0;
+	int sslEnabled = 0;
+
+	u32 flags;
 
 private:
 	uintptr_t sock_ = -1;
@@ -60,6 +85,9 @@ public:
 	Client();
 	~Client();
 
+	// SSL Related Functions
+	int InitializeSSL(std::string certPEM, int useAuth);
+
 	// Return value is the HTTP return code. 200 means OK. < 0 means some local error.
 	int GET(const RequestParams &req, Buffer *output, net::RequestProgress *progress);
 	int GET(const RequestParams &req, Buffer *output, std::vector<std::string> &responseHeaders, net::RequestProgress *progress);
@@ -72,11 +100,14 @@ public:
 
 	int SendRequest(const char *method, const RequestParams &req, const char *otherHeaders, net::RequestProgress *progress);
 	int SendRequestWithData(const char* method, const RequestParams& req, std::string_view data, const char* otherHeaders, net::RequestProgress* progress);
-	int SendSSLRequestWithData(mbedtls_ssl_context ssl, const char* method, const RequestParams& req, std::string_view data, const char* otherHeaders, net::RequestProgress* progress);
+	//int SendSSLRequestWithData(mbedtls_ssl_context ssl, const char* method, const RequestParams& req, std::string_view data, const char* otherHeaders, net::RequestProgress* progress);
 	int ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &responseHeaders, net::RequestProgress *progress, std::string *statusLine = nullptr);
 	// If your response contains a response, you must read it.
 	int ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::string> &responseHeaders, Buffer *output, net::RequestProgress *progress);
 
+	int isSSLEnabled() {
+		return sslEnabled;
+	}
 	void SetDataTimeout(double t) {
 		dataTimeout_ = t;
 	}

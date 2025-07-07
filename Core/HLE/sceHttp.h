@@ -19,14 +19,6 @@
 
 #include <map>
 #include "Common/Net/HTTPClient.h"
-#include "mbedtls/ssl.h"
-#include "mbedtls/net_sockets.h"
-#include "mbedtls/platform.h"
-#include "mbedtls/ssl_cache.h"
-#include "mbedtls/ssl_ciphersuites.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/x509_crt.h"
 
 // Based on https://docs.vitasdk.org/group__SceHttpUser.html
 #define 	SCE_HTTP_DEFAULT_RESOLVER_TIMEOUT   (1 * 1000 * 1000U)
@@ -164,9 +156,10 @@ enum SceHttpStatusCode {
 	SCE_HTTP_STATUS_CODE_HTTP_VERSION_NOT_SUPPORTED = 505,
 	SCE_HTTP_STATUS_CODE_INSUFFICIENT_STORAGE = 507
 };
+// Options not yet identified
 enum SceHttpsOptions {
-	SCE_HTTPS_OPTIONS_FLAG_HTTPS = 35,
-	SCE_HTTPS_OPTIONS_FLAG_HTTP = 28,
+	//SCE_HTTPS_OPTIONS_FLAG_HTTPS = 35,
+	//SCE_HTTPS_OPTIONS_FLAG_HTTP = 28,
 };
 enum SceHttpVersion {
 	SCE_HTTP_VERSION_1_0 = 1,
@@ -200,6 +193,7 @@ protected:
 	int useCache = 0;
 	int useAuth = 0;
 	int useRedirect = 0;
+	int tlsEnabled = 0;
 
 	u32 connectTimeout = SCE_HTTP_DEFAULT_CONNECT_TIMEOUT;
 	u32 sendTimeout = SCE_HTTP_DEFAULT_SEND_TIMEOUT;
@@ -208,6 +202,8 @@ protected:
 	int resolveRetryCount = SCE_HTTP_DEFAULT_RESOLVER_RETRY;
 
 	std::map<std::string, std::string> requestHeaders_;
+	std::string certPEM;
+	std::unordered_map<int, bool> httpsOptions = {};
 
 public:
 	HTTPTemplate() {}
@@ -226,6 +222,16 @@ public:
 	u32 getResolveTimeout() { return resolveTimeout; }
 	int getResolveRetryCount() { return resolveRetryCount; }
 
+	void setProxy() {};
+	void enableCookie() { this->useCookie = 1; }
+	void enableKeepAlive() { this->useKeepAlive = 1; }
+	void enableCache() { this->useCache = 1; }
+	void enableRedirect() { this->useRedirect = 1; }
+	void enableAuth() { this->useAuth = 1; }
+	void enableOption(int option) { this->httpsOptions[option] = 1; };
+	void disableOption(int option) { this->httpsOptions[option] = 0; };
+	void enableTLS() { this->tlsEnabled = 1; }
+
 	void setUserAgent(const char* userAgent) { this->userAgent = userAgent ? userAgent : ""; }
 	void setConnectTimeout(u32 timeout) { this->connectTimeout = timeout; }
 	void setSendTimeout(u32 timeout) { this->sendTimeout = timeout; }
@@ -235,6 +241,7 @@ public:
 
 	int addRequestHeader(const char* name, const char* value, u32 mode);
 	int removeRequestHeader(const char* name);
+	int setCert(std::string certificate);
 };
 
 class HTTPConnection : public HTTPTemplate {
@@ -244,9 +251,8 @@ protected:
 	std::string scheme;
 	u16 port = 80;
 	int enableKeepalive = 0;
-	bool tlsEnabled = false;
-	mbedtls_ssl_context ssl;
-	mbedtls_net_context net;
+	//mbedtls_ssl_context ssl;
+	//mbedtls_net_context net;
 
 public:
 	HTTPConnection() {}
@@ -255,12 +261,7 @@ public:
 
 	virtual const char* className() override { return name_HTTPConnection; }
 
-	void enableTLS() {
-		mbedtls_ssl_init(&ssl);
-		mbedtls_net_init(&net);
-		tlsEnabled = true;
-	}
-	bool isTLSEnabled() { return tlsEnabled; }
+	bool isSSLEnabled() { return tlsEnabled; }
 	int getTemplateID() { return templateID; }
 	const std::string getHost() { return hostString; }
 	const std::string getScheme() { return scheme; }
@@ -303,6 +304,7 @@ public:
 	int getAllResponseHeaders(u32 headerAddrPtr, u32 headerSizePtr);
 	int readData(u32 destDataPtr, u32 size);
 	int sendRequest(u32 postDataPtr, u32 postDataSize);
+	//int sendSSLRequest(u32 postDataPtr, u32 postDataSize);
 };
 
 

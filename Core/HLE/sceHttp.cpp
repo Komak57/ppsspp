@@ -38,7 +38,7 @@
 //#include <openssl/err.h>
 //#include <openssl/x509.h>
 //#include <openssl/x509_vfy.h>
-
+//static std::unordered_map<int, bool> httpsOptions;
 
 static std::vector<std::shared_ptr<HTTPTemplate>> httpObjects;
 static std::mutex httpLock;
@@ -48,11 +48,6 @@ bool httpsInited = false;
 bool httpCacheInited = false;
 
 //static SSL_CTX* pspSslCtx = nullptr;
-static mbedtls_ssl_config sslConfig;
-static mbedtls_ctr_drbg_context ctrDrbg;
-static mbedtls_entropy_context entropy;
-static mbedtls_x509_crt caCert;
-static std::unordered_map<int, bool> httpsOptions;
 
 HTTPTemplate::HTTPTemplate(const char* userAgent, int httpVer, int autoProxyConf) {
 	this->userAgent = userAgent ? userAgent : "";
@@ -80,6 +75,12 @@ int HTTPTemplate::removeRequestHeader(const char* name) {
 	requestHeaders_.erase(name);
 	return 0;
 }
+int HTTPTemplate::setCert(std::string certificate) {
+	if (certificate.size() == 0)
+		return -1;
+	certPEM = certificate;
+	return 0;
+}
 
 HTTPConnection::HTTPConnection(int templateID, const char* hostString, const char* scheme, u32 port, int enableKeepalive) {
 	// Copy base data as initial base value for this
@@ -94,23 +95,26 @@ HTTPConnection::HTTPConnection(int templateID, const char* hostString, const cha
 }
 HTTPConnection::~HTTPConnection() {
 	// Clean up and free SSL resources
-	if (tlsEnabled) {
-		mbedtls_ssl_free(&ssl);
-		mbedtls_net_free(&net);
-	}
+	//if (tlsEnabled) {
+	//	mbedtls_ssl_free(&ssl);
+	//	mbedtls_net_free(&net);
+	//}
 }
 
 HTTPRequest::HTTPRequest(int connectionID, int method, const char* url, u64 contentLength) {
 	// Copy base data as initial base value for this
 	// Since dynamic_cast/dynamic_pointer_cast/typeid requires RTTI to be enabled (ie. /GR instead of /GR- on msvc, enabled by default on most compilers), so we can only use static_cast here
 	HTTPConnection::operator=(static_cast<HTTPConnection&>(*httpObjects[connectionID - 1LL]));
-
+	
 	// Initialize
 	this->connectionID = connectionID;
 	this->method = method;
 	this->url = url ? url : "";
 	this->contentLength = contentLength;
 
+	if (tlsEnabled) {
+		client.InitializeSSL(certPEM, useAuth);
+	}
 	//progress_.cancelled = &cancelled_;
 	responseContent_.clear();
 }
@@ -281,17 +285,17 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 	const char* postData = Memory::GetCharPointer(postDataPtr);
 	if (postDataSize > 0)
 		NotifyMemInfo(MemBlockFlags::READ, postDataPtr, postDataSize, "HttpSendRequest");
-	if (tlsEnabled) {
+	
+	/*if (isSSLEnabled()) {
 		int err = client.SendSSLRequestWithData(ssl, methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
 		if (err < 0)
 			return err;
 	}
-	else {
-		// Original plain-socket request
+	else {*/
 		int err = client.SendRequestWithData(methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
 		if (err < 0)
 			return err;
-	}
+	//}
 	if (cancelled_) {
 		return SCE_HTTP_ERROR_ABORTED;
 	}
@@ -316,6 +320,94 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 	return 0;
 }
 
+//int HTTPRequest::sendSSLRequest(u32 postDataPtr, u32 postDataSize) {
+//	// Initialize Connection
+//	client.SetDataTimeout(getRecvTimeout() / 1000000.0);
+//	// Initialize Headers
+//	if (getHttpVer() == SCE_HTTP_VERSION_1_0)
+//		client.SetHttpVersion("1.0");
+//	else
+//		client.SetHttpVersion("1.1");
+//	client.SetUserAgent(getUserAgent());
+//	if (postDataSize > 0)
+//		requestHeaders_["Content-Length"] = std::to_string(postDataSize);
+//	const std::string delimiter = "\r\n";
+//	const std::string extraHeaders = std::accumulate(requestHeaders_.begin(), requestHeaders_.end(), std::string(),
+//		[delimiter](const std::string& s, const std::pair<const std::string, std::string>& p) {
+//		return s + p.first + ": " + p.second + delimiter;
+//	});
+//
+//	// TODO: Do this on a separate thread, since this may blocks "Emu" thread here
+//	// Try to resolve first
+//	// Note: LittleBigPlanet onlu passed the path (ie. /LITTLEBIGPLANETPSP_XML/login?) during sceHttpCreateRequest without the host domain, thus will need to be construced into a valid URI using the data from sceHttpCreateConnection upon validating/parsing the URL.
+//	std::string fullURL = url;
+//	if (startsWithNoCase(url, "/")) {
+//		fullURL = scheme + "://" + hostString + ":" + std::to_string(port) + fullURL;
+//	}
+//
+//	Url fileUrl(fullURL);
+//	if (!fileUrl.Valid()) {
+//		return SCE_HTTP_ERROR_INVALID_URL;
+//	}
+//	if (!client.Resolve(fileUrl.Host().c_str(), fileUrl.Port())) {
+//		ERROR_LOG(Log::sceNet, "Failed resolving %s", fileUrl.ToString().c_str());
+//		return -1;
+//	}
+//
+//	// Establish Connection
+//	if (!client.SSLConnect(&ssl, getResolveRetryCount(), getConnectTimeout() / 1000000.0, &cancelled_)) {
+//		ERROR_LOG(Log::sceNet, "Failed connecting to server or cancelled.");
+//		return -1; // SCE_HTTP_ERROR_ABORTED
+//	}
+//	if (cancelled_) {
+//		return SCE_HTTP_ERROR_ABORTED;
+//	}
+//
+//	// Send the Request
+//	std::string methodstr = "GET";
+//	switch (method) {
+//	case PSP_HTTP_METHOD_POST:
+//		methodstr = "POST";
+//		break;
+//	case PSP_HTTP_METHOD_HEAD:
+//		methodstr = "HEAD";
+//		break;
+//	default:
+//		break;
+//	}
+//	net::Buffer buffer_;
+//	net::RequestProgress progress_(&cancelled_);
+//	http::RequestParams req(fileUrl.Resource(), "*/*");
+//	const char* postData = Memory::GetCharPointer(postDataPtr);
+//	if (postDataSize > 0)
+//		NotifyMemInfo(MemBlockFlags::READ, postDataPtr, postDataSize, "HttpSendRequest");
+//
+//	int err = client.SendSSLRequestWithData(methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
+//	if (err < 0)
+//		return err;
+//	if (cancelled_) {
+//		return SCE_HTTP_ERROR_ABORTED;
+//	}
+//
+//	// Retrieve Response's Status Code (and Headers too?)
+//	responseCode_ = client.ReadResponseHeaders(&buffer_, responseHeaders_, &progress_, &httpLine_);
+//	if (cancelled_) {
+//		return SCE_HTTP_ERROR_ABORTED;
+//	}
+//
+//	// TODO: Read response entity within readData() in smaller chunk(based on size arg of sceHttpReadData) instead of the whole content at once here
+//	net::Buffer entity_;
+//	int res = client.ReadResponseEntity(&buffer_, responseHeaders_, &entity_, &progress_);
+//	if (res != 0) {
+//		ERROR_LOG(Log::sceNet, "Unable to read HTTP response entity: %d", res);
+//	}
+//	entity_.TakeAll(&responseContent_);
+//	if (cancelled_) {
+//		return SCE_HTTP_ERROR_ABORTED;
+//	}
+//
+//	return 0;
+//}
 void __HttpInit() {
 }
 
@@ -355,6 +447,8 @@ static int sceHttpInit(int poolSize) {
 	httpObjects.clear();
 	// Reserve at least 1 element to prevent ::begin() from returning null when no element has been added yet
 	httpObjects.reserve(1);
+	// sceHttpsInit fails if we don't have something in httpObjects
+	httpObjects.emplace_back(std::make_shared<HTTPTemplate>());
 	httpInited = true;
 	return 0;
 }
@@ -458,7 +552,11 @@ static int sceHttpSendRequest(int requestID, u32 dataPtr, u32 dataSize) {
 
 	const auto& req = (HTTPRequest*)httpObjects[requestID - 1LL].get();
 	// Internally try to connect, and get response headers (at least the status code?)
-	int retval = req->sendRequest(dataPtr, dataSize);
+	int retval = -1;
+	/*if (req->isSSLEnabled())
+		retval = req->sendSSLRequest(dataPtr, dataSize);
+	else*/
+		retval = req->sendRequest(dataPtr, dataSize);
 	return hleLogDebug(Log::sceNet, retval);
 }
 
@@ -499,61 +597,105 @@ static int sceHttpDeleteConnection(int connectionID) {
 }
 
 // id: ID of the template, connection or request
-static int sceHttpSetConnectTimeOut(int id, u32 timeout) {
-	WARN_LOG(Log::sceNet, "UNTESTED sceHttpSetConnectTimeout(%d, %d)", id, timeout);
-	if (id <= 0 || id > (int)httpObjects.size())
+static int sceHttpSetConnectTimeOut(int templateID, u32 timeout) {
+	WARN_LOG(Log::sceNet, "UNTESTED sceHttpSetConnectTimeout(%d, %d)", templateID, timeout);
+	if (templateID <= 0 || templateID > (int)httpObjects.size())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	auto& conn = httpObjects[id - 1LL];
+	auto& conn = httpObjects[templateID - 1LL];
 	conn->setConnectTimeout(timeout);
 	return 0;
 }
 
 // id: ID of the template, connection or request
-static int sceHttpSetSendTimeOut(int id, u32 timeout) {
-	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpSetSendTimeout(%d, %d)", id, timeout);
-	if (id <= 0 || id > (int)httpObjects.size())
+static int sceHttpSetSendTimeOut(int templateID, u32 timeout) {
+	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpSetSendTimeout(%d, %d)", templateID, timeout);
+	if (templateID <= 0 || templateID > (int)httpObjects.size())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	auto& conn = httpObjects[id - 1LL];
+	auto& conn = httpObjects[templateID - 1LL];
 	conn->setSendTimeout(timeout);
 	return 0;
 }
 
-static u32 sceHttpSetProxy(u32 id, u32 activateFlagPtr, u32 mode, u32 newProxyHostPtr, u32 newProxyPort) {
-	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpSetProxy(%d, %x, %x, %x, %d)", id, activateFlagPtr, mode, newProxyHostPtr, newProxyPort);
+static u32 sceHttpSetProxy(u32 templateID, u32 activateFlagPtr, u32 mode, u32 newProxyHostPtr, u32 newProxyPort) {
+	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpSetProxy(%d, %x, %x, %x, %d)", templateID, activateFlagPtr, mode, newProxyHostPtr, newProxyPort);
+	std::lock_guard<std::mutex> guard(httpLock);
+	if (templateID <= 0 || templateID > (int)httpObjects.size())
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+
+	auto& conn = httpObjects[templateID - 1LL];
+	conn->setProxy();
+
 	return 0;
 }
 
 // id: ID of the template or connection
-static int sceHttpEnableCookie(int id) {
-	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpEnableCookie(%d)", id);
+static int sceHttpEnableCookie(int templateID) {
+	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpEnableCookie(%d)", templateID);
+	std::lock_guard<std::mutex> guard(httpLock);
+	if (templateID <= 0 || templateID > (int)httpObjects.size())
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+
+	auto& conn = httpObjects[templateID - 1LL];
+	conn->enableCookie();
+
 	return 0;
 }
 
 // id: ID of the template or connection
-static int sceHttpEnableKeepAlive(int id) {
-	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpEnableKeepAlive(%d)", id);
+static int sceHttpEnableKeepAlive(int templateID) {
+	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpEnableKeepAlive(%d)", templateID);
+	std::lock_guard<std::mutex> guard(httpLock);
+	if (templateID <= 0 || templateID > (int)httpObjects.size())
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+
+	auto& conn = httpObjects[templateID - 1LL];
+	conn->enableKeepAlive();
+
 	return 0;
 }
 
 // id: ID of the template or connection
-static int sceHttpDisableCookie(int id) {
-	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpDisableCookie(%d)", id);
+static int sceHttpDisableCookie(int templateID) {
+	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpDisableCookie(%d)", templateID);
+	std::lock_guard<std::mutex> guard(httpLock);
+	if (templateID <= 0 || templateID > (int)httpObjects.size())
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+
+	auto& conn = httpObjects[templateID - 1LL];
+	conn->enableCookie();
+
 	return 0;
 }
 
 // id: ID of the template or connection
-static int sceHttpDisableKeepAlive(int id) {
-	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpDisableKeepAlive(%d)", id);
+static int sceHttpDisableKeepAlive(int templateID) {
+	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpDisableKeepAlive(%d)", templateID);
+	std::lock_guard<std::mutex> guard(httpLock);
+	if (templateID <= 0 || templateID > (int)httpObjects.size())
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+
+	auto& conn = httpObjects[templateID - 1LL];
+	conn->enableKeepAlive();
+
 	return 0;
 }
 
-static int sceHttpsInit(int unknown1, int certPtr, int unknown3, int unknown4) {
-	WARN_LOG(Log::sceNet, "UNTESTED sceHttpsInit(%d, %d, %d, %x)", unknown1, certPtr, unknown3, unknown4);
+static int sceHttpsInit(int templateID, int certPtr, int unknown3, int unknown4) {
+	WARN_LOG(Log::sceNet, "UNTESTED sceHttpsInit(%d, %x, %d, %d)", templateID, certPtr, unknown3, unknown4);
 	if (httpsInited) {
 		return 0;  // Already initialized
 	}
+
+	std::lock_guard<std::mutex> guard(httpLock);
+	if (templateID <= 0 || templateID > (int)httpObjects.size())
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+
+	if (httpObjects[templateID - 1LL]->className() != name_HTTPTemplate)
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+
+	auto& conn = httpObjects[templateID - 1LL];
 
     // Portable Ops doesn't provide a certPtr
 	if (certPtr == 0) {
@@ -596,6 +738,8 @@ static int sceHttpsInit(int unknown1, int certPtr, int unknown3, int unknown4) {
 		i = end;
 	}
 
+	conn->setCert(certPEM);
+	conn->enableTLS();
 	// This line will cause an error if certPEM is not a valid pointer to a string
 	//size_t pemLen = strnlen(certPEM, 8192);  // avoid infinite reads
 	//if (pemLen == 8192) {
@@ -605,46 +749,6 @@ static int sceHttpsInit(int unknown1, int certPtr, int unknown3, int unknown4) {
 
 	// TODO: add OpenSSH 1.1.1 or mbedtls 2.28 for TLS1.0 support for games like PSPo2i
 
-	mbedtls_entropy_init(&entropy);
-	mbedtls_ctr_drbg_init(&ctrDrbg);
-
-	if (mbedtls_ctr_drbg_seed(&ctrDrbg, mbedtls_entropy_func, &entropy, nullptr, 0) != 0) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to seed RNG");
-		return -1;
-	}
-
-	// Initialize CA certificate store
-	// Note: certPEM MUST be pointing to a valid certificate, or it will cause a strlen crash
-	// PSP2i has it at 0x08e73a04
-	mbedtls_x509_crt_init(&caCert);
-	if (certPEM.size() > 0) {
-		int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
-		if (ret < 0) {
-			ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to parse cert: -0x%04x", -ret);
-			return -1;
-		}
-	}
-
-	// Setup SSL config
-	mbedtls_ssl_config_init(&sslConfig);
-	if (mbedtls_ssl_config_defaults(&sslConfig,
-		MBEDTLS_SSL_IS_CLIENT,
-		MBEDTLS_SSL_TRANSPORT_STREAM,
-		MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to set SSL config defaults");
-		return -1;
-	}
-	mbedtls_debug_set_threshold(4);
-	mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, nullptr);
-
-	// Limit to TLS 1.0
-	mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
-	mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
-
-	mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_REQUIRED);
-	mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, nullptr);
-	mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
-	
 	
 	//SSL_library_init();
 	//OpenSSL_add_all_algorithms();
@@ -707,34 +811,22 @@ static int sceHttpsEnableOption(int optionId) {
 	// sceHttpsEnableOption accepts the ssl flags, not an id
 	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpsEnableOption(%d)", optionId);
 	switch (optionId) {
-	case SCE_HTTPS_OPTIONS_FLAG_HTTPS:
-		INFO_LOG(Log::sceNet, "%s - HTTPS Enabled", __FUNCTION__);
-		break;
-	case SCE_HTTPS_OPTIONS_FLAG_HTTP:
-		INFO_LOG(Log::sceNet, "%s - HTTP Enabled", __FUNCTION__);
-		break;
 	default:
-		INFO_LOG(Log::sceNet, "%s - UNKNOWN %d Enabled", __FUNCTION__, optionId);
+		WARN_LOG(Log::sceNet, "%s - UNKNOWN %d Enabled", __FUNCTION__, optionId);
 		break;
 	}
-	httpsOptions[optionId] = true;
+	httpObjects.back()->enableOption(optionId);
 	return 0;
 }
 
 static int sceHttpsDisableOption(int optionId) {
 	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpsDisableOption(%d)", optionId);
 	switch (optionId) {
-	case SCE_HTTPS_OPTIONS_FLAG_HTTPS:
-		INFO_LOG(Log::sceNet, "%s - HTTPS Disabled", __FUNCTION__);
-		break;
-	case SCE_HTTPS_OPTIONS_FLAG_HTTP:
-		INFO_LOG(Log::sceNet, "%s - HTTP Disabled", __FUNCTION__);
-		break;
 	default:
-		INFO_LOG(Log::sceNet, "%s - UNKNOWN %d Disabled", __FUNCTION__, optionId);
+		WARN_LOG(Log::sceNet, "%s - UNKNOWN %d Disabled", __FUNCTION__, optionId);
 		break;
 	}
-	httpsOptions[optionId] = false;
+	httpObjects.back()->disableOption(optionId);
 	return 0;
 }
 
@@ -767,13 +859,7 @@ static int sceHttpCreateConnection(int templateID, const char *hostString, const
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
 	// TODO: Look up hostString in DNS here.
-
-	auto conn = std::make_shared<HTTPConnection>(templateID, hostString ? hostString : "", scheme ? scheme : "", port, enableKeepalive);
-	// Enable TLS if Flag is set
-	if (httpsOptions[SCE_HTTPS_OPTIONS_FLAG_HTTPS])
-		conn->enableTLS();
-
-	httpObjects.emplace_back(conn);
+	httpObjects.emplace_back(std::make_shared<HTTPConnection>(templateID, hostString ? hostString : "", scheme ? scheme : "", port, enableKeepalive));
 	int retid = (int)httpObjects.size();
 	return hleLogDebug(Log::sceNet, retid);
 }

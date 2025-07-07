@@ -18,13 +18,24 @@
 #include "Common/Data/Encoding/Compression.h"
 #include "Common/Net/NetBuffer.h"
 #include "Common/Log.h"
+#include <mbedtls\debug.h>
 
 namespace net {
 
 Connection::~Connection() {
-	Disconnect();
-	if (resolved_ != nullptr)
-		DNSResolveFree(resolved_);
+	if (sslEnabled) {
+		Disconnect();
+		mbedtls_net_free(&server_fd);
+		mbedtls_ssl_free(&sslCtx);
+		mbedtls_ssl_config_free(&sslConfig);
+		mbedtls_ctr_drbg_free(&ctrDrbg);
+		mbedtls_entropy_free(&entropy);
+	}
+	else {
+		Disconnect();
+		if (resolved_ != nullptr)
+			DNSResolveFree(resolved_);
+	}
 }
 
 // For whatever crazy reason, htons isn't available on android x86 on the build server. so here we go.
@@ -194,10 +205,107 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 	return false;
 }
 
+bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
+	WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, %i)", maxTries, timeout, cancelConnect);
+	if (port_ <= 0) {
+		ERROR_LOG(Log::IO, "SSLConnect - Bad port");
+		return false;
+	}
+
+	for (int tries = maxTries; tries > 0; --tries) {
+
+		for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
+			if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
+				continue;
+
+			int ret;
+			/*
+			 * 1. Start the connection
+			 */
+			if ((ret = mbedtls_net_connect(&server_fd, possible->ai_addr->sa_data,
+				std::to_string(port_).c_str(), MBEDTLS_NET_PROTO_TCP)) != 0) {
+				ERROR_LOG(Log::HTTP, "SSLConnect - mbedtls_net_connect(%d) call to %s failed (%d: %s)", server_fd, ret);
+				continue;
+			}
+
+			/*
+			 * 2. Setup stuff
+			 */
+			NOTICE_LOG(Log::sceNet, "SSLConnect - Setting up the SSL/TLS structure...");
+			if ((ret = mbedtls_ssl_config_defaults(&sslConfig,
+				MBEDTLS_SSL_IS_CLIENT,
+				MBEDTLS_SSL_TRANSPORT_STREAM,
+				MBEDTLS_SSL_PRESET_DEFAULT)) != 0) {
+				ERROR_LOG(Log::HTTP, "SSLConnect - mbedtls_ssl_config_defaults(%d) call to %s failed (%d: %s)", server_fd, ret);
+				continue;
+			}
+
+			mbedtls_printf(" ok\n");
+
+			/* OPTIONAL is not optimal for security,
+			 * but makes interop easier in this simplified example */
+			if (useAuth)
+				mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_OPTIONAL);
+			mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
+			mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
+			//mbedtls_ssl_conf_dbg(&sslConfig, my_debug, stdout);
+
+			if ((ret = mbedtls_ssl_setup(&sslCtx, &sslConfig)) != 0) {
+				ERROR_LOG(Log::HTTP, "SSLConnect - mbedtls_ssl_setup returned %d", ret);
+				continue;
+			}
+
+			if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
+				ERROR_LOG(Log::HTTP, "SSLConnect - mbedtls_ssl_set_hostname returned %d", ret);
+				continue;
+			}
+
+			mbedtls_ssl_set_bio(&sslCtx, &server_fd, mbedtls_net_send, mbedtls_net_recv, NULL);
+
+			/*
+			 * 4. Handshake
+			 */
+			NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
+			fflush(stdout);
+
+			while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
+				if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
+					ERROR_LOG(Log::HTTP, "SSLConnect - mbedtls_ssl_handshake returned -0x%x", (unsigned int)-ret);
+					continue;
+				}
+			}
+
+			/*
+			 * 5. Verify the server certificate
+			 */
+			NOTICE_LOG(Log::sceNet, "SSLConnect - Verifying peer X.509 certificate...");
+
+			/* In real life, we probably want to bail out when ret != 0 */
+			if ((flags = mbedtls_ssl_get_verify_result(&sslCtx)) != 0) {
+				char vrfy_buf[512];
+
+				mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
+
+				ERROR_LOG(Log::HTTP, "SSLConnect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
+			}
+
+			INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
+			return true;
+		}
+		sleep_ms(1, "connect");
+	}
+	return false;
+}
+
 void Connection::Disconnect() {
-	if ((intptr_t)sock_ != -1) {
-		closesocket(sock_);
-		sock_ = -1;
+	if (sslEnabled) {
+		mbedtls_ssl_close_notify(&sslCtx);
+	}
+	else {
+		if ((intptr_t)sock_ != -1) {
+			closesocket(sock_);
+			sock_ = -1;
+		}
 	}
 }
 
@@ -212,10 +320,64 @@ constexpr const char *HTTP_VERSION = "1.1";
 Client::Client() {
 	userAgent_ = DEFAULT_USERAGENT;
 	httpVersion_ = HTTP_VERSION;
+	// TODO: Initialize SSH
 }
 
 Client::~Client() {
 	Disconnect();
+}
+
+int Client::InitializeSSL(std::string certPEM, int useAuth) {
+	WARN_LOG(Log::sceNet, "UNTESTED Client::InitializeSSL(%x, %i)", certPEM, useAuth);
+	this->useAuth = useAuth;
+	mbedtls_net_init(&server_fd);
+	mbedtls_ssl_init(&sslCtx);
+	mbedtls_ssl_config_init(&sslConfig);
+	mbedtls_ctr_drbg_init(&ctrDrbg);
+	mbedtls_entropy_init(&entropy);
+
+	if (mbedtls_ctr_drbg_seed(&ctrDrbg, mbedtls_entropy_func, &entropy, nullptr, 0) != 0) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to seed RNG");
+		return -1;
+	}
+
+	// Initialize CA certificate store
+	// Note: certPEM MUST be pointing to a valid certificate, or it will cause a strlen crash
+	// PSP2i has it at 0x08e73a04
+	mbedtls_x509_crt_init(&caCert);
+	if (certPEM.size() == 0) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: No cert provided.");
+		return -1;
+	}
+
+	int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
+	if (ret < 0) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to parse cert: -0x%04x", -ret);
+		return -1;
+	}
+
+	// Setup SSL config
+	mbedtls_ssl_config_init(&sslConfig);
+	if (mbedtls_ssl_config_defaults(&sslConfig,
+		MBEDTLS_SSL_IS_CLIENT,
+		MBEDTLS_SSL_TRANSPORT_STREAM,
+		MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to set SSL config defaults");
+		return -1;
+	}
+	mbedtls_debug_set_threshold(4);
+	mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, nullptr);
+
+	// Limit to TLS 1.0
+	mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
+	mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
+
+	mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_REQUIRED);
+	mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, nullptr);
+	mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
+	sslEnabled = 1;
+
+	return 0;
 }
 
 // Ignores line folding (deprecated), but respects field combining.
@@ -355,46 +517,61 @@ int Client::SendRequestWithData(const char *method, const RequestParams &req, st
 		otherHeaders ? otherHeaders : "");
 
 	buffer.Append(data);
-	bool flushed = buffer.FlushSocket(sock(), dataTimeout_, progress->cancelled);
-	if (!flushed) {
-		return -1;  // TODO error code.
-	}
-	return 0;
-}
-
-int Client::SendSSLRequestWithData(mbedtls_ssl_context ssl, const char* method, const RequestParams& req, std::string_view data, const char* otherHeaders, net::RequestProgress* progress) {
-	progress->Update(0, 0, false);
-
-	net::Buffer buffer;
-	const char* tpl =
-		"%s %s HTTP/%s\r\n"
-		"Host: %s\r\n"
-		"User-Agent: %s\r\n"
-		"Accept: %s\r\n"
-		"Connection: close\r\n"
-		"%s"
-		"\r\n";
-
-	buffer.Printf(tpl,
-		method, req.resource.c_str(), HTTP_VERSION,
-		host_.c_str(),
-		userAgent_.c_str(),
-		req.acceptMime,
-		otherHeaders ? otherHeaders : "");
-
-	buffer.Append(data);
-	int sent = 0;
-	while (sent < (int)data.size()) {
-		int ret;
-		ret = mbedtls_ssl_write(&ssl, (const unsigned char*)data.data() + sent, data.size() - sent);
-		if (ret <= 0) {
-			ERROR_LOG(Log::sceNet, "TLS write failed: -0x%04x", ret < 0 ? -ret : 0);
-			return -1;
+	if (sslEnabled) {
+		int sent = 0;
+		while (sent < (int)data.size()) {
+			int ret;
+			ret = mbedtls_ssl_write(&sslCtx, (const unsigned char*)data.data() + sent, data.size() - sent);
+			if (ret <= 0) {
+				ERROR_LOG(Log::sceNet, "TLS write failed: -0x%04x", ret < 0 ? -ret : 0);
+				return -1;
+			}
+			sent += ret;
 		}
-		sent += ret;
+	}
+	else {
+		bool flushed = buffer.FlushSocket(sock(), dataTimeout_, progress->cancelled);
+		if (!flushed) {
+			return -1;  // TODO error code.
+		}
 	}
 	return 0;
 }
+
+
+//int Client::SendSSLRequestWithData(mbedtls_ssl_context ssl, const char* method, const RequestParams& req, std::string_view data, const char* otherHeaders, net::RequestProgress* progress) {
+//	progress->Update(0, 0, false);
+//
+//	net::Buffer buffer;
+//	const char* tpl =
+//		"%s %s HTTP/%s\r\n"
+//		"Host: %s\r\n"
+//		"User-Agent: %s\r\n"
+//		"Accept: %s\r\n"
+//		"Connection: close\r\n"
+//		"%s"
+//		"\r\n";
+//
+//	buffer.Printf(tpl,
+//		method, req.resource.c_str(), HTTP_VERSION,
+//		host_.c_str(),
+//		userAgent_.c_str(),
+//		req.acceptMime,
+//		otherHeaders ? otherHeaders : "");
+//
+//	buffer.Append(data);
+//	int sent = 0;
+//	while (sent < (int)data.size()) {
+//		int ret;
+//		ret = mbedtls_ssl_write(&ssl, (const unsigned char*)data.data() + sent, data.size() - sent);
+//		if (ret <= 0) {
+//			ERROR_LOG(Log::sceNet, "TLS write failed: -0x%04x", ret < 0 ? -ret : 0);
+//			return -1;
+//		}
+//		sent += ret;
+//	}
+//	return 0;
+//}
 
 int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &responseHeaders, net::RequestProgress *progress, std::string *statusLine) {
 	// Snarf all the data we can into RAM. A little unsafe but hey.
@@ -571,10 +748,17 @@ int HTTPRequest::Perform(const std::string &url) {
 	if (cancelled_) {
 		return -1;
 	}
-
-	if (!client.Connect(2, 20.0, &cancelled_)) {
-		ERROR_LOG(Log::HTTP, "Failed connecting to server or cancelled (=%d).", cancelled_);
-		return -1;
+	if (client.isSSLEnabled()) {
+		if (!client.SSLConnect(2, 20.0, &cancelled_)) {
+			ERROR_LOG(Log::HTTP, "Failed connecting to server or cancelled (=%d).", cancelled_);
+			return -1;
+		}
+	}
+	else {
+		if (!client.Connect(2, 20.0, &cancelled_)) {
+			ERROR_LOG(Log::HTTP, "Failed connecting to server or cancelled (=%d).", cancelled_);
+			return -1;
+		}
 	}
 
 	if (cancelled_) {
