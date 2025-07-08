@@ -111,23 +111,23 @@ int HTTPConnection::InitializeSSL() {
 	mbedtls_debug_set_threshold(4);
 
 	if (mbedtls_ctr_drbg_seed(&ctrDrbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to seed RNG");
+		ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to seed RNG");
 		return -1;
 	}
 
+	// MPO Doesn't provide a cert here
+	if (certPEM.size() == 0)
+		WARN_LOG(Log::sceNet, "InitializeSSL: No cert provided.");
 	// Initialize CA certificate store
 	// Note: certPEM MUST be pointing to a valid certificate, or it will cause a strlen crash
 	// PSP2i has it at 0x08e73a04
-	mbedtls_x509_crt_init(&caCert);
-	if (certPEM.size() == 0) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: No cert provided.");
-		return -1;
-	}
-
-	int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
-	if (ret < 0) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to parse cert: -0x%04x", -ret);
-		return -1;
+	if (certPEM.size() > 0) {
+		mbedtls_x509_crt_init(&caCert);
+		int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
+		if (ret < 0) {
+			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to parse cert: -0x%04x", -ret);
+			return -1;
+		}
 	}
 
 	// Setup SSL config
@@ -135,7 +135,7 @@ int HTTPConnection::InitializeSSL() {
 		MBEDTLS_SSL_IS_CLIENT,
 		MBEDTLS_SSL_TRANSPORT_STREAM,
 		MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to set SSL config defaults");
+		ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to set SSL config defaults");
 		return -1;
 	}
 
@@ -145,7 +145,8 @@ int HTTPConnection::InitializeSSL() {
 		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_OPTIONAL);
 	else
 		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_NONE);
-	mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
+	if (certPEM.size() > 0)
+		mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
 	mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
 	mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, NULL);
 
@@ -162,6 +163,7 @@ int HTTPConnection::InitializeSSL() {
 	// Enable Legacy Cipher
 	mbedtls_ssl_conf_ciphersuites(&sslConfig, net::legacy_ciphersuites_array); // optional if you’ve recompiled with weak cipher support
 	// Limit to TLS 1.0
+	// HTTPS Option 35 may relate to allowing SSLv3 here
 	mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
 	mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
 
@@ -668,48 +670,50 @@ static int sceHttpsInit(int ctxId, int certPtr, int unknown3, int unknown4) {
 		return 0;  // Already initialized
 	}
 
+	// Patapon3 doesn't provide a certPtr
     // Portable Ops doesn't provide a certPtr
-	if (certPtr == 0) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: No cert provided");
-		return -1;
-	}
+	if (certPtr == 0)
+		WARN_LOG(Log::sceNet, "sceHttpsInit: No cert provided");
 
-	u32 memPtr = Memory::Read_U32(certPtr);
-	if (!Memory::IsValidRange(memPtr, 1)) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: certPtr points to invalid address: %08x", certPtr);
-		return -1;
-	}
+	if (certPtr != 0) {
 
-	u32 certAddr = Memory::Read_U32(memPtr);
-	if (!Memory::IsValidRange(certAddr, 1)) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: certAddrPtr points to invalid address: %08x", memPtr);
-		return -1;
-	}
-
-	// Read 8192 bytes of data until we reach a zero terminal
-	std::string certPEM = "";
-	for (size_t i = 0; i < 8192; ++i) {
-		if (!Memory::IsValidAddress(certAddr + i)) {
-			ERROR_LOG(Log::sceNet, "sceHttpsInit: Invalid memory at PEM offset %08x", certAddr + i);
+		u32 memPtr = Memory::Read_U32(certPtr);
+		if (!Memory::IsValidRange(memPtr, 1)) {
+			ERROR_LOG(Log::sceNet, "sceHttpsInit: certPtr points to invalid address: %08x", certPtr);
 			return -1;
 		}
 
-		u8 ch = Memory::Read_U8(certAddr + i);
-		if (ch == 0)
-			break;
+		u32 certAddr = Memory::Read_U32(memPtr);
+		if (!Memory::IsValidRange(certAddr, 1)) {
+			ERROR_LOG(Log::sceNet, "sceHttpsInit: certAddrPtr points to invalid address: %08x", memPtr);
+			return -1;
+		}
 
-		certPEM.push_back(ch);
-	}
-	INFO_LOG(Log::sceNet, "%s - CERTIFICATE:", __FUNCTION__);
-	size_t i = 0;
-	while (i < certPEM.size()) {
-		size_t newline = certPEM.find('\n', i);
-		size_t end = std::min(i + 64, newline != std::string::npos ? newline + 1 : certPEM.size());
-		INFO_LOG(Log::sceNet, "%s - %s", __FUNCTION__, certPEM.substr(i, end - i).c_str());
-		i = end;
-	}
+		// Read 8192 bytes of data until we reach a zero terminal
+		std::string certPEM = "";
+		for (size_t i = 0; i < 8192; ++i) {
+			if (!Memory::IsValidAddress(certAddr + i)) {
+				ERROR_LOG(Log::sceNet, "sceHttpsInit: Invalid memory at PEM offset %08x", certAddr + i);
+				return -1;
+			}
 
-	bufferTemplate.setCert(certPEM);
+			u8 ch = Memory::Read_U8(certAddr + i);
+			if (ch == 0)
+				break;
+
+			certPEM.push_back(ch);
+		}
+		INFO_LOG(Log::sceNet, "%s - CERTIFICATE:", __FUNCTION__);
+		size_t i = 0;
+		while (i < certPEM.size()) {
+			size_t newline = certPEM.find('\n', i);
+			size_t end = std::min(i + 64, newline != std::string::npos ? newline + 1 : certPEM.size());
+			INFO_LOG(Log::sceNet, "%s - %s", __FUNCTION__, certPEM.substr(i, end - i).c_str());
+			i = end;
+		}
+
+		bufferTemplate.setCert(certPEM);
+	}
 	bufferTemplate.enableTLS();
 	httpsInited = true;
 	return 0;

@@ -2385,6 +2385,7 @@ u32 sceKernelFindModuleByName(const char *name)
 
 // The id in question here is a file handle.
 static u32 sceKernelLoadModuleByID(u32 id, u32 flags, u32 lmoptionPtr) {
+	DEBUG_LOG(Log::Loader, "sceKernelLoadModuleByID(%i, %i, %08x)", id, flags, lmoptionPtr);
 	u32 error;
 	u32 handle = __IoGetFileHandleFromId(id, error);
 	if (handle == (u32)-1) {

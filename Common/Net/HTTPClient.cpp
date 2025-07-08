@@ -280,6 +280,7 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 			/*
 			 * 5. Verify the server certificate
 			 */
+			// HTTPS Option 28 may relate to disabling this check
 			NOTICE_LOG(Log::sceNet, "SSLConnect - Verifying peer X.509 certificate...");
 
 			/* In real life, we probably want to bail out when ret != 0 */
@@ -558,7 +559,7 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 	int i = readbuf->Contains("\r\n\r\n");
 	// Still no header eof? Try again!
 	if (i < 0) {
-		ERROR_LOG(Log::HTTP, "Headers not yet found in %i bytes", readbuf->size());
+		DEBUG_LOG(Log::HTTP, "Headers not yet found in %i bytes", readbuf->size());
 		goto begin;
 	}
 
