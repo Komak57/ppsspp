@@ -349,8 +349,8 @@ Client::~Client() {
 		mbedtls_x509_crt_free(&caCert);
 
 		// Also clear entropy and rng contexts if reinitialized every time
-		mbedtls_ctr_drbg_free(&ctrDrbg);
-		mbedtls_entropy_free(&entropy);
+		//mbedtls_ctr_drbg_free(&ctrDrbg);
+		//mbedtls_entropy_free(&entropy);
 	}
 	Disconnect();
 }
@@ -573,8 +573,28 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 			responseHeaders.push_back(line);
 		start = end + 2;  // Skip past the \r\n
 	}
+	// take first line
+	std::string line = responseHeaders.front();
 
-	return i;
+	// Find HTTP Code
+	int code;
+	size_t code_pos = line.find(' ');
+	if (code_pos != line.npos) {
+		code_pos = line.find_first_not_of(' ', code_pos);
+	}
+
+	if (code_pos != line.npos) {
+		code = atoi(&line[code_pos]);
+	}
+	else {
+		ERROR_LOG(Log::HTTP, "Could not parse HTTP status code: '%s'", line.c_str());
+		return -1;
+	}
+
+	if (statusLine)
+		*statusLine = line;
+
+	return code;
 
 	// Grab the first header line that contains the http code.
 	/*std::string line;
@@ -652,7 +672,7 @@ int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::stri
 	if (remainingLength > 0) {
 		INFO_LOG(Log::sceNet, "ReadResponseEntity - %i/%i bytes remaining", remainingLength, contentLength);
 		int ret;
-		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? netCtx.fd : sock(), remainingLength, progress, sslEnabled, (sslEnabled ? &sslCtx : nullptr))) < 0)
+		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? netCtx.fd : sock(), contentLength, progress, sslEnabled, (sslEnabled ? &sslCtx : nullptr))) < 0)
 			return -1;
 	}
 	// output now contains the rest of the reply. Dechunk it.

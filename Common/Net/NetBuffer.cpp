@@ -196,7 +196,7 @@ int Buffer::Read(int fd, size_t sz, bool useSSL, mbedtls_ssl_context* sslCtx) {
 				case MBEDTLS_ERR_NET_CONN_RESET:
 				case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
 					WARN_LOG(Log::HTTP, "Read - Client closed connection gracefully");
-					return (int)received > 0 ? (int)received : retval;
+					return (int)received;
 				case MBEDTLS_ERR_SSL_TIMEOUT:
 					ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
 					return retval;
