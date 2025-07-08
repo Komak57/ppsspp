@@ -257,8 +257,14 @@ protected:
 	std::string scheme;
 	u16 port = 80;
 	int enableKeepalive = 0;
-	//mbedtls_ssl_context ssl;
-	//mbedtls_net_context net;
+
+	mbedtls_ssl_context sslCtx;
+	mbedtls_net_context netCtx;
+
+	mbedtls_ssl_config sslConfig;
+	mbedtls_ctr_drbg_context ctrDrbg;
+	mbedtls_entropy_context entropy;
+	mbedtls_x509_crt caCert;
 
 public:
 	HTTPConnection() {}
@@ -266,6 +272,9 @@ public:
 	virtual ~HTTPConnection();
 
 	virtual const char* className() override { return name_HTTPConnection; }
+
+	// SSL Related Functions
+	int InitializeSSL();
 
 	bool isSSLEnabled() { return tlsEnabled; }
 	int getTemplateID() { return templateID; }
@@ -289,7 +298,6 @@ private:
 	int entityLength_ = -1;
 
 	http::Client client;
-	//net::RequestProgress progress_(&cancelled_);
 	std::vector<std::string> responseHeaders_;
 	std::string httpLine_;
 	std::string responseContent_;
@@ -310,7 +318,6 @@ public:
 	int getAllResponseHeaders(u32 headerAddrPtr, u32 headerSizePtr);
 	int readData(u32 destDataPtr, u32 size);
 	int sendRequest(u32 postDataPtr, u32 postDataSize);
-	//int sendSSLRequest(u32 postDataPtr, u32 postDataSize);
 };
 
 

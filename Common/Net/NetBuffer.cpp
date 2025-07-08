@@ -188,6 +188,10 @@ int Buffer::Read(int fd, size_t sz, bool useSSL, mbedtls_ssl_context* sslCtx) {
 		int toRead = (int)std::min(sz, sizeof(buf));
 		if (useSSL) {
 			retval = mbedtls_ssl_read(sslCtx, (unsigned char*)buf, toRead);
+			if (retval == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
+				WARN_LOG(Log::HTTP, "mbedtls_ssl_read Connection closed gracefully");
+				return 0;
+			}
 			if (retval == MBEDTLS_ERR_SSL_TIMEOUT) {
 				ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
 				return -1;

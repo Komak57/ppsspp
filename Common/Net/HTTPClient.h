@@ -62,6 +62,8 @@ protected:
 	int useRedirect = 0;
 	int sslEnabled = 0;
 
+	bool connected = false;
+
 	u32 flags;
 
 private:
@@ -89,8 +91,16 @@ public:
 	Client();
 	~Client();
 
-	// SSL Related Functions
-	int InitializeSSL(std::string certPEM, int useAuth);
+	void Initialize(mbedtls_ssl_context sslCtx, mbedtls_net_context netCtx, mbedtls_ssl_config sslConfig, mbedtls_ctr_drbg_context ctrDrbg, mbedtls_entropy_context entropy, mbedtls_x509_crt caCert) {
+		this->sslCtx = sslCtx;
+		this->netCtx = netCtx;
+		this->sslConfig = sslConfig;
+		this->ctrDrbg = ctrDrbg;
+		this->entropy = entropy;
+		this->caCert = caCert;
+		this->sslEnabled = true;
+		return;
+	}
 
 	// Return value is the HTTP return code. 200 means OK. < 0 means some local error.
 	int GET(const RequestParams &req, Buffer *output, net::RequestProgress *progress);
@@ -104,7 +114,6 @@ public:
 
 	int SendRequest(const char *method, const RequestParams &req, const char *otherHeaders, net::RequestProgress *progress);
 	int SendRequestWithData(const char* method, const RequestParams& req, std::string_view data, const char* otherHeaders, net::RequestProgress* progress);
-	//int SendSSLRequestWithData(mbedtls_ssl_context ssl, const char* method, const RequestParams& req, std::string_view data, const char* otherHeaders, net::RequestProgress* progress);
 	int ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &responseHeaders, net::RequestProgress *progress, std::string *statusLine = nullptr);
 	// If your response contains a response, you must read it.
 	int ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::string> &responseHeaders, Buffer *output, net::RequestProgress *progress);

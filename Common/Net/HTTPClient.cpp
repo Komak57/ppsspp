@@ -28,15 +28,14 @@ Connection::~Connection() {
 		Disconnect();
 		mbedtls_net_free(&netCtx);
 		mbedtls_ssl_free(&sslCtx);
+
 		mbedtls_ssl_config_free(&sslConfig);
 		mbedtls_ctr_drbg_free(&ctrDrbg);
 		mbedtls_entropy_free(&entropy);
 	}
-	else {
-		Disconnect();
-		if (resolved_ != nullptr)
-			DNSResolveFree(resolved_);
-	}
+	Disconnect();
+	if (resolved_ != nullptr)
+		DNSResolveFree(resolved_);
 }
 
 // For whatever crazy reason, htons isn't available on android x86 on the build server. so here we go.
@@ -102,7 +101,7 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 	if (sslEnabled)
 		return SSLConnect(maxTries, timeout, cancelConnect);
 
-	NOTICE_LOG(Log::sceNet, "Connection::Connect(%i, %d, %i)", maxTries, timeout, cancelConnect);
+	NOTICE_LOG(Log::sceNet, "Connection::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 	if (port_ <= 0) {
 		ERROR_LOG(Log::IO, "Bad port");
 		return false;
@@ -211,10 +210,18 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 }
 
 bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
-	WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, %i)", maxTries, timeout, cancelConnect);
+	WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 	if (port_ <= 0) {
 		ERROR_LOG(Log::IO, "SSLConnect - Bad port");
 		return false;
+	}
+	if (connected) {
+		mbedtls_ssl_session_reset(&sslCtx);
+		mbedtls_ssl_config_free(&sslConfig);
+
+		mbedtls_ssl_free(&sslCtx);
+		mbedtls_net_free(&netCtx);
+		connected = false;
 	}
 
 
@@ -247,7 +254,7 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 			}
 
 			//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
-			if ((ret = mbedtls_ssl_set_hostname(&sslCtx, "game.revurb.us")) != 0) {
+			if ((ret = mbedtls_ssl_set_hostname(&sslCtx, host_.c_str())) != 0) {
 				char errbuf[128];
 				mbedtls_strerror(ret, errbuf, sizeof(errbuf));
 				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
@@ -286,6 +293,7 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 			}
 
 			INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
+			connected = true;
 			return true;
 		retry:
 			INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
@@ -330,76 +338,6 @@ Client::Client() {
 
 Client::~Client() {
 	Disconnect();
-}
-
-int Client::InitializeSSL(std::string certPEM, int useAuth) {
-	WARN_LOG(Log::sceNet, "UNTESTED Client::InitializeSSL(%x, %i)", certPEM, useAuth);
-	this->useAuth = useAuth;
-
-	mbedtls_net_init(&netCtx);
-	mbedtls_ssl_init(&sslCtx);
-	mbedtls_ssl_config_init(&sslConfig);
-	mbedtls_ctr_drbg_init(&ctrDrbg);
-	mbedtls_entropy_init(&entropy);
-	mbedtls_debug_set_threshold(4);
-
-	if (mbedtls_ctr_drbg_seed(&ctrDrbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to seed RNG");
-		return -1;
-	}
-
-	// Initialize CA certificate store
-	// Note: certPEM MUST be pointing to a valid certificate, or it will cause a strlen crash
-	// PSP2i has it at 0x08e73a04
-	mbedtls_x509_crt_init(&caCert);
-	if (certPEM.size() == 0) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: No cert provided.");
-		return -1;
-	}
-
-	int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
-	if (ret < 0) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to parse cert: -0x%04x", -ret);
-		return -1;
-	}
-
-	// Setup SSL config
-	if (mbedtls_ssl_config_defaults(&sslConfig,
-		MBEDTLS_SSL_IS_CLIENT,
-		MBEDTLS_SSL_TRANSPORT_STREAM,
-		MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
-		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to set SSL config defaults");
-		return -1;
-	}
-
-	/* OPTIONAL is not optimal for security,
-	 * but makes interop easier in this simplified example */
-	if (useAuth)
-		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_OPTIONAL);
-	else
-		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_NONE);
-	mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
-	mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
-	mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, NULL);
-
-	// Check compiled Ciphers
-	/*const int* ciphers = mbedtls_ssl_list_ciphersuites();
-	int cipherCount = 0;
-	for (const int* c = ciphers; *c != 0; ++c)
-		++cipherCount;
-	INFO_LOG(Log::sceNet, "sceHttpsInit: Parsing %i ciphers", cipherCount);
-	for (int i = 0; i < cipherCount; i++) {
-		INFO_LOG(Log::sceNet, "sceHttpsInit: ciphers[%i] = 0x%04x = %s", i, ciphers[i], mbedtls_ssl_get_ciphersuite_name(ciphers[i]));
-	}*/
-
-	// Enable Legacy Cipher
-	mbedtls_ssl_conf_ciphersuites(&sslConfig, net::legacy_ciphersuites_array); // optional if you’ve recompiled with weak cipher support
-	// Limit to TLS 1.0
-	mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
-	mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
-
-	sslEnabled = 1;
-	return 0;
 }
 
 // Ignores line folding (deprecated), but respects field combining.

@@ -95,12 +95,80 @@ HTTPConnection::HTTPConnection(int templateID, const char* hostString, const cha
 	this->enableKeepalive = enableKeepalive;
 }
 HTTPConnection::~HTTPConnection() {
+	WARN_LOG(Log::sceNet, "HTTPConnection::~HTTPConnection(%i)", this->templateID);
 	// Clean up and free SSL resources
-	//if (tlsEnabled) {
-	//	mbedtls_ssl_free(&ssl);
-	//	mbedtls_net_free(&net);
-	//}
 }
+
+int HTTPConnection::InitializeSSL() {
+	WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::InitializeSSL()");
+	this->useAuth = useAuth;
+
+	mbedtls_net_init(&netCtx);
+	mbedtls_ssl_init(&sslCtx);
+	mbedtls_ssl_config_init(&sslConfig);
+	mbedtls_ctr_drbg_init(&ctrDrbg);
+	mbedtls_entropy_init(&entropy);
+	mbedtls_debug_set_threshold(4);
+
+	if (mbedtls_ctr_drbg_seed(&ctrDrbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to seed RNG");
+		return -1;
+	}
+
+	// Initialize CA certificate store
+	// Note: certPEM MUST be pointing to a valid certificate, or it will cause a strlen crash
+	// PSP2i has it at 0x08e73a04
+	mbedtls_x509_crt_init(&caCert);
+	if (certPEM.size() == 0) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: No cert provided.");
+		return -1;
+	}
+
+	int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
+	if (ret < 0) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to parse cert: -0x%04x", -ret);
+		return -1;
+	}
+
+	// Setup SSL config
+	if (mbedtls_ssl_config_defaults(&sslConfig,
+		MBEDTLS_SSL_IS_CLIENT,
+		MBEDTLS_SSL_TRANSPORT_STREAM,
+		MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
+		ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to set SSL config defaults");
+		return -1;
+	}
+
+	/* OPTIONAL is not optimal for security,
+	 * but makes interop easier in this simplified example */
+	if (useAuth)
+		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_OPTIONAL);
+	else
+		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_NONE);
+	mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
+	mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
+	mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, NULL);
+
+	// Check compiled Ciphers
+	/*const int* ciphers = mbedtls_ssl_list_ciphersuites();
+	int cipherCount = 0;
+	for (const int* c = ciphers; *c != 0; ++c)
+		++cipherCount;
+	INFO_LOG(Log::sceNet, "sceHttpsInit: Parsing %i ciphers", cipherCount);
+	for (int i = 0; i < cipherCount; i++) {
+		INFO_LOG(Log::sceNet, "sceHttpsInit: ciphers[%i] = 0x%04x = %s", i, ciphers[i], mbedtls_ssl_get_ciphersuite_name(ciphers[i]));
+	}*/
+
+	// Enable Legacy Cipher
+	mbedtls_ssl_conf_ciphersuites(&sslConfig, net::legacy_ciphersuites_array); // optional if you’ve recompiled with weak cipher support
+	// Limit to TLS 1.0
+	mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
+	mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
+
+	enableTLS();
+	return 0;
+}
+
 
 HTTPRequest::HTTPRequest(int connectionID, int method, const char* url, u64 contentLength) {
 	// Copy base data as initial base value for this
@@ -114,7 +182,7 @@ HTTPRequest::HTTPRequest(int connectionID, int method, const char* url, u64 cont
 	this->contentLength = contentLength;
 
 	if (tlsEnabled) {
-		client.InitializeSSL(certPEM, useAuth);
+		client.Initialize(this->sslCtx, this->netCtx, this->sslConfig, this->ctrDrbg, this->entropy, this->caCert);
 	}
 	//progress_.cancelled = &cancelled_;
 	responseContent_.clear();
@@ -321,94 +389,6 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 	return 0;
 }
 
-//int HTTPRequest::sendSSLRequest(u32 postDataPtr, u32 postDataSize) {
-//	// Initialize Connection
-//	client.SetDataTimeout(getRecvTimeout() / 1000000.0);
-//	// Initialize Headers
-//	if (getHttpVer() == SCE_HTTP_VERSION_1_0)
-//		client.SetHttpVersion("1.0");
-//	else
-//		client.SetHttpVersion("1.1");
-//	client.SetUserAgent(getUserAgent());
-//	if (postDataSize > 0)
-//		requestHeaders_["Content-Length"] = std::to_string(postDataSize);
-//	const std::string delimiter = "\r\n";
-//	const std::string extraHeaders = std::accumulate(requestHeaders_.begin(), requestHeaders_.end(), std::string(),
-//		[delimiter](const std::string& s, const std::pair<const std::string, std::string>& p) {
-//		return s + p.first + ": " + p.second + delimiter;
-//	});
-//
-//	// TODO: Do this on a separate thread, since this may blocks "Emu" thread here
-//	// Try to resolve first
-//	// Note: LittleBigPlanet onlu passed the path (ie. /LITTLEBIGPLANETPSP_XML/login?) during sceHttpCreateRequest without the host domain, thus will need to be construced into a valid URI using the data from sceHttpCreateConnection upon validating/parsing the URL.
-//	std::string fullURL = url;
-//	if (startsWithNoCase(url, "/")) {
-//		fullURL = scheme + "://" + hostString + ":" + std::to_string(port) + fullURL;
-//	}
-//
-//	Url fileUrl(fullURL);
-//	if (!fileUrl.Valid()) {
-//		return SCE_HTTP_ERROR_INVALID_URL;
-//	}
-//	if (!client.Resolve(fileUrl.Host().c_str(), fileUrl.Port())) {
-//		ERROR_LOG(Log::sceNet, "Failed resolving %s", fileUrl.ToString().c_str());
-//		return -1;
-//	}
-//
-//	// Establish Connection
-//	if (!client.SSLConnect(&ssl, getResolveRetryCount(), getConnectTimeout() / 1000000.0, &cancelled_)) {
-//		ERROR_LOG(Log::sceNet, "Failed connecting to server or cancelled.");
-//		return -1; // SCE_HTTP_ERROR_ABORTED
-//	}
-//	if (cancelled_) {
-//		return SCE_HTTP_ERROR_ABORTED;
-//	}
-//
-//	// Send the Request
-//	std::string methodstr = "GET";
-//	switch (method) {
-//	case PSP_HTTP_METHOD_POST:
-//		methodstr = "POST";
-//		break;
-//	case PSP_HTTP_METHOD_HEAD:
-//		methodstr = "HEAD";
-//		break;
-//	default:
-//		break;
-//	}
-//	net::Buffer buffer_;
-//	net::RequestProgress progress_(&cancelled_);
-//	http::RequestParams req(fileUrl.Resource(), "*/*");
-//	const char* postData = Memory::GetCharPointer(postDataPtr);
-//	if (postDataSize > 0)
-//		NotifyMemInfo(MemBlockFlags::READ, postDataPtr, postDataSize, "HttpSendRequest");
-//
-//	int err = client.SendSSLRequestWithData(methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
-//	if (err < 0)
-//		return err;
-//	if (cancelled_) {
-//		return SCE_HTTP_ERROR_ABORTED;
-//	}
-//
-//	// Retrieve Response's Status Code (and Headers too?)
-//	responseCode_ = client.ReadResponseHeaders(&buffer_, responseHeaders_, &progress_, &httpLine_);
-//	if (cancelled_) {
-//		return SCE_HTTP_ERROR_ABORTED;
-//	}
-//
-//	// TODO: Read response entity within readData() in smaller chunk(based on size arg of sceHttpReadData) instead of the whole content at once here
-//	net::Buffer entity_;
-//	int res = client.ReadResponseEntity(&buffer_, responseHeaders_, &entity_, &progress_);
-//	if (res != 0) {
-//		ERROR_LOG(Log::sceNet, "Unable to read HTTP response entity: %d", res);
-//	}
-//	entity_.TakeAll(&responseContent_);
-//	if (cancelled_) {
-//		return SCE_HTTP_ERROR_ABORTED;
-//	}
-//
-//	return 0;
-//}
 void __HttpInit() {
 }
 
@@ -732,57 +712,6 @@ static int sceHttpsInit(int ctxId, int certPtr, int unknown3, int unknown4) {
 
 	bufferTemplate.setCert(certPEM);
 	bufferTemplate.enableTLS();
-	// This line will cause an error if certPEM is not a valid pointer to a string
-	//size_t pemLen = strnlen(certPEM, 8192);  // avoid infinite reads
-	//if (pemLen == 8192) {
-	//	ERROR_LOG(Log::sceNet, "sceHttpsInit: PEM string not null-terminated or too long");
-	//	return -1;
-	//}
-
-	// TODO: add OpenSSH 1.1.1 or mbedtls 2.28 for TLS1.0 support for games like PSPo2i
-
-	
-	//SSL_library_init();
-	//OpenSSL_add_all_algorithms();
-	//SSL_load_error_strings();
-
-	//pspSslCtx = SSL_CTX_new(TLSv1_method());  // TLS 1.0 only
-	//if (!pspSslCtx) {
-	//	ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to create SSL_CTX");
-	//	return -1;
-	//}
-
-	//// Disable everything but TLS 1.0
-	//SSL_CTX_set_options(pspSslCtx,
-	//	SSL_OP_NO_SSLv2 |
-	//	SSL_OP_NO_SSLv3 |
-	//	SSL_OP_NO_TLSv1_1 |
-	//	SSL_OP_NO_TLSv1_2 |
-	//	SSL_OP_NO_TLSv1_3);
-
-	//BIO* bio = BIO_new_mem_buf(certPEM, -1);
-	//if (!bio) {
-	//	ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to create BIO");
-	//	SSL_CTX_free(pspSslCtx);
-	//	pspSslCtx = nullptr;
-	//	return -1;
-	//}
-
-	//X509* cert = PEM_read_bio_X509(bio, nullptr, 0, nullptr);
-	//BIO_free(bio);
-
-	//if (!cert) {
-	//	ERROR_LOG(Log::sceNet, "sceHttpsInit: Failed to parse cert");
-	//	SSL_CTX_free(pspSslCtx);
-	//	pspSslCtx = nullptr;
-	//	return -1;
-	//}
-
-	//X509_STORE* store = SSL_CTX_get_cert_store(pspSslCtx);
-	//X509_STORE_add_cert(store, cert);
-	//X509_free(cert);
-
-
 	httpsInited = true;
 	return 0;
 }
@@ -851,7 +780,9 @@ static int sceHttpCreateConnection(int templateID, const char *hostString, const
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
 	// TODO: Look up hostString in DNS here.
-	httpObjects.emplace_back(std::make_shared<HTTPConnection>(templateID, hostString ? hostString : "", scheme ? scheme : "", port, enableKeepalive));
+	auto conn = std::make_shared<HTTPConnection>(templateID, hostString ? hostString : "", scheme ? scheme : "", port, enableKeepalive);
+	conn->InitializeSSL();
+	httpObjects.emplace_back(conn);
 	int retid = (int)httpObjects.size();
 	return hleLogDebug(Log::sceNet, retid);
 }
