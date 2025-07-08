@@ -232,6 +232,12 @@ public:
 	void disableOption(int option) { this->httpsOptions[option] = 0; };
 	void enableTLS() { this->tlsEnabled = 1; }
 
+	void CopyFrom(HTTPTemplate parent) {
+		this->certPEM = parent.certPEM;
+		this->httpsOptions = parent.httpsOptions;
+		this->tlsEnabled = parent.tlsEnabled;
+	}
+
 	void setUserAgent(const char* userAgent) { this->userAgent = userAgent ? userAgent : ""; }
 	void setConnectTimeout(u32 timeout) { this->connectTimeout = timeout; }
 	void setSendTimeout(u32 timeout) { this->sendTimeout = timeout; }

@@ -19,7 +19,12 @@
 #include "mbedtls/x509_crt.h"
 
 namespace net {
-
+const int legacy_ciphersuites_array[] = {
+MBEDTLS_TLS_RSA_WITH_3DES_EDE_CBC_SHA,  // DES-CBC3-SHA
+MBEDTLS_TLS_RSA_WITH_RC4_128_SHA,       // RC4-SHA
+MBEDTLS_TLS_RSA_WITH_RC4_128_MD5,       // RC4-MD5
+0                                       // terminator (required)
+};
 class Connection {
 public:
 	virtual ~Connection();
@@ -45,7 +50,6 @@ protected:
 	mbedtls_ssl_context sslCtx;
 	mbedtls_net_context netCtx;
 
-	mbedtls_net_context server_fd;
 	mbedtls_ssl_config sslConfig;
 	mbedtls_ctr_drbg_context ctrDrbg;
 	mbedtls_entropy_context entropy;

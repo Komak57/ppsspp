@@ -2,6 +2,8 @@
 
 #include <cstring>
 #include <string>
+//#include <mbedtls\ssl.h>
+//#include "mbedtls/net_sockets.h"
 
 namespace fd_util {
 
@@ -15,7 +17,8 @@ size_t Write(int fd, const std::string &str);
 
 // Returns true if the fd became ready, false if it didn't or
 // if there was another error.
-bool WaitUntilReady(int fd, double timeout, bool for_write = false);
+int WaitUntilReady(int fd, double timeout, bool for_write = false);
+//bool WaitUntilReady(mbedtls_net_context* netCtx, double timeout, bool for_write);
 
 void SetNonBlocking(int fd, bool non_blocking);
 

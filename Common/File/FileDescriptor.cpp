@@ -69,7 +69,7 @@ size_t Write(int fd, const std::string &str) {
 	return WriteLine(fd, str.c_str(), str.size());
 }
 
-bool WaitUntilReady(int fd, double timeout, bool for_write) {
+int WaitUntilReady(int fd, double timeout, bool for_write) {
 	struct timeval tv;
 	tv.tv_sec = (long)floor(timeout);
 	tv.tv_usec = (long)((timeout - floor(timeout)) * 1000000.0);
@@ -87,15 +87,47 @@ bool WaitUntilReady(int fd, double timeout, bool for_write) {
 
 	if (rval < 0) {
 		// Error calling select.
-		return false;
+		return -1;
 	} else if (rval == 0) {
 		// Timeout.
-		return false;
+		return 0;
 	} else {
 		// Socket is ready.
-		return true;
+		return 1;
 	}
 }
+
+//bool WaitUntilReady(mbedtls_net_context* netCtx, double timeout, bool for_write) {
+//	struct timeval tv;
+//	tv.tv_sec = (long)floor(timeout);
+//	tv.tv_usec = (long)((timeout - floor(timeout)) * 1000000.0);
+//
+//	fd_set fds;
+//	FD_ZERO(&fds);
+//	FD_SET(netCtx->fd, &fds);
+//	// First argument to select is the highest socket in the set + 1.
+//	int rval;
+//	if (for_write) {
+//		rval = mbedtls_ssl_read(&sslCtx, buffer, len);
+//		rval = select(fd + 1, nullptr, &fds, nullptr, &tv);
+//	}
+//	else {
+//		rval = select(fd + 1, &fds, nullptr, nullptr, &tv);
+//	}
+//
+//	if (rval < 0) {
+//		// Error calling select.
+//		return false;
+//	}
+//	else if (rval == 0) {
+//		// Timeout.
+//		return false;
+//	}
+//	else {
+//		// Socket is ready.
+//		return true;
+//	}
+//}
 
 void SetNonBlocking(int sock, bool non_blocking) {
 #ifndef _WIN32

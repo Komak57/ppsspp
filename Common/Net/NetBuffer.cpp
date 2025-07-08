@@ -27,10 +27,10 @@ void RequestProgress::Update(int64_t downloaded, int64_t totalBytes, bool done) 
 	}
 }
 
-bool Buffer::FlushSocket(uintptr_t sock, double timeout, bool *cancelled) {
+bool Buffer::FlushSocket(uintptr_t sock, double timeout, bool* cancelled) {
 	static constexpr float CANCEL_INTERVAL = 0.25f;
 
-	data_.iterate_blocks([&](const char *data, size_t size) {
+	data_.iterate_blocks([&](const char* data, size_t size) {
 		for (size_t pos = 0, end = size; pos < end; ) {
 			bool ready = false;
 			double endTimeout = time_now_d() + timeout;
@@ -57,8 +57,46 @@ bool Buffer::FlushSocket(uintptr_t sock, double timeout, bool *cancelled) {
 	data_.clear();
 	return true;
 }
+bool Buffer::FlushSocket(mbedtls_ssl_context *sslCtx, mbedtls_net_context* netCtx, double timeout, bool* cancelled) {
+	static constexpr float CANCEL_INTERVAL = 0.25f;
 
-bool Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress) {
+	data_.iterate_blocks([&](const char* data, size_t size) {
+		for (size_t pos = 0, end = size; pos < end; ) {
+			bool ready = false;
+			double endTimeout = time_now_d() + timeout;
+			while (!ready) {
+				if (cancelled && *cancelled)
+					return false;
+				ready = fd_util::WaitUntilReady(netCtx->fd, CANCEL_INTERVAL, true);
+				if (!ready && time_now_d() > endTimeout) {
+					ERROR_LOG(Log::IO, "FlushSocket timed out");
+					return false;
+				}
+			}
+			int sent = mbedtls_ssl_write(sslCtx, (const unsigned char*)data + pos, end - pos);
+			//int sent = send(sock, &data[pos], end - pos, MSG_NOSIGNAL);
+			// TODO: Do we need some retry logic here, instead of just giving up?
+			if (sent <= 0) {
+				switch (sent) {
+				case MBEDTLS_ERR_NET_CONN_RESET:
+				case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+					ERROR_LOG(Log::sceNet, "SSL write failed: Client closed connection");
+					return false;
+				default:
+					ERROR_LOG(Log::sceNet, "SSL write failed: -0x%04x", -sent);
+					return false;
+				}
+			}
+			pos += sent;
+		}
+		return true;
+	});
+
+	data_.clear();
+	return true;
+}
+
+bool Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress, bool useSSL, mbedtls_ssl_context* sslCtx) {
 	static constexpr float CANCEL_INTERVAL = 0.25f;
 	std::vector<char> buf;
 	// We're non-blocking and reading from an OS buffer, so try to read as much as we can at a time.
@@ -82,14 +120,32 @@ bool Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progres
 				return false;
 			ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);
 		}
-
-		int retval = recv(fd, &buf[0], buf.size(), MSG_NOSIGNAL);
+		int retval;
+		if (useSSL) {
+			retval = mbedtls_ssl_read(sslCtx, reinterpret_cast<unsigned char*>(&buf[0]), (int)buf.size());
+		}
+		else {
+			retval = recv(fd, &buf[0], buf.size(), MSG_NOSIGNAL);
+		}
 		if (retval == 0) {
 			return true;
 		} else if (retval < 0) {
-			if (socket_errno != EWOULDBLOCK) {
-				ERROR_LOG(Log::IO, "Error reading from buffer: %i", retval);
-				return false;
+			if (useSSL) {
+				switch (retval) {
+				case MBEDTLS_ERR_NET_CONN_RESET:
+				case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+					WARN_LOG(Log::sceNet, "ReadAllWithProgress - SSL read failed: Client closed connection gracefully");
+					return true;
+				default:
+					ERROR_LOG(Log::sceNet, "ReadAllWithProgress - SSL read failed: -0x%04x", -retval);
+					return false;
+				}
+			}
+			else {
+				if (socket_errno != EWOULDBLOCK) {
+					ERROR_LOG(Log::IO, "ReadAllWithProgress - Error reading from buffer: %i", retval);
+					return false;
+				}
 			}
 
 			// Just try again on a would block error, not a real error.
@@ -106,22 +162,68 @@ bool Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progres
 	return true;
 }
 
-int Buffer::Read(int fd, size_t sz) {
+//int Buffer::Read(int fd, size_t sz) {
+//	char buf[4096];
+//	int retval;
+//	size_t received = 0;
+//	while ((retval = recv(fd, buf, std::min(sz, sizeof(buf)), MSG_NOSIGNAL)) > 0) {
+//		if (retval < 0) {
+//			return retval;
+//		}
+//		char *p = Append((size_t)retval);
+//		memcpy(p, buf, retval);
+//		sz -= retval;
+//		received += retval;
+//		if (sz == 0)
+//			return 0;
+//	}
+//	return (int)received;
+//}
+int Buffer::Read(int fd, size_t sz, bool useSSL, mbedtls_ssl_context* sslCtx) {
 	char buf[4096];
-	int retval;
+	int retval = 0;
 	size_t received = 0;
-	while ((retval = recv(fd, buf, std::min(sz, sizeof(buf)), MSG_NOSIGNAL)) > 0) {
-		if (retval < 0) {
-			return retval;
+
+	while (sz > 0) {
+		int toRead = (int)std::min(sz, sizeof(buf));
+		if (useSSL) {
+			retval = mbedtls_ssl_read(sslCtx, (unsigned char*)buf, toRead);
+			if (retval == MBEDTLS_ERR_SSL_TIMEOUT) {
+				ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
+				return -1;
+			}
+			if (retval == MBEDTLS_ERR_SSL_WANT_WRITE) {
+				ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_WRITE");
+				break;
+			}
+			if (retval == MBEDTLS_ERR_SSL_WANT_READ) {
+				ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_READ");
+				continue;
+			}
+			if (retval < 0) {
+				ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned %i", retval);
+				return -1;
+			}
+			char* p = Append((size_t)retval);
+			memcpy(p, buf, retval);
+			sz -= retval;
+			received += retval;
+
 		}
-		char *p = Append((size_t)retval);
-		memcpy(p, buf, retval);
-		sz -= retval;
-		received += retval;
-		if (sz == 0)
-			return 0;
+		else {
+			retval = recv(fd, buf, toRead, MSG_NOSIGNAL);
+
+			if (retval < 0)
+				break;
+
+			char* p = Append((size_t)retval);
+			memcpy(p, buf, retval);
+			sz -= retval;
+			received += retval;
+		}
 	}
-	return (int)received;
+
+	return (int)received > 0 ? (int)received : retval;  // Return -1 or 0 for error, else bytes read
 }
 
 }  // namespace

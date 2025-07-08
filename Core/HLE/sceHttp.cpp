@@ -47,6 +47,7 @@ bool httpInited = false;
 bool httpsInited = false;
 bool httpCacheInited = false;
 
+HTTPTemplate bufferTemplate;
 //static SSL_CTX* pspSslCtx = nullptr;
 
 HTTPTemplate::HTTPTemplate(const char* userAgent, int httpVer, int autoProxyConf) {
@@ -682,20 +683,11 @@ static int sceHttpDisableKeepAlive(int templateID) {
 	return 0;
 }
 
-static int sceHttpsInit(int templateID, int certPtr, int unknown3, int unknown4) {
-	WARN_LOG(Log::sceNet, "UNTESTED sceHttpsInit(%d, %x, %d, %d)", templateID, certPtr, unknown3, unknown4);
+static int sceHttpsInit(int ctxId, int certPtr, int unknown3, int unknown4) {
+	WARN_LOG(Log::sceNet, "UNTESTED sceHttpsInit(%d, %x, %d, %d)", ctxId, certPtr, unknown3, unknown4);
 	if (httpsInited) {
 		return 0;  // Already initialized
 	}
-
-	std::lock_guard<std::mutex> guard(httpLock);
-	if (templateID <= 0 || templateID > (int)httpObjects.size())
-		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
-
-	if (httpObjects[templateID - 1LL]->className() != name_HTTPTemplate)
-		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
-
-	auto& conn = httpObjects[templateID - 1LL];
 
     // Portable Ops doesn't provide a certPtr
 	if (certPtr == 0) {
@@ -738,8 +730,8 @@ static int sceHttpsInit(int templateID, int certPtr, int unknown3, int unknown4)
 		i = end;
 	}
 
-	conn->setCert(certPEM);
-	conn->enableTLS();
+	bufferTemplate.setCert(certPEM);
+	bufferTemplate.enableTLS();
 	// This line will cause an error if certPEM is not a valid pointer to a string
 	//size_t pemLen = strnlen(certPEM, 8192);  // avoid infinite reads
 	//if (pemLen == 8192) {
@@ -815,7 +807,7 @@ static int sceHttpsEnableOption(int optionId) {
 		WARN_LOG(Log::sceNet, "%s - UNKNOWN %d Enabled", __FUNCTION__, optionId);
 		break;
 	}
-	httpObjects.back()->enableOption(optionId);
+	bufferTemplate.enableOption(optionId);
 	return 0;
 }
 
@@ -826,7 +818,7 @@ static int sceHttpsDisableOption(int optionId) {
 		WARN_LOG(Log::sceNet, "%s - UNKNOWN %d Disabled", __FUNCTION__, optionId);
 		break;
 	}
-	httpObjects.back()->disableOption(optionId);
+	bufferTemplate.disableOption(optionId);
 	return 0;
 }
 
@@ -991,7 +983,12 @@ static int sceHttpCreateTemplate(const char *userAgent, int httpVer, int autoPro
 	// Reporting to find more games to be tested
 	WARN_LOG_REPORT_ONCE(sceHttpCreateTemplate, Log::sceNet, "UNTESTED sceHttpCreateTemplate(%s, %d, %d)", safe_string(userAgent), httpVer, autoProxyConf);
 	std::lock_guard<std::mutex> guard(httpLock);
-	httpObjects.push_back(std::make_shared<HTTPTemplate>(userAgent? userAgent:"", httpVer, autoProxyConf));
+	auto tmplate = std::make_shared<HTTPTemplate>(userAgent ? userAgent : "", httpVer, autoProxyConf);
+	// Copy buffer data to new template
+	// FIXME: Find a more appropriate way to buffer HTTPS Options
+	tmplate->CopyFrom(bufferTemplate);
+	httpObjects.push_back(tmplate);
+
 	int retid = (int)httpObjects.size();
 	return hleLogDebug(Log::sceNet, retid);
 }

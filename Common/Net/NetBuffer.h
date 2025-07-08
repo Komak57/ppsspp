@@ -2,8 +2,10 @@
 
 #include <cstdint>
 #include <functional>
+#include <mbedtls\ssl.h>
 
 #include "Common/Buffer.h"
+#include <mbedtls\net_sockets.h>
 
 namespace net {
 
@@ -21,13 +23,15 @@ public:
 
 class Buffer : public ::Buffer {
 public:
-	bool FlushSocket(uintptr_t sock, double timeout, bool *cancelled = nullptr);
-
-	bool ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress);
+	bool FlushSocket(uintptr_t sock, double timeout, bool* cancelled = nullptr);
+	bool FlushSocket(mbedtls_ssl_context *sslCtx, mbedtls_net_context *netCtx, double timeout, bool* cancelled = nullptr);
+	
+	bool ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress, bool useSSL, mbedtls_ssl_context* sslCtx);
 
 	// < 0: error
 	// >= 0: number of bytes read
-	int Read(int fd, size_t sz);
+	//int Read(int fd, size_t sz);
+	int Read(int fd, size_t sz, bool useSSL, mbedtls_ssl_context* sslCtx);
 };
 
 }
