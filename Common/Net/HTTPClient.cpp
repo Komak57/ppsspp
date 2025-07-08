@@ -346,7 +346,7 @@ Client::~Client() {
 		sslEnabled = false;
 
 		// Clear cert if you're not persisting it across sessions
-		mbedtls_x509_crt_free(&caCert);
+		//mbedtls_x509_crt_free(&caCert);
 
 		// Also clear entropy and rng contexts if reinitialized every time
 		//mbedtls_ctr_drbg_free(&ctrDrbg);
@@ -557,12 +557,14 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 	// Check for header marker
 	int i = readbuf->Contains("\r\n\r\n");
 	// Still no header eof? Try again!
-	if (i < 0)
+	if (i < 0) {
+		ERROR_LOG(Log::HTTP, "Headers not yet found in %i bytes", readbuf->size());
 		goto begin;
+	}
 
 	// Pull the raw header data
 	std::string header;
-	readbuf->Take(i, &header);
+	readbuf->Take(i+4, &header);
 
 	// Split lines into responseHeaders
 	size_t start = 0;
@@ -667,12 +669,15 @@ int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::stri
 		// Just sanity checking...
 		contentLength = 0;
 	}
-	int remainingLength = contentLength - readbuf->size();
+	// Minimize calls to readbuf->size() for performance
+	int readbufLength = readbuf->size();
+	int remainingLength = contentLength - readbufLength;
+	progress->Update(readbufLength, contentLength, (remainingLength == 0));
 	// Only read if we're expecting more data
 	if (remainingLength > 0) {
 		INFO_LOG(Log::sceNet, "ReadResponseEntity - %i/%i bytes remaining", remainingLength, contentLength);
 		int ret;
-		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? netCtx.fd : sock(), contentLength, progress, sslEnabled, (sslEnabled ? &sslCtx : nullptr))) < 0)
+		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? netCtx.fd : sock(), remainingLength, progress, sslEnabled, (sslEnabled ? &sslCtx : nullptr))) < 0)
 			return -1;
 	}
 	// output now contains the rest of the reply. Dechunk it.

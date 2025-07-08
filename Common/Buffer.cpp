@@ -141,7 +141,7 @@ int Buffer::Contains(const char* needle) {
 	int match = 0;
 	int i;
 	// Itterate over every character
-	for (i = 0; i < data_.size() - needle_len; i++) {
+	for (i = 0; i < data_.size() - needle_len + 1; i++) {
 		bool match = true;
 		// Itterate through match to avoid partial-match errors
 		for (int j = 0; j < needle_len; ++j) {
