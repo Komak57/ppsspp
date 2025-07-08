@@ -549,7 +549,6 @@ static int sceHttpDeleteRequest(int requestID) {
 
 	if (httpObjects[requestID - 1LL]->className() != name_HTTPRequest)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
-
 	httpObjects.erase(httpObjects.begin() + requestID - 1);
 	return 0;
 }

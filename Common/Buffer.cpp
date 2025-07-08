@@ -132,6 +132,30 @@ bool Buffer::FlushToFile(const Path &filename, bool clear) {
 	return true;
 }
 
+int Buffer::Contains(const char* needle) {
+	if (!needle || !*needle)
+		return -1;
+	int needle_len = strlen(needle);
+	if (needle == 0 || data_.size() < needle_len)
+		return -1;
+	int match = 0;
+	int i;
+	// Itterate over every character
+	for (i = 0; i < data_.size() - needle_len; i++) {
+		bool match = true;
+		// Itterate through match to avoid partial-match errors
+		for (int j = 0; j < needle_len; ++j) {
+			if (data_.peek(i + j) != needle[j]) {
+				match = false;
+				break;
+			}
+		}
+		if (match)
+			return i;
+	}
+	return -1;
+}
+
 void Buffer::PeekAll(std::string *dest) {
 	dest->resize(data_.size());
 	data_.iterate_blocks(([=](const char *blockData, size_t blockSize) {

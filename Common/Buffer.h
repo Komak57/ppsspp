@@ -36,6 +36,9 @@ public:
 
 	// Parsing Helpers
 
+	// Returns the index position of needle in the buffer
+	int Buffer::Contains(const char* needle);
+
 	// Use for easy line skipping. If no CRLF within the buffer, returns -1.
 	// If parsing HTML headers, this indicates that you should probably buffer up
 	// more data.

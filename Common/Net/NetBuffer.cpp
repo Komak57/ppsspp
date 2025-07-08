@@ -12,6 +12,7 @@
 #include "Common/Log.h"
 #include "Common/Net/NetBuffer.h"
 #include "Common/TimeUtil.h"
+#include <mbedtls\error.h>
 
 namespace net {
 
@@ -80,8 +81,8 @@ bool Buffer::FlushSocket(mbedtls_ssl_context *sslCtx, mbedtls_net_context* netCt
 				switch (sent) {
 				case MBEDTLS_ERR_NET_CONN_RESET:
 				case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-					ERROR_LOG(Log::sceNet, "SSL write failed: Client closed connection");
-					return false;
+					ERROR_LOG(Log::sceNet, "FlushSocket: Client closed connection gracefully");
+					return true;
 				default:
 					ERROR_LOG(Log::sceNet, "SSL write failed: -0x%04x", -sent);
 					return false;
@@ -96,7 +97,7 @@ bool Buffer::FlushSocket(mbedtls_ssl_context *sslCtx, mbedtls_net_context* netCt
 	return true;
 }
 
-bool Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress, bool useSSL, mbedtls_ssl_context* sslCtx) {
+int Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress, bool useSSL, mbedtls_ssl_context* sslCtx) {
 	static constexpr float CANCEL_INTERVAL = 0.25f;
 	std::vector<char> buf;
 	// We're non-blocking and reading from an OS buffer, so try to read as much as we can at a time.
@@ -132,19 +133,20 @@ bool Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progres
 		} else if (retval < 0) {
 			if (useSSL) {
 				switch (retval) {
-				case MBEDTLS_ERR_NET_CONN_RESET:
 				case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-					WARN_LOG(Log::sceNet, "ReadAllWithProgress - SSL read failed: Client closed connection gracefully");
-					return true;
+					WARN_LOG(Log::HTTP, "ReadAllWithProgress - Client closed connection gracefully");
+					return total;
 				default:
-					ERROR_LOG(Log::sceNet, "ReadAllWithProgress - SSL read failed: -0x%04x", -retval);
-					return false;
+					char errbuf[128];
+					mbedtls_strerror(retval, errbuf, sizeof(errbuf));
+					ERROR_LOG(Log::HTTP, "ReadAllWithProgress Failed: -0x%04x -> %s", -retval, errbuf);
+					return retval;
 				}
 			}
 			else {
 				if (socket_errno != EWOULDBLOCK) {
 					ERROR_LOG(Log::IO, "ReadAllWithProgress - Error reading from buffer: %i", retval);
-					return false;
+					return retval;
 				}
 			}
 
@@ -159,7 +161,7 @@ bool Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progres
 			progress->kBps = (float)(total / (time_now_d() - st)) / 1024.0f;
 		}
 	}
-	return true;
+	return total;
 }
 
 //int Buffer::Read(int fd, size_t sz) {
@@ -179,6 +181,7 @@ bool Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progres
 //	}
 //	return (int)received;
 //}
+
 int Buffer::Read(int fd, size_t sz, bool useSSL, mbedtls_ssl_context* sslCtx) {
 	char buf[4096];
 	int retval = 0;
@@ -188,30 +191,29 @@ int Buffer::Read(int fd, size_t sz, bool useSSL, mbedtls_ssl_context* sslCtx) {
 		int toRead = (int)std::min(sz, sizeof(buf));
 		if (useSSL) {
 			retval = mbedtls_ssl_read(sslCtx, (unsigned char*)buf, toRead);
-			if (retval == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
-				WARN_LOG(Log::HTTP, "mbedtls_ssl_read Connection closed gracefully");
-				return 0;
-			}
-			if (retval == MBEDTLS_ERR_SSL_TIMEOUT) {
-				ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
-				return -1;
-			}
-			if (retval == MBEDTLS_ERR_SSL_WANT_WRITE) {
-				ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_WRITE");
-				break;
-			}
-			if (retval == MBEDTLS_ERR_SSL_WANT_READ) {
-				ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_READ");
-				continue;
-			}
 			if (retval < 0) {
-				ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned %i", retval);
-				return -1;
+				switch (retval) {
+				case MBEDTLS_ERR_NET_CONN_RESET:
+				case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+					WARN_LOG(Log::HTTP, "Read - Client closed connection gracefully");
+					return (int)received > 0 ? (int)received : retval;
+				case MBEDTLS_ERR_SSL_TIMEOUT:
+					ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
+					return retval;
+				case MBEDTLS_ERR_SSL_WANT_WRITE:
+					ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_WRITE");
+					return retval;
+				case MBEDTLS_ERR_SSL_WANT_READ:
+					VERBOSE_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_READ");
+					// Read some more!
+					continue;
+				default:
+					char errbuf[128];
+					mbedtls_strerror(retval, errbuf, sizeof(errbuf));
+					ERROR_LOG(Log::HTTP, "Read Failed: -0x%04x -> %s", -retval, errbuf);
+					return retval;
+				}
 			}
-			char* p = Append((size_t)retval);
-			memcpy(p, buf, retval);
-			sz -= retval;
-			received += retval;
 
 		}
 		else {
@@ -219,12 +221,11 @@ int Buffer::Read(int fd, size_t sz, bool useSSL, mbedtls_ssl_context* sslCtx) {
 
 			if (retval < 0)
 				break;
-
-			char* p = Append((size_t)retval);
-			memcpy(p, buf, retval);
-			sz -= retval;
-			received += retval;
 		}
+		char* p = Append((size_t)retval);
+		memcpy(p, buf, retval);
+		sz -= retval;
+		received += retval;
 	}
 
 	return (int)received > 0 ? (int)received : retval;  // Return -1 or 0 for error, else bytes read

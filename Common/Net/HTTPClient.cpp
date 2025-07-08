@@ -337,6 +337,21 @@ Client::Client() {
 }
 
 Client::~Client() {
+	DEBUG_LOG(Log::HTTP, "~Client()");
+	if (sslEnabled) {
+		mbedtls_ssl_close_notify(&sslCtx);  // Optional, sends close_notify
+		mbedtls_ssl_free(&sslCtx);
+		mbedtls_ssl_config_free(&sslConfig);
+		mbedtls_net_free(&netCtx);
+		sslEnabled = false;
+
+		// Clear cert if you're not persisting it across sessions
+		mbedtls_x509_crt_free(&caCert);
+
+		// Also clear entropy and rng contexts if reinitialized every time
+		mbedtls_ctr_drbg_free(&ctrDrbg);
+		mbedtls_entropy_free(&entropy);
+	}
 	Disconnect();
 }
 
@@ -401,15 +416,26 @@ int Client::GET(const RequestParams &req, Buffer *output, std::vector<std::strin
 	if (err < 0) {
 		return err;
 	}
+	/* TODO:
+	   - Await for response
+	   - Read data until header marker '\r\n\r\n'
+	   - Pull headers from buffer, leaving data
+	   - Check for response-code
+	   - Check for content-length
+	   - Check remaining data against content-length
+	   - Read data until content-length obtained
+	*/
 
 	net::Buffer readbuf;
 	int code = ReadResponseHeaders(&readbuf, responseHeaders, progress);
 	if (code < 0) {
+		ERROR_LOG(Log::HTTP, "Failed to read HTTP Headers");
 		return code;
 	}
 
 	err = ReadResponseEntity(&readbuf, responseHeaders, output, progress);
 	if (err < 0) {
+		ERROR_LOG(Log::HTTP, "Failed to read HTTP Entity");
 		return err;
 	}
 	return code;
@@ -438,11 +464,13 @@ int Client::POST(const RequestParams &req, std::string_view data, std::string_vi
 	std::vector<std::string> responseHeaders;
 	int code = ReadResponseHeaders(&readbuf, responseHeaders, progress);
 	if (code < 0) {
+		ERROR_LOG(Log::HTTP, "Failed to read HTTP headers");
 		return code;
 	}
 
 	err = ReadResponseEntity(&readbuf, responseHeaders, output, progress);
 	if (err < 0) {
+		ERROR_LOG(Log::HTTP, "Failed to read HTTP Entity");
 		return err;
 	}
 	return code;
@@ -501,21 +529,16 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 	static constexpr float CANCEL_INTERVAL = 0.25f;
 	int ready = 0;
 	double endTimeout = time_now_d() + dataTimeout_;
+	begin:
 	while (ready == 0) {
 		if (progress->cancelled && *progress->cancelled)
 			return -1;
+		// Check for silent fails
 		if (fd < 0) {
 			ERROR_LOG(Log::HTTP, "HTTP Connection lost");
 			return -1;
 		}
-		if (sslEnabled) {
-			// Skip sock->select
-			//ready = true;
-			ready = fd_util::WaitUntilReady(netCtx.fd, CANCEL_INTERVAL, false);
-		}
-		else {
-			ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);
-		}
+		ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);
 		if (ready < 0) {
 			ERROR_LOG(Log::HTTP, "HTTP WaitUntilReady Failed");
 			return -1;
@@ -526,14 +549,35 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 		}
 	};
 	// Let's hope all the headers are available in a single packet...
-	if (readbuf->Read(fd, 4096, sslEnabled, (sslEnabled? &sslCtx : nullptr)) < 0) {
-		ERROR_LOG(Log::HTTP, "Failed to read HTTP headers :(");
+	int ret;
+	if ((ret = readbuf->Read(fd, 4096, sslEnabled, (sslEnabled? &sslCtx : nullptr))) < 0) {
+		ERROR_LOG(Log::HTTP, "Failed to read HTTP headers -0x%04x", -ret);
 		return -1;
 	}
+	// Check for header marker
+	int i = readbuf->Contains("\r\n\r\n");
+	// Still no header eof? Try again!
+	if (i < 0)
+		goto begin;
+
+	// Pull the raw header data
+	std::string header;
+	readbuf->Take(i, &header);
+
+	// Split lines into responseHeaders
+	size_t start = 0;
+	size_t end;
+	while ((end = header.find("\r\n", start)) != std::string::npos) {
+		std::string line = header.substr(start, end - start);
+		if (line != "")
+			responseHeaders.push_back(line);
+		start = end + 2;  // Skip past the \r\n
+	}
+
+	return i;
 
 	// Grab the first header line that contains the http code.
-
-	std::string line;
+	/*std::string line;
 	readbuf->TakeLineCRLF(&line);
 
 	int code;
@@ -565,7 +609,7 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 		return -1;
 	}
 
-	return code;
+	return code;*/
 }
 
 int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::string> &responseHeaders, Buffer *output, net::RequestProgress *progress) {
@@ -603,11 +647,14 @@ int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::stri
 		// Just sanity checking...
 		contentLength = 0;
 	}
-
-	int fd = sslEnabled ? netCtx.fd : sock();
-	if (!readbuf->ReadAllWithProgress(fd, contentLength, progress, sslEnabled, (sslEnabled? &sslCtx : nullptr)))
-		return -1;
-
+	int remainingLength = contentLength - readbuf->size();
+	// Only read if we're expecting more data
+	if (remainingLength > 0) {
+		INFO_LOG(Log::sceNet, "ReadResponseEntity - %i/%i bytes remaining", remainingLength, contentLength);
+		int ret;
+		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? netCtx.fd : sock(), remainingLength, progress, sslEnabled, (sslEnabled ? &sslCtx : nullptr))) < 0)
+			return -1;
+	}
 	// output now contains the rest of the reply. Dechunk it.
 	if (!output->IsVoid()) {
 		if (chunked) {
