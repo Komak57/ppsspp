@@ -1317,6 +1317,44 @@ static int sceUtilityGameSharingGetStatus() {
 	return hleLogError(Log::sceUtility, 0, "UNIMPL");
 }
 
+int dialog_State = PSP_UTILITY_DIALOG_NONE;
+static int sceUtilityHtmlViewerInitStart(u32 paramsPtr) {
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerInitStart(%08x)", paramsPtr);
+	dialog_State = PSP_UTILITY_DIALOG_INIT;
+	return 0;
+}
+static int sceUtilityHtmlViewerGetStatus() {
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerGetStatus() => %i", dialog_State);
+	int buf = dialog_State;
+	switch (dialog_State) {
+	case PSP_UTILITY_DIALOG_INIT:
+		dialog_State = PSP_UTILITY_DIALOG_VISIBLE;
+		break;
+	case PSP_UTILITY_DIALOG_QUIT:
+		dialog_State = PSP_UTILITY_DIALOG_FINISHED;
+		break;
+	case PSP_UTILITY_DIALOG_FINISHED:
+		dialog_State = PSP_UTILITY_DIALOG_NONE;
+		break;
+	default:
+		break;
+	}
+	return buf;
+}
+static int sceUtilityHtmlViewerShutdownStart() {
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerShutdownStart()");
+	dialog_State = PSP_UTILITY_DIALOG_QUIT;
+	return 0;
+}
+
+static int sceUtilityHtmlViewerUpdate(int n) {
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerUpdate(%i)", n);
+	// TODO: Render Browser
+	// For now, let's just quit out so the user doesn't get stuck
+	dialog_State = PSP_UTILITY_DIALOG_FINISHED;
+	return 0;
+}
+
 static u32 sceUtilityLoadUsbModule(u32 module)
 {
 	if (module < 1 || module > 5)
@@ -1390,7 +1428,7 @@ const HLEFunction sceUtility[] =
 	{0XF3F76017, &WrapI_V<sceUtilityOskGetStatus>,                 "sceUtilityOskGetStatus",                 'i', ""   },
 
 	{0X41E30674, &WrapU_UU<sceUtilitySetSystemParamString>,        "sceUtilitySetSystemParamString",         'x', "xx" },
-	{0X45C18506, &WrapU_UU<sceUtilitySetSystemParamInt>,           "sceUtilitySetSystemParamInt",            'x', "xx"   },
+	{0X45C18506, &WrapU_UU<sceUtilitySetSystemParamInt>,           "sceUtilitySetSystemParamInt",            'x', "xx" },
 	{0X34B78343, &WrapU_UUI<sceUtilityGetSystemParamString>,       "sceUtilityGetSystemParamString",         'x', "xxi"},
 	{0XA5DA2406, &WrapU_UU<sceUtilityGetSystemParamInt>,           "sceUtilityGetSystemParamInt",            'x', "xx" },
 
@@ -1405,10 +1443,10 @@ const HLEFunction sceUtility[] =
 	{0XED0FAD38, nullptr,                                          "sceUtilitySavedataErrUpdate",            '?', ""   },
 	{0X88BC7406, nullptr,                                          "sceUtilitySavedataErrGetStatus",         '?', ""   },
 
-	{0XBDA7D894, nullptr,                                          "sceUtilityHtmlViewerGetStatus",          '?', ""   },
-	{0XCDC3AA41, nullptr,                                          "sceUtilityHtmlViewerInitStart",          '?', ""   },
-	{0XF5CE1134, nullptr,                                          "sceUtilityHtmlViewerShutdownStart",      '?', ""   },
-	{0X05AFB9E4, nullptr,                                          "sceUtilityHtmlViewerUpdate",             '?', ""   },
+	{0XBDA7D894, &WrapI_V<sceUtilityHtmlViewerGetStatus>,          "sceUtilityHtmlViewerGetStatus",          'i', ""   },
+	{0XCDC3AA41, &WrapI_U<sceUtilityHtmlViewerInitStart>,          "sceUtilityHtmlViewerInitStart",          'i', "x"  },
+	{0XF5CE1134, &WrapI_V<sceUtilityHtmlViewerShutdownStart>,      "sceUtilityHtmlViewerShutdownStart",      'i', ""   },
+	{0X05AFB9E4, &WrapI_I<sceUtilityHtmlViewerUpdate>,             "sceUtilityHtmlViewerUpdate",             'i', "i"  },
 
 	{0X16A1A8D8, nullptr,                                          "sceUtilityAuthDialogGetStatus",          '?', ""   },
 	{0X943CBA46, nullptr,                                          "sceUtilityAuthDialogInitStart",          '?', ""   },
@@ -1462,9 +1500,9 @@ const HLEFunction sceUtility[] =
 	{0XCFE7C460, nullptr,                                          "sceUtility_CFE7C460",                    '?', ""   },
 
 	{0XC130D441, nullptr,                                          "sceUtilityPsnShutdownStart",             '?', ""   },
-	{ 0XA7BB7C67, &WrapV_I<sceUtilityPsnInitStart>,				   "sceUtilityPsnInitStart",                 'v', "x" },
+	{ 0XA7BB7C67, &WrapV_I<sceUtilityPsnInitStart>,				   "sceUtilityPsnInitStart",                 'v', "x"  },
 	{0X0940A1B9, nullptr,                                          "sceUtilityPsnUpdate",                    '?', ""   },
-	{ 0X094198B8, &WrapI_V<sceUtilityPsnGetStatus>,				   "sceUtilityPsnGetStatus",                 'i', "" },
+	{ 0X094198B8, &WrapI_V<sceUtilityPsnGetStatus>,				   "sceUtilityPsnGetStatus",                 'i', ""   },
 
 	{0X9F313D14, nullptr,                                          "sceUtilityAutoConnectShutdownStart",     '?', ""   },
 	{0X3A15CD0A, nullptr,                                          "sceUtilityAutoConnectInitStart",         '?', ""   },

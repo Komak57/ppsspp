@@ -118,6 +118,19 @@ enum class UtilityDialogType {
 	NPSIGNIN,
 };
 
+/**
+ * Return-values for the various sceUtility***GetStatus() functions
+**/
+typedef enum
+{
+	PSP_UTILITY_DIALOG_NONE = 0,	/**< No dialog is currently active */
+	PSP_UTILITY_DIALOG_INIT,		/**< The dialog is currently being initialized */
+	PSP_UTILITY_DIALOG_VISIBLE,		/**< The dialog is visible and ready for use */
+	PSP_UTILITY_DIALOG_QUIT,		/**< The dialog has been canceled and should be shut down */
+	PSP_UTILITY_DIALOG_FINISHED		/**< The dialog has successfully shut down */
+
+} pspUtilityDialogState;
+
 void __UtilityInit();
 void __UtilityDoState(PointerWrap &p);
 void __UtilityShutdown();
