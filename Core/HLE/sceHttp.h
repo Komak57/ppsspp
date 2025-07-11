@@ -18,23 +18,9 @@
 #pragma once
 
 #include <map>
-#include "Common/Net/HTTPClient.h"
-
-// Based on https://docs.vitasdk.org/group__SceHttpUser.html
-#define 	SCE_HTTP_DEFAULT_RESOLVER_TIMEOUT   (1 * 1000 * 1000U)
-#define 	SCE_HTTP_DEFAULT_RESOLVER_RETRY   (5U)
-#define 	SCE_HTTP_DEFAULT_CONNECT_TIMEOUT   (30* 1000 * 1000U)
-#define 	SCE_HTTP_DEFAULT_SEND_TIMEOUT   (120* 1000 * 1000U)
-#define 	SCE_HTTP_DEFAULT_RECV_TIMEOUT   (120* 1000 * 1000U)
-#define 	SCE_HTTP_DEFAULT_RECV_BLOCK_SIZE   (1500U)
-#define 	SCE_HTTP_DEFAULT_RESPONSE_HEADER_MAX   (5000U)
-#define 	SCE_HTTP_DEFAULT_REDIRECT_MAX   (6U)
-#define 	SCE_HTTP_DEFAULT_TRY_AUTH_MAX   (6U)
-#define 	SCE_HTTP_INVALID_ID   0
-#define 	SCE_HTTP_ENABLE   (1)
-#define 	SCE_HTTP_DISABLE   (0)
-#define 	SCE_HTTP_USERNAME_MAX_SIZE   256
-#define 	SCE_HTTP_PASSWORD_MAX_SIZE   256
+ // HTTPS Requirements from mbedtls
+#include <mbedtls\debug.h>
+#include <mbedtls\certs.h>
 
 // If http isn't loaded (seems unlikely), most functions should return SCE_KERNEL_ERROR_LIBRARY_NOTFOUND
 
@@ -156,32 +142,6 @@ enum SceHttpStatusCode {
 	SCE_HTTP_STATUS_CODE_HTTP_VERSION_NOT_SUPPORTED = 505,
 	SCE_HTTP_STATUS_CODE_INSUFFICIENT_STORAGE = 507
 };
-// Options not yet identified
-enum SceHttpsOptions {
-	//SCE_HTTPS_OPTIONS_FLAG_HTTPS = 35,
-	//SCE_HTTPS_OPTIONS_FLAG_HTTP = 28,
-};
-enum SceHttpVersion {
-	SCE_HTTP_VERSION_1_0 = 1,
-	SCE_HTTP_VERSION_1_1
-};
-
-enum SceHttpProxyMode {
-	SCE_HTTP_PROXY_AUTO,
-	SCE_HTTP_PROXY_MANUAL
-};
-
-enum SceHttpAddHeaderMode {
-	SCE_HTTP_HEADER_OVERWRITE,
-	SCE_HTTP_HEADER_ADD
-};
-
-
-// Just a holder for class names
-static const char* name_HTTPTemplate = "HTTPTemplate";
-static const char* name_HTTPConnection = "HTTPConnection";
-static const char* name_HTTPRequest = "HTTPRequest";
-
 class HTTPTemplate {
 protected:
 	std::string userAgent; // char userAgent[512];

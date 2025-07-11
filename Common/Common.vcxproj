@@ -551,6 +551,7 @@
     <ClInclude Include="Net\HTTPHeaders.h" />
     <ClInclude Include="Net\HTTPServer.h" />
     <ClInclude Include="Net\HTTPRequest.h" />
+    <ClInclude Include="Net\HTTPShared.h" />
     <ClInclude Include="Net\Resolve.h" />
     <ClInclude Include="Net\Sinks.h" />
     <ClInclude Include="Net\SocketCompat.h" />

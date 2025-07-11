@@ -9,20 +9,6 @@
 
 namespace http {
 
-enum class RequestMethod {
-	GET,
-	POST,
-};
-
-enum class RequestFlags {
-	Default = 0,
-	ProgressBar = 1,
-	ProgressBarDelayed = 2,
-	Cached24H = 4,
-	KeepInMemory = 8,
-};
-ENUM_CLASS_BITOPS(RequestFlags);
-
 // Abstract request.
 class Request {
 public:

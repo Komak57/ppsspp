@@ -199,6 +199,9 @@
     <ClInclude Include="Net\HTTPServer.h">
       <Filter>Net</Filter>
     </ClInclude>
+    <ClInclude Include="Net\HTTPShared.h">
+      <Filter>Net</Filter>
+    </ClInclude>
     <ClInclude Include="Net\HTTPHeaders.h">
       <Filter>Net</Filter>
     </ClInclude>
