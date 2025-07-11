@@ -1,6 +1,5 @@
 #include "Common/Net/HTTPRequest.h"
 #include "Common/Net/HTTPClient.h"
-#include "Common/Net/HTTPNaettRequest.h"
 #include "Common/TimeUtil.h"
 #include "Common/File/FileUtil.h"
 #include "Common/StringUtils.h"
