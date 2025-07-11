@@ -30,7 +30,7 @@
 #include "Common/MemoryUtil.h"
 #include "Common/System/NativeApp.h"
 #include "Common/System/System.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Common/StringUtils.h"
 #include "Common/Profiler/Profiler.h"
 #include "Common/Thread/ThreadUtil.h"

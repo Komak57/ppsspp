@@ -30,7 +30,7 @@
 #include "Common/System/Display.h"
 #include "Common/System/NativeApp.h"
 #include "Common/System/System.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Common/Math/curves.h"
 #include "Common/File/VFS/VFS.h"
 

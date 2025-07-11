@@ -6,7 +6,7 @@
 
 #include "ext/imgui/imgui.h"
 
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Core/MemMap.h"
 #include "Core/Debugger/Breakpoints.h"
 #include "Core/MIPS/MIPSDebugInterface.h"

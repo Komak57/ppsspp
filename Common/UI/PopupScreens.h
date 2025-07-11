@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 
 #include "Common/Data/Text/I18n.h"
 #include "Common/UI/UIScreen.h"

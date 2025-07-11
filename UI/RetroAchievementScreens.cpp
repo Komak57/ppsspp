@@ -1,5 +1,5 @@
 #include "Common/System/OSD.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Common/UI/View.h"
 #include "Common/UI/ViewGroup.h"
 #include "Common/UI/Context.h"

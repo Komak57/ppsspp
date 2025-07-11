@@ -18,7 +18,7 @@
 #include "GPU/GPUCommon.h"
 #include "Common/File/Path.h"
 #include "Common/System/System.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Common/System/NativeApp.h"
 #include "Common/Data/Text/I18n.h"
 #include "Common/StringUtils.h"

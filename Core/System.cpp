@@ -32,7 +32,7 @@
 #include "ext/lua/lapi.h"
 
 #include "Common/System/System.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Common/System/OSD.h"
 #include "Common/Data/Text/I18n.h"
 #include "Common/File/Path.h"

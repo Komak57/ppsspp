@@ -32,7 +32,7 @@
 #include "Common/Net/Resolve.h"
 #include "Common/Net/URL.h"
 #include "Common/Thread/ThreadUtil.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 
 #include "Common/File/PathBrowser.h"
 #include "Common/Data/Format/JSONReader.h"

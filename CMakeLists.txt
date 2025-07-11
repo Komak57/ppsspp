@@ -853,8 +853,8 @@ add_library(Common STATIC
 	Common/System/Display.h
 	Common/System/System.h
 	Common/System/NativeApp.h
-	Common/System/Request.cpp
-	Common/System/Request.h
+	Common/Net/RequestManager.cpp
+	Common/Net/RequestManager.h
 	Common/System/OSD.cpp
 	Common/System/OSD.h
 	Common/Thread/Channel.h

@@ -6,6 +6,8 @@
 #include <functional>
 #include <string_view>
 
+#include "Common/Net/HTTPShared.h"
+#include "Common/Net/HTTPRequest.h"
 #include "Common/System/System.h"
 #include "Common/File/Path.h"
 
@@ -26,6 +28,10 @@ typedef int RequesterToken;
 // by running them on the main thread. So beware in your implementations!
 class RequestManager {
 public:
+	~RequestManager() {
+		//CancelAll();
+	}
+
 	// These requests are to be handled by platform implementations.
 	// The callback you pass in will be called on the main thread later.
 	// Params are at the end since it's the part most likely to recieve additions in the future,
@@ -41,6 +47,14 @@ public:
 	// This will call the callback of any finished requests.
 	void ProcessRequests();
 
+	void SetUserAgent(std::string_view userAgent) {
+		userAgent_ = userAgent;
+	}
+
+	void SetCacheDir(const Path& path) {
+		cacheDir_ = path;
+	}
+
 	RequesterToken GenerateRequesterToken() {
 		int token = tokenGen_++;
 		return token;
@@ -48,6 +62,31 @@ public:
 
 	void ForgetRequestsWithToken(RequesterToken token);
 
+	std::shared_ptr<HTTPRequest> StartDownloadWithCallback(
+		std::string_view url,
+		const Path& outfile,
+		RequestFlags flags,
+		std::function<void(HTTPRequest&)> callback,
+		std::string_view name = "",
+		const char* acceptMime = nullptr);
+
+	std::shared_ptr<HTTPRequest> AsyncPostWithCallback(
+		std::string_view url,
+		std::string_view postData,
+		std::string_view postMime, // Use postMime = "application/x-www-form-urlencoded" for standard form-style posts, such as used by retroachievements. For encoding form data manually we have MultipartFormDataEncoder.
+		RequestFlags flags,
+		std::function<void(HTTPRequest&)> callback,
+		std::string_view name = "");
+
+	// NOTE: This is the only version that supports the cache flag (for now).
+	std::shared_ptr<HTTPRequest> StartDownload(std::string_view url, const Path& outfile, RequestFlags flags, const char* acceptMime = nullptr);
+
+	// Drops finished downloads from the list.
+	void Update();
+	void CancelAll();
+
+	Path RequestManager::UrlToCachePath(const Path& cacheDir, std::string_view url);
+	Path UrlToCachePath(const std::string_view url);
 	// Unclear if we need this...
 	void Clear();
 
@@ -78,6 +117,14 @@ private:
 	std::mutex responseMutex_;
 
 	RequesterToken tokenGen_ = 20000;
+
+	std::vector<std::shared_ptr<HTTPRequest>> downloads_;
+	// These get copied to downloads_ in Update(). It's so that callbacks can add new downloads
+	// while running.
+	std::vector<std::shared_ptr<HTTPRequest>> newDownloads_;
+
+	std::string userAgent_;
+	Path cacheDir_;
 };
 
 const char *RequestTypeAsString(SystemRequestType type);

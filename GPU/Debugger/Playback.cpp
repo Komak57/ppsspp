@@ -29,7 +29,7 @@
 #include "Common/CommonTypes.h"
 #include "Common/Log.h"
 #include "Common/Thread/ThreadUtil.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Core/Config.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"

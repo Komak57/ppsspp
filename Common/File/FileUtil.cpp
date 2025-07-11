@@ -42,7 +42,7 @@
 #include "Common/StringUtils.h"
 #include "Common/TimeUtil.h"
 #include "Common/SysError.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 
 #ifdef _WIN32
 #include "Common/CommonWindows.h"

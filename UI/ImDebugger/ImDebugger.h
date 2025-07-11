@@ -8,7 +8,7 @@
 
 #include "Common/CommonTypes.h"
 #include "Common/Log.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 
 #include "Core/Core.h"
 #include "Core/HLE/SocketManager.h"

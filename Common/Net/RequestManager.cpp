@@ -2,11 +2,12 @@
 
 #include <cstring>
 
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Common/System/System.h"
 #include "Common/Log.h"
 #include "Common/File/Path.h"
 #include "Common/TimeUtil.h"
+#include "Common/StringUtils.h"
 
 #if PPSSPP_PLATFORM(ANDROID)
 
@@ -18,6 +19,7 @@
 JavaVM *gJvm = nullptr;
 
 #endif
+#include <Common\File\FileUtil.h>
 
 RequestManager g_requestManager;
 
@@ -179,3 +181,169 @@ void System_MoveToTrash(const Path &path) {
 	g_requestManager.MakeSystemRequest(SystemRequestType::MOVE_TO_TRASH, NO_REQUESTER_TOKEN, nullptr, nullptr, path.ToString(), "", 0);
 }
 
+
+static bool IsHttpsUrl(std::string_view url) {
+	return startsWith(url, "https:");
+}
+
+std::shared_ptr<HTTPRequest> CreateRequest(RequestMethod method, std::string_view url, std::string_view postdata, std::string_view postMime, const Path& outfile, RequestFlags flags, std::string_view name) {
+	// HTTPRequest is ambiguous between HTTPS and HTTP
+	//auto request = std::make_shared<HTTPRequest>(method, url, postdata, postMime, outfile, flags, name);
+	auto request = std::make_shared<HTTPRequest>((int)method, url.data(), name.data());
+	request->SetAccept(postMime.data());
+	if (IsHttpsUrl(url)) {
+		// TODO: Enable HTTPS
+		request->enableHTTPS();
+	}
+	return request;
+}
+
+std::shared_ptr<HTTPRequest> RequestManager::StartDownload(std::string_view url, const Path& outfile, RequestFlags flags, const char* acceptMime) {
+	const bool enableCache = !cacheDir_.empty() && (flags & RequestFlags::Cached24H);
+
+	// Come up with a cache file path.
+	Path cacheFile = UrlToCachePath(url);
+	std::shared_ptr<HTTPRequest> rqst;
+
+	time_t cacheFileTime;
+	std::string contents;
+	if (enableCache) {
+		_dbg_assert_(outfile.empty());  // It's automatically replaced below
+
+		// TODO: This should be done on the thread, maybe. But let's keep it simple for now.
+		if (!File::GetModifTimeT(cacheFile, &cacheFileTime))
+			goto time_failed;
+
+		time_t now = (time_t)time_now_unix_utc();
+		if (cacheFileTime <= now - 24 * 60 * 60)
+			goto time_old;
+
+		if (!File::ReadBinaryFileToString(cacheFile, &contents))
+			goto read_failed;
+
+		// The file is new enough. Let's construct a fake, already finished download so we don't need
+		// to modify the calling code.
+		INFO_LOG(Log::sceNet, "Returning cached file for %.*s: %s", (int)url.size(), url.data(), cacheFile.c_str());
+		//std::shared_ptr<HTTPRequest> dl(new CachedRequest(RequestMethod::GET, url, "infra-dns.json", nullptr, flags, contents));
+		rqst = CreateRequest(RequestMethod::GET, url, "infra-dns.json", (acceptMime ? acceptMime : ""), cacheFile, (flags | RequestFlags::KeepInMemory), "start-cached-download");
+		// FIXME: This may not work with the current system
+		rqst->LoadCache(contents);
+		newDownloads_.push_back(rqst);
+		return rqst;
+
+		time_failed:
+		INFO_LOG(Log::sceNet, "Failed to check time modified. Proceeding with request.");
+		goto continue_without;
+		time_old:
+		INFO_LOG(Log::sceNet, "Cached file too old, proceeding with request");
+		goto continue_without;
+		read_failed:
+		INFO_LOG(Log::sceNet, "Failed reading from cache, proceeding with request");
+	}
+	continue_without:
+
+
+	rqst = CreateRequest(RequestMethod::GET, url, "", (acceptMime ? acceptMime : ""), outfile, flags, "start-download");
+
+	if (!userAgent_.empty())
+		rqst->setUserAgent(userAgent_.c_str());
+	newDownloads_.push_back(rqst);
+	//rqst->Start();
+	// FIXME: Create Pointer for postData
+	u32 postDataPtr = 0;
+	u32 postDataSize = 0;
+	rqst->sendRequest(postDataPtr, postDataSize);
+	return rqst;
+}
+
+std::shared_ptr<HTTPRequest> RequestManager::StartDownloadWithCallback(
+	std::string_view url,
+	const Path& outfile,
+	RequestFlags flags,
+	std::function<void(HTTPRequest&)> callback,
+	std::string_view name,
+	const char* acceptMime) {
+	std::shared_ptr<HTTPRequest> rqst = CreateRequest(RequestMethod::GET, url, "", (acceptMime ? acceptMime : ""), outfile, flags, name);
+
+	if (!userAgent_.empty())
+		rqst->setUserAgent(userAgent_.c_str());
+	rqst->SetCallback(callback);
+	newDownloads_.push_back(rqst);
+	//rqst->Start();
+	// FIXME: Create Pointer for postData
+	u32 postDataPtr = 0;
+	u32 postDataSize = 0;
+	rqst->sendRequest(postDataPtr, postDataSize);
+	return rqst;
+}
+
+std::shared_ptr<HTTPRequest> RequestManager::AsyncPostWithCallback(
+	std::string_view url,
+	std::string_view postData,
+	std::string_view postMime,
+	RequestFlags flags,
+	std::function<void(HTTPRequest&)> callback,
+	std::string_view name) {
+	std::shared_ptr<HTTPRequest> rqst = CreateRequest(RequestMethod::POST, url, postData, postMime, Path(), flags, name);
+	if (!userAgent_.empty())
+		rqst->setUserAgent(userAgent_.c_str());
+	rqst->SetCallback(callback);
+	newDownloads_.push_back(rqst);
+	//rqst->Start();
+	// FIXME: Create Pointer for postData
+	u32 postDataPtr = 0;
+	u32 postDataSize = 0;
+	rqst->sendRequest(postDataPtr, postDataSize);
+	return rqst;
+}
+
+Path RequestManager::UrlToCachePath(const Path& cacheDir, std::string_view url) {
+	std::string fn = "DLCACHE_";
+	for (auto c : url) {
+		if (isalnum(c) || c == '.' || c == '-' || c == '_') {
+			fn.push_back(tolower(c));
+		}
+		else {
+			fn.push_back('_');
+		}
+	}
+	return cacheDir / fn;
+}
+
+Path RequestManager::UrlToCachePath(const std::string_view url) {
+	if (cacheDir_.empty()) {
+		return Path();
+	}
+
+	return UrlToCachePath(cacheDir_, url);
+}
+
+void RequestManager::Update() {
+	for (auto& iter : newDownloads_) {
+		downloads_.push_back(iter);
+	}
+	newDownloads_.clear();
+
+restart:
+	for (size_t i = 0; i < downloads_.size(); i++) {
+		auto dl = downloads_[i];
+		if (dl->client()->Progress()->Done()) {
+			dl->RunCallback();
+			// Threading
+			//dl->Join();
+			downloads_.erase(downloads_.begin() + i);
+			goto restart;
+		}
+	}
+}
+
+void RequestManager::CancelAll() {
+	for (size_t i = 0; i < downloads_.size(); i++) {
+		downloads_[i]->client()->Progress()->Cancel();
+	}
+	// Threading
+	/*for (size_t i = 0; i < downloads_.size(); i++) {
+		downloads_[i]->Join();
+	}*/
+	downloads_.clear();
+}

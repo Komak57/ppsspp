@@ -612,7 +612,7 @@
     <ClInclude Include="SysError.h" />
     <ClInclude Include="System\Display.h" />
     <ClInclude Include="System\OSD.h" />
-    <ClInclude Include="System\Request.h" />
+    <ClInclude Include="Net\RequestManager.h" />
     <ClInclude Include="System\NativeApp.h" />
     <ClInclude Include="System\System.h" />
     <ClInclude Include="Thread\Barrier.h" />
@@ -1100,7 +1100,7 @@
     <ClCompile Include="StringUtils.cpp" />
     <ClCompile Include="System\Display.cpp" />
     <ClCompile Include="System\OSD.cpp" />
-    <ClCompile Include="System\Request.cpp" />
+    <ClCompile Include="Net\RequestManager.cpp" />
     <ClCompile Include="Thread\ParallelLoop.cpp" />
     <ClCompile Include="Thread\ThreadManager.cpp" />
     <ClCompile Include="Thread\ThreadUtil.cpp" />

@@ -20,7 +20,7 @@
 #include <array>
 #include "Common/CommonFuncs.h"
 #include "Common/CommonTypes.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Common/Data/Encoding/Utf8.h"
 #include "Common/Data/Text/Parsers.h"
 #include "Common/Log.h"

@@ -64,7 +64,7 @@ struct JNIEnv {};
 #include "Common/System/NativeApp.h"
 #include "Common/System/System.h"
 #include "Common/System/OSD.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Common/Thread/ThreadUtil.h"
 #include "Common/File/Path.h"
 #include "Common/File/DirListing.h"

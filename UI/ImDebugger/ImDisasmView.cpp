@@ -14,7 +14,7 @@
 #include "Core/MIPS/MIPSTables.h"
 #include "Core/Debugger/SymbolMap.h"
 #include "Core/MemMap.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 
 #include "Core/System.h"
 #include "UI/ImDebugger/ImDisasmView.h"

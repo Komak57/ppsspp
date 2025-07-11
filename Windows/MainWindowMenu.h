@@ -3,7 +3,7 @@
 #include "Common/CommonWindows.h"
 #include <Windowsx.h>
 
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Core/System.h"
 
 namespace MainWindow {

@@ -29,7 +29,7 @@
 #include "Common/Data/Text/Parsers.h"
 #include "Common/StringUtils.h"
 #include "Common/System/System.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 
 #include "Core/Config.h"
 #include "Core/Screenshot.h"

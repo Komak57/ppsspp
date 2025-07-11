@@ -17,7 +17,7 @@
 
 #include "Common/Profiler/Profiler.h"
 #include "Common/System/NativeApp.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Common/System/System.h"
 
 #include "Common/CommonWindows.h"

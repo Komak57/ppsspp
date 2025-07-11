@@ -30,7 +30,7 @@
 #include "Common/Serialize/SerializeMap.h"
 #include "Common/Serialize/SerializeSet.h"
 #include "Common/StringUtils.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Core/Core.h"
 #include "Core/Config.h"
 #include "Core/ConfigValues.h"

@@ -29,10 +29,8 @@
 
 extern const char *PPSSPP_GIT_VERSION;
 
-namespace http {
-	class Request;
-	class RequestManager;
-}
+class HTTPRequest;
+class RequestManager;
 
 struct UrlEncoder;
 
@@ -629,7 +627,7 @@ public:
 
 	void UpdateIniLocation(const char *iniFileName = nullptr, const char *controllerIniFilename = nullptr);
 
-	static void DownloadCompletedCallback(http::Request &download);
+	static void DownloadCompletedCallback(HTTPRequest &download);
 	void DismissUpgrade();
 
 	void ResetControlLayout();
@@ -683,6 +681,6 @@ std::string CreateRandMAC();
 bool TryUpdateSavedPath(Path *path);
 
 // TODO: Find a better place for this.
-extern http::RequestManager g_DownloadManager;
+extern RequestManager g_DownloadManager;
 extern Config g_Config;
 

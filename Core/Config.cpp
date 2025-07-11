@@ -49,7 +49,7 @@
 #include "Common/GPU/Vulkan/VulkanLoader.h"
 #include "Common/VR/PPSSPPVR.h"
 #include "Common/System/OSD.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Core/Config.h"
 #include "Core/ConfigSettings.h"
 #include "Core/ConfigValues.h"
@@ -62,7 +62,7 @@
 #include "GPU/Common/FramebufferManagerCommon.h"
 
 // TODO: Find a better place for this.
-http::RequestManager g_DownloadManager;
+RequestManager g_DownloadManager;
 
 Config g_Config;
 

@@ -9,7 +9,7 @@
 
 #include "ppsspp_config.h"
 #include "Common/File/Path.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 
 #define PreferredMemoryStickUserDefaultsKey "UserPreferredMemoryStickDirectoryPath"
 

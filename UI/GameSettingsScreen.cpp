@@ -31,7 +31,7 @@
 #include "Common/VR/PPSSPPVR.h"
 
 #include "Common/System/Display.h"  // Only to check screen aspect ratio with pixel_yres/pixel_xres
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Common/System/OSD.h"
 #include "Common/System/NativeApp.h"
 #include "Common/Data/Color/RGBAUtil.h"

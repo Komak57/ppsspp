@@ -484,8 +484,8 @@
     <ClInclude Include="..\ext\basis_universal\basisu_transcoder_uastc.h">
       <Filter>ext\basis_universal</Filter>
     </ClInclude>
-    <ClInclude Include="System\Request.h">
-      <Filter>System</Filter>
+    <ClInclude Include="Net\RequestManager.h">
+      <Filter>Net</Filter>
     </ClInclude>
     <ClInclude Include="File\AndroidContentURI.h">
       <Filter>File</Filter>
@@ -1108,8 +1108,8 @@
     <ClCompile Include="..\ext\basis_universal\basisu_transcoder.cpp">
       <Filter>ext\basis_universal</Filter>
     </ClCompile>
-    <ClCompile Include="System\Request.cpp">
-      <Filter>System</Filter>
+    <ClCompile Include="Net\RequestManager.cpp">
+      <Filter>Net</Filter>
     </ClCompile>
     <ClCompile Include="File\AndroidContentURI.cpp">
       <Filter>File</Filter>

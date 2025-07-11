@@ -32,7 +32,7 @@ SDLJoystick *joystick = NULL;
 #include "ext/imgui/imgui_impl_platform.h"
 #include "Common/System/Display.h"
 #include "Common/System/System.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Common/System/NativeApp.h"
 #include "ext/glslang/glslang/Public/ShaderLang.h"
 #include "Common/Data/Format/PNGLoad.h"

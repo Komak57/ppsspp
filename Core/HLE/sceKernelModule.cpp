@@ -27,7 +27,7 @@
 #include "Common/Serialize/SerializeSet.h"
 #include "Common/File/FileUtil.h"
 #include "Common/StringUtils.h"
-#include "Common/System/Request.h"
+#include "Common/Net/RequestManager.h"
 #include "Common/System/System.h"
 #include "Common/System/OSD.h"
 #include "Common/Data/Text/I18n.h"
