@@ -15,7 +15,7 @@
 #include "Common/Net/SocketCompat.h"
 
 #ifndef HTTPS_NOT_AVAILABLE
-#include "ext/naett/naett.h"
+//#include "ext/naett/naett.h"
 #endif
 
 #if PPSSPP_PLATFORM(ANDROID)
@@ -25,7 +25,7 @@ extern JavaVM *gJvm;
 
 namespace net {
 
-static bool g_naettInitialized;
+static bool g_SSLInitialized;
 
 void Init()
 {
@@ -34,16 +34,16 @@ void Init()
 	WSADATA wsaData = {0};
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
 #endif
-	if (!g_naettInitialized) {
+	if (!g_SSLInitialized) {
 #ifndef HTTPS_NOT_AVAILABLE
 #if PPSSPP_PLATFORM(ANDROID)
-		_assert_(gJvm != nullptr);
-		naettInit(gJvm);
+		//_assert_(gJvm != nullptr);
+		//naettInit(gJvm);
 #else
-		naettInit(NULL);
+		//naettInit(NULL);
 #endif
 #endif
-		g_naettInitialized = true;
+		g_SSLInitialized = true;
 	}
 }
 

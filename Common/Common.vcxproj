@@ -447,7 +447,6 @@
     <ClInclude Include="..\ext\lua\lvm.h" />
     <ClInclude Include="..\ext\lua\lzio.h" />
     <ClInclude Include="..\ext\minimp3\minimp3.h" />
-    <ClInclude Include="..\ext\naett\naett.h" />
     <ClInclude Include="..\ext\sol\config.hpp" />
     <ClInclude Include="..\ext\sol\forward.hpp" />
     <ClInclude Include="..\ext\sol\sol.hpp" />
@@ -547,7 +546,6 @@
     <ClInclude Include="Math\math_util.h" />
     <ClInclude Include="Math\SIMDHeaders.h" />
     <ClInclude Include="Math\Statistics.h" />
-    <ClInclude Include="Net\HTTPNaettRequest.h" />
     <ClInclude Include="Net\NetBuffer.h" />
     <ClInclude Include="Net\HTTPClient.h" />
     <ClInclude Include="Net\HTTPHeaders.h" />
@@ -556,6 +554,7 @@
     <ClInclude Include="Net\Resolve.h" />
     <ClInclude Include="Net\Sinks.h" />
     <ClInclude Include="Net\SocketCompat.h" />
+    <ClInclude Include="Net\SSLRequest.h" />
     <ClInclude Include="Net\URL.h" />
     <ClInclude Include="Net\WebsocketServer.h" />
     <ClInclude Include="Profiler\Profiler.h" />
@@ -948,7 +947,6 @@
     <ClCompile Include="..\ext\lua\lvm.c" />
     <ClCompile Include="..\ext\lua\lzio.c" />
     <ClCompile Include="..\ext\minimp3\minimp3.cpp" />
-    <ClCompile Include="..\ext\naett\naett.c" />
     <ClCompile Include="..\ext\vma\vk_mem_alloc.cpp" />
     <ClCompile Include="ABI.cpp" />
     <ClCompile Include="Arm64Emitter.cpp" />
@@ -1039,7 +1037,6 @@
     <ClCompile Include="Math\lin\vec3.cpp" />
     <ClCompile Include="Math\math_util.cpp" />
     <ClCompile Include="Math\Statistics.cpp" />
-    <ClCompile Include="Net\HTTPNaettRequest.cpp" />
     <ClCompile Include="Net\NetBuffer.cpp" />
     <ClCompile Include="Net\HTTPClient.cpp" />
     <ClCompile Include="Net\HTTPHeaders.cpp" />
@@ -1047,6 +1044,7 @@
     <ClCompile Include="Net\HTTPRequest.cpp" />
     <ClCompile Include="Net\Resolve.cpp" />
     <ClCompile Include="Net\Sinks.cpp" />
+    <ClCompile Include="Net\SSLRequest.cpp" />
     <ClCompile Include="Net\URL.cpp" />
     <ClCompile Include="Net\WebsocketServer.cpp" />
     <ClCompile Include="Profiler\Profiler.cpp" />

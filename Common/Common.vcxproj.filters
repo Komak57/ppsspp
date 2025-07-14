@@ -505,12 +505,6 @@
     <ClInclude Include="Net\HTTPRequest.h">
       <Filter>Net</Filter>
     </ClInclude>
-    <ClInclude Include="..\ext\naett\naett.h">
-      <Filter>ext\naett</Filter>
-    </ClInclude>
-    <ClInclude Include="Net\HTTPNaettRequest.h">
-      <Filter>Net</Filter>
-    </ClInclude>
     <ClInclude Include="Render\Text\draw_text_sdl.h">
       <Filter>Render\Text</Filter>
     </ClInclude>
@@ -693,6 +687,9 @@
     </ClInclude>
     <ClInclude Include="..\ext\imgui\imgui_extras.h">
       <Filter>ext\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="Net\SSLRequest.h">
+      <Filter>Net</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -1138,12 +1135,6 @@
     <ClCompile Include="Net\HTTPRequest.cpp">
       <Filter>Net</Filter>
     </ClCompile>
-    <ClCompile Include="..\ext\naett\naett.c">
-      <Filter>ext\naett</Filter>
-    </ClCompile>
-    <ClCompile Include="Net\HTTPNaettRequest.cpp">
-      <Filter>Net</Filter>
-    </ClCompile>
     <ClCompile Include="Render\Text\draw_text_sdl.cpp">
       <Filter>Render\Text</Filter>
     </ClCompile>
@@ -1306,6 +1297,9 @@
     <ClCompile Include="..\ext\imgui\imgui_extras.cpp">
       <Filter>ext\imgui</Filter>
     </ClCompile>
+    <ClCompile Include="Net\SSLRequest.cpp">
+      <Filter>Net</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Crypto">
@@ -1409,9 +1403,6 @@
     </Filter>
     <Filter Include="ext\basis_universal">
       <UniqueIdentifier>{d6d5f6e0-1c72-496b-af11-6d52d5123033}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ext\naett">
-      <UniqueIdentifier>{34f45db9-5c08-49cb-b349-b9e760ce3213}</UniqueIdentifier>
     </Filter>
     <Filter Include="ext\libchdr">
       <UniqueIdentifier>{b681797d-7747-487f-b448-5ef5b2d2805b}</UniqueIdentifier>
