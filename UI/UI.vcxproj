@@ -137,6 +137,9 @@
     <ProjectReference Include="..\ext\rcheevos-build\rcheevos.vcxproj">
       <Project>{31694510-a8c0-40f6-b09b-e8df825adefa}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\ext\wolfssl\wolfssl-VS2022.vcxproj">
+      <Project>{12226dbe-7278-4dfa-a119-5a0294cf0b33}</Project>
+    </ProjectReference>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{004B8D11-2BE3-4BD9-AB40-2BE04CF2096F}</ProjectGuid>

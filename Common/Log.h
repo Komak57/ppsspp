@@ -129,6 +129,25 @@ void GenericLog(Log type, LogLevel level, const char *file, int line, const char
 #define DEBUG_LOG(t,...)   do { GENERIC_LOG(t, LogLevel::LDEBUG,   __VA_ARGS__) } while (false)
 #define VERBOSE_LOG(t,...) do { GENERIC_LOG(t, LogLevel::LVERBOSE, __VA_ARGS__) } while (false)
 
+// Note: WolfSSL Logging is really bad at level separation
+static void wolfssl_debug(const int level, const char* const msg)
+{
+	switch (level) {
+	case 0: // ERROR_LOG - Critical errors, invalid certs, etc
+		ERROR_LOG(Log::sceNet, "%s", msg);
+		break;
+	case 1: // INFO_LOG - General information
+		VERBOSE_LOG(Log::sceNet, "%s", msg);
+		break;
+	case 2: // ENTER_LOG - Function entry
+	case 3: // LEAVE_LOG - Function exit
+	default:
+		DEBUG_LOG(Log::sceNet, "%s", msg);
+		break;
+	}
+	//mbedtls_fprintf((FILE*)ctx, "%s:%04d: %s", file, line, str);
+}
+
 static void ssl_debug(void* ctx, int level,
 	const char* file, int line,
 	const char* str)

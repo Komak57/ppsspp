@@ -625,6 +625,9 @@
     <ProjectReference Include="..\ext\SPIRV-Cross.vcxproj">
       <Project>{4328a62c-f1e9-47ed-b816-a1a81daf4363}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\ext\wolfssl\wolfssl-VS2022.vcxproj">
+      <Project>{12226dbe-7278-4dfa-a119-5a0294cf0b33}</Project>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="..\assets\shaders\tex_2xbrz.csh">

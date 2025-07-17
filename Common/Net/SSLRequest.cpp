@@ -7,6 +7,7 @@
 #include "Common/Thread/ThreadUtil.h"
 #include "Common/StringUtils.h"
 #include "Common/Log.h"
+
 #if defined(_WIN32)
 #pragma comment(lib, "Crypt32.lib")
 #include <windows.h>
@@ -58,89 +59,238 @@ namespace http {
 		return parts;
 	}
 
+	void HTTPSRequest::ThrowError(const char* fmt, ...) {
+		char buffer[1024];  // Adjust size if needed
+		va_list args;
+		va_start(args, fmt);
+		vsnprintf(buffer, sizeof(buffer), fmt, args);
+		va_end(args);
+
+		ERROR_LOG(Log::sceNet, "%s", buffer);
+		failed_ = true;
+		progress_.Update(0, 0, true);
+	}
+
 	HTTPSRequest::HTTPSRequest(RequestMethod method, std::string_view url, std::string_view postData, std::string_view postMime, const Path& outfile, RequestFlags flags, std::string_view name)
 		: Request(method, url, name, &cancelled_, flags), method_(method), postData_(postData), postMime_(postMime) {
 		outfile_ = outfile;
-		// Pull trusted cert from device
-
-#if defined(_WIN32)
-		HCERTSTORE store = CertOpenStore(
-			CERT_STORE_PROV_SYSTEM,
-			0,
-			NULL,
-			CERT_SYSTEM_STORE_CURRENT_USER | CERT_STORE_READONLY_FLAG,
-			L"ROOT");
-
-		PCCERT_CONTEXT ctx = NULL;
-		mbedtls_x509_crt_init(&caCert);
-
-		while ((ctx = CertEnumCertificatesInStore(store, ctx))) {
-			mbedtls_x509_crt_parse_der(&caCert,
-				ctx->pbCertEncoded,
-				ctx->cbCertEncoded);
-		}
-
-		CertFreeCertificateContext(ctx);
-		CertCloseStore(store, 0);
-#elif defined(__linux__)
-		// FIXME: untested
-		mbedtls_x509_crt_init(&caCert);
-		mbedtls_x509_crt_parse_file(&caCert,
-			"/etc/ssl/certs/ca-certificates.crt");
-#elif defined(__APPLE__)
-		// FIXME: untested
-		SecTrustRef trust;
-		OSStatus status = SecTrustCopyAnchorCertificates(&trust);
-		CFArrayRef certs = SecTrustCopyAnchorCertificates(&trust);
-
-		mbedtls_x509_crt_init(&caCert);
-		for (size_t i = 0; i < CFArrayGetCount(certs); ++i) {
-			SecCertificateRef cert = (SecCertificateRef)CFArrayGetValueAtIndex(certs, i);
-			CFDataRef data = SecCertificateCopyData(cert);
-			mbedtls_x509_crt_parse_der(&caCert,
-				CFDataGetBytePtr(data),
-				CFDataGetLength(data));
-			CFRelease(data);
-		}
-		SecTrustSetAnchorCertificates(trust, NULL);
-		CFRelease(certs);
-#endif
-		// Then attach to mbedTLS:
-		mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
 	}
 
 	HTTPSRequest::~HTTPSRequest() {
 		HTTPSRequest::Join();
 	}
 
+	int HTTPSRequest::LoadStoreCert() {
+		_dbg_assert_msg_(ctx_, "LoadStoreCert called before WOLFSSL_CTX initialized!");
+#if defined(_WIN32)
+		// We can also use CERT_SYSTEM_STORE_CURRENT_USER / CERT_SYSTEM_STORE_LOCAL_MACHINE if needed
+		HCERTSTORE store = CertOpenStore(
+			CERT_STORE_PROV_SYSTEM,
+			0,
+			NULL,
+			CERT_SYSTEM_STORE_LOCAL_MACHINE | CERT_STORE_READONLY_FLAG,
+			L"ROOT");
+
+		PCCERT_CONTEXT ctx = NULL;
+		int idx = 0;
+
+		// Cert Type: SSL_FILETYPE_ASN1, SSL_FILETYPE_PEM, SSL_FILETYPE_DEFAULT
+		while ((ctx = CertEnumCertificatesInStore(store, ctx))) {
+			idx++;
+			//INFO_LOG(Log::sceNet, "Cert %d: len = %d", idx++, ctx->cbCertEncoded);
+			_dbg_assert_(ctx->pbCertEncoded != nullptr);
+			_dbg_assert_(ctx->cbCertEncoded > 0);
+			// Try ASN1
+			if (wolfSSL_CTX_load_verify_buffer(ctx_, ctx->pbCertEncoded, ctx->cbCertEncoded, SSL_FILETYPE_ASN1) != WOLFSSL_SUCCESS) {
+				int err = wolfSSL_get_error(nullptr, 0);
+				char errBuf[80];
+				wolfSSL_ERR_error_string(err, errBuf);
+				DEBUG_LOG(Log::sceNet, "Failed to load CA cert #%i (%s)", idx, errBuf);
+			}
+		}
+
+		CertFreeCertificateContext(ctx);
+		CertCloseStore(store, 0);
+#elif defined(__linux__)
+		// FIXME: untested
+		const char* linux_cert_paths[] = {
+			"/etc/ssl/certs/ca-certificates.crt",               // Debian/Ubuntu
+			"/etc/pki/tls/certs/ca-bundle.crt",                 // Fedora/RHEL/CentOS
+			"/etc/ssl/ca-bundle.pem",                           // OpenSUSE
+			"/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem" // Newer Fedora
+		};
+		bool found = false;
+		for (const char* path : linux_cert_paths) {
+			if (access(path, R_OK) == 0) {
+				ret = wolfSSL_CTX_load_verify_locations(ctx_, target.c_str(), NULL);
+				if (ret != SSL_SUCCESS) {
+					// Not a valid certificate
+					WARN_LOG(Log::sceNet, "LoadStoreCert - Error loading CA certificate from file: %d (%s)", ret, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(NULL, ret)));
+					continue;
+				}
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			ERROR_LOG(Log::sceNet, "InitializeSSL: No trusted CA certs found on Linux");
+			return -1;
+		}
+#elif defined(__APPLE__)
+		// FIXME: untested
+		SecTrustRef trust;
+		OSStatus status = SecTrustCopyAnchorCertificates(&trust);
+		CFArrayRef certs = SecTrustCopyAnchorCertificates(&trust);
+
+		for (size_t i = 0; i < CFArrayGetCount(certs); ++i) {
+			SecCertificateRef cert = (SecCertificateRef)CFArrayGetValueAtIndex(certs, i);
+			CFDataRef data = SecCertificateCopyData(cert);
+
+			if (wolfSSL_CTX_load_verify_buffer(ctx_, CFDataGetBytePtr(data), CFDataGetLength(data), SSL_FILETYPE_ASN1) != WOLFSSL_SUCCESS) {
+				int err = wolfSSL_get_error(nullptr, 0);
+				char errBuf[80];
+				wolfSSL_ERR_error_string(err, errBuf);
+				WARN_LOG(Log::sceNet, "Failed to load CA cert #%i (%s)", idx, errBuf);
+			}
+			CFRelease(data);
+		}
+		SecTrustSetAnchorCertificates(trust, NULL);
+		CFRelease(certs);
+#endif
+		return 0;
+	}
+
+	int HTTPSRequest::InitializeSSL(CertType certtype, std::string target) {
+		WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::InitializeSSL()");
+
+		wolfSSL_Debugging_ON();  // Optional: turn off for release
+#ifdef DEBUG
+		wolfSSL_SetLoggingCb(wolfssl_debug);
+#endif
+		if (wolfSSL_Init() != WOLFSSL_SUCCESS) {
+			ERROR_LOG(Log::sceNet, "wolfSSL_Init failed");
+			return -1;
+		}
+
+		ctx_ = wolfSSL_CTX_new(wolfTLS_client_method());
+		if (!ctx_) {
+			ERROR_LOG(Log::sceNet, "wolfSSL_CTX_new failed");
+			return -1;
+		}
+
+		// Force specific ciphers in the handshake process
+		//const char* cipher_list = "TLS13-AES256-GCM-SHA384:TLS13-CHACHA20-POLY1305-SHA256";
+		//wolfSSL_CTX_set_cipher_list(ctx_, cipher_list);
+
+		// Optional: TLS version range
+		wolfSSL_CTX_SetMinVersion(ctx_, WOLFSSL_TLSV1_2);
+		wolfSSL_CTX_set_verify(ctx_, SSL_VERIFY_PEER, NULL);
+
+		int ret;
+		switch (certtype) {
+		case CertType::Store:
+			ret = LoadStoreCert();
+			if (ret < 0)
+				return ret;
+			break;
+		case CertType::File:
+			ret = wolfSSL_CTX_load_verify_locations(ctx_, target.c_str(), NULL);
+			if (ret != SSL_SUCCESS) {
+				ERROR_LOG(Log::sceNet, "InitializeSSL - Error loading CA certificate from file: %d (%s)", ret, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(NULL, ret)));
+				return ret;
+			}
+			break;
+		case CertType::PEM:
+			ret = wolfSSL_CTX_load_verify_buffer(ctx_, (const unsigned char*)target.c_str(), (long)target.size(), SSL_FILETYPE_PEM);
+			if (ret != WOLFSSL_SUCCESS) {
+				ERROR_LOG(Log::sceNet, "Failed to load PEM certificate");
+				return ret;
+			}
+		}
+
+		ssl_ = wolfSSL_new(ctx_);
+		if (!ssl_) {
+			ERROR_LOG(Log::sceNet, "Could not generate SSL from Context");
+			return -1;
+		}
+
+		return 0;
+	}
+
+
 	// Note: This is a Blocking action
 	void HTTPSRequest::Start() {
 		URLParts urlParts = SplitURL(url_);
 		// Setup TLS
-		mbedtls_ssl_init(&sslCtx);
-		mbedtls_ssl_setup(&sslCtx, &sslConfig);
-		mbedtls_ssl_set_hostname(&sslCtx, urlParts.host.c_str());
+		int ret = InitializeSSL(CertType::Store);
+		if (ret < 0) {
+			ThrowError("TLS init failed: %d", ret);
+			return;
+		}
+		wolfSSL_UseSNI(ssl_, WOLFSSL_SNI_HOST_NAME, urlParts.host.c_str(), (unsigned short)urlParts.host.length());
 
-		// Setup TCP connection
-		mbedtls_net_init(&netCtx);
-		int ret = mbedtls_net_connect(&netCtx, url_.c_str(), "443", MBEDTLS_NET_PROTO_TCP);
-		if (ret != 0) {
-			ERROR_LOG(Log::IO, "TLS connect failed: %d", ret);
-			failed_ = true;
-			progress_.Update(0, 0, true);
+		struct addrinfo hints = {}, * res = nullptr;
+		hints.ai_family = AF_INET;       // Use AF_UNSPEC to support IPv4+IPv6
+		hints.ai_socktype = SOCK_STREAM;
+		hints.ai_protocol = IPPROTO_TCP;
+
+		int status = getaddrinfo(urlParts.host.c_str(), urlParts.port.c_str(), &hints, &res);
+		if (status != 0 || res == nullptr) {
+			ThrowError("Unable to get Address Info for socket: %d", gai_strerror(status));
+			return;
+		}
+		// Create TCP socket
+		sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+		if (sockfd < 0) {
+			ThrowError("Could not create Socket: %d", sockfd);
+			freeaddrinfo(res);
 			return;
 		}
 
-		mbedtls_ssl_set_bio(&sslCtx, &netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
+		wolfSSL_set_fd(ssl_, sockfd);
 
-		// Handshake
-		while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
-			if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-				ERROR_LOG(Log::IO, "TLS handshake failed: -0x%x", -ret);
-				failed_ = true;
-				progress_.Update(0, 0, true);
-				return;
+		// wolfSSL_connect does not connect the socket, so we need to do it ourselves
+		if (connect(sockfd, res->ai_addr, (int)res->ai_addrlen) < 0) {
+#ifdef _WIN32
+			ThrowError("Connection Failed: %d", WSAGetLastError());
+#else
+			ThrowError("Connection Failed");
+#endif
+			freeaddrinfo(res);
+#ifdef _WIN32
+			closesocket(sockfd);
+#else
+			close(sockfd);
+#endif
+			return;
+		}
+		// FIXME: Insecure
+		//wolfSSL_CTX_set_verify(ctx_, SSL_VERIFY_NONE, NULL);
+
+		// Debugging stuff
+		INFO_LOG(Log::sceNet, "SNI: %s", urlParts.host.c_str()); // Reports 4 (TLS1_3)
+		INFO_LOG(Log::sceNet, "SSL Version: %i", wolfSSL_GetVersion(ssl_)); // Reports 4 (TLS1_3)
+		int i = 0;
+		const char* cipher;
+		while ((cipher = wolfSSL_get_cipher_list(i++)) != NULL)
+			DEBUG_LOG(Log::sceNet, "Supported cipher: %s", cipher);
+		INFO_LOG(Log::sceNet, "%i Supported Ciphers", i);
+
+		// Then initiate handshake
+		if (wolfSSL_connect(ssl_) != WOLFSSL_SUCCESS) {
+			if (wolfSSL_is_init_finished(ssl_)) {
+				ThrowError("Connection failed (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl_, 0)));
 			}
+			else {
+				ThrowError("TLS handshake failed (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl_, 0)));
+			}
+			const char* cipher = wolfSSL_get_cipher(ssl_);
+			if (cipher == "NONE")	// Reports (NONE) when handshake failed
+				ERROR_LOG(Log::sceNet, "Unable to agree on a cipher");
+			else
+				INFO_LOG(Log::sceNet, "Using Cipher - (%s)", cipher);
+
+			return;
 		}
 
 		// Construct HTTP request
@@ -175,11 +325,10 @@ namespace http {
 		// Send HTTP request
 		size_t written = 0;
 		while (written < len) {
-			ret = mbedtls_ssl_write(&sslCtx, buf + written, len - written);
-			if (ret < 0) {
-				ERROR_LOG(Log::IO, "TLS write failed: %d", ret);
-				failed_ = true;
-				progress_.Update(0, 0, true);
+			ret = wolfSSL_write(ssl_, buf + written, (int)(len - written));
+			if (ret <= 0) {
+				int err = wolfSSL_get_error(ssl_, ret);
+				ThrowError("TLS write failed: %d (wolfSSL_get_error: %d)", ret, err);
 				return;
 			}
 			written += ret;
@@ -193,9 +342,46 @@ namespace http {
 			return;
 		}
 
-		mbedtls_ssl_close_notify(&sslCtx);
-		mbedtls_net_free(&netCtx);
-		mbedtls_ssl_free(&sslCtx);
+		if (ssl_) {
+			wolfSSL_free(ssl_);
+			ssl_ = nullptr;
+		}
+		if (ctx_) {
+			wolfSSL_CTX_free(ctx_);
+			ctx_ = nullptr;
+		}
+		wolfSSL_Cleanup();
+	}
+
+	// TODO: Move this to the requesting service
+	// DeChunk Helper
+	static bool DeChunk(Buffer* inbuffer, Buffer* outbuffer, int contentLength) {
+		_dbg_assert_(outbuffer->empty());
+		int dechunkedBytes = 0;
+		while (true) {
+			std::string line;
+			inbuffer->TakeLineCRLF(&line);
+			if (!line.size())
+				return false;
+			unsigned int chunkSize = 0;
+			if (sscanf(line.c_str(), "%x", &chunkSize) != 1) {
+				return false;
+			}
+			if (chunkSize) {
+				std::string data;
+				inbuffer->Take(chunkSize, &data);
+				outbuffer->Append(data);
+			}
+			else {
+				// a zero size chunk should mean the end.
+				inbuffer->clear();
+				return true;
+			}
+			dechunkedBytes += chunkSize;
+			inbuffer->Skip(2);
+		}
+		// Unreachable
+		return true;
 	}
 
 	bool HTTPSRequest::Done() {
@@ -206,42 +392,95 @@ namespace http {
 		int total = 0;
 		int ret = 0;
 
+		// Read until there's nothing left to grab
 		do {
-			ret = mbedtls_ssl_read(&sslCtx, responseBuf, sizeof(responseBuf));
-			if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE)
-				continue;
-			else if (ret <= 0)
+			ret = wolfSSL_read(ssl_, responseBuf, sizeof(responseBuf));
+			if (ret <= 0) {
+				int err = wolfSSL_get_error(ssl_, ret);
+				if (err == WOLFSSL_ERROR_WANT_READ)
+					continue;
+				// TODO: Catch other errors
+				WARN_LOG(Log::IO, "Read End - %d", err);
 				break;
+			}
 
 			responseData.append((char*)responseBuf, ret);
 			total += ret;
 			progress_.Update(total, total, false);
 		} while (true);
 
-		// Parse headers (you can improve this later)
+		// Strip headers
 		size_t headerEnd = responseData.find("\r\n\r\n");
-		if (headerEnd == std::string::npos) {
-			ERROR_LOG(Log::IO, "HTTP response malformed");
-			failed_ = true;
-			progress_.Update(0, 0, true);
-			return true;
+		std::string headers = responseData.substr(0, headerEnd+4);
+
+		std::vector<std::string> responseHeaders = {};
+		// Split headers into organized lines
+		size_t start = 0;
+		size_t end;
+		while ((end = headers.find("\r\n", start)) != std::string::npos) {
+			std::string line = headers.substr(start, end - start);
+			if (line != "")
+				responseHeaders.push_back(line);
+			start = end + 2;  // Skip past the \r\n
+		}
+		// take first line
+		std::string line = responseHeaders.front();
+
+		// Find HTTP Code
+		size_t code_pos = line.find(' ');
+		if (code_pos != line.npos) {
+			code_pos = line.find_first_not_of(' ', code_pos);
 		}
 
-		std::string headers = responseData.substr(0, headerEnd);
-		std::string body = responseData.substr(headerEnd + 4);
-		buffer_.Append(body.size());
-		memcpy(buffer_.Append(0), body.data(), body.size());
+		if (code_pos != line.npos) {
+			resultCode_ = atoi(&line[code_pos]);
+		}
+		else {
+			ThrowError("Could not parse HTTP status code: '%s'", line.c_str());
+			return -1;
+		}
 
-		// Very naive status code extraction
-		size_t statusStart = headers.find(" ");
-		if (statusStart != std::string::npos)
-			resultCode_ = std::stoi(headers.substr(statusStart + 1));
+		// buffer body data for external handling
+		std::string body = responseData.substr(headerEnd + 4);
+		Buffer bodybuf;
+		void* dst = bodybuf.Append(body.size());
+		memcpy(dst, body.data(), body.size());
+
+		for (std::string line : responseHeaders) {
+			if (startsWithNoCase(line, "Transfer-Encoding:")) {
+				// De-Chunk data
+				if (line.find("chunked") != std::string::npos) {
+					if (!DeChunk(&bodybuf, &buffer_, body.length())) {
+						ThrowError("Bad chunked data, couldn't read chunk size");
+						return -1;
+					}
+				}
+			}
+		}
+		//// Parse headers (you can improve this later)
+		//size_t headerEnd = responseData.find("\r\n\r\n");
+		//if (headerEnd == std::string::npos) {
+		//	ERROR_LOG(Log::IO, "HTTP response malformed");
+		//	failed_ = true;
+		//	progress_.Update(0, 0, true);
+		//	return true;
+		//}
+
+		//std::string headers = responseData.substr(0, headerEnd);
+		//std::string body = responseData.substr(headerEnd + 4);
+		//buffer_.Append(body.size());
+		//memcpy(buffer_.Append(0), body.data(), body.size());
+
+		//// Very naive status code extraction
+		//size_t statusStart = headers.find(" ");
+		//if (statusStart != std::string::npos)
+		//	resultCode_ = std::stoi(headers.substr(statusStart + 1));
 
 		completed_ = true;
 		progress_.Update(total, total, true);
 
 		if (resultCode_ != 200) {
-			ERROR_LOG(Log::IO, "Request failed: %d", resultCode_);
+			ThrowError("Request failed: %d", resultCode_);
 			failed_ = true;
 		}
 
