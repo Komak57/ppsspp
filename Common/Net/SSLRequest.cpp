@@ -16,6 +16,7 @@
 #if defined(__linux__)
 #include <unistd.h> // For access()
 #endif
+#include <Common\File\FileDescriptor.h>
 
 //#include "ext/naett/naett.h"
 
@@ -286,15 +287,17 @@ namespace http {
 				ThrowError("Connection failed (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl_, 0)));
 			}
 			else {
-			const char* cipher = wolfSSL_get_cipher(ssl_);
-			if (cipher == "NONE")	// Reports (NONE) when handshake failed
+				const char* cipher = wolfSSL_get_cipher(ssl_);
+				if (cipher == "NONE")	// Reports (NONE) when handshake failed
 					ThrowError("TLS handshake failed / Unable to agree on a cipher (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl_, 0)));
-			else
+				else
 					ThrowError("TLS handshake failed / Using Cipher %s (%s)", cipher, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl_, 0)));
 			}
 
 			return;
 		}
+		// Set NonBlocking
+		fd_util::SetNonBlocking(sockfd, true);
 
 		// Construct HTTP request
 		char requestBuf[2048];
@@ -407,7 +410,7 @@ namespace http {
 				int err = wolfSSL_get_error(ssl_, ret);
 				switch (err) {
 				case WOLFSSL_ERROR_WANT_READ:
-					continue;
+					continue; // non-blocking compliant
 				case WOLFSSL_ERROR_ZERO_RETURN:
 					NOTICE_LOG(Log::sceNet, "TLS connection closed by peer.");
 					break;
@@ -422,7 +425,6 @@ namespace http {
 				ThrowError("Read returned more data than available in the buffer");
 				return false;
 			}
-
 			responseData.append((char*)responseBuf, ret);
 			total += ret;
 			progress_.Update(total, total, false);
