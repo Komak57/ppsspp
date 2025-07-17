@@ -328,8 +328,13 @@ namespace http {
 			ret = wolfSSL_write(ssl_, buf + written, (int)(len - written));
 			if (ret <= 0) {
 				int err = wolfSSL_get_error(ssl_, ret);
-				ThrowError("TLS write failed: %d (wolfSSL_get_error: %d)", ret, err);
-				return;
+				switch (err) {
+				case WOLFSSL_ERROR_WANT_WRITE:
+					continue;
+				default:
+					ThrowError("TLS write failed: %d (wolfSSL_get_error: %d)", ret, err);
+					return;
+				}
 			}
 			written += ret;
 		}
@@ -397,11 +402,15 @@ namespace http {
 			ret = wolfSSL_read(ssl_, responseBuf, sizeof(responseBuf));
 			if (ret <= 0) {
 				int err = wolfSSL_get_error(ssl_, ret);
-				if (err == WOLFSSL_ERROR_WANT_READ)
+				switch (err) {
+				case WOLFSSL_ERROR_WANT_READ:
 					continue;
-				// TODO: Catch other errors
-				WARN_LOG(Log::IO, "Read End - %d", err);
-				break;
+				case WOLFSSL_ERROR_ZERO_RETURN:
+					break;
+				default:
+					WARN_LOG(Log::IO, "Read End - %d", err);
+					break;
+				}
 			}
 
 			responseData.append((char*)responseBuf, ret);
