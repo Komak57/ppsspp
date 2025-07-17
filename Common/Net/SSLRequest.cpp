@@ -405,6 +405,11 @@ namespace http {
 
 		// Read until there's nothing left to grab
 		do {
+			if (IsCancelled()) {
+				resultCode_ = -1000;
+				return false;
+			}
+
 			ret = wolfSSL_read(ssl_, responseBuf, sizeof(responseBuf));
 			if (ret <= 0) {
 				int err = wolfSSL_get_error(ssl_, ret);
@@ -427,7 +432,7 @@ namespace http {
 			}
 			responseData.append((char*)responseBuf, ret);
 			total += ret;
-			progress_.Update(total, total, false);
+			progress_.Update(responseData.size(), total, false);
 		} while (true);
 
 		// Strip headers
