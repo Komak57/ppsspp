@@ -134,7 +134,7 @@ static void wolfssl_debug(const int level, const char* const msg)
 {
 	switch (level) {
 	case 0: // ERROR_LOG - Critical errors, invalid certs, etc
-		ERROR_LOG(Log::sceNet, "%s", msg);
+		DEBUG_LOG(Log::sceNet, "%s", msg);
 		break;
 	case 1: // INFO_LOG - General information
 		VERBOSE_LOG(Log::sceNet, "%s", msg);

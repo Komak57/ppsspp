@@ -13,6 +13,9 @@
 #include <windows.h>
 #include <wincrypt.h>
 #endif
+#if defined(__linux__)
+#include <unistd.h> // For access()
+#endif
 
 //#include "ext/naett/naett.h"
 
@@ -122,10 +125,10 @@ namespace http {
 		bool found = false;
 		for (const char* path : linux_cert_paths) {
 			if (access(path, R_OK) == 0) {
-				ret = wolfSSL_CTX_load_verify_locations(ctx_, target.c_str(), NULL);
+				int ret = wolfSSL_CTX_load_verify_locations(ctx_, path, NULL);
 				if (ret != SSL_SUCCESS) {
 					// Not a valid certificate
-					WARN_LOG(Log::sceNet, "LoadStoreCert - Error loading CA certificate from file: %d (%s)", ret, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(NULL, ret)));
+					DEBUG_LOG(Log::sceNet, "LoadStoreCert - Error loading CA certificate from file: %d (%s)", ret, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(NULL, ret)));
 					continue;
 				}
 				found = true;
@@ -196,7 +199,7 @@ namespace http {
 		case CertType::File:
 			ret = wolfSSL_CTX_load_verify_locations(ctx_, target.c_str(), NULL);
 			if (ret != SSL_SUCCESS) {
-				ERROR_LOG(Log::sceNet, "InitializeSSL - Error loading CA certificate from file: %d (%s)", ret, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(NULL, ret)));
+				ERROR_LOG(Log::sceNet, "Error loading CA certificate from file: %d (%s)", ret, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(NULL, ret)));
 				return ret;
 			}
 			break;
@@ -206,6 +209,7 @@ namespace http {
 				ERROR_LOG(Log::sceNet, "Failed to load PEM certificate");
 				return ret;
 			}
+			break;
 		}
 
 		ssl_ = wolfSSL_new(ctx_);
@@ -282,13 +286,12 @@ namespace http {
 				ThrowError("Connection failed (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl_, 0)));
 			}
 			else {
-				ThrowError("TLS handshake failed (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl_, 0)));
-			}
 			const char* cipher = wolfSSL_get_cipher(ssl_);
 			if (cipher == "NONE")	// Reports (NONE) when handshake failed
-				ERROR_LOG(Log::sceNet, "Unable to agree on a cipher");
+					ThrowError("TLS handshake failed / Unable to agree on a cipher (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl_, 0)));
 			else
-				INFO_LOG(Log::sceNet, "Using Cipher - (%s)", cipher);
+					ThrowError("TLS handshake failed / Using Cipher %s (%s)", cipher, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl_, 0)));
+			}
 
 			return;
 		}
@@ -406,11 +409,18 @@ namespace http {
 				case WOLFSSL_ERROR_WANT_READ:
 					continue;
 				case WOLFSSL_ERROR_ZERO_RETURN:
+					NOTICE_LOG(Log::sceNet, "TLS connection closed by peer.");
 					break;
 				default:
 					WARN_LOG(Log::IO, "Read End - %d", err);
-					break;
+					ThrowError("Read End - %d", err);
+					return false;
 				}
+				break; // Clean break from loop
+			}
+			if (ret > sizeof(responseBuf)) {
+				ThrowError("Read returned more data than available in the buffer");
+				return false;
 			}
 
 			responseData.append((char*)responseBuf, ret);
@@ -446,7 +456,7 @@ namespace http {
 		}
 		else {
 			ThrowError("Could not parse HTTP status code: '%s'", line.c_str());
-			return -1;
+			return false;
 		}
 
 		// buffer body data for external handling
@@ -461,7 +471,7 @@ namespace http {
 				if (line.find("chunked") != std::string::npos) {
 					if (!DeChunk(&bodybuf, &buffer_, body.length())) {
 						ThrowError("Bad chunked data, couldn't read chunk size");
-						return -1;
+						return false;
 					}
 				}
 			}
