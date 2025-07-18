@@ -68,3 +68,6 @@
 [submodule "ext/mbedtls"]
 	path = ext/mbedtls
 	url = https://github.com/Mbed-TLS/mbedtls.git
+[submodule "ext/wolfssl"]
+	path = ext/wolfssl
+	url = https://github.com/wolfSSL/wolfssl.git
