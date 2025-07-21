@@ -25,6 +25,7 @@
 #include "Core/HLE/sceNp.h"
 #include "Core/HLE/sceNp2.h"
 #include "sceNetResolver.cpp"
+#include <Core\Util\NPAgent.h>
 
 bool npMatching2Inited = false;
 SceNpAuthMemoryStat npMatching2MemStat = {};
@@ -36,7 +37,7 @@ std::deque<NpMatching2Args> npMatching2Events;
 std::map<int, NpMatching2Handler> npMatching2Handlers;
 //std::map<int, NpMatching2Context> npMatching2Contexts;
 
-std::map<int, RoomInfo> servers;
+std::map<int, net::NPAgent> servers;
 
 static int GenerateCallbackInfo(int ctxId, u32 optParam, u32 event_type) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, optParam, event_type, currentMIPS->pc);
@@ -276,7 +277,6 @@ static int sceNpMatching2ContextStart(int ctxId)
 		servers = {};
 		int i = 1;
 		while (true) {
-			RoomInfo server = {};
 			ofs = entity.find("<agent-fqdn", ++ofs2);
 			if (ofs == std::string::npos) {
 				if (i == 1)
@@ -293,7 +293,7 @@ static int sceNpMatching2ContextStart(int ctxId)
 			ofs += 4;
 			ofs2 = entity.find('"', ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
-			server.ID = std::stoi(text.c_str());
+			int server_id = std::stoi(text.c_str());
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d ID: %s", __FUNCTION__, i, text.c_str());
 
 			ofs = entity.find("port=", frontPos);
@@ -303,7 +303,7 @@ static int sceNpMatching2ContextStart(int ctxId)
 			ofs += 6;
 			ofs2 = entity.find('"', ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
-			server.Port = std::stoi(text.c_str());
+			int server_port = std::stoi(text.c_str());
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Port: %s", __FUNCTION__, i, text.c_str());
 
 			ofs = entity.find("status=", frontPos);
@@ -314,10 +314,9 @@ static int sceNpMatching2ContextStart(int ctxId)
 			ofs2 = entity.find('"', ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
 			std::string alive = { 'a','l','i','v','e' };
+			int server_status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
 			if (text == alive)
-				server.Status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
-			else
-				server.Status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
+				server_status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Status: %s", __FUNCTION__, i, text.c_str());
 
 			ofs = entity.find('>', ++ofs2);
@@ -326,12 +325,12 @@ static int sceNpMatching2ContextStart(int ctxId)
 
 			ofs2 = entity.find("</agent-fqdn", ++ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
-			server.Host = text.c_str();
+			std::string server_host = text;
 			// TODO: Get IPAddr from DNS
 			//server.IPAddr = std::stoi();
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Host: %s", __FUNCTION__, i, text.c_str());
 
-			servers[server.ID] = server;
+			servers[server_id] = net::NPAgent(server_host, server_port, server_status);
 			i++;
 		}
 	}
@@ -461,7 +460,7 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
 	// Preserve original server list
-	std::map<int, RoomInfo> rooms = servers;
+	std::map<int, net::NPAgent> rooms = servers;
 	if (rooms.size() > maxServerIds) {
 		// Shouldn't happen, but in the event we have more servers than were requested, log, resize, and continue
 		ERROR_LOG(Log::sceNet, "%s - %d servers available > %d servers requested", __FUNCTION__, ctxId, serverIdsPtr, maxServerIds, servers.size(), maxServerIds);
@@ -522,14 +521,14 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 	DEBUG_LOG(Log::sceNet, "%s - (cbFunc: %08x, cbArg: %08x, reqId: %08) at %08x", __FUNCTION__, cbFunc, cbArg, request_id, currentMIPS->pc);
 
 	// Will only process 1 server request at a time
-	RoomInfo server = servers[serverId];
+	net::NPAgent *server = &servers[serverId];
 	//u32 serverInfo = (static_cast<u16>(server.ID) << 16 | static_cast<u8>(server.Status) << 8);
 	u32 infoSize = 4;
 
 	// Allocate space, and write value into the pool
 	u32 serverInfoPtr = np_memory.Alloc(infoSize);
-	Memory::Write_U16(server.ID, serverInfoPtr);
-	Memory::Write_U8(server.Status, serverInfoPtr+2);
+	Memory::Write_U16(serverId, serverInfoPtr);
+	Memory::Write_U8(server->GetStatus(), serverInfoPtr + 2);
 
 	// Notify callback handler
 	if (Memory::IsValidAddress(cbFunc)) {
@@ -591,23 +590,31 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 
 	DEBUG_LOG(Log::sceNet, "%s - (cbFunc: %08x, cbArg: %08x, reqId: %08) at %08x", __FUNCTION__, cbFunc, cbArg, request_id, currentMIPS->pc);
 
-	RoomInfo server = servers[serverId];
+	net::NPAgent* server = &servers[serverId];
+	// Check server status
+	server->Resolve();
+	// Connect to server before we collect information
+	server->Connect();
 	// FIXME: Get worldInfo from PSN
-	SceNpMatching2World worldInfo = {};
-	
+	std::optional<SceNpMatching2World> worldInfo = server->GetWorldInfo(npTitleId.data);
+	server->Disconnect();
+	if (!worldInfo) {
+		ERROR_LOG(Log::sceNet, "Failed to get World Info from PSN");
+	}
+
 	u32 infoSize = sizeof(worldInfo);
 
 	// Allocate space, and write value into the pool
 	u32 worldInfoPtr = np_memory.Alloc(infoSize);
-	Memory::Write_U16(worldInfo.worldId, worldInfoPtr);							// World ID
-	Memory::Write_U32(worldInfo.numOfLobby, worldInfoPtr + 2);					// Lobby Count
-	Memory::Write_U32(worldInfo.maxNumOfTotalLobbyMember, worldInfoPtr + 2);	// Member Limit
-	Memory::Write_U32(worldInfo.curNumOfTotalLobbyMember, worldInfoPtr + 2);	// Member Count
-	Memory::Write_U32(worldInfo.curNumOfRoom, worldInfoPtr + 2);				// Room Count
-	Memory::Write_U32(worldInfo.curNumOfTotalRoomMember, worldInfoPtr + 2);		// Room Member Count
-	Memory::Write_U8(worldInfo.withEntitlementId, worldInfoPtr + 2);			// Uses EntitlementID
+	Memory::Write_U16(worldInfo->worldId, worldInfoPtr);							// World ID
+	Memory::Write_U32(worldInfo->numOfLobby, worldInfoPtr + 2);					// Lobby Count
+	Memory::Write_U32(worldInfo->maxNumOfTotalLobbyMember, worldInfoPtr + 2);	// Member Limit
+	Memory::Write_U32(worldInfo->curNumOfTotalLobbyMember, worldInfoPtr + 2);	// Member Count
+	Memory::Write_U32(worldInfo->curNumOfRoom, worldInfoPtr + 2);				// Room Count
+	Memory::Write_U32(worldInfo->curNumOfTotalRoomMember, worldInfoPtr + 2);		// Room Member Count
+	Memory::Write_U8(worldInfo->withEntitlementId, worldInfoPtr + 2);			// Uses EntitlementID
 	for(int i = 0; i < 32; i++)
-		Memory::Write_U8(worldInfo.entitlementId.data[i], worldInfoPtr + 2);	// EntitlementID
+		Memory::Write_U8(worldInfo->entitlementId[i], worldInfoPtr + 2);	// EntitlementID
 	Memory::Write_U8(0, worldInfoPtr + 2);										// Padding
 	Memory::Write_U8(0, worldInfoPtr + 2);										// Padding
 	Memory::Write_U8(0, worldInfoPtr + 2);										// Padding

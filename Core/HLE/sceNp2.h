@@ -303,15 +303,6 @@ enum PS3Matching2
 
 #define PSP_NP_MATCHING2_MAX_CONTEXTID	7;
 
-// Server status
-enum
-{
-	SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE = 1,
-	SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE = 2,
-	SCE_NP_MATCHING2_SERVER_STATUS_BUSY = 3,
-	SCE_NP_MATCHING2_SERVER_STATUS_MAINTENANCE = 4,
-};
-
 struct NpMatching2Handler {
 	u32 ctx_id;
 	u32 cb;
@@ -357,28 +348,6 @@ struct NpMatching2Args {
 
 };
 
-// 0x88 bytes
-struct RoomInfo {
-	u16_le ID;
-	u16 Port;
-	u8 Status;
-	std::string Host;
-	u32_le IPAddr = 910526074; // 910526074 || 0x3645867a || 54.69.134.122 || elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net
-};
-
-// World
-struct SceNpMatching2World
-{
-	u16 worldId;
-	u32 numOfLobby;
-	u32 maxNumOfTotalLobbyMember;
-	u32 curNumOfTotalLobbyMember;
-	u32 curNumOfRoom;
-	u32 curNumOfTotalRoomMember;
-	u8 withEntitlementId;
-	SceNpEntitlementId entitlementId;
-	u8 padding[3];
-};
 #pragma pack(pop)
 
 extern std::recursive_mutex npMatching2EvtMtx;

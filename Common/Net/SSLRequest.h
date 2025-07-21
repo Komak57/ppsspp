@@ -3,7 +3,6 @@
 #include <thread>
 #include <string_view>
 
-#include "Common/Net/HTTPRequest.h"
 #include <wolfssl/options.h>
 #include <wolfssl/ssl.h>
 #include <wolfssl/wolfcrypt/coding.h>
@@ -12,7 +11,7 @@
 #ifndef HTTPS_NOT_AVAILABLE
 
 namespace http {
-	enum CertType {
+	enum SSLCertType {
 		Store,
 		File,
 		PEM
@@ -24,10 +23,10 @@ namespace http {
 		~HTTPSRequest();
 
 		// Initilizes the SSL libraries and sets the certificate.
-		// CertType::Store - will pull from a Trusted CA
-		// CertType::File - loads a file at path 'target'
-		// CertType::PEM - lads a PEM directly from 'target'
-		int InitializeSSL(CertType certtype, std::string target = "");
+		// SSLCertType::Store - will pull from a Trusted CA
+		// SSLCertType::File - loads a file at path 'target'
+		// SSLCertType::PEM - lads a PEM directly from 'target'
+		int InitializeSSL(SSLCertType certtype, std::string target = "");
 		// Compatibility Enabled way to obtain trusted certs from the device
 		int LoadStoreCert();
 

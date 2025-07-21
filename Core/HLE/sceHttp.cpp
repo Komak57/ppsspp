@@ -26,18 +26,13 @@
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/sceKernelMemory.h"
-#include "Core/HLE/sceHttp.h"
-#include "Core/Debugger/MemBlockInfo.h"
 #include "Common/StringUtils.h"
+#include "Core/Debugger/MemBlockInfo.h"
 #include "Common/LogReporting.h"
 #include "Common/Net/URL.h"
 #include "Common/Net/HTTPClient.h"
-#include <mbedtls\debug.h>
- // HTTPS Requirements from OpenSSL 1.1.1
-//#include <openssl/ssl.h>
-//#include <openssl/err.h>
-//#include <openssl/x509.h>
-//#include <openssl/x509_vfy.h>
+#include "Core/HLE/sceHttp.h"
+
 //static std::unordered_map<int, bool> httpsOptions;
 
 static std::vector<std::shared_ptr<HTTPTemplate>> httpObjects;
@@ -103,69 +98,52 @@ int HTTPConnection::InitializeSSL() {
 	WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::InitializeSSL()");
 	this->useAuth = useAuth;
 
-	mbedtls_net_init(&netCtx);
-	mbedtls_ssl_init(&sslCtx);
-	mbedtls_ssl_config_init(&sslConfig);
-	mbedtls_ctr_drbg_init(&ctrDrbg);
-	mbedtls_entropy_init(&entropy);
-	mbedtls_debug_set_threshold(4);
-
-	if (mbedtls_ctr_drbg_seed(&ctrDrbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
-		ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to seed RNG");
+	wolfSSL_Debugging_ON();  // Optional: turn off for release
+#ifdef DEBUG
+	wolfSSL_SetLoggingCb(wolfssl_debug);
+#endif
+	if (wolfSSL_Init() != WOLFSSL_SUCCESS) {
+		ERROR_LOG(Log::sceNet, "wolfSSL_Init failed");
 		return -1;
 	}
 
-	// MPO Doesn't provide a cert here
-	if (certPEM.size() == 0)
-		WARN_LOG(Log::sceNet, "InitializeSSL: No cert provided.");
-	// Initialize CA certificate store
-	// Note: certPEM MUST be pointing to a valid certificate, or it will cause a strlen crash
-	// PSP2i has it at 0x08e73a04
-	if (certPEM.size() > 0) {
-		mbedtls_x509_crt_init(&caCert);
-		int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
-		if (ret < 0) {
-			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to parse cert: -0x%04x", -ret);
-			return -1;
+	ctx_ = wolfSSL_CTX_new(wolfTLS_client_method());
+	if (!ctx_) {
+		ERROR_LOG(Log::sceNet, "wolfSSL_CTX_new failed");
+		return -1;
+	}
+
+	// Force specific ciphers in the handshake process
+	//const char* cipher_list = "TLS13-AES256-GCM-SHA384:TLS13-CHACHA20-POLY1305-SHA256";
+	//wolfSSL_CTX_set_cipher_list(ctx_, cipher_list);
+
+	// Optional: TLS version range
+	wolfSSL_CTX_SetMinVersion(ctx_, WOLFSSL_TLSV1);
+
+	if (useAuth)
+		wolfSSL_CTX_set_verify(ctx_, SSL_VERIFY_PEER, NULL);
+	else
+		wolfSSL_CTX_set_verify(ctx_, SSL_VERIFY_NONE, NULL);
+
+	int ret;
+	if (!certPEM.empty()) {
+		ret = wolfSSL_CTX_load_verify_buffer(ctx_, (const unsigned char*)certPEM.c_str(), (long)certPEM.length(), SSL_FILETYPE_PEM);
+		if (ret != WOLFSSL_SUCCESS) {
+			ERROR_LOG(Log::sceNet, "Failed to load PEM certificate");
+			return ret;
 		}
 	}
-
-	// Setup SSL config
-	if (mbedtls_ssl_config_defaults(&sslConfig,
-		MBEDTLS_SSL_IS_CLIENT,
-		MBEDTLS_SSL_TRANSPORT_STREAM,
-		MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
-		ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to set SSL config defaults");
-		return -1;
+	else {
+		/*ret = LoadStoreCert();
+		if (ret < 0)
+			return ret;*/
 	}
 
-	/* OPTIONAL is not optimal for security,
-	 * but makes interop easier in this simplified example */
-	if (useAuth)
-		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_OPTIONAL);
-	else
-		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_NONE);
-	if (certPEM.size() > 0)
-		mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
-	mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
-	mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, NULL);
-
-	// Check compiled Ciphers
-	/*const int* ciphers = mbedtls_ssl_list_ciphersuites();
-	int cipherCount = 0;
-	for (const int* c = ciphers; *c != 0; ++c)
-		++cipherCount;
-	INFO_LOG(Log::sceNet, "sceHttpsInit: Parsing %i ciphers", cipherCount);
-	for (int i = 0; i < cipherCount; i++) {
-		INFO_LOG(Log::sceNet, "sceHttpsInit: ciphers[%i] = 0x%04x = %s", i, ciphers[i], mbedtls_ssl_get_ciphersuite_name(ciphers[i]));
-	}*/
-
-	// Force Enable Legacy Cipher
-	//mbedtls_ssl_conf_ciphersuites(&sslConfig, net::legacy_ciphersuites_array); // optional if you’ve recompiled with weak cipher support
-	// Limit to TLS 1.0 - TLS 1.2
-	// HTTPS Option 35 may relate to allowing SSLv3 here
-	mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
-	mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
+	ssl_ = wolfSSL_new(ctx_);
+	if (!ssl_) {
+		ERROR_LOG(Log::sceNet, "Could not generate SSL from Context");
+		return -1;
+	}
 
 	enableTLS();
 	return 0;
@@ -184,7 +162,8 @@ HTTPRequest::HTTPRequest(int connectionID, int method, const char* url, u64 cont
 	this->contentLength = contentLength;
 
 	if (tlsEnabled) {
-		client.Initialize(this->sslCtx, this->netCtx, this->sslConfig, this->ctrDrbg, this->entropy, this->caCert);
+		// Transfer configuration to HTTPClient
+		client.Initialize(this->ssl_, this->ctx_);
 	}
 	//progress_.cancelled = &cancelled_;
 	responseContent_.clear();

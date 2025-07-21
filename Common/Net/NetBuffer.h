@@ -26,11 +26,11 @@ public:
 	bool FlushSocket(uintptr_t sock, double timeout, bool* cancelled = nullptr);
 	bool FlushSocket(mbedtls_ssl_context *sslCtx, mbedtls_net_context *netCtx, double timeout, bool* cancelled = nullptr);
 	
-	int ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress, bool useSSL, mbedtls_ssl_context* sslCtx);
+	int ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress);
 
 	// < 0: error
 	// >= 0: number of bytes read
-	int Read(int fd, size_t sz, bool useSSL, mbedtls_ssl_context* sslCtx);
+	int Read(int fd, size_t sz);
 };
 
 }

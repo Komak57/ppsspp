@@ -4,12 +4,14 @@
 
 #include "Common/Net/HTTPRequest.h"
 #include "Common/Net/SSLRequest.h"
-#include "Common/Thread/ThreadUtil.h"
 #include "Common/StringUtils.h"
-#include "Common/Log.h"
 
+// Used to get the machine's trusted certs
+// A precompiled trusted cert chain can be used instead
 #if defined(_WIN32)
 #pragma comment(lib, "Crypt32.lib")
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX // Avoid std::min override
 #include <windows.h>
 #include <wincrypt.h>
 #endif
@@ -164,7 +166,7 @@ namespace http {
 		return 0;
 	}
 
-	int HTTPSRequest::InitializeSSL(CertType certtype, std::string target) {
+	int HTTPSRequest::InitializeSSL(SSLCertType certtype, std::string target) {
 		WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::InitializeSSL()");
 
 		wolfSSL_Debugging_ON();  // Optional: turn off for release
@@ -192,19 +194,19 @@ namespace http {
 
 		int ret;
 		switch (certtype) {
-		case CertType::Store:
+		case SSLCertType::Store:
 			ret = LoadStoreCert();
 			if (ret < 0)
 				return ret;
 			break;
-		case CertType::File:
+		case SSLCertType::File:
 			ret = wolfSSL_CTX_load_verify_locations(ctx_, target.c_str(), NULL);
 			if (ret != SSL_SUCCESS) {
 				ERROR_LOG(Log::sceNet, "Error loading CA certificate from file: %d (%s)", ret, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(NULL, ret)));
 				return ret;
 			}
 			break;
-		case CertType::PEM:
+		case SSLCertType::PEM:
 			ret = wolfSSL_CTX_load_verify_buffer(ctx_, (const unsigned char*)target.c_str(), (long)target.size(), SSL_FILETYPE_PEM);
 			if (ret != WOLFSSL_SUCCESS) {
 				ERROR_LOG(Log::sceNet, "Failed to load PEM certificate");
@@ -227,7 +229,7 @@ namespace http {
 	void HTTPSRequest::Start() {
 		URLParts urlParts = SplitURL(url_);
 		// Setup TLS
-		int ret = InitializeSSL(CertType::Store);
+		int ret = InitializeSSL(SSLCertType::Store);
 		if (ret < 0) {
 			ThrowError("TLS init failed: %d", ret);
 			return;

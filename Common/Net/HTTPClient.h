@@ -5,26 +5,20 @@
 #include <thread>
 #include <cstdint>
 
-#include "Common/File/Path.h"
-#include "Common/Net/NetBuffer.h"
 #include "Common/Net/Resolve.h"
 #include "Common/Net/HTTPRequest.h"
-#include "mbedtls/ssl.h"
-#include "mbedtls/net_sockets.h"
-#include "mbedtls/platform.h"
-#include "mbedtls/ssl_cache.h"
-#include "mbedtls/ssl_ciphersuites.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/x509_crt.h"
+#include <wolfssl/options.h> // wolfSSL_UseSNI
+#include <wolfssl/ssl.h>
+//#include <wolfssl/wolfcrypt/coding.h>
+//#include <wolfssl/error-ssl.h>
 
 namespace net {
-const int legacy_ciphersuites_array[] = {
-MBEDTLS_TLS_RSA_WITH_3DES_EDE_CBC_SHA,  // DES-CBC3-SHA
-MBEDTLS_TLS_RSA_WITH_RC4_128_SHA,       // RC4-SHA
-MBEDTLS_TLS_RSA_WITH_RC4_128_MD5,       // RC4-MD5
-0                                       // terminator (required)
-};
+//const int legacy_ciphersuites_array[] = {
+//MBEDTLS_TLS_RSA_WITH_3DES_EDE_CBC_SHA,  // DES-CBC3-SHA
+//MBEDTLS_TLS_RSA_WITH_RC4_128_SHA,       // RC4-SHA
+//MBEDTLS_TLS_RSA_WITH_RC4_128_MD5,       // RC4-MD5
+//0                                       // terminator (required)
+//};
 class Connection {
 public:
 	virtual ~Connection();
@@ -33,7 +27,7 @@ public:
 	bool Resolve(const char *host, int port, DNSType type = DNSType::ANY);
 
 	bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
-	bool SSLConnect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
+	//bool SSLConnect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 	void Disconnect();
 
 	// Only to be used for bring-up and debugging.
@@ -47,13 +41,8 @@ protected:
 
 	addrinfo *resolved_ = nullptr;
 
-	mbedtls_ssl_context sslCtx;
-	mbedtls_net_context netCtx;
-
-	mbedtls_ssl_config sslConfig;
-	mbedtls_ctr_drbg_context ctrDrbg;
-	mbedtls_entropy_context entropy;
-	mbedtls_x509_crt caCert;
+	WOLFSSL_CTX* ctx_ = nullptr;
+	WOLFSSL* ssl_ = nullptr;
 
 	int useCookie = 0;
 	int useKeepAlive = 0;
@@ -73,7 +62,6 @@ private:
 }	// namespace net
 
 namespace http {
-
 bool GetHeaderValue(const std::vector<std::string> &responseHeaders, const std::string &header, std::string *value);
 
 class RequestParams {
@@ -91,15 +79,10 @@ public:
 	Client();
 	~Client();
 
-	void Initialize(mbedtls_ssl_context sslCtx, mbedtls_net_context netCtx, mbedtls_ssl_config sslConfig, mbedtls_ctr_drbg_context ctrDrbg, mbedtls_entropy_context entropy, mbedtls_x509_crt caCert) {
-		this->sslCtx = sslCtx;
-		this->netCtx = netCtx;
-		this->sslConfig = sslConfig;
-		this->ctrDrbg = ctrDrbg;
-		this->entropy = entropy;
-		this->caCert = caCert;
+	void Initialize(WOLFSSL* ssl, WOLFSSL_CTX* ctx) {
+		this->ssl_ = ssl;
+		this->ctx_ = ctx;
 		this->sslEnabled = true;
-		return;
 	}
 
 	// Return value is the HTTP return code. 200 means OK. < 0 means some local error.

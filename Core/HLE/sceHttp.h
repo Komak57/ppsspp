@@ -258,13 +258,8 @@ protected:
 	u16 port = 80;
 	int enableKeepalive = 0;
 
-	mbedtls_ssl_context sslCtx;
-	mbedtls_net_context netCtx;
-
-	mbedtls_ssl_config sslConfig;
-	mbedtls_ctr_drbg_context ctrDrbg;
-	mbedtls_entropy_context entropy;
-	mbedtls_x509_crt caCert;
+	WOLFSSL_CTX* ctx_ = nullptr;
+	WOLFSSL* ssl_ = nullptr;
 
 public:
 	HTTPConnection() {}

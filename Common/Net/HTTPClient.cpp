@@ -9,29 +9,27 @@
 #include "Common/System/OSD.h"
 
 #include "Common/Net/SocketCompat.h"
-#include "Common/Net/Resolve.h"
 #include "Common/Net/URL.h"
 
 #include "Common/File/FileDescriptor.h"
 #include "Common/SysError.h"
 #include "Common/Thread/ThreadUtil.h"
 #include "Common/Data/Encoding/Compression.h"
-#include "Common/Net/NetBuffer.h"
-#include "Common/Log.h"
-#include <mbedtls\debug.h>
-#include <mbedtls\error.h>
 
 namespace net {
 
 Connection::~Connection() {
 	if (sslEnabled) {
 		Disconnect();
-		mbedtls_net_free(&netCtx);
-		mbedtls_ssl_free(&sslCtx);
 
-		mbedtls_ssl_config_free(&sslConfig);
-		mbedtls_ctr_drbg_free(&ctrDrbg);
-		mbedtls_entropy_free(&entropy);
+		if (ssl_) {
+			wolfSSL_free(ssl_);
+			ssl_ = nullptr;
+		}
+		if (ctx_) {
+			wolfSSL_CTX_free(ctx_);
+			ctx_ = nullptr;
+		}
 	}
 	Disconnect();
 	if (resolved_ != nullptr)
@@ -98,8 +96,8 @@ static void FormatAddr(char *addrbuf, size_t bufsize, const addrinfo *info) {
 }
 
 bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
-	if (sslEnabled)
-		return SSLConnect(maxTries, timeout, cancelConnect);
+	/*if (sslEnabled)
+		return SSLConnect(maxTries, timeout, cancelConnect);*/
 
 	NOTICE_LOG(Log::sceNet, "Connection::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 	if (port_ <= 0) {
@@ -187,7 +185,28 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 					closesocket(sock);
 				}
 			}
+			// TODO: Wrap socket with WolfSSL
+			if (sslEnabled) {
+				// Optional, based on the hosting servers strictness
+				wolfSSL_UseSNI(ssl_, WOLFSSL_SNI_HOST_NAME, host_.c_str(), (unsigned short)host_.length());
 
+				wolfSSL_set_fd(ssl_, sock_);
+				// Then initiate handshake
+				if (wolfSSL_connect(ssl_) != WOLFSSL_SUCCESS) {
+					if (wolfSSL_is_init_finished(ssl_)) {
+						ERROR_LOG(Log::HTTP, "Connection failed (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl_, 0)));
+					}
+					else {
+						const char* cipher = wolfSSL_get_cipher(ssl_);
+						if (cipher == "NONE")	// Reports (NONE) when handshake failed
+							ERROR_LOG(Log::HTTP, "TLS handshake failed / Unable to agree on a cipher (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl_, 0)));
+						else
+							ERROR_LOG(Log::HTTP, "TLS handshake failed / Using Cipher %s (%s)", cipher, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl_, 0)));
+					}
+
+					break;
+				}
+			}
 			// Great, now we're good to go.
 			return true;
 		} else {
@@ -209,111 +228,9 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 	return false;
 }
 
-bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
-	WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
-	if (port_ <= 0) {
-		ERROR_LOG(Log::IO, "SSLConnect - Bad port");
-		return false;
-	}
-	if (connected) {
-		mbedtls_ssl_session_reset(&sslCtx);
-		mbedtls_ssl_config_free(&sslConfig);
-
-		mbedtls_ssl_free(&sslCtx);
-		mbedtls_net_free(&netCtx);
-		connected = false;
-	}
-
-
-	for (int tries = maxTries; tries > 0; --tries) {
-		mbedtls_ssl_setup(&sslCtx, &sslConfig);
-		for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
-			if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
-				continue;
-
-			int ret;
-			/*
-			 * 1. Start the connection
-			 */
-			char addrStr[128]{};
-			FormatAddr(addrStr, sizeof(addrStr), possible);
-			char portStr[8]{};
-			memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
-			if ((ret = mbedtls_net_connect(&netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
-				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", addrStr, portStr, (unsigned int)-ret);
-				goto retry;
-			}
-			// Set NonBlocking
-			fd_util::SetNonBlocking(netCtx.fd, true);
-			/*
-			 * 2. Setup stuff
-			 */
-			if ((ret = mbedtls_ssl_setup(&sslCtx, &sslConfig)) != 0) {
-				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_setup returned 0x%04x", ret);
-				goto retry;
-			}
-
-			//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
-			if ((ret = mbedtls_ssl_set_hostname(&sslCtx, host_.c_str())) != 0) {
-				char errbuf[128];
-				mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
-				goto retry;
-			}
-
-			mbedtls_ssl_set_bio(&sslCtx, &netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
-
-			/*
-			 * 4. Handshake
-			 */
-			NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
-
-			while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
-				if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-					char errbuf[128];
-					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
-					goto retry;
-				}
-			}
-
-			/*
-			 * 5. Verify the server certificate
-			 */
-			// HTTPS Option 28 may relate to disabling this check
-			NOTICE_LOG(Log::sceNet, "SSLConnect - Verifying peer X.509 certificate...");
-
-			/* In real life, we probably want to bail out when ret != 0 */
-			if ((flags = mbedtls_ssl_get_verify_result(&sslCtx)) != 0) {
-				char vrfy_buf[512];
-
-				mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
-
-				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
-				goto retry;
-			}
-
-			INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
-			connected = true;
-			return true;
-		retry:
-			INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
-			mbedtls_ssl_session_reset(&sslCtx);
-			mbedtls_ssl_config_free(&sslConfig);
-
-			mbedtls_ssl_free(&sslCtx);
-			mbedtls_net_free(&netCtx);
-
-			continue;
-		}
-		sleep_ms(1, "connect");
-	}
-	return false;
-}
-
 void Connection::Disconnect() {
 	if (sslEnabled) {
-		mbedtls_ssl_close_notify(&sslCtx);
+		//mbedtls_ssl_close_notify(&sslCtx);
 	}
 	else {
 		if ((intptr_t)sock_ != -1) {
@@ -340,18 +257,16 @@ Client::Client() {
 Client::~Client() {
 	DEBUG_LOG(Log::HTTP, "~Client()");
 	if (sslEnabled) {
-		mbedtls_ssl_close_notify(&sslCtx);  // Optional, sends close_notify
-		mbedtls_ssl_free(&sslCtx);
-		mbedtls_ssl_config_free(&sslConfig);
-		mbedtls_net_free(&netCtx);
+
+		if (ssl_) {
+			wolfSSL_free(ssl_);
+			ssl_ = nullptr;
+		}
+		if (ctx_) {
+			wolfSSL_CTX_free(ctx_);
+			ctx_ = nullptr;
+		}
 		sslEnabled = false;
-
-		// Clear cert if you're not persisting it across sessions
-		//mbedtls_x509_crt_free(&caCert);
-
-		// Also clear entropy and rng contexts if reinitialized every time
-		//mbedtls_ctr_drbg_free(&ctrDrbg);
-		//mbedtls_entropy_free(&entropy);
 	}
 	Disconnect();
 }
@@ -507,25 +422,15 @@ int Client::SendRequestWithData(const char *method, const RequestParams &req, st
 		otherHeaders ? otherHeaders : "");
 
 	buffer.Append(data);
-	if (sslEnabled) {
-		bool flushed = buffer.FlushSocket(&sslCtx, &netCtx, dataTimeout_, progress->cancelled);
-		if (!flushed) {
-			return -1;  // TODO error code.
-		}
-	}
-	else {
-		bool flushed = buffer.FlushSocket(sock(), dataTimeout_, progress->cancelled);
-		if (!flushed) {
-			return -1;  // TODO error code.
-		}
+	bool flushed = buffer.FlushSocket(sock(), dataTimeout_, progress->cancelled);
+	if (!flushed) {
+		return -1;  // TODO error code.
 	}
 	return 0;
 }
 
 int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &responseHeaders, net::RequestProgress *progress, std::string *statusLine) {
 	DEBUG_LOG(Log::HTTP, "ReadResponseHeaders()");
-	// maps the socket for HTTPS or HTTP
-	int fd = sslEnabled ? netCtx.fd : sock();
 	// Snarf all the data we can into RAM. A little unsafe but hey.
 	static constexpr float CANCEL_INTERVAL = 0.25f;
 	int ready = 0;
@@ -535,11 +440,11 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 		if (progress->cancelled && *progress->cancelled)
 			return -1;
 		// Check for silent fails
-		if (fd < 0) {
+		if (sock() < 0) {
 			ERROR_LOG(Log::HTTP, "HTTP Connection lost");
 			return -1;
 		}
-		ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);
+		ready = fd_util::WaitUntilReady(sock(), CANCEL_INTERVAL, false);
 		if (ready < 0) {
 			ERROR_LOG(Log::HTTP, "HTTP WaitUntilReady Failed");
 			return -1;
@@ -551,7 +456,7 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 	};
 	// Let's hope all the headers are available in a single packet...
 	int ret;
-	if ((ret = readbuf->Read(fd, 4096, sslEnabled, (sslEnabled? &sslCtx : nullptr))) < 0) {
+	if ((ret = readbuf->Read(sock(), 4096)) < 0) {
 		ERROR_LOG(Log::HTTP, "Failed to read HTTP headers -0x%04x", -ret);
 		return -1;
 	}
@@ -678,7 +583,7 @@ int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::stri
 	if (remainingLength > 0) {
 		INFO_LOG(Log::sceNet, "ReadResponseEntity - %i/%i bytes remaining", remainingLength, contentLength);
 		int ret;
-		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? netCtx.fd : sock(), remainingLength, progress, sslEnabled, (sslEnabled ? &sslCtx : nullptr))) < 0)
+		if ((ret = readbuf->ReadAllWithProgress(sock(), remainingLength, progress)) < 0)
 			return -1;
 	}
 	// output now contains the rest of the reply. Dechunk it.
