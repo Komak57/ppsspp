@@ -20,6 +20,8 @@
 #include <string>
 #include <iomanip>
 #include <cstdint>
+#include <Swap.h>
+#include <mutex>
 
 #pragma pack(push,1)
 
@@ -312,6 +314,37 @@ enum
 	SCE_NP_MATCHING2_SERVER_STATUS_MAINTENANCE = 4,
 };
 
+typedef u16 SceNpMatching2ServerId;
+typedef u32 SceNpMatching2WorldId;
+typedef u16 SceNpMatching2WorldNumber;
+typedef u64 SceNpMatching2LobbyId;
+typedef u16 SceNpMatching2LobbyNumber;
+typedef u16 SceNpMatching2LobbyMemberId;
+typedef u64 SceNpMatching2RoomId;
+typedef u16 SceNpMatching2RoomNumber;
+typedef u16 SceNpMatching2RoomMemberId;
+typedef u8 SceNpMatching2RoomGroupId;
+typedef u8 SceNpMatching2TeamId;
+typedef u16 SceNpMatching2ContextId;
+typedef u32 SceNpMatching2RequestId;
+typedef u16 SceNpMatching2AttributeId;
+typedef u32 SceNpMatching2FlagAttr;
+typedef u8 SceNpMatching2NatType;
+typedef u8 SceNpMatching2Operator;
+typedef u8 SceNpMatching2CastType;
+typedef u8 SceNpMatching2SessionType;
+typedef u8 SceNpMatching2SignalingType;
+typedef u8 SceNpMatching2SignalingFlag;
+typedef u8 SceNpMatching2EventCause;
+typedef u8 SceNpMatching2ServerStatus;
+typedef u8 SceNpMatching2Role;
+typedef u8 SceNpMatching2BlockKickFlag;
+typedef u64 SceNpMatching2RoomPasswordSlotMask;
+typedef u64 SceNpMatching2RoomJoinedSlotMask;
+typedef u16 SceNpMatching2Event;
+typedef u32 SceNpMatching2EventKey;
+typedef u32 SceNpMatching2SignalingRequestId;
+
 struct NpMatching2Handler {
 	u32 ctx_id;
 	u32 cb;
@@ -369,16 +402,130 @@ struct RoomInfo {
 // World
 struct SceNpMatching2World
 {
-	u16 worldId;
+	u32 worldId;
 	u32 numOfLobby;
 	u32 maxNumOfTotalLobbyMember;
 	u32 curNumOfTotalLobbyMember;
 	u32 curNumOfRoom;
 	u32 curNumOfTotalRoomMember;
 	u8 withEntitlementId;
-	SceNpEntitlementId entitlementId;
+	u8 entitlementId[32];
 	u8 padding[3];
 };
+
+// World data list request response data
+struct SceNpMatching2GetWorldInfoListResponse
+{
+	u32 worldInfoPtr;
+	u32 worldNum;
+};
+
+// Range filter
+struct SceNpMatching2RangeFilter
+{
+	u32 startIndex;
+	u32 max;
+};
+
+// Binary-type attribute
+struct SceNpMatching2BinAttr
+{
+	SceNpMatching2AttributeId id;
+	u8 padding[2];
+	u8* ptr;
+	u32 size;
+};
+
+// Binary-type search condition
+struct SceNpMatching2BinSearchFilter
+{
+	SceNpMatching2Operator searchOperator;
+	u8 padding[3];
+	SceNpMatching2BinAttr attr;
+};
+
+// Integer-type attribute
+struct SceNpMatching2IntAttr
+{
+	SceNpMatching2AttributeId id;
+	u8 padding[2];
+	u32 num;
+};
+
+// Integer-type search condition
+struct SceNpMatching2IntSearchFilter
+{
+	SceNpMatching2Operator searchOperator;
+	u8 padding[3];
+	SceNpMatching2IntAttr attr;
+};
+
+// Room search parameters
+struct SceNpMatching2SearchRoomRequest
+{
+	s32 option;
+	SceNpMatching2WorldId worldId;
+	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2RangeFilter rangeFilter;
+	SceNpMatching2FlagAttr flagFilter;
+	SceNpMatching2FlagAttr flagAttr;
+	SceNpMatching2IntSearchFilter* intFilter;
+	u32 intFilterNum;
+	SceNpMatching2BinSearchFilter* binFilter;
+	u32 binFilterNum;
+	SceNpMatching2AttributeId* attrId;
+	u32 attrIdNum;
+};
+
+// Range of result
+struct SceNpMatching2Range
+{
+	u32 startIndex;
+	u32 total;
+	u32 size;
+};
+
+// Room search response data
+struct SceNpMatching2SearchRoomResponse
+{
+	SceNpMatching2Range range;
+	u32 roomDataExternal;
+};
+
+struct SceNpUserInformation;
+struct SceNpMatching2RoomGroup;
+struct SceNpMatching2IntAttr;
+struct SceNpMatching2BinAttr;
+
+// External room data
+struct SceNpMatching2RoomDataExternal
+{
+	SceNpMatching2RoomDataExternal* next;
+	SceNpMatching2ServerId serverId;
+	u8 padding1[2];
+	SceNpMatching2WorldId worldId;
+	u16 publicSlotNum;
+	u16 privateSlotNum;
+	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2RoomId roomId;
+	u16 openPublicSlotNum;
+	u16 maxSlot;
+	u16 openPrivateSlotNum;
+	u16 curMemberNum;
+	SceNpMatching2RoomPasswordSlotMask passwordSlotMask;
+	SceNpUserInformation* owner;
+	SceNpMatching2RoomGroup* roomGroup;
+	u32 roomGroupNum;
+	u32 flagAttr;
+	SceNpMatching2IntAttr* roomSearchableIntAttrExternal;
+	u32 roomSearchableIntAttrExternalNum;
+	SceNpMatching2BinAttr* roomSearchableBinAttrExternal;
+	u32 roomSearchableBinAttrExternalNum;
+	SceNpMatching2BinAttr* roomBinAttrExternal;
+	u32 roomBinAttrExternalNum;
+};
+
+
 #pragma pack(pop)
 
 extern std::recursive_mutex npMatching2EvtMtx;

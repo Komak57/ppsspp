@@ -22,8 +22,8 @@
 #include "Core/CoreTiming.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/FunctionWrappers.h"
-#include "Core/HLE/sceNp.h"
 #include "Core/HLE/sceNp2.h"
+#include <Core\Util\NPAgent.h>
 #include "sceNetResolver.cpp"
 
 bool npMatching2Inited = false;
@@ -35,8 +35,15 @@ std::recursive_mutex npMatching2EvtMtx;
 std::deque<NpMatching2Args> npMatching2Events;
 std::map<int, NpMatching2Handler> npMatching2Handlers;
 //std::map<int, NpMatching2Context> npMatching2Contexts;
+net::NPAgent* tServer;
+std::map<int, net::NPAgent> servers;
+std::vector<SceNpMatching2World> worlds;
 
-std::map<int, RoomInfo> servers;
+template <typename T>
+void Write_Struct(const T& object, const u32 address, const char* tag, size_t taglen) {
+	Memory::Memcpy(address, &object, sizeof(T), tag, taglen);
+}
+
 
 static int GenerateCallbackInfo(int ctxId, u32 optParam, u32 event_type) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, optParam, event_type, currentMIPS->pc);
@@ -238,12 +245,17 @@ static int sceNpMatching2ContextStart(int ctxId)
 		int err = client.SendRequest("GET", req, requestHeaders, &progress);
 		if (err < 0) {
 			client.Disconnect();
-			return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "HTTP GET Error = %d", err);
+			return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_FORBIDDEN, "HTTP GET Error = %d", err);
 		}
 
 		net::Buffer readbuf;
 		std::vector<std::string> responseHeaders;
-		int code = client.ReadResponseHeaders(&readbuf, responseHeaders, &progress);
+		int code = client.ReadResponse(&readbuf, &progress);
+		if (code != 200) {
+			client.Disconnect();
+			return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_INTERNAL_SERVER_ERROR, "HTTP Error Code = %d", code);
+		}
+		/*int code = client.ReadResponseHeaders(&readbuf, responseHeaders, &progress);
 		if (code != 200) {
 			client.Disconnect();
 			return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "HTTP Error Code = %d", code);
@@ -253,12 +265,12 @@ static int sceNpMatching2ContextStart(int ctxId)
 		int res = client.ReadResponseEntity(&readbuf, responseHeaders, &output, &progress);
 		if (res != 0) {
 			WARN_LOG(Log::sceNet, "Unable to read HTTP response entity: %d", res);
-		}
+		}*/
 		client.Disconnect();
 
 		std::string entity;
-		size_t readBytes = output.size();
-		output.Take(readBytes, &entity);
+		size_t readBytes = readbuf.size();
+		readbuf.Take(readBytes, &entity);
 
 		INFO_LOG(Log::sceNet, "Entity Data: %d", entity);
 
@@ -276,7 +288,6 @@ static int sceNpMatching2ContextStart(int ctxId)
 		servers = {};
 		int i = 1;
 		while (true) {
-			RoomInfo server = {};
 			ofs = entity.find("<agent-fqdn", ++ofs2);
 			if (ofs == std::string::npos) {
 				if (i == 1)
@@ -293,7 +304,7 @@ static int sceNpMatching2ContextStart(int ctxId)
 			ofs += 4;
 			ofs2 = entity.find('"', ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
-			server.ID = std::stoi(text.c_str());
+			int server_id = std::stoi(text.c_str());
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d ID: %s", __FUNCTION__, i, text.c_str());
 
 			ofs = entity.find("port=", frontPos);
@@ -303,7 +314,7 @@ static int sceNpMatching2ContextStart(int ctxId)
 			ofs += 6;
 			ofs2 = entity.find('"', ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
-			server.Port = std::stoi(text.c_str());
+			int server_port = std::stoi(text.c_str());
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Port: %s", __FUNCTION__, i, text.c_str());
 
 			ofs = entity.find("status=", frontPos);
@@ -314,10 +325,9 @@ static int sceNpMatching2ContextStart(int ctxId)
 			ofs2 = entity.find('"', ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
 			std::string alive = { 'a','l','i','v','e' };
+			int server_status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
 			if (text == alive)
-				server.Status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
-			else
-				server.Status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
+				server_status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Status: %s", __FUNCTION__, i, text.c_str());
 
 			ofs = entity.find('>', ++ofs2);
@@ -326,12 +336,12 @@ static int sceNpMatching2ContextStart(int ctxId)
 
 			ofs2 = entity.find("</agent-fqdn", ++ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
-			server.Host = text.c_str();
+			std::string server_host = text;
 			// TODO: Get IPAddr from DNS
 			//server.IPAddr = std::stoi();
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Host: %s", __FUNCTION__, i, text.c_str());
 
-			servers[server.ID] = server;
+			servers[server_id] = net::NPAgent(server_id, server_host, server_port, server_status);
 			i++;
 		}
 	}
@@ -461,7 +471,7 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
 	// Preserve original server list
-	std::map<int, RoomInfo> rooms = servers;
+	std::map<int, net::NPAgent> rooms = servers;
 	if (rooms.size() > maxServerIds) {
 		// Shouldn't happen, but in the event we have more servers than were requested, log, resize, and continue
 		ERROR_LOG(Log::sceNet, "%s - %d servers available > %d servers requested", __FUNCTION__, ctxId, serverIdsPtr, maxServerIds, servers.size(), maxServerIds);
@@ -522,14 +532,15 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 	DEBUG_LOG(Log::sceNet, "%s - (cbFunc: %08x, cbArg: %08x, reqId: %08) at %08x", __FUNCTION__, cbFunc, cbArg, request_id, currentMIPS->pc);
 
 	// Will only process 1 server request at a time
-	RoomInfo server = servers[serverId];
+	net::NPAgent* server = &servers[serverId];
+
 	//u32 serverInfo = (static_cast<u16>(server.ID) << 16 | static_cast<u8>(server.Status) << 8);
 	u32 infoSize = 4;
 
 	// Allocate space, and write value into the pool
 	u32 serverInfoPtr = np_memory.Alloc(infoSize);
-	Memory::Write_U16(server.ID, serverInfoPtr);
-	Memory::Write_U8(server.Status, serverInfoPtr+2);
+	Memory::Write_U16(serverId, serverInfoPtr);
+	Memory::Write_U8(server->GetStatus(), serverInfoPtr + 2);
 
 	// Notify callback handler
 	if (Memory::IsValidAddress(cbFunc)) {
@@ -570,9 +581,10 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 	return 0;
 }
 
+// This function produces information about the lobbies, parties, and existing player counts
 static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optParam, u32 assignedReqId) {
 
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqId, Memory::Read_U32(assignedReqId), currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNIMPL %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqId, Memory::Read_U32(assignedReqId), currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -590,27 +602,44 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 	u32 request_id = Memory::Read_U32(optParam + 0x10);		// Request ID in OptParam, suppose to be at 0x0c
 
 	DEBUG_LOG(Log::sceNet, "%s - (cbFunc: %08x, cbArg: %08x, reqId: %08) at %08x", __FUNCTION__, cbFunc, cbArg, request_id, currentMIPS->pc);
-
-	RoomInfo server = servers[serverId];
+	tServer = &servers[serverId];
+	// Check server status
+	tServer->Resolve();
+	// Connect to server before we collect information
+	tServer->Connect();
 	// FIXME: Get worldInfo from PSN
-	SceNpMatching2World worldInfo = {};
+	int ret = tServer->GetWorldInfo(npTitleId.data, &worlds);
+	tServer->Disconnect();
 	
-	u32 infoSize = sizeof(worldInfo);
+	if (ret < 0) {
+		ERROR_LOG(Log::sceNet, "Unable to retrieve World Info");
+		return -1;
+	}
 
+	u32 worldInfoSize = sizeof(SceNpMatching2World)*worlds.size();
 	// Allocate space, and write value into the pool
-	u32 worldInfoPtr = np_memory.Alloc(infoSize);
-	Memory::Write_U16(worldInfo.worldId, worldInfoPtr);							// World ID
-	Memory::Write_U32(worldInfo.numOfLobby, worldInfoPtr + 2);					// Lobby Count
-	Memory::Write_U32(worldInfo.maxNumOfTotalLobbyMember, worldInfoPtr + 2);	// Member Limit
-	Memory::Write_U32(worldInfo.curNumOfTotalLobbyMember, worldInfoPtr + 2);	// Member Count
-	Memory::Write_U32(worldInfo.curNumOfRoom, worldInfoPtr + 2);				// Room Count
-	Memory::Write_U32(worldInfo.curNumOfTotalRoomMember, worldInfoPtr + 2);		// Room Member Count
-	Memory::Write_U8(worldInfo.withEntitlementId, worldInfoPtr + 2);			// Uses EntitlementID
-	for(int i = 0; i < 32; i++)
-		Memory::Write_U8(worldInfo.entitlementId.data[i], worldInfoPtr + 2);	// EntitlementID
-	Memory::Write_U8(0, worldInfoPtr + 2);										// Padding
-	Memory::Write_U8(0, worldInfoPtr + 2);										// Padding
-	Memory::Write_U8(0, worldInfoPtr + 2);										// Padding
+	u32 worldInfoPtr = np_memory.Alloc(worldInfoSize);
+	if (!Memory::IsValidAddress(worldInfoPtr) || worldInfoPtr == 0) {
+		ERROR_LOG(Log::sceNet, "Unable to allocate memory for WorldInfo");
+		return SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY;
+	}
+	int i = 0;
+	for (i = 0; i < worlds.size(); i++) {
+		Write_Struct(worlds[i], worldInfoPtr + (i*sizeof(SceNpMatching2World)), "world%i", 8);	// worldInfoPtr
+	}
+
+	SceNpMatching2GetWorldInfoListResponse resp{};
+	resp.worldNum = worlds.size();
+	resp.worldInfoPtr = worldInfoPtr;
+
+	u32 infoSize = sizeof(SceNpMatching2GetWorldInfoListResponse);
+	// Allocate space, and write value into the pool
+	u32 worldInfoResponsePtr = np_memory.Alloc(infoSize);
+	if (!Memory::IsValidAddress(worldInfoResponsePtr) || worldInfoResponsePtr == 0) {
+		ERROR_LOG(Log::sceNet, "Unable to allocate memory for WorldInfo");
+		return SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY;
+	}
+	Write_Struct(resp, worldInfoResponsePtr, "SceNpMatching2World", 20);
 
 	// Notify callback handler
 	if (Memory::IsValidAddress(cbFunc)) {
@@ -625,7 +654,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		args[1] = request_id;					// RequestId || 0 indicates aborted request
 		args[2] = SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList;	// Event
 		args[3] = 0;							// ErrorCode
-		args[4] = worldInfoPtr;					// WorldInfo struct [ ??? ]
+		args[4] = worldInfoResponsePtr;			// WorldInfo struct [ ??? ]
 		args[5] = cbArg;						// Struct to some valid information?
 
 		WARN_LOG(Log::sceNet, "%s - FUN_%08x(%d, %d, %d, %d, %08x, %d)", __FUNCTION__, cbFunc, args[0], args[1], args[2], args[3], args[4], args[5]);
@@ -729,16 +758,76 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_MAX); // Should be SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT ?
 
+	if (tServer == nullptr)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND); // Should be SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID ?
+	
 	u32 cbFunc = Memory::Read_U32(reqParamPtr);
 	u32 cbArg = Memory::Read_U32(reqParamPtr + 0x04);
+	SceNpMatching2SearchRoomRequest req;
+	Memory::Memcpy(&req, reqParamPtr, sizeof(req));
+
+	tServer->Connect();
+	SceNpMatching2RoomDataExternal roomData{};
+	roomData.serverId = tServer->GetID();
+	//req.option
+	roomData.lobbyId = req.lobbyId;
+	roomData.worldId = req.worldId;
+	//req.rangeFilter.startIndex
+	//req.flagFilter
+	roomData.flagAttr = req.flagAttr;
+
+	// FIXME: Get roomData from PSN
+	int ret = tServer->SearchRoom(&roomData);
+	tServer->Disconnect();
+
+	if (ret < 0) {
+		ERROR_LOG(Log::sceNet, "Unable to retrieve Room Info");
+		return -1;
+	}
+
+	u32 infoSize = sizeof(SceNpMatching2RoomDataExternal);
+	u32 roomInfoPtr = np_memory.Alloc(infoSize);
+
+	if (!Memory::IsValidAddress(roomInfoPtr)) {
+		ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataExternal");
+		return SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY;
+	}
+	Write_Struct(roomData, roomInfoPtr, "SceNpMatching2RoomDataExternal", 31);
+
+
+	SceNpMatching2SearchRoomResponse respData{};
+	respData.range = { req.rangeFilter.startIndex, req.rangeFilter.max, req.rangeFilter.max };
+	respData.roomDataExternal = roomInfoPtr;
+
+	u32 respSize = sizeof(SceNpMatching2SearchRoomResponse);
+	u32 respPtr = np_memory.Alloc(respSize);
+
+	if (!Memory::IsValidAddress(respPtr)) {
+		ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
+		return SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY;
+	}
+	Write_Struct(roomData, respPtr, "SceNpMatching2SearchRoomResponse", 33);
 
 	// Notify callback handler
 	if (Memory::IsValidAddress(cbFunc)) {
-		// There args are supposed to be constructed in the stack and the data need to be available even after returning from this function, so these args + optional data probably copied to somewhere
-		u32 args[1];
-		// TODO: Set the correct callback args
+		// TODO: PS3 obtains request_id via optParam->appReqId but value is 0?
+		int request_id = GenerateCallbackInfo(ctxId, reqParamPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom);
 
-		Memory::Write_U32(0, assignedReqIdPtr); // server status or flags?
+		if (Memory::IsValidAddress(assignedReqIdPtr))
+			Memory::Write_U32(request_id, assignedReqIdPtr);
+
+		u32_le args[6];
+		args[0] = ctxId;						// ContextID
+		args[1] = request_id;					// RequestId || 0 indicates aborted request
+		args[2] = SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom;	// Event
+		args[3] = 0;							// ErrorCode
+		args[4] = respPtr;						// SearchRoomResponse struct [ ??? ]
+		args[5] = cbArg;						// Struct to some valid information?
+
+		WARN_LOG(Log::sceNet, "%s - FUN_%08x(%d, %d, %d, %d, %08x, %d)", __FUNCTION__, cbFunc, args[0], args[1], args[2], args[3], args[4], args[5]);
+
+		notifyNpMatching2Handlers(ctxId, 6, args);
+
 	}
 
 	return 0;
