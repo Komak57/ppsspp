@@ -37,6 +37,7 @@ private:
 // Forward Declare
 struct SceNpMatching2World;
 struct SceNpMatching2RoomDataExternal;
+struct SceNpMatching2RoomDataInternal;
 namespace net {
 
 	class NPAgent {
@@ -55,6 +56,7 @@ namespace net {
 		int GetID() { return ID; }
 		int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World> *worldInfoOut);
 		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
+		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { return sock_; }

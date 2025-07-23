@@ -447,9 +447,67 @@ namespace net {
 		}
 		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
 #endif
-		roomDataOut->next = nullptr;
-		roomDataOut->worldId = 0;
-		roomDataOut->serverId = 0;
+
+		return 0;
+	}
+	int NPAgent::CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) {
+		NOTICE_LOG(Log::sceNet, "NPAgent::CreatJoinRoom()");
+#ifndef AGENT_TESTING
+		if (sock_ <= 0) {
+			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Socket not connected");
+			return -1;
+		}
+#endif
+		if (canceled) {
+			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Cancelled");
+			return -1;
+		}
+
+
+		u32 packet_size = 0x36;
+		Packet packet = Packet();
+
+		int i = 0;
+		std::string hexdata = "";
+		for (i = 0; i < packet.Length(); i++) {
+			char const c = packet.Data()[i];
+			hexdata += hex_chars[(c & 0xF0) >> 4];
+			hexdata += hex_chars[(c & 0x0F) >> 0];
+		}
+		INFO_LOG(Log::sceNet, "Request: %s", hexdata.c_str());
+
+#ifndef AGENT_TESTING
+		// packet.Pack(0x0112, packet.Length()+4);
+		net::Buffer buffer;
+		void* dst = buffer.Append(packet_size);
+		memcpy(dst, packet.Data(), packet.Length());
+
+		bool flushed = buffer.FlushSocket(sock(), 60.0, &canceled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return std::nullopt;
+		}
+
+		net::Buffer readbuf;
+		// Read response
+		int ret;
+		if ((ret = readbuf.Read(sock_, 4096, false, nullptr)) < 0) {
+			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
+			return std::nullopt;
+		}
+
+		std::string response;
+		readbuf.Take(ret, &response);
+
+		// 1002 0027 10010000 01001000 00000000 19490bc9118fc488581dcbfcb27a4a31 001d 0003 0001 01
+		hexdata = "";
+		for (i = 0; i < response.length(); i++) {
+			int c = response[i];
+			hexdata += hex_chars[(c & 0xF0) >> 4];
+			hexdata += hex_chars[(c & 0x0F) >> 0];
+		}
+		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
+#endif
 
 		return 0;
 	}

@@ -705,6 +705,7 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 cal
 	return 0;
 }
 
+// Used to host a room
 static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 unknown1, u32 unknown2, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
@@ -714,38 +715,81 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_MAX); // Should be SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT ?
 
-	// Server ID is a 16-bit variable according to JPCSP
-	int serverId = Memory::Read_U16(reqParamPtr + 0x06);
-
-	if (serverId == 0)
-		return hleLogError(Log::sceNet, 0x80550CBF); // Should be SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID ?
+	if (tServer == nullptr)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND); // Should be SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID ?
 
 	u32 cbFunc = Memory::Read_U32(reqParamPtr);
 	u32 cbArg = Memory::Read_U32(reqParamPtr + 0x04);
+	SceNpMatching2CreateJoinRoomRequest req;
+	Memory::Memcpy(&req, reqParamPtr, sizeof(req));
+
+	tServer->Connect();
+
+	// FIXME: Populate all relevant data from req into memory as required
+	SceNpMatching2RoomDataInternal roomData{};
+	roomData.serverId = tServer->GetID();
+	//req.option
+	roomData.worldId = req.worldId;
+	roomData.lobbyId = req.lobbyId;
+	//roomData.roomId
+	//roomData.curMemberNum
+	//req.rangeFilter.startIndex
+	//req.flagFilter
+	roomData.flagAttr = req.flagAttr;
+
+	// FIXME: Get roomData from PSN
+	int ret = tServer->CreatJoinRoom(&roomData);
+	tServer->Disconnect();
+
+	if (ret < 0) {
+		ERROR_LOG(Log::sceNet, "Unable to retrieve Room Info");
+		return -1;
+	}
+
+	u32 infoSize = sizeof(roomData);
+	u32 roomInfoPtr = np_memory.Alloc(infoSize);
+
+	if (!Memory::IsValidAddress(roomInfoPtr)) {
+		ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataExternal");
+		return SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY;
+	}
+	Write_Struct(roomData, roomInfoPtr, "SceNpMatching2RoomDataExternal", 31);
+
+
+	SceNpMatching2CreateJoinRoomResponse respData{};
+	respData.roomDataInternal = roomInfoPtr;
+
+	u32 respSize = sizeof(respData);
+	u32 respPtr = np_memory.Alloc(respSize);
+
+	if (!Memory::IsValidAddress(respPtr)) {
+		ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
+		return SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY;
+	}
+	Write_Struct(roomData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
 
 	// Notify callback handler
 	if (Memory::IsValidAddress(cbFunc)) {
-		// There args are supposed to be constructed in the stack and the data need to be available even after returning from this function, so these args + optional data probably copied to somewhere
-		u32 args[11];
-		args[0] = PSP_NP_MATCHING2_EVENT_0102;
-		args[1] = PSP_NP_MATCHING2_STATE_1209;
-		//args.data[2] = pointer to arg[8] (optional data?)
-		args[3] = optParamPtr;
-		args[4] = 0;
-		args[5] = assignedReqIdPtr;
-		args[6] = 0;
-		// Followed by optional data?
-		args[8] = reqParamPtr; // an initially zeroed struct of 1224 bytes, where the 1st 32bit is set to reqParamPtr
-		args[9] = unknown1;
-		args[10] = unknown2;
+		// TODO: PS3 obtains request_id via optParam->appReqId but value is 0?
+		int request_id = GenerateCallbackInfo(ctxId, reqParamPtr, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom);
 
-		notifyNpMatching2Handlers(ctxId, 11, args);
-		//notifyNpMatching2Handlers(args, ctxId, serverId, 0, 0, 0, 0, 1, 0x0a);
+		if (Memory::IsValidAddress(assignedReqIdPtr))
+			Memory::Write_U32(request_id, assignedReqIdPtr);
 
-		Memory::Write_U32(args[1], assignedReqIdPtr);
+		u32_le args[6];
+		args[0] = ctxId;						// ContextID
+		args[1] = request_id;					// RequestId || 0 indicates aborted request
+		args[2] = SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom;	// Event
+		args[3] = 0;							// ErrorCode
+		args[4] = respPtr;						// SearchRoomResponse struct [ ??? ]
+		args[5] = cbArg;						// Struct to some valid information?
+
+		WARN_LOG(Log::sceNet, "%s - FUN_%08x(%d, %d, %d, %d, %08x, %d)", __FUNCTION__, cbFunc, args[0], args[1], args[2], args[3], args[4], args[5]);
+
+		notifyNpMatching2Handlers(ctxId, 6, args);
+
 	}
 
-	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
 	return 0;
 }
 
@@ -767,11 +811,15 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 	Memory::Memcpy(&req, reqParamPtr, sizeof(req));
 
 	tServer->Connect();
+
+	// FIXME: Populate all relevant data from req into memory as required
 	SceNpMatching2RoomDataExternal roomData{};
 	roomData.serverId = tServer->GetID();
 	//req.option
-	roomData.lobbyId = req.lobbyId;
 	roomData.worldId = req.worldId;
+	roomData.lobbyId = req.lobbyId;
+	//roomData.roomId
+	//roomData.curMemberNum
 	//req.rangeFilter.startIndex
 	//req.flagFilter
 	roomData.flagAttr = req.flagAttr;
