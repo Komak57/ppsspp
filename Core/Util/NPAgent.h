@@ -2,6 +2,7 @@
 #include "Common/Net/Resolve.h"
 #include <CommonTypes.h>
 #include <optional>
+#include "Core/HLE/np_types.h"
 
 // 0x88 bytes
 //struct RoomInfo {

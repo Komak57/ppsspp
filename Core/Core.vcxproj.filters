@@ -2196,6 +2196,9 @@
     <ClInclude Include="Util\NPAgent.h">
       <Filter>Util</Filter>
     </ClInclude>
+    <ClInclude Include="HLE\np_types.h">
+      <Filter>HLE\Libraries</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\LICENSE.TXT" />

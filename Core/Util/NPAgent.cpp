@@ -7,7 +7,6 @@
 #include "Common/File/FileDescriptor.h"
 #include "Common/SysError.h"
 #include <Net\NetBuffer.h>
-#include "Core/HLE/sceNp2.h"
 #define AGENT_TESTING
 
 bool IsBigEndian() {
