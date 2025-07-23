@@ -522,6 +522,44 @@ int Client::SendRequestWithData(const char *method, const RequestParams &req, st
 	return 0;
 }
 
+int Client::ReadResponse(net::Buffer* readbuf, net::RequestProgress* progress) {
+	DEBUG_LOG(Log::HTTP, "ReadResponse()");
+	// maps the socket for HTTPS or HTTP
+	int fd = sslEnabled ? netCtx.fd : sock();
+
+	// Snarf all the data we can into RAM. A little unsafe but hey.
+	static constexpr float CANCEL_INTERVAL = 0.25f;
+	int ready = 0;
+	double endTimeout = time_now_d() + dataTimeout_;
+begin:
+	while (ready == 0) {
+		if (progress->cancelled && *progress->cancelled)
+			return -1;
+		// Check for silent fails
+		if (fd < 0) {
+			ERROR_LOG(Log::HTTP, "HTTP Connection lost");
+			return -1;
+		}
+		ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);
+		if (ready < 0) {
+			ERROR_LOG(Log::HTTP, "HTTP WaitUntilReady Failed");
+			return -1;
+		}
+		if (!ready && time_now_d() > endTimeout) {
+			ERROR_LOG(Log::HTTP, "HTTP headers timed out");
+			return -1;
+		}
+	};
+	// Read small chunk
+	int ret;
+	if ((ret = readbuf->ReadHTML(fd, sslEnabled, (sslEnabled ? &sslCtx : nullptr))) < 0) {
+		ERROR_LOG(Log::HTTP, "Failed to read Response -0x%04x", -ret);
+		return -1;
+	}
+
+	return ret;
+}
+
 int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &responseHeaders, net::RequestProgress *progress, std::string *statusLine) {
 	DEBUG_LOG(Log::HTTP, "ReadResponseHeaders()");
 	// maps the socket for HTTPS or HTTP
