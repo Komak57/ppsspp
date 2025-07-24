@@ -45,7 +45,12 @@ void Write_Struct(const T& object, const u32 address, const char* tag, size_t ta
 	Memory::Memcpy(address, &object, sizeof(T), tag, taglen);
 }
 
-// Returns the RequestId
+/* Generate a callback handler for async processing returns
+ * @param optParamPtr pointer to SceNpMatching2RequestOptParam
+ * @param assignedReqIdPtr pointer to AppRequestID
+ * @param event_type PS3Matching2RequestEvent Event
+ * @return u32 System RequestID
+ */
 static u32 GenerateCallbackInfo(int ctxId, u32 optParamPtr, u32 assignedReqIdPtr, PS3Matching2RequestEvent event_type) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %d) at %08x", __FUNCTION__, ctxId, optParamPtr, assignedReqIdPtr, event_type, currentMIPS->pc);
 
@@ -78,9 +83,13 @@ static u32 GenerateCallbackInfo(int ctxId, u32 optParamPtr, u32 assignedReqIdPtr
 	return reqId;
 }
 
-// Thread-safe return from an std::async environment.
-// NOTE: If there are any problems writing to np_memory,
-//   it may be prudent to run a thread-sanitized environment instead
+/* Thread-safe Notify Return for related Callback
+ * @param appReqId Related System Request ID
+ * @param dataPtr Pointer to a Struct generated for the request
+ * @param errorCode System Error Code
+ * @return u32 System Error Code (unused)
+ * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
+ */
 static int notifyNpMatching2Handlers(u32 appReqId, u32 dataPtr, u32 errorCode = SCE_NP_MATCHING2_OKAY) {
 	if (npMatching2Handlers.find(appReqId) == npMatching2Handlers.end())
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_CONTEXT_ID, "%s - No Handler Found for appReqId %d", __FUNCTION__, appReqId);
@@ -104,6 +113,9 @@ static int notifyNpMatching2Handlers(u32 appReqId, u32 dataPtr, u32 errorCode = 
 	return errorCode;
 }
 
+/* Event Processor
+ * @note The arguments are suppose to be combined here?
+ */
 bool NpMatching2ProcessEvents() {
 	if (npMatching2Events.empty()) {
 		return false;
@@ -122,26 +134,13 @@ bool NpMatching2ProcessEvents() {
 		if (it->first == event.reqId)
 		{
 			//DEBUG_LOG(Log::sceNet, "NpMatching2Callback [HandlerID=%i][EventID=%04x][State=%04x][ArgsPtr=%08x]", it->first, event, stat, it->second.argument);
-			NOTICE_LOG(Log::sceNet, "NpMatching2ProcessEvents - FUN_%08x(%08x, %08x, %08x, %08x, %08x, %08x, %08x, %08x)", it->second.cb,
-				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
+			NOTICE_LOG(Log::sceNet, "%s - FUN_%08x(%08x, %08x, %08x, %08x, %08x, %08x)", __FUNCTION__, it->second.cb,
+				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]);
 			hleEnqueueCall(it->second.cb, event.argc, event.args);
 			return true;
 		}
 	}
-	ERROR_LOG(Log::sceNet, "NpMatching2ProcessEvents - No Handler Found for CtxId %d", event.reqId);
-
-	//// Per npMatching2 function callback
-	//u32* inStruct = (u32*)Memory::GetPointer(event.cbFunc);
-	//if (inStruct != nullptr) {
-	//	if (Memory::IsValidAddress(inStruct[0])) {
-	//		//DEBUG_LOG(Log::sceNet, "NpMatching2Callback [ServerID=%i][EventID=%04x][State=%04x][FuncAddr=%08x][ArgsPtr=%08x]", *(u32*)Memory::GetPointer(serverIdPtr), event, stat, inStruct[0], inStruct[1]);
-
-	//		DEBUG_LOG(Log::sceNet, "NpMatching2Callback FUN_%08x(%s)", inStruct[0], event.ToString());
-	//		hleEnqueueCall(inStruct[0], event.argc, event.args);
-	//		return true;
-	//	}
-	//}
-	//ERROR_LOG(Log::sceNet, "NpMatching2Callback - Invalid Callback %d", event.ctxId);
+	ERROR_LOG(Log::sceNet, "%s - No Handler Found for CtxId %d", __FUNCTION__, event.reqId);
 	return false;
 }
 
@@ -452,11 +451,8 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 	handler.cb = callbackFunctionAddr;
 	handler.cb_arg = callbackArgument;
 
-	u32 reqId = 1;
-	if (npMatching2Handlers.size() > 0)
-		reqId = (npMatching2Handlers.rbegin()->first) + 1;
-	npMatching2Handlers[reqId] = handler;
-	NOTICE_LOG(Log::sceNet, "%s - Added SignalingCallback FUN_%08x(%08x) with appReqId(%d)", __FUNCTION__, handler.cb, handler.cb_arg, reqId);
+	npMatching2Handlers[0] = handler;
+	NOTICE_LOG(Log::sceNet, "%s - Added SignalingCallback FUN_%08x(%08x) with appReqId(%d)", __FUNCTION__, handler.cb, handler.cb_arg, 0);
 	/*if (npMatching2Handlers.find(ctxId) == npMatching2Handlers.end()) {
 		npMatching2Handlers[ctxId] = handler;
 		WARN_LOG(Log::sceNet, "%s - Added handler(%08x, %08x) : %d", __FUNCTION__, handler.cb, handler.cb_arg, ctxId);
@@ -478,10 +474,12 @@ static int sceNpMatching2SignalingGetConnectionStatus(int unk) {
 	return 0;
 }
 
-// Allocates the list of server Id's to memory
-// - serverIdsPtr = pointer to where the servers should be written
-// - maxServerIds = maximum number of servers the client can receive
-// Returns the number of servers we allocated
+/* Allocates the list of server Id's to memory
+ * @param serverIdsPtr Pointer to where the servers should be written
+ * @param maxServerIds maximum number of servers the client can receive
+ * @return Number of servers we allocated
+ * @note PSP has been observed writing these in decremental order
+ */
 static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int maxServerIds)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %d) at %08x", __FUNCTION__, ctxId, serverIdsPtr, maxServerIds, currentMIPS->pc);
@@ -511,10 +509,13 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 	return rooms.size();
 }
 
-// Produces information about a target server
-// - serverIdPtr = Pointer to the target Server ID
-// - optParam = Struct containing related pointers
-// - assignedReqId = Pointer to the index of a unique callback
+/* Produces information about a target server
+ * @param serverIdPtr Pointer to the target Server ID
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqId Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ * @note Performs the operations in an async lambda function
+ */
 static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam, u32 assignedReqId) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqId, Memory::Read_U32(assignedReqId), currentMIPS->pc);
 	u32 request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo);
@@ -548,8 +549,14 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 	return 0;
 }
 
-// This function produces information about the lobbies, parties, and existing player counts
-// This function occurs immediately after a server has been selected
+/* Produces information about the lobbies, parties, and existing player counts
+ * @param serverIdPtr Pointer to the target Server ID
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqId Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ * @note Performs the operations in an async lambda function
+ * @note This function occurs immediately after a server has been selected
+ */
 static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optParam, u32 assignedReqId) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqId, Memory::Read_U32(assignedReqId), currentMIPS->pc);
 	u32 request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList);
@@ -607,10 +614,17 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 	return 0;
 }
 
-static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
+/* Incomplete - Leaves the current Lobby/Party
+ * @param reqParamPtr ?
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqId Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ * @note Performs the operations in an async lambda function
+ */
+static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
-	u32 request_id = GenerateCallbackInfo(ctxId, optParamPtr, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom);
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	u32 request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom);
 
 	// ThreadStart
 	std::async(std::launch::async, [=]() {
@@ -627,9 +641,16 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, 
 	return 0;
 }
 
-static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr) {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
-	u32 request_id = GenerateCallbackInfo(ctxId, optParamPtr, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom);
+/* Incomplete - Unknown
+ * @param reqParamPtr ?
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqId Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ * @note Performs the operations in an async lambda function
+ */
+static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr) {
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	u32 request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal);
 
 	// ThreadStart
 	std::async(std::launch::async, [=]() {
@@ -646,11 +667,19 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 	return 0;
 }
 
-// Used to host a room
-static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 unknown1, u32 unknown2, u32 assignedReqIdPtr)
+/* Incomplete - Hosts a Lobby/Party
+ * @param reqParamPtr SceNpMatching2CreateJoinRoomRequest Request Information
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param unknown1 ?
+ * @param unkonwn2 ?
+ * @param assignedReqId Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ * @note Performs the operations in an async lambda function
+ */
+static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 unknown1, u32 unknown2, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
-	int request_id = GenerateCallbackInfo(ctxId, optParamPtr, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom);
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom);
 
 	// ThreadStart
 	std::async(std::launch::async, [=]() {
@@ -663,8 +692,6 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		if (tServer == nullptr)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
-		u32 cbFunc = Memory::Read_U32(reqParamPtr);
-		u32 cbArg = Memory::Read_U32(reqParamPtr + 0x04);
 		SceNpMatching2CreateJoinRoomRequest req;
 		Memory::Memcpy(&req, reqParamPtr, sizeof(req));
 
@@ -717,6 +744,13 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	return 0;
 }
 
+/* Incomplete - Searches for all Lobbies/Parties
+ * @param reqParamPtr SceNpMatching2SearchRoomRequest Request Information
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqId Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ * @note Performs the operations in an async lambda function
+ */
 static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
@@ -788,11 +822,18 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 	return 0;
 }
 
-static int sceNpMatching2SendRoomChatMessage(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
+/* Incomplete - Sends a Chat Message to relevant players?
+ * @param reqParamPtr ? Request Information
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqId Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ * @note Performs the operations in an async lambda function
+ */
+static int sceNpMatching2SendRoomChatMessage(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 
-	int request_id = GenerateCallbackInfo(ctxId, optParamPtr, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomChatMessage);
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomChatMessage);
 
 	// ThreadStart
 	std::async(std::launch::async, [=]() {
