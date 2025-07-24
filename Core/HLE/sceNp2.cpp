@@ -36,8 +36,8 @@ std::recursive_mutex npMatching2EvtMtx;
 std::deque<NpMatching2Args> npMatching2Events;
 std::map<u32, NpMatching2Handler> npMatching2Handlers;
 //std::map<int, NpMatching2Context> npMatching2Contexts;
-net::NPAgent* tServer;
-std::map<u16, net::NPAgent> servers;
+u16 tServer;
+std::map<u16, std::unique_ptr<net::NPAgent>> servers;
 std::vector<SceNpMatching2World> worlds;
 
 template <typename T>
@@ -279,17 +279,6 @@ static int sceNpMatching2ContextStart(int ctxId)
 			client.Disconnect();
 			return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_INTERNAL_SERVER_ERROR, "HTTP Error Code = %d", code);
 		}
-		/*int code = client.ReadResponseHeaders(&readbuf, responseHeaders, &progress);
-		if (code != 200) {
-			client.Disconnect();
-			return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "HTTP Error Code = %d", code);
-		}
-
-		net::Buffer output;
-		int res = client.ReadResponseEntity(&readbuf, responseHeaders, &output, &progress);
-		if (res != 0) {
-			WARN_LOG(Log::sceNet, "Unable to read HTTP response entity: %d", res);
-		}*/
 		client.Disconnect();
 
 		std::string entity;
@@ -309,7 +298,7 @@ static int sceNpMatching2ContextStart(int ctxId)
 		text = entity.substr(ofs, ofs2-ofs);
 		INFO_LOG(Log::sceNet, "%s - Title ID: %s", __FUNCTION__, text.c_str());
 
-		servers = {};
+		servers.clear();
 		int i = 1;
 		while (true) {
 			ofs = entity.find("<agent-fqdn", ++ofs2);
@@ -361,11 +350,9 @@ static int sceNpMatching2ContextStart(int ctxId)
 			ofs2 = entity.find("</agent-fqdn", ++ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
 			std::string server_host = text;
-			// TODO: Get IPAddr from DNS
-			//server.IPAddr = std::stoi();
 			INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Host: %s", __FUNCTION__, i, text.c_str());
 
-			servers[server_id] = net::NPAgent(server_id, server_host, server_port, server_status);
+			servers.emplace(server_id, net::CreateNPAgent(net::NPAgentType::PSN, server_id, server_host, server_port, server_status));
 			i++;
 		}
 	}
@@ -388,6 +375,8 @@ static int sceNpMatching2ContextStop(int ctxId)
 
 	//TODO: Stop any in-progress HTTPClient communication used on sceNpMatching2ContextStart
 	//npMatching2Ctx.started = false;
+
+	//TODO: Cancel all async tasks and return SCE_NP_MATCHING2_ERROR_ABORTED for each.
 
 	return 0;
 }
@@ -489,24 +478,16 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 	if (!Memory::IsValidAddress(serverIdsPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	// Preserve original server list
-	std::map<u16, net::NPAgent> rooms = servers;
-	if (rooms.size() > maxServerIds) {
-		// Shouldn't happen, but in the event we have more servers than were requested, log, resize, and continue
-		ERROR_LOG(Log::sceNet, "%s - %d servers available > %d servers requested", __FUNCTION__, ctxId, serverIdsPtr, maxServerIds, servers.size(), maxServerIds);
-		auto it = rooms.begin();
-		std::advance(it, maxServerIds);
-		rooms.erase(it, rooms.end());
-	}
-	// These are usually last to first order
+	int count = 0;
 	int ofs = 0;
-	for (auto it = rooms.rbegin(); it != rooms.rend(); ++it) {
+
+	for (auto it = servers.rbegin(); it != servers.rend() && count < maxServerIds; ++it, ++count) {
 		Memory::Write_U16(it->first, serverIdsPtr + ofs);
 		ofs += 2;
 	}
 
 	// Return the number of servers allocated to memory
-	return rooms.size();
+	return count;
 }
 
 /* Produces information about a target server
@@ -533,16 +514,15 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 		if ((serverId = Memory::Read_U16(serverIdPtr)) == 0)
 			return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID);
 
-		tServer = &servers[serverId];
 		// Check server status
-		tServer->Resolve();
+		servers[serverId]->Resolve();
 
 		u32 infoSize = 4;
 
 		// Allocate space, and write value into the pool
 		u32 serverInfoPtr = np_memory.Alloc(infoSize);
 		Memory::Write_U16(serverId, serverInfoPtr);
-		Memory::Write_U8(servers[serverId].GetStatus(), serverInfoPtr + 2);
+		Memory::Write_U8(servers[serverId]->GetStatus(), serverInfoPtr + 2);
 
 		return notifyNpMatching2Handlers(request_id, serverInfoPtr);
 	}); // ThreadEnd
@@ -574,12 +554,12 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		if ((serverId = Memory::Read_U16(serverIdPtr)) == 0)
 			return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID);
 
-		tServer = &servers[serverId];
+		tServer = serverId;
 		// Connect to server before we collect information
-		tServer->Connect();
+		servers[tServer]->Connect();
 		// FIXME: Get worldInfo from PSN
-		int ret = tServer->GetWorldInfo(npTitleId.data, &worlds);
-		tServer->Disconnect();
+		int ret = servers[tServer]->GetWorldInfo(npTitleId.data, &worlds);
+		servers[tServer]->Disconnect();
 
 		if (ret < 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
@@ -689,17 +669,17 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 
-		if (tServer == nullptr)
+		if (tServer == 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
 		SceNpMatching2CreateJoinRoomRequest req;
 		Memory::Memcpy(&req, reqParamPtr, sizeof(req));
 
-		tServer->Connect();
+		servers[tServer]->Connect();
 
 		// FIXME: Populate all relevant data from req into memory as required
 		SceNpMatching2RoomDataInternal roomData{};
-		roomData.serverId = tServer->GetID();
+		roomData.serverId = servers[tServer]->GetID();
 		//req.option
 		roomData.worldId = req.worldId;
 		roomData.lobbyId = req.lobbyId;
@@ -710,8 +690,8 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		roomData.flagAttr = req.flagAttr;
 
 		// FIXME: Get roomData from PSN
-		int ret = tServer->CreatJoinRoom(&roomData);
-		tServer->Disconnect();
+		int ret = servers[tServer]->CreatJoinRoom(&roomData);
+		servers[tServer]->Disconnect();
 
 		if (ret < 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
@@ -764,17 +744,17 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 
-		if (tServer == nullptr)
+		if (tServer == 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
 		SceNpMatching2SearchRoomRequest req;
 		Memory::Memcpy(&req, reqParamPtr, sizeof(req));
 
-		tServer->Connect();
+		servers[tServer]->Connect();
 
 		// FIXME: Populate all relevant data from req into memory as required
 		SceNpMatching2RoomDataExternal roomData{};
-		roomData.serverId = tServer->GetID();
+		roomData.serverId = servers[tServer]->GetID();
 		//req.option
 		roomData.worldId = req.worldId;
 		roomData.lobbyId = req.lobbyId;
@@ -785,8 +765,8 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 		roomData.flagAttr = req.flagAttr;
 
 		// FIXME: Get roomData from PSN
-		int ret = tServer->SearchRoom(&roomData);
-		tServer->Disconnect();
+		int ret = servers[tServer]->SearchRoom(&roomData);
+		servers[tServer]->Disconnect();
 
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to retrieve Room Info");
@@ -843,7 +823,7 @@ static int sceNpMatching2SendRoomChatMessage(int ctxId, u32 reqParamPtr, u32 opt
 		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 
-		if (tServer == nullptr)
+		if (tServer == 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
 		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);

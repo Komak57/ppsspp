@@ -39,12 +39,10 @@ struct SceNpMatching2World;
 struct SceNpMatching2RoomDataExternal;
 struct SceNpMatching2RoomDataInternal;
 namespace net {
-
+	enum class NPAgentType { PSN, RPCN };
 	class NPAgent {
 	public:
-		NPAgent() {}
-		NPAgent(int serverId, std::string host, int port, u8 status = 2);
-		~NPAgent();
+		virtual ~NPAgent() = default;
 
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
@@ -54,23 +52,48 @@ namespace net {
 
 		u8 GetStatus();
 		int GetID() { return ID; }
-		int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World> *worldInfoOut);
-		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
-		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
+		virtual int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World> *worldInfoOut) = 0;
+		virtual int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) = 0;
+		virtual int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { return sock_; }
 
 	protected:
+		int ID;
+		uintptr_t sock_ = -1;
+		bool canceled = false;
+
 		std::string host_;
 		int port_ = -1;
 		u8 status;
 		addrinfo* resolved_ = nullptr;
 		bool connected = false;
-	private:
-		int ID;
-		uintptr_t sock_ = -1;
-		bool canceled = false;
 	};
 
+	class PSNAgent : public NPAgent {
+	public:
+		~PSNAgent();
+		PSNAgent(int serverId, std::string host, int port, u8 status = 2);
+		int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World>* worldInfoOut);
+		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
+		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
+	};
+
+	class RPCNAgent : public NPAgent {
+	public:
+		~RPCNAgent();
+		RPCNAgent(int serverId);
+		int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World>* worldInfoOut);
+		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
+		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
+	};
+
+	inline std::unique_ptr<NPAgent> CreateNPAgent(NPAgentType type, int serverId, std::string host = "", int port = 0, u8 status = 2) {
+		switch (type) {
+		case NPAgentType::PSN: return std::make_unique<PSNAgent>(serverId, host, port, status);
+		case NPAgentType::RPCN: return std::make_unique<RPCNAgent>(serverId);
+		}
+		return nullptr;
+	}
 }

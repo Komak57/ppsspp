@@ -60,14 +60,25 @@ void Packet::Write(std::string data) {
 }
 
 namespace net {
-	NPAgent::NPAgent(int serverId, std::string host, int port, u8 status) {
+	PSNAgent::PSNAgent(int serverId, std::string host, int port, u8 status) {
 		this->ID = serverId;
 		this->host_ = host;
 		this->port_ = port;
 		this->status = status;
 	}
+	// FIXME: Populate with actual connection credentials for RPCN
+	RPCNAgent::RPCNAgent(int serverId) {
+		this->ID = serverId;
+		this->host_ = "host";
+		this->port_ = 0;
+		this->status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
+	}
 
-	NPAgent::~NPAgent() {
+	PSNAgent::~PSNAgent() {
+		Disconnect();
+	}
+
+	RPCNAgent::~RPCNAgent() {
 		Disconnect();
 	}
 
@@ -292,7 +303,7 @@ namespace net {
 	*/
 	char const hex_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
 
-	int NPAgent::GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World> *worldInfoOut) {
+	int PSNAgent::GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World> *worldInfoOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npTitleId);
 #ifndef AGENT_TESTING
 		if (sock_ <= 0) {
@@ -388,8 +399,11 @@ namespace net {
 
 		return 0;
 	}
+	int RPCNAgent::GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World>* worldInfoOut) {
+		return 0;
+	}
 
-	int NPAgent::SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) {
+	int PSNAgent::SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::SearchRoom()");
 #ifndef AGENT_TESTING
 		if (sock_ <= 0) {
@@ -450,7 +464,11 @@ namespace net {
 
 		return 0;
 	}
-	int NPAgent::CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) {
+	int RPCNAgent::SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) {
+		return 0;
+	}
+
+	int PSNAgent::CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::CreatJoinRoom()");
 #ifndef AGENT_TESTING
 		if (sock_ <= 0) {
@@ -509,6 +527,10 @@ namespace net {
 		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
 #endif
 
+		return 0;
+	}
+
+	int RPCNAgent::CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) {
 		return 0;
 	}
 
