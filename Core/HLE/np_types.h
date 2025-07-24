@@ -409,6 +409,7 @@ struct SceNpAuthMemoryStat {
 #pragma pack(push,1)
 
 // Based on https://gist.githubusercontent.com/raw/4140449/PS%20Vita (Might be slightly different with PSP?)
+#define SCE_NP_MATCHING2_OKAY									0x00000000
 #define SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY					0x80550c01
 #define SCE_NP_MATCHING2_ERROR_ALREADY_INITIALIZED				0x80550c02
 #define SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED					0x80550c03

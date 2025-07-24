@@ -46,16 +46,21 @@ void Write_Struct(const T& object, const u32 address, const char* tag, size_t ta
 }
 
 // Returns the RequestId
-static u32 GenerateCallbackInfo(int ctxId, u32 optParam, PS3Matching2RequestEvent event_type) {
-	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %d) at %08x", __FUNCTION__, ctxId, optParam, event_type, currentMIPS->pc);
+static u32 GenerateCallbackInfo(int ctxId, u32 optParamPtr, u32 assignedReqIdPtr, PS3Matching2RequestEvent event_type) {
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %d) at %08x", __FUNCTION__, ctxId, optParamPtr, assignedReqIdPtr, event_type, currentMIPS->pc);
+
+	if (!Memory::IsValidAddress(optParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr)) {
+		ERROR_LOG(Log::sceNet, "%s - Invalid Arguments", __FUNCTION__);
+		return 0; // Abort Request
+	}
 
 	SceNpMatching2RequestOptParam req{};
-	Memory::Memcpy(&req, optParam, sizeof(req));
+	Memory::Memcpy(&req, optParamPtr, sizeof(req));
 	INFO_LOG(Log::sceNet, "%s - optParam[%08x, %08x]", __FUNCTION__, req.cbFunc, req.cbFuncArg);
 
 	if (req.cbFunc == 0 || !Memory::IsValidAddress(req.cbFunc)) {
 		ERROR_LOG(Log::sceNet, "%s - Invalid Callback FUN_%08x(%08x) for appReqId(%d)", __FUNCTION__, req.cbFunc, req.cbFuncArg, event_type);
-		return 0;
+		return 0; // Abort Request
 	}
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
@@ -66,33 +71,17 @@ static u32 GenerateCallbackInfo(int ctxId, u32 optParam, PS3Matching2RequestEven
 	handler.cb_arg = req.cbFuncArg;
 	handler.event_type = event_type;
 
-	// Generate a unique ID for this request
-	u32 reqId = 1;
-	if (npMatching2Handlers.size() > 0)
-		reqId = (npMatching2Handlers.rbegin()->first) + 1;
+	// 0 defines an Aborted Request
+	u32 reqId = Memory::Read_U32(assignedReqIdPtr)+1;
 	npMatching2Handlers[reqId] = handler;
 	NOTICE_LOG(Log::sceNet, "%s - Added Callback FUN_%08x(%08x, %d) with appReqId(%d)", __FUNCTION__, handler.cb, handler.cb_arg, event_type, reqId);
 	return reqId;
-	/*if (npMatching2Handlers.find(event_type) == npMatching2Handlers.end()) {
-
-		return event_type;
-	}
-	else {
-		ERROR_LOG(Log::sceNet, "%s - Callback FUN_%08x(%08x) already exists for appReqId(%d)", __FUNCTION__, handler.cb, handler.cb_arg, event_type);
-	}*/
-
-	//return 0; // Default to Aborted Request
 }
 
-// serverId: 0 on 0x0103/0x0104/0x0105/0x0107/0x0108/0x0109/0x010a/0x010b/0x010c/0x010d (ie. when already joined to a server?)
-// unk1~unk5 usually 0, 
-// unk1: 1st 32-bit of LeaveRoom/etc's Arg2 on 0x0103/0x0104/0x0105/0x0107/0x0108/0x0109/0x010a/0x010b/0x010c/0x010d/0x010e
-// unk2: 2nd 32-bit of LeaveRoom/etc's Arg2 on 0x0103/0x0104/0x0105/0x0107/0x0108/0x0109/0x010a/0x010b/0x010c/0x010d/0x010e
-// unk5: 1 on 0x0002/0x0003/0x0005/0x0006/0x0007/0x0101/0x0102/0x0106
-// unk6 (new state?): 8-bit?(masked with 0xff) 0x01 on 0x0001, 0x03 on 0x0002, 0x04 on 0x0003, 0x05 on 0x0004, 0x06 on 0x0005, 0x07 on 0x0006, 0x08 on 0x0007,
-//		0x09 on 0x0101, 0x0A on 0x0102, 0x0C on 0x0103, 0x0D on 0x0104, 0x0E on 0x0105, 0x0F on 0x0106, 0x10 on 0x0107, 0x11 on 0x0108,
-//		0x12 on 0x0109, 0x13 on 0x010a, 0x14 on 0x010b, 0x15 on 0x010c, 0x16 on 0x010d, 0x17 on 0x010e, 0x18 on 0xa102
-static int notifyNpMatching2Handlers(u32 appReqId, u32 dataPtr, u32 errorCode) {
+// Thread-safe return from an std::async environment.
+// NOTE: If there are any problems writing to np_memory,
+//   it may be prudent to run a thread-sanitized environment instead
+static int notifyNpMatching2Handlers(u32 appReqId, u32 dataPtr, u32 errorCode = SCE_NP_MATCHING2_OKAY) {
 	if (npMatching2Handlers.find(appReqId) == npMatching2Handlers.end())
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_CONTEXT_ID, "%s - No Handler Found for appReqId %d", __FUNCTION__, appReqId);
 
@@ -105,9 +94,9 @@ static int notifyNpMatching2Handlers(u32 appReqId, u32 dataPtr, u32 errorCode) {
 	args[0] = handler.ctx_id;				// ContextID
 	args[1] = appReqId;						// RequestId || 0 indicates aborted request
 	args[2] = handler.event_type;			// Event
-	args[3] = errorCode;					// ErrorCode
-	args[4] = dataPtr;						// ServerInfo struct [ u16 ID, u8 Status, 0x00 ]
-	args[5] = handler.cb_arg;				// Struct to some valid information?
+	args[3] = errorCode;					// ErrorCode || 0 is OK
+	args[4] = dataPtr;						// Response struct
+	args[5] = handler.cb_arg;				// Request Arguments?
 
 	npMatching2Events.push_back(NpMatching2Args(appReqId, 6, args));
 	if (appReqId == 0)
@@ -525,24 +514,23 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 // Produces information about a target server
 // - serverIdPtr = Pointer to the target Server ID
 // - optParam = Struct containing related pointers
-// - assignedReqId = ?
-// Unknown1 = optParam, unknown2 = assignedReqId according to https://github.com/RPCS3/rpcs3/blob/master/rpcs3/Emu/Cell/Modules/sceNp2.cpp ?
+// - assignedReqId = Pointer to the index of a unique callback
 static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam, u32 assignedReqId) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqId, Memory::Read_U32(assignedReqId), currentMIPS->pc);
-	u32 request_id = GenerateCallbackInfo(ctxId, optParam, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo);
+	u32 request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo);
 
 	// ThreadStart
 	std::async(std::launch::async, [=]() {
 		if (!npMatching2Inited)
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
 
-		if (!Memory::IsValidAddress(serverIdPtr) || !Memory::IsValidAddress(assignedReqId))
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+		if (!Memory::IsValidAddress(serverIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 
 		// Server ID is a 16-bit variable according to JPCSP
 		u16 serverId;
 		if ((serverId = Memory::Read_U16(serverIdPtr)) == 0)
-			return notifyNpMatching2Handlers(0, 0, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID);
+			return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID);
 
 		tServer = &servers[serverId];
 		// Check server status
@@ -555,7 +543,7 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 		Memory::Write_U16(serverId, serverInfoPtr);
 		Memory::Write_U8(servers[serverId].GetStatus(), serverInfoPtr + 2);
 
-		return notifyNpMatching2Handlers(request_id, serverInfoPtr, 0);
+		return notifyNpMatching2Handlers(request_id, serverInfoPtr);
 	}); // ThreadEnd
 	return 0;
 }
@@ -564,20 +552,20 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 // This function occurs immediately after a server has been selected
 static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optParam, u32 assignedReqId) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqId, Memory::Read_U32(assignedReqId), currentMIPS->pc);
-	u32 request_id = GenerateCallbackInfo(ctxId, optParam, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList);
+	u32 request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList);
 
 	// ThreadStart
 	std::async(std::launch::async, [=]() {
 		if (!npMatching2Inited)
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
 
 		if (!Memory::IsValidAddress(serverIdPtr) || !Memory::IsValidAddress(assignedReqId))
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 
 		// Server ID is a 16-bit variable according to JPCSP
 		u16 serverId;
 		if ((serverId = Memory::Read_U16(serverIdPtr)) == 0)
-			return notifyNpMatching2Handlers(0, 0, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID);
+			return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID);
 
 		tServer = &servers[serverId];
 		// Connect to server before we collect information
@@ -587,14 +575,14 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		tServer->Disconnect();
 
 		if (ret < 0)
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, ret));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 
 		u32 worldInfoSize = sizeof(SceNpMatching2World) * worlds.size();
 		// Allocate space, and write value into the pool
 		u32 worldInfoPtr = np_memory.Alloc(worldInfoSize);
 		if (!Memory::IsValidAddress(worldInfoPtr) || worldInfoPtr == 0) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for WorldInfo");
-			return notifyNpMatching2Handlers(0, 0, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY);
+			return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY);
 		}
 		int i = 0;
 		for (i = 0; i < worlds.size(); i++) {
@@ -610,11 +598,11 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		u32 worldInfoResponsePtr = np_memory.Alloc(infoSize);
 		if (!Memory::IsValidAddress(worldInfoResponsePtr) || worldInfoResponsePtr == 0) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for WorldInfo");
-			return notifyNpMatching2Handlers(0, 0, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY);
+			return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY);
 		}
 		Write_Struct(resp, worldInfoResponsePtr, "SceNpMatching2World", 20);
 
-		return notifyNpMatching2Handlers(request_id, worldInfoResponsePtr, 0);
+		return notifyNpMatching2Handlers(request_id, worldInfoResponsePtr);
 	}); // ThreadEnd
 	return 0;
 }
@@ -622,15 +610,15 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
-	u32 request_id = GenerateCallbackInfo(ctxId, optParamPtr, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom);
+	u32 request_id = GenerateCallbackInfo(ctxId, optParamPtr, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom);
 
 	// ThreadStart
 	std::async(std::launch::async, [=]() {
 		if (!npMatching2Inited)
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
 
 		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 
 		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
 	});
@@ -641,15 +629,15 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, 
 
 static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr) {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
-	u32 request_id = GenerateCallbackInfo(ctxId, optParamPtr, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom);
+	u32 request_id = GenerateCallbackInfo(ctxId, optParamPtr, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom);
 
 	// ThreadStart
 	std::async(std::launch::async, [=]() {
 		if (!npMatching2Inited)
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
 
 		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 
 		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
 	});
@@ -662,18 +650,18 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 unknown1, u32 unknown2, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
-	int request_id = GenerateCallbackInfo(ctxId, optParamPtr, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom);
+	int request_id = GenerateCallbackInfo(ctxId, optParamPtr, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom);
 
 	// ThreadStart
 	std::async(std::launch::async, [=]() {
 		if (!npMatching2Inited)
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
 
 		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 
 		if (tServer == nullptr)
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
 		u32 cbFunc = Memory::Read_U32(reqParamPtr);
 		u32 cbArg = Memory::Read_U32(reqParamPtr + 0x04);
@@ -699,14 +687,14 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		tServer->Disconnect();
 
 		if (ret < 0)
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, ret));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 
 		u32 infoSize = sizeof(roomData);
 		u32 roomInfoPtr = np_memory.Alloc(infoSize);
 
 		if (!Memory::IsValidAddress(roomInfoPtr)) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataExternal");
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
 		}
 		Write_Struct(roomData, roomInfoPtr, "SceNpMatching2RoomDataExternal", 31);
 
@@ -719,11 +707,11 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 
 		if (!Memory::IsValidAddress(respPtr)) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
 		}
 		Write_Struct(roomData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
 
-		return notifyNpMatching2Handlers(request_id, respPtr, 0);
+		return notifyNpMatching2Handlers(request_id, respPtr);
 	});
 
 	return 0;
@@ -732,18 +720,18 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
-	int request_id = GenerateCallbackInfo(ctxId, optParamPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom);
+	int request_id = GenerateCallbackInfo(ctxId, optParamPtr, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom);
 
 	// ThreadStart
 	std::async(std::launch::async, [=]() {
 		if (!npMatching2Inited)
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
 
 		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 
 		if (tServer == nullptr)
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
 		SceNpMatching2SearchRoomRequest req;
 		Memory::Memcpy(&req, reqParamPtr, sizeof(req));
@@ -776,7 +764,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 
 		if (!Memory::IsValidAddress(roomInfoPtr)) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataExternal");
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
 		}
 		Write_Struct(roomData, roomInfoPtr, "SceNpMatching2RoomDataExternal", 31);
 
@@ -790,11 +778,11 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 
 		if (!Memory::IsValidAddress(respPtr)) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
 		}
 		Write_Struct(roomData, respPtr, "SceNpMatching2SearchRoomResponse", 33);
 
-		return notifyNpMatching2Handlers(request_id, respPtr, 0);
+		return notifyNpMatching2Handlers(request_id, respPtr);
 	});
 
 	return 0;
@@ -804,18 +792,18 @@ static int sceNpMatching2SendRoomChatMessage(int ctxId, u32 reqParamPtr, u32 opt
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 
-	int request_id = GenerateCallbackInfo(ctxId, optParamPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomChatMessage);
+	int request_id = GenerateCallbackInfo(ctxId, optParamPtr, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomChatMessage);
 
 	// ThreadStart
 	std::async(std::launch::async, [=]() {
 		if (!npMatching2Inited)
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
 
 		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 
 		if (tServer == nullptr)
-			return notifyNpMatching2Handlers(0, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
 		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
 	});
