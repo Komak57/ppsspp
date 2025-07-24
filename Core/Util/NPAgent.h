@@ -52,6 +52,7 @@ namespace net {
 
 		u8 GetStatus();
 		int GetID() { return ID; }
+
 		virtual int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World> *worldInfoOut) = 0;
 		virtual int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) = 0;
 		virtual int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
@@ -78,6 +79,7 @@ namespace net {
 		int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
 		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
+		static int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
 	};
 
 	class RPCNAgent : public NPAgent {
