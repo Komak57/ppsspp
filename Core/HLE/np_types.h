@@ -537,6 +537,7 @@ struct SceNpAuthMemoryStat {
 // Event of request functions
 enum PS3Matching2RequestEvent
 {
+	SCE_NP_MATCHING2_REQUEST_EVENT_Empty = 0x0000,
 	SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo = 0x0001,
 	SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList = 0x0002,
 	SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataExternalList = 0x0003,
@@ -697,6 +698,21 @@ enum
 	SCE_NP_MATCHING2_SERVER_STATUS_MAINTENANCE = 4,
 };
 
+// Request callback function
+//using SceNpMatching2RequestCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey,
+//	s32 errorCode, u32 dataSize, PSPPointer<void> arg);
+//using SceNpMatching2RoomEventCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey,
+//	s32 errorCode, u32 dataSize, PSPPointer<void> arg);
+//using SceNpMatching2RoomMessageCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId srcMemberId, SceNpMatching2Event event,
+//	SceNpMatching2EventKey eventKey, s32 errorCode, u32 dataSize, PSPPointer<void> arg);
+//using SceNpMatching2LobbyEventCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2LobbyId lobbyId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey,
+//	s32 errorCode, u32 dataSize, PSPPointer<void> arg);
+//using SceNpMatching2LobbyMessageCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2LobbyId lobbyId, SceNpMatching2LobbyMemberId srcMemberId, SceNpMatching2Event event,
+//	SceNpMatching2EventKey eventKey, s32 errorCode, u32 dataSize, PSPPointer<void> arg);
+//using SceNpMatching2SignalingCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId peerMemberId, SceNpMatching2Event event,
+//	s32 errorCode, PSPPointer<void> arg);
+//using SceNpMatching2ContextCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2Event event, SceNpMatching2EventCause eventCause, s32 errorCode, PSPPointer<void> arg);
+
 typedef u16 SceNpMatching2ServerId;
 typedef u32 SceNpMatching2WorldId;
 typedef u16 SceNpMatching2WorldNumber;
@@ -728,6 +744,23 @@ typedef u16 SceNpMatching2Event;
 typedef u32 SceNpMatching2EventKey;
 typedef u32 SceNpMatching2SignalingRequestId;
 
+// Option parameters for requests
+//struct SceNpMatching2RequestOptParam
+//{
+//	PSPPointer<SceNpMatching2RequestCallback> cbFunc;
+//	PSPPointer<void> cbFuncArg;
+//	u32 timeout;
+//	u16 appReqId;
+//	u8 padding[2];
+//};
+struct SceNpMatching2RequestOptParam
+{
+	u32 cbFunc;
+	u32 cbFuncArg;
+	//u32 timeout;	// Not present in PSP
+	//u32 reqIdPtr;	// Not present in PSP
+};
+
 struct NpMatching2Handler {
 	u32 ctx_id;
 	u32 cb;
@@ -747,14 +780,14 @@ struct NpMatching2Handler {
 struct NpMatching2Args {
 	// Now allows for optional arguments to be omitted in the sending process.
 	static const size_t MAX_ARGS = 11;
-	u16 ctxId;
+	u32 reqId;
 	//u32 cbFunc;
 	size_t argc = 0;
 	u32_le args[MAX_ARGS]; // 7 elements (excluding optional data)? or may be 11 elements (including optional data)?
 	// May be followed by optional data? since these Args usually created on the stack
 
-	NpMatching2Args(u16 ctxId, size_t argc, u32_le args[]) {
-		this->ctxId = ctxId;
+	NpMatching2Args(u32 reqId, size_t argc, u32_le args[]) {
+		this->reqId = reqId;
 		this->argc = (argc > MAX_ARGS) ? MAX_ARGS : argc;
 		for (size_t i = 0; i < this->argc; ++i)
 			this->args[i] = args[i];
@@ -902,7 +935,7 @@ struct SceNpMatching2RoomGroup
 // Internal room member data
 struct SceNpMatching2RoomMemberDataInternal
 {
-	SceNpMatching2RoomMemberDataInternal* next;
+	PSPPointer<SceNpMatching2RoomMemberDataInternal> next;
 	SceNpUserInfo2 userInfo;
 	CellRtcTick joinDate;
 	SceNpMatching2RoomMemberId memberId;

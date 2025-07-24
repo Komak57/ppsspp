@@ -33,7 +33,7 @@ BlockAllocator np_memory;
 
 std::recursive_mutex npMatching2EvtMtx;
 std::deque<NpMatching2Args> npMatching2Events;
-std::map<int, NpMatching2Handler> npMatching2Handlers;
+std::map<u32, NpMatching2Handler> npMatching2Handlers;
 //std::map<int, NpMatching2Context> npMatching2Contexts;
 net::NPAgent* tServer;
 std::map<int, net::NPAgent> servers;
@@ -44,25 +44,43 @@ void Write_Struct(const T& object, const u32 address, const char* tag, size_t ta
 	Memory::Memcpy(address, &object, sizeof(T), tag, taglen);
 }
 
+// Returns the RequestId
+static u32 GenerateCallbackInfo(int ctxId, u32 optParam, PS3Matching2RequestEvent event_type) {
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %d) at %08x", __FUNCTION__, ctxId, optParam, event_type, currentMIPS->pc);
 
-static int GenerateCallbackInfo(int ctxId, u32 optParam, u32 event_type) {
-	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, optParam, event_type, currentMIPS->pc);
+	SceNpMatching2RequestOptParam req{};
+	Memory::Memcpy(&req, optParam, sizeof(req));
+	INFO_LOG(Log::sceNet, "%s - optParam[%08x, %08x]", __FUNCTION__, req.cbFunc, req.cbFuncArg);
 
-	if (npMatching2Handlers.count(ctxId) == 0)
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_CONTEXT_ID, "%s - No Handler Found for CtxId %d", __FUNCTION__, ctxId);
-
+	if (req.cbFunc == 0 || !Memory::IsValidAddress(req.cbFunc)) {
+		ERROR_LOG(Log::sceNet, "%s - Invalid Callback FUN_%08x(%08x) for appReqId(%d)", __FUNCTION__, req.cbFunc, req.cbFuncArg, event_type);
+		return 0;
+	}
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
-	npMatching2Handlers[ctxId].ctx_id = ctxId; // double handle
-	if (optParam != 0 && Memory::IsValidAddress(optParam)) {
-		npMatching2Handlers[ctxId].cb = Memory::Read_U32(optParam);
-		npMatching2Handlers[ctxId].cb_arg = Memory::Read_U32(optParam + 4);
-	}
-	npMatching2Handlers[ctxId].event_type = event_type;
+	NpMatching2Handler handler{};
 
-	if (optParam != 0 && Memory::IsValidAddress(optParam))
-		return Memory::Read_U32(optParam + 0x10);
-	return 0; // Default to Aborted Request
+	handler.ctx_id = ctxId; // double handle
+	handler.cb = req.cbFunc;
+	handler.cb_arg = req.cbFuncArg;
+	handler.event_type = event_type;
+
+	// Generate a unique ID for this request
+	u32 reqId = 1;
+	if (npMatching2Handlers.size() > 0)
+		reqId = (npMatching2Handlers.rbegin()->first) + 1;
+	npMatching2Handlers[reqId] = handler;
+	NOTICE_LOG(Log::sceNet, "%s - Added Callback FUN_%08x(%08x, %d) with appReqId(%d)", __FUNCTION__, handler.cb, handler.cb_arg, event_type, reqId);
+	return reqId;
+	/*if (npMatching2Handlers.find(event_type) == npMatching2Handlers.end()) {
+
+		return event_type;
+	}
+	else {
+		ERROR_LOG(Log::sceNet, "%s - Callback FUN_%08x(%08x) already exists for appReqId(%d)", __FUNCTION__, handler.cb, handler.cb_arg, event_type);
+	}*/
+
+	//return 0; // Default to Aborted Request
 }
 
 // serverId: 0 on 0x0103/0x0104/0x0105/0x0107/0x0108/0x0109/0x010a/0x010b/0x010c/0x010d (ie. when already joined to a server?)
@@ -73,10 +91,16 @@ static int GenerateCallbackInfo(int ctxId, u32 optParam, u32 event_type) {
 // unk6 (new state?): 8-bit?(masked with 0xff) 0x01 on 0x0001, 0x03 on 0x0002, 0x04 on 0x0003, 0x05 on 0x0004, 0x06 on 0x0005, 0x07 on 0x0006, 0x08 on 0x0007,
 //		0x09 on 0x0101, 0x0A on 0x0102, 0x0C on 0x0103, 0x0D on 0x0104, 0x0E on 0x0105, 0x0F on 0x0106, 0x10 on 0x0107, 0x11 on 0x0108,
 //		0x12 on 0x0109, 0x13 on 0x010a, 0x14 on 0x010b, 0x15 on 0x010c, 0x16 on 0x010d, 0x17 on 0x010e, 0x18 on 0xa102
-void notifyNpMatching2Handlers(u32 ctxId, u32 argc, u32_le cbArgs[]) {
+static int notifyNpMatching2Handlers(u32 appReqId, u32 argc, u32_le cbArgs[]) {
+	if (npMatching2Handlers.find(appReqId) == npMatching2Handlers.end())
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_CONTEXT_ID, "%s - No Handler Found for appReqId %d", __FUNCTION__, appReqId);
+
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
-	// TODO: separate/map each list per ctxId
-	npMatching2Events.push_back(NpMatching2Args(ctxId, argc, cbArgs));
+	NOTICE_LOG(Log::sceNet, "%s - Matching Handler for appReqId(%d)", __FUNCTION__, appReqId);
+	npMatching2Events.push_back(NpMatching2Args(appReqId, argc, cbArgs));
+	if (appReqId == 0)
+		return SCE_NP_MATCHING2_ERROR_ABORTED;
+	return 0;
 }
 
 bool NpMatching2ProcessEvents() {
@@ -93,17 +117,17 @@ bool NpMatching2ProcessEvents() {
 	npMatching2Events.pop_front();
 
 	// Process matching ctxId
-	for (std::map<int, NpMatching2Handler>::iterator it = npMatching2Handlers.begin(); it != npMatching2Handlers.end(); ++it) {
-		if (it->first == event.ctxId)
+	for (std::map<u32, NpMatching2Handler>::iterator it = npMatching2Handlers.begin(); it != npMatching2Handlers.end(); ++it) {
+		if (it->first == event.reqId)
 		{
 			//DEBUG_LOG(Log::sceNet, "NpMatching2Callback [HandlerID=%i][EventID=%04x][State=%04x][ArgsPtr=%08x]", it->first, event, stat, it->second.argument);
-			DEBUG_LOG(Log::sceNet, "NpMatching2Callback FUN_%08x(%08x, %08x, %08x, %08x, %08x, %08x, %08x, %08x)", it->second.cb,
+			NOTICE_LOG(Log::sceNet, "NpMatching2ProcessEvents - FUN_%08x(%08x, %08x, %08x, %08x, %08x, %08x, %08x, %08x)", it->second.cb,
 				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
 			hleEnqueueCall(it->second.cb, event.argc, event.args);
 			return true;
 		}
 	}
-	ERROR_LOG(Log::sceNet, "NpMatching2Callback - No Handler Found for CtxId %d", event.ctxId);
+	ERROR_LOG(Log::sceNet, "NpMatching2ProcessEvents - No Handler Found for CtxId %d", event.reqId);
 
 	//// Per npMatching2 function callback
 	//u32* inStruct = (u32*)Memory::GetPointer(event.cbFunc);
@@ -135,7 +159,7 @@ static inline void FreeUser(u32& addr) {
 
 static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityMask, int threadStackSize)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %d, %d, %d) at %08x", __FUNCTION__, poolSize, threadPriority, cpuAffinityMask, threadStackSize, currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %d, %d, %d) at %08x", __FUNCTION__, poolSize, threadPriority, cpuAffinityMask, threadStackSize, currentMIPS->pc);
 	//if (npMatching2Inited)
 	//	return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ALREADY_INITIALIZED);
 
@@ -164,7 +188,7 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 
 static int sceNpMatching2Term()
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s() at %08x", __FUNCTION__, currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s() at %08x", __FUNCTION__, currentMIPS->pc);
 	npMatching2Inited = false;
 	npMatching2Handlers.clear();
 	npMatching2Events.clear();
@@ -176,7 +200,7 @@ static int sceNpMatching2Term()
 
 static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr, u32 ctxIdPtr, int unknown)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%08x[%s], %08x[%08x], %08x[%hu], %i) at %08x", __FUNCTION__, communicationIdPtr, safe_string(Memory::GetCharPointer(communicationIdPtr)), passPhrasePtr, Memory::Read_U32(passPhrasePtr), ctxIdPtr, Memory::Read_U16(ctxIdPtr), unknown, currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x[%s], %08x[%08x], %08x[%hu], %i) at %08x", __FUNCTION__, communicationIdPtr, safe_string(Memory::GetCharPointer(communicationIdPtr)), passPhrasePtr, Memory::Read_U32(passPhrasePtr), ctxIdPtr, Memory::Read_U16(ctxIdPtr), unknown, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -214,7 +238,7 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 
 static int sceNpMatching2ContextStart(int ctxId)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d) at %08x", __FUNCTION__, ctxId, currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d) at %08x", __FUNCTION__, ctxId, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -415,40 +439,36 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 	if (ctxId <= 0)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_CONTEXT_ID);
 
-	int id = ctxId;
-	if (callbackFunctionAddr != 0) {
-		bool foundHandler = false;
-
-		struct NpMatching2Handler handler;
-		memset(&handler, 0, sizeof(handler));
-
-		handler.ctx_id = ctxId; // double handle
-		handler.cb = callbackFunctionAddr;
-		handler.cb_arg = callbackArgument;
-
-		for (std::map<int, NpMatching2Handler>::iterator it = npMatching2Handlers.begin(); it != npMatching2Handlers.end(); it++) {
-			if (it->second.cb == handler.cb) {
-				foundHandler = true;
-				id = it->first;
-				return id;
-			}
-		}
-
-		if (!foundHandler && Memory::IsValidAddress(handler.cb)) {
-			npMatching2Handlers[id] = handler;
-			WARN_LOG(Log::sceNet, "%s - Added handler(%08x, %08x) : %d", __FUNCTION__, handler.cb, handler.cb_arg, id);
-			return id;
-		}
-		else {
-			ERROR_LOG(Log::sceNet, "%s - Same handler(%08x, %08x) already exists", __FUNCTION__, handler.cb, handler.cb_arg);
-		}
-
-		//u32 dataLength = 4097; 
-		//notifyNpMatching2Handlers(retval, dataLength, handler.argument);
-
-		// callback struct have 57 * u32? where [0]=0, [40]=flags, [55]=callbackFunc, and [56]=callbackArgs?
-		//hleEnqueueCall(callbackFunctionAddr, 7, (u32*)Memory::GetPointer(callbackArgument), nullptr); // 7 args? since the callback handler is trying to use t2 register
+	if (callbackFunctionAddr == 0 || !Memory::IsValidAddress(callbackFunctionAddr)) {
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "%s - Invalid Callback %08x", __FUNCTION__, callbackFunctionAddr);
 	}
+	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
+
+	struct NpMatching2Handler handler;
+	memset(&handler, 0, sizeof(handler));
+
+	handler.ctx_id = ctxId; // double handle
+	handler.cb = callbackFunctionAddr;
+	handler.cb_arg = callbackArgument;
+
+	u32 reqId = 1;
+	if (npMatching2Handlers.size() > 0)
+		reqId = (npMatching2Handlers.rbegin()->first) + 1;
+	npMatching2Handlers[reqId] = handler;
+	NOTICE_LOG(Log::sceNet, "%s - Added SignalingCallback FUN_%08x(%08x) with appReqId(%d)", __FUNCTION__, handler.cb, handler.cb_arg, reqId);
+	/*if (npMatching2Handlers.find(ctxId) == npMatching2Handlers.end()) {
+		npMatching2Handlers[ctxId] = handler;
+		WARN_LOG(Log::sceNet, "%s - Added handler(%08x, %08x) : %d", __FUNCTION__, handler.cb, handler.cb_arg, ctxId);
+		return ctxId;
+	}
+	else {
+		ERROR_LOG(Log::sceNet, "%s - Same handler(%08x, %08x) already exists", __FUNCTION__, handler.cb, handler.cb_arg);
+	}*/
+	//u32 dataLength = 4097; 
+	//notifyNpMatching2Handlers(retval, dataLength, handler.argument);
+
+	// callback struct have 57 * u32? where [0]=0, [40]=flags, [55]=callbackFunc, and [56]=callbackArgs?
+	//hleEnqueueCall(callbackFunctionAddr, 7, (u32*)Memory::GetPointer(callbackArgument), nullptr); // 7 args? since the callback handler is trying to use t2 register
 	return 0;
 }
 
@@ -527,9 +547,6 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 	// u8  0x00 Padding
 	u32 cbFunc = Memory::Read_U32(optParam);			// Callback to a getServerInfo function
 	u32 cbArg = Memory::Read_U32(optParam + 0x04);		// Struct containing data
-	u32 request_id = Memory::Read_U32(optParam + 0x10);		// Request ID in OptParam, suppose to be at 0x0c
-
-	DEBUG_LOG(Log::sceNet, "%s - (cbFunc: %08x, cbArg: %08x, reqId: %08) at %08x", __FUNCTION__, cbFunc, cbArg, request_id, currentMIPS->pc);
 
 	// Will only process 1 server request at a time
 	net::NPAgent* server = &servers[serverId];
@@ -542,43 +559,34 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 	Memory::Write_U16(serverId, serverInfoPtr);
 	Memory::Write_U8(server->GetStatus(), serverInfoPtr + 2);
 
-	// Notify callback handler
-	if (Memory::IsValidAddress(cbFunc)) {
-		// TODO: PS3 obtains request_id via optParam->appReqId but value is 0?
-		//Memory::Write_U16(request_id, optParam + 12);
-		request_id = GenerateCallbackInfo(ctxId, optParam, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo);
+	u32 request_id = GenerateCallbackInfo(ctxId, optParam, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo);
 
-		if (Memory::IsValidAddress(assignedReqId))
-			Memory::Write_U32(request_id, assignedReqId);
-		// The cbFunc seems to be storing s0~s4(s0 pointing to 0x0996DD58 containing data similar to 0x09888158 above on the 1st 2x 32-bit data, s1 seems to be ctxId, s2~s4=0xdeadbeef) into stack and use a0~t1 (6 args?):
-		//		Arg1(a0) & Arg3(a2) are being masked with 0xffff (16-bit id?)
-		//		This callback tried to load data from address 0x08BD4860+8 (not part of arg? which being set using content of unknown2 not long after returning from sceNpMatching2GetServerInfo, so we may need to give some delay before calling this callback)
-		//		and comparing it with Arg2(a1), repeated by increasing the address 0x08BD4860 by 288 bytes on each loop for 64 times or until it found a matching one.
-		//		When a match is found the callback will process the address further, otherwise exit the callback.
-		//		Matching address struct: (zeroed before calling sceNpMatching2GetServerInfo? and set after returning from sceNpMatching2GetServerInfo?)
-		//			0000 32-bit func address (another callback?) 0x08A07EF4
-		//			0008 32-bit value from unknown2 content, being set not long after returning from sceNpMatching2GetServerInfo
-		//			000c 32-bit unknown 
-		//			0010 8-bit status to indicate not updated from callback yet? initially 0, set to 1 not long after returning from sceNpMatching2GetServerInfo (along with unknown2 content)
-		//
-		// There args are supposed to be constructed in the stack and the data need to be available even after returning from this function, so these args + optional data probably copied to somewhere
+	// The cbFunc seems to be storing s0~s4(s0 pointing to 0x0996DD58 containing data similar to 0x09888158 above on the 1st 2x 32-bit data, s1 seems to be ctxId, s2~s4=0xdeadbeef) into stack and use a0~t1 (6 args?):
+	//		Arg1(a0) & Arg3(a2) are being masked with 0xffff (16-bit id?)
+	//		This callback tried to load data from address 0x08BD4860+8 (not part of arg? which being set using content of unknown2 not long after returning from sceNpMatching2GetServerInfo, so we may need to give some delay before calling this callback)
+	//		and comparing it with Arg2(a1), repeated by increasing the address 0x08BD4860 by 288 bytes on each loop for 64 times or until it found a matching one.
+	//		When a match is found the callback will process the address further, otherwise exit the callback.
+	//		Matching address struct: (zeroed before calling sceNpMatching2GetServerInfo? and set after returning from sceNpMatching2GetServerInfo?)
+	//			0000 32-bit func address (another callback?) 0x08A07EF4
+	//			0008 32-bit value from unknown2 content, being set not long after returning from sceNpMatching2GetServerInfo
+	//			000c 32-bit unknown 
+	//			0010 8-bit status to indicate not updated from callback yet? initially 0, set to 1 not long after returning from sceNpMatching2GetServerInfo (along with unknown2 content)
+	//
+	// There args are supposed to be constructed in the stack and the data need to be available even after returning from this function, so these args + optional data probably copied to somewhere
 
-		u32_le args[6];
-		args[0] = ctxId;						// ContextID
-		args[1] = request_id;					// RequestId || 0 indicates aborted request
-		args[2] = SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo;	// Event
-		args[3] = 0;							// ErrorCode
-		args[4] = serverInfoPtr;				// ServerInfo struct [ u16 ID, u8 Status, 0x00 ]
-		args[5] = cbArg;						// Struct to some valid information?
+	u32_le args[6];
+	args[0] = ctxId;						// ContextID
+	args[1] = request_id;					// RequestId || 0 indicates aborted request
+	args[2] = SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo;	// Event
+	args[3] = 0;							// ErrorCode
+	args[4] = serverInfoPtr;				// ServerInfo struct [ u16 ID, u8 Status, 0x00 ]
+	args[5] = cbArg;						// Struct to some valid information?
 
-		WARN_LOG(Log::sceNet, "%s - FUN_%08x(%d, %d, %d, %d, %08x, %d)", __FUNCTION__, cbFunc, args[0], args[1], args[2], args[3], args[4], args[5]);
-
-		notifyNpMatching2Handlers(ctxId, 6, args);
-		//notifyNpMatching2Handlers(args, ctxId, serverId, cbFunc, cbArg, 0, 0, 0, 1);
-	}
+	DEBUG_LOG(Log::sceNet, "%s - FUN_%08x(%d, %d, %d, %d, %08x, %d)", __FUNCTION__, cbFunc, args[0], args[1], args[2], args[3], args[4], args[5]);
 
 	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
-	return 0;
+	return notifyNpMatching2Handlers(request_id, 6, args);
+	//hleEnqueueCall(cbFunc, 6, args);
 }
 
 // This function produces information about the lobbies, parties, and existing player counts
@@ -599,9 +607,8 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 
 	u32 cbFunc = Memory::Read_U32(optParam);			// Callback to a getServerInfo function
 	u32 cbArg = Memory::Read_U32(optParam + 0x04);		// Struct containing data
-	u32 request_id = Memory::Read_U32(optParam + 0x10);		// Request ID in OptParam, suppose to be at 0x0c
 
-	DEBUG_LOG(Log::sceNet, "%s - (cbFunc: %08x, cbArg: %08x, reqId: %08) at %08x", __FUNCTION__, cbFunc, cbArg, request_id, currentMIPS->pc);
+	DEBUG_LOG(Log::sceNet, "%s - (cbFunc: %08x, cbArg: %08x, reqId: %08) at %08x", __FUNCTION__, cbFunc, cbArg, currentMIPS->pc);
 	tServer = &servers[serverId];
 	// Check server status
 	tServer->Resolve();
@@ -644,10 +651,10 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 	// Notify callback handler
 	if (Memory::IsValidAddress(cbFunc)) {
 		// TODO: PS3 obtains request_id via optParam->appReqId but value is 0?
-		request_id = GenerateCallbackInfo(ctxId, optParam, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList);
+		u32 request_id = GenerateCallbackInfo(ctxId, optParam, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList);
 
-		if (Memory::IsValidAddress(assignedReqId))
-			Memory::Write_U32(request_id, assignedReqId);
+		/*if (Memory::IsValidAddress(assignedReqId))
+			Memory::Write_U32(request_id, assignedReqId);*/
 
 		u32_le args[6];
 		args[0] = ctxId;						// ContextID
@@ -659,7 +666,8 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 
 		WARN_LOG(Log::sceNet, "%s - FUN_%08x(%d, %d, %d, %d, %08x, %d)", __FUNCTION__, cbFunc, args[0], args[1], args[2], args[3], args[4], args[5]);
 
-		notifyNpMatching2Handlers(ctxId, 6, args);
+		notifyNpMatching2Handlers(request_id, 6, args);
+		//hleEnqueueCall(cbFunc, 6, args);
 
 	}
 
@@ -691,7 +699,9 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, 
 		args[6] = 0;
 		//args.data[8] = an initially zeroed struct of 536 bytes where the 1st 20 bytes were taken from reqParam offset 0x08
 
-		notifyNpMatching2Handlers(ctxId, 7, args);
+		//notifyNpMatching2Handlers(ctxId, 7, args);
+
+		hleEnqueueCall(cbFunc, 6, args);
 
 		Memory::Write_U32(args[1], assignedReqIdPtr);
 	}
@@ -773,8 +783,8 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		// TODO: PS3 obtains request_id via optParam->appReqId but value is 0?
 		int request_id = GenerateCallbackInfo(ctxId, reqParamPtr, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom);
 
-		if (Memory::IsValidAddress(assignedReqIdPtr))
-			Memory::Write_U32(request_id, assignedReqIdPtr);
+		/*if (Memory::IsValidAddress(assignedReqIdPtr))
+			Memory::Write_U32(request_id, assignedReqIdPtr);*/
 
 		u32_le args[6];
 		args[0] = ctxId;						// ContextID
@@ -786,7 +796,8 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 
 		WARN_LOG(Log::sceNet, "%s - FUN_%08x(%d, %d, %d, %d, %08x, %d)", __FUNCTION__, cbFunc, args[0], args[1], args[2], args[3], args[4], args[5]);
 
-		notifyNpMatching2Handlers(ctxId, 6, args);
+		notifyNpMatching2Handlers(request_id, 6, args);
+		//hleEnqueueCall(cbFunc, 6, args);
 
 	}
 
@@ -861,8 +872,8 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 		// TODO: PS3 obtains request_id via optParam->appReqId but value is 0?
 		int request_id = GenerateCallbackInfo(ctxId, reqParamPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom);
 
-		if (Memory::IsValidAddress(assignedReqIdPtr))
-			Memory::Write_U32(request_id, assignedReqIdPtr);
+		/*if (Memory::IsValidAddress(assignedReqIdPtr))
+			Memory::Write_U32(request_id, assignedReqIdPtr);*/
 
 		u32_le args[6];
 		args[0] = ctxId;						// ContextID
@@ -874,7 +885,8 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 
 		WARN_LOG(Log::sceNet, "%s - FUN_%08x(%d, %d, %d, %d, %08x, %d)", __FUNCTION__, cbFunc, args[0], args[1], args[2], args[3], args[4], args[5]);
 
-		notifyNpMatching2Handlers(ctxId, 6, args);
+		notifyNpMatching2Handlers(request_id, 6, args);
+		//hleEnqueueCall(cbFunc, 6, args);
 
 	}
 
@@ -907,7 +919,8 @@ static int sceNpMatching2SendRoomChatMessage(int ctxId, u32 reqParamPtr, u32 opt
 		//args.data[8] = reqParamPtr;
 
 		//notifyNpMatching2Handlers(args, ctxId, 0, cbFunc, cbArg, 0, 0, 0, 0x10);
-		notifyNpMatching2Handlers(ctxId, 7, args);
+		//notifyNpMatching2Handlers(ctxId, 7, args);
+		hleEnqueueCall(cbFunc, 6, args);
 
 		Memory::Write_U32(args[1], assignedReqIdPtr); // server status or flags?
 	}
