@@ -455,9 +455,9 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		tServer = serverId;
 		// Connect to server before we collect information
 		servers[tServer]->Connect();
+		servers[tServer]->Login();
 		// FIXME: Get worldInfo from PSN
 		int ret = servers[tServer]->GetWorldInfo(npTitleId.data, &worlds);
-		servers[tServer]->Disconnect();
 
 		if (ret < 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
@@ -556,7 +556,7 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
  */
 static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 unknown1, u32 unknown2, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom);
 
 	// ThreadStart
@@ -573,8 +573,6 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		SceNpMatching2CreateJoinRoomRequest req;
 		Memory::Memcpy(&req, reqParamPtr, sizeof(req));
 
-		servers[tServer]->Connect();
-
 		// FIXME: Populate all relevant data from req into memory as required
 		SceNpMatching2RoomDataInternal roomData{};
 		roomData.serverId = servers[tServer]->GetID();
@@ -589,8 +587,6 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 
 		// FIXME: Get roomData from PSN
 		int ret = servers[tServer]->CreatJoinRoom(&roomData);
-		servers[tServer]->Disconnect();
-
 		if (ret < 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 
@@ -616,6 +612,9 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		}
 		Write_Struct(roomData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
 
+		// Cache Rooms
+		//rooms.push_back(roomData);
+
 		return notifyNpMatching2Handlers(request_id, respPtr);
 	});
 
@@ -631,7 +630,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
  */
 static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 	int request_id = GenerateCallbackInfo(ctxId, optParamPtr, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom);
 
 	// ThreadStart
@@ -648,7 +647,6 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 		SceNpMatching2SearchRoomRequest req;
 		Memory::Memcpy(&req, reqParamPtr, sizeof(req));
 
-		servers[tServer]->Connect();
 
 		// FIXME: Populate all relevant data from req into memory as required
 		SceNpMatching2RoomDataExternal roomData{};
@@ -664,7 +662,6 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 
 		// FIXME: Get roomData from PSN
 		int ret = servers[tServer]->SearchRoom(&roomData);
-		servers[tServer]->Disconnect();
 
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to retrieve Room Info");
@@ -731,57 +728,438 @@ static int sceNpMatching2SendRoomChatMessage(int ctxId, u32 reqParamPtr, u32 opt
 	return 0;
 }
 
+static int sceNpMatching2SetDefaultRequestOptParam(int ctxId, u32 optParam)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParam, currentMIPS->pc);
+
+	return 0;
+}
+
+static int sceNpMatching2SetUserInfo(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+static int sceNpMatching2GetUserInfoList(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_GetUserInfoList);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+static int sceNpMatching2AbortRequest(int ctxId, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x) at %08x", __FUNCTION__, ctxId, assignedReqIdPtr, currentMIPS->pc);
+
+	return 0;
+}
+
+static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SetSignalingOptParam);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+static int sceNpMatching2GetSignalingOptParamLocal(int ctxId, u32 roomId, u32 signalingOptParam)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, signalingOptParam, currentMIPS->pc);
+
+	return 0;
+}
+
+static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%08x) at %08x", __FUNCTION__, netInfoPtr, currentMIPS->pc);
+
+	return 0;
+}
+
+static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 roomId, u32 roomMemberId, u32 signalingReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, roomId, roomMemberId, signalingReqIdPtr, Memory::Read_U32(signalingReqIdPtr), currentMIPS->pc);
+
+	return 0;
+}
+
+static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingReqIdPtr, u32 netInfoPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x[%08x], %08x) at %08x", __FUNCTION__, ctxId, signalingReqIdPtr, Memory::Read_U32(signalingReqIdPtr), netInfoPtr, currentMIPS->pc);
+
+	return 0;
+}
+
+static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x[%08x]) at %08x", __FUNCTION__, ctxId, signalingReqIdPtr, Memory::Read_U32(signalingReqIdPtr), currentMIPS->pc);
+
+	return 0;
+}
+
+static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 roomId, u32 memberId, u32 code, u32 connInfoPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, memberId, code, connInfoPtr, currentMIPS->pc);
+
+	return 0;
+}
+
+static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+static int sceNpMatching2GetRoomPasswordLocal(int ctxId, u32 roomId, u32 withPassword, u32 Password)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, withPassword, Password, currentMIPS->pc);
+
+	return 0;
+}
+
+static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+static int sceNpMatching2GrantRoomOwner(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_GrantRoomOwner);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+static int sceNpMatching2GetRoomMemberIdListLocal(int ctxId, u32 roomId, u32 sortMethod, u32 memberId, u32 memberIdNum)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, sortMethod, memberId, memberIdNum, currentMIPS->pc);
+
+	return 0;
+}
+
+static int sceNpMatching2SetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+static int sceNpMatching2GetRoomMemberDataInternalLocal(int ctxId, u32 roomId, u32 memberId, u32 attrId, u32 attrIdNum, u32 memberPtr, u32 bufPtr, u32 bufLen)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x, %08x, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, memberId, attrId, attrIdNum, memberPtr, bufPtr, bufLen, currentMIPS->pc);
+
+	return 0;
+}
+
+static int sceNpMatching2GetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+static int sceNpMatching2GetRoomMemberDataExternalList(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataExternalList);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+static int sceNpMatching2KickoutRoomMember(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_KickoutRoomMember);
+
+	// ThreadStart
+	std::async(std::launch::async, [=]() {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+
+	return 0;
+}
+
+
+
+
+
+
 const HLEFunction sceNpMatching2[] = {
-	{0xF47342FC, &WrapI_IUI<sceNpMatching2GetServerIdListLocal>,		"sceNpMatching2GetServerIdListLocal",			'i', "ixi"    },
-	{0x4EE3A8EC, &WrapI_IUUU<sceNpMatching2GetServerInfo>,				"sceNpMatching2GetServerInfo",					'i', "ixxx"   },
-	{0xA53E7C69, &WrapI_IUUU< sceNpMatching2GetWorldInfoList>,			"sceNpMatching2GetWorldInfoList",				'i', "ixxx"   },
-	{0x631682CC, nullptr,												"sceNpMatching2SetDefaultRequestOptParam",		'i', "" 	  },
-	{0x22F38DAF, &WrapI_U<sceNpMatching2GetMemoryStat>,					"sceNpMatching2GetMemoryStat",					'i', "x"      },
-	{0x7D1D5F5E, nullptr,												"sceNpMatching2SetUserInfo",					'i', "" 	  },
-	{0xC8FC5D41, nullptr,												"sceNpMatching2GetUserInfoList",				'i', "" 	  },
-	{0xFADBA9DB, nullptr,												"sceNpMatching2AbortRequest",					'i', "" 	  },
+	{0xF47342FC, &WrapI_IUI<sceNpMatching2GetServerIdListLocal>,			"sceNpMatching2GetServerIdListLocal",			'i', "ixi"    },
+	{0x4EE3A8EC, &WrapI_IUUU<sceNpMatching2GetServerInfo>,					"sceNpMatching2GetServerInfo",					'i', "ixxx"   },
+	{0xA53E7C69, &WrapI_IUUU<sceNpMatching2GetWorldInfoList>,				"sceNpMatching2GetWorldInfoList",				'i', "ixxx"   },
+	{0x631682CC, &WrapI_IU<sceNpMatching2SetDefaultRequestOptParam>,		"sceNpMatching2SetDefaultRequestOptParam",		'i', "ix"     },
+	{0x22F38DAF, &WrapI_U<sceNpMatching2GetMemoryStat>,						"sceNpMatching2GetMemoryStat",					'i', "x"      },
+	{0x7D1D5F5E, &WrapI_IUUU<sceNpMatching2SetUserInfo>,					"sceNpMatching2SetUserInfo",					'i', "ixxx"   },
+	{0xC8FC5D41, &WrapI_IUUU<sceNpMatching2GetUserInfoList>,				"sceNpMatching2GetUserInfoList",				'i', "ixxx"   },
+	{0xFADBA9DB, &WrapI_IU<sceNpMatching2AbortRequest>,						"sceNpMatching2AbortRequest",					'i', "ix"     },
 
-	{0xA3C298D1, &WrapI_IUU<sceNpMatching2RegisterSignalingCallback>,	"sceNpMatching2RegisterSignalingCallback",		'i', "ixx"    },
-	{0x9A67F5D0, nullptr,												"sceNpMatching2SetSignalingOptParam",			'i', "" 	  },
-	{0xC7E72EC5, nullptr,												"sceNpMatching2GetSignalingOptParamLocal",		'i', "" 	  },
-	{0xFF32EA05, nullptr,												"sceNpMatching2SignalingGetLocalNetInfo",		'i', "" 	  },
-	{0x8CD109E7, nullptr,												"sceNpMatching2SignalingGetPeerNetInfo",		'i', "" 	  },
-	{0xDFEDB642, nullptr,												"sceNpMatching2SignalingGetPeerNetInfoResult",	'i', "" 	  },
-	{0x9462C05A, nullptr,												"sceNpMatching2SignalingCancelPeerNetInfo",		'i', "" 	  },
-	{0x3892E9A6, nullptr,												"sceNpMatching2SignalingGetConnectionInfo",		'i', "" 	  },
-	{0x6D6D0C75, &WrapI_I<sceNpMatching2SignalingGetConnectionStatus>,	"sceNpMatching2SignalingGetConnectionStatus",	'i', "i" 	  },
+	{0xA3C298D1, &WrapI_IUU<sceNpMatching2RegisterSignalingCallback>,		"sceNpMatching2RegisterSignalingCallback",		'i', "ixx"    },
+	{0x9A67F5D0, &WrapI_IUUU<sceNpMatching2SetSignalingOptParam>,			"sceNpMatching2SetSignalingOptParam",			'i', "ixxx"   },
+	{0xC7E72EC5, &WrapI_IUU<sceNpMatching2GetSignalingOptParamLocal>,		"sceNpMatching2GetSignalingOptParamLocal",		'i', "ixx"    },
+	{0xFF32EA05, &WrapI_U<sceNpMatching2SignalingGetLocalNetInfo>,			"sceNpMatching2SignalingGetLocalNetInfo",		'i', "x"      },
+	{0x8CD109E7, &WrapI_IUUU<sceNpMatching2SignalingGetPeerNetInfo>,		"sceNpMatching2SignalingGetPeerNetInfo",		'i', "ixxx"   },
+	{0xDFEDB642, &WrapI_IUU<sceNpMatching2SignalingGetPeerNetInfoResult>,	"sceNpMatching2SignalingGetPeerNetInfoResult",	'i', "ixx"    },
+	{0x9462C05A, &WrapI_IU<sceNpMatching2SignalingCancelPeerNetInfo>,		"sceNpMatching2SignalingCancelPeerNetInfo",		'i', "ix"     },
+	{0x3892E9A6, &WrapI_IUUUU<sceNpMatching2SignalingGetConnectionInfo>,	"sceNpMatching2SignalingGetConnectionInfo",		'i', "ixxxx"  },
+	{0x6D6D0C75, &WrapI_I<sceNpMatching2SignalingGetConnectionStatus>,		"sceNpMatching2SignalingGetConnectionStatus",	'i', "i" 	  },
 
-	{0x2E61F6E1, &WrapI_IIII<sceNpMatching2Init>,						"sceNpMatching2Init",							'i', "iiii"   },
-	{0x8BF37D8C, &WrapI_V<sceNpMatching2Term>,							"sceNpMatching2Term",							'i', ""       },
-	{0x5030CC53, &WrapI_UUUI<sceNpMatching2CreateContext>,				"sceNpMatching2CreateContext",					'i', "xxxi"   },
-	{0x3DE70241, &WrapI_I<sceNpMatching2DestroyContext>,				"sceNpMatching2DestroyContext",					'i', "i"      },
-	{0x190FF903, &WrapI_I<sceNpMatching2ContextStart>,					"sceNpMatching2ContextStart",					'i', "i"      },
-	{0x2B3892FC, &WrapI_I<sceNpMatching2ContextStop>,					"sceNpMatching2ContextStop",					'i', "i"      },
+	{0x2E61F6E1, &WrapI_IIII<sceNpMatching2Init>,							"sceNpMatching2Init",							'i', "iiii"   },
+	{0x8BF37D8C, &WrapI_V<sceNpMatching2Term>,								"sceNpMatching2Term",							'i', ""       },
+	{0x5030CC53, &WrapI_UUUI<sceNpMatching2CreateContext>,					"sceNpMatching2CreateContext",					'i', "xxxi"   },
+	{0x3DE70241, &WrapI_I<sceNpMatching2DestroyContext>,					"sceNpMatching2DestroyContext",					'i', "i"      },
+	{0x190FF903, &WrapI_I<sceNpMatching2ContextStart>,						"sceNpMatching2ContextStart",					'i', "i"      },
+	{0x2B3892FC, &WrapI_I<sceNpMatching2ContextStop>,						"sceNpMatching2ContextStop",					'i', "i"      },
 
-	{0x1421514B, nullptr,												"sceNpMatching2SetDefaultRoomEventOptParam",	'i', ""		  },
-	{0xD13491AB, nullptr,												"sceNpMatching2SetDefaultRoomMessageOptParam",	'i', "" 	  },
-	{0xE6C93DBD, nullptr,												"sceNpMatching2SetRoomDataInternal",			'i', "" 	  },
-	{0xE313E586, nullptr,												"sceNpMatching2GetRoomDataInternal",			'i', "" 	  },
-	{0xEF683F4F, nullptr,												"sceNpMatching2GetRoomDataInternalLocal",		'i', "" 	  },
-	{0xD7D4AEB2, &WrapI_IUUU<sceNpMatching2SetRoomDataExternal>,		"sceNpMatching2SetRoomDataExternal",			'i', "ixxx"   },
-	{0x12C5A111, nullptr,												"sceNpMatching2GetRoomDataExternalList",		'i', ""		  },
-	{0xF739BE92, nullptr,												"sceNpMatching2GetRoomPasswordLocal",			'i', "" 	  },
+	{0x1421514B, nullptr,													"sceNpMatching2SetDefaultRoomEventOptParam",	'i', ""       },
+	{0xD13491AB, nullptr,													"sceNpMatching2SetDefaultRoomMessageOptParam",	'i', ""       },
+	{0xE6C93DBD, &WrapI_IUUU<sceNpMatching2SetRoomDataInternal>,			"sceNpMatching2SetRoomDataInternal",			'i', "ixxx"   },
+	{0xE313E586, &WrapI_IUUU<sceNpMatching2GetRoomDataInternal>,			"sceNpMatching2GetRoomDataInternal",			'i', "ixxx"   },
+	{0xEF683F4F, nullptr,													"sceNpMatching2GetRoomDataInternalLocal",		'i', ""       },
+	{0xD7D4AEB2, &WrapI_IUUU<sceNpMatching2SetRoomDataExternal>,			"sceNpMatching2SetRoomDataExternal",			'i', "ixxx"   },
+	{0x12C5A111, &WrapI_IUUU<sceNpMatching2GetRoomDataExternalList>,		"sceNpMatching2GetRoomDataExternalList",		'i', "ixxx"   },
+	{0xF739BE92, &WrapI_IUUU<sceNpMatching2GetRoomPasswordLocal>,			"sceNpMatching2GetRoomPasswordLocal",			'i', "ixxx"   },
 
-	{0xAAD0946A, &WrapI_IUUUUU<sceNpMatching2CreateJoinRoom>,			"sceNpMatching2CreateJoinRoom",					'i', "ixxxxx" },
-	{0x7BBFC427, nullptr,												"sceNpMatching2JoinRoom",						'i', "" 	  },
-	{0xC870535A, &WrapI_IUUU<sceNpMatching2LeaveRoom>,					"sceNpMatching2LeaveRoom",						'i', "ixxx"   },
-	{0x81C13E6D, &WrapI_IUUU<sceNpMatching2SearchRoom>,					"sceNpMatching2SearchRoom",						'i', "ixxx"   },
-	{0xF940D9AD, nullptr,												"sceNpMatching2SendRoomMessage",				'i', "" 	  },
-	{0x55F7837F, &WrapI_IUUU<sceNpMatching2SendRoomChatMessage>,		"sceNpMatching2SendRoomChatMessage",			'i', "ixxx"   },
-	{0x495E97BD, nullptr,												"sceNpMatching2GrantRoomOwner",					'i', "" 	  },
+	{0xAAD0946A, &WrapI_IUUUUU<sceNpMatching2CreateJoinRoom>,				"sceNpMatching2CreateJoinRoom",					'i', "ixxxxx" },
+	{0x7BBFC427, &WrapI_IUUU<sceNpMatching2JoinRoom>,						"sceNpMatching2JoinRoom",						'i', "ixxx"   },
+	{0xC870535A, &WrapI_IUUU<sceNpMatching2LeaveRoom>,						"sceNpMatching2LeaveRoom",						'i', "ixxx"   },
+	{0x81C13E6D, &WrapI_IUUU<sceNpMatching2SearchRoom>,						"sceNpMatching2SearchRoom",						'i', "ixxx"   },
+	{0xF940D9AD, &WrapI_IUUU<sceNpMatching2SendRoomMessage>,				"sceNpMatching2SendRoomMessage",				'i', "ixxx"   },
+	{0x55F7837F, &WrapI_IUUU<sceNpMatching2SendRoomChatMessage>,			"sceNpMatching2SendRoomChatMessage",			'i', "ixxx"   },
+	{0x495E97BD, &WrapI_IUUU<sceNpMatching2GrantRoomOwner>,					"sceNpMatching2GrantRoomOwner",					'i', "ixxx"   },
 
-	{0x80F61558, nullptr,												"sceNpMatching2GetRoomMemberIdListLocal",		'i', "" 	  },
-	{0x7DAA8A90, nullptr,												"sceNpMatching2SetRoomMemberDataInternal",		'i', "" 	  },
-	{0xF22C7ADC, nullptr,												"sceNpMatching2GetRoomMemberDataInternalLocal",	'i', "" 	  },
-	{0xA5775DBF, nullptr,												"sceNpMatching2GetRoomMemberDataInternal",		'i', "" 	  },
-	{0x5C7DB6A4, nullptr,												"sceNpMatching2GetRoomMemberDataInternalList",	'i', "" 	  },
-	{0xFBF494C0, nullptr,												"sceNpMatching2GetRoomMemberDataExternalList",	'i', "" 	  },
-	{0x97529ECC, nullptr,												"sceNpMatching2KickoutRoomMember",				'i', "" 	  },
+	{0x80F61558, &WrapI_IUUUU<sceNpMatching2GetRoomMemberIdListLocal>,		"sceNpMatching2GetRoomMemberIdListLocal",		'i', "ixxxx"  },
+	{0x7DAA8A90, &WrapI_IUUU<sceNpMatching2SetRoomMemberDataInternal>,		"sceNpMatching2SetRoomMemberDataInternal",		'i', "ixxx"   },
+	{0xF22C7ADC, &WrapI_IUUUUUUU<sceNpMatching2GetRoomMemberDataInternalLocal>,	"sceNpMatching2GetRoomMemberDataInternalLocal",	'i', "ixxxxxxx"   },
+	{0xA5775DBF, &WrapI_IUUU<sceNpMatching2GetRoomMemberDataInternal>,		"sceNpMatching2GetRoomMemberDataInternal",		'i', "ixxx"   },
+	{0x5C7DB6A4, nullptr,													"sceNpMatching2GetRoomMemberDataInternalList",	'i', ""       },
+	{0xFBF494C0, &WrapI_IUUU<sceNpMatching2GetRoomMemberDataExternalList>,	"sceNpMatching2GetRoomMemberDataExternalList",	'i', "ixxx"   },
+	{0x97529ECC, &WrapI_IUUU<sceNpMatching2KickoutRoomMember>,				"sceNpMatching2KickoutRoomMember",				'i', "ixxx"   },
 };
 
 void Register_sceNpMatching2()

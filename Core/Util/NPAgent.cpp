@@ -363,6 +363,7 @@ namespace net {
 		return false;
 	}
 #endif
+
 	void NPAgent::Disconnect() {
 		if ((intptr_t)sock_ != -1) {
 			canceled = true;
@@ -413,6 +414,26 @@ namespace net {
 	*/
 	char const hex_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
 
+	bool PSNAgent::Login() {
+		return false;
+	}
+	bool RPCNAgent::Login() {
+		// npid
+		// password
+		// token
+
+		// Send CommandType::Login, req_id, data, packet_data
+
+		// Get Reply
+		// online_name
+		// avatar_url
+		// user_id 
+		// friends (PS3)
+
+		// Disconnect on Error
+		// Disconnect on malformed data
+		return false;
+	}
 	int PSNAgent::GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World> *worldInfoOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npTitleId);
 #ifndef AGENT_TESTING

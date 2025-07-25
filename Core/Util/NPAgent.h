@@ -53,6 +53,7 @@ namespace net {
 		u8 GetStatus();
 		int GetID() { return ID; }
 
+		virtual bool Login() = 0;
 		virtual int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World> *worldInfoOut) = 0;
 		virtual int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) = 0;
 		virtual int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
@@ -76,6 +77,8 @@ namespace net {
 	public:
 		~PSNAgent();
 		PSNAgent(int serverId, std::string host, int port, u8 status = 2);
+
+		bool Login();
 		int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
 		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
@@ -86,6 +89,8 @@ namespace net {
 	public:
 		~RPCNAgent();
 		RPCNAgent(int serverId);
+
+		bool Login();
 		int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
 		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);

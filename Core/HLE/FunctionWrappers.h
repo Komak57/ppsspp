@@ -914,3 +914,10 @@ template<u32 func(void *, int)> void WrapU_VI() {
 	u32 retval = func(Memory::GetPointerWrite(PARAM(0)), PARAM(1));
 	RETURN(retval);
 }
+
+template<int func(int, u32, u32, u32, u32, u32, u32, u32)> void WrapI_IUUUUUUU() {
+	// sceNpMatching2GetRoomMemberDataInternalLocal
+	int retval = func(PARAM(0), PARAM(1), PARAM(2), PARAM(3), PARAM(4), PARAM(5), PARAM(6), PARAM(7));
+	RETURN(retval);
+}
+
