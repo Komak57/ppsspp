@@ -1377,10 +1377,10 @@ static u32 sceUtilityUnloadUsbModule(u32 module)
 	return hleNoLog(0);
 }
 
-static void sceUtilityPsnInitStart(int param_1)
+static void sceUtilityPsnInitStart(u32 paramPtr)
 {
 	// Related Flag for PSP2i => "JP0177-NPJH50332_00"
-	WARN_LOG_REPORT(Log::sceUtility, "UNIMPL sceUtilityPsnInitStart(%i)", param_1);
+	WARN_LOG_REPORT(Log::sceUtility, "UNIMPL sceUtilityPsnInitStart(0x%08x)", paramPtr);
 	return hleNoLogVoid();
 }
 
@@ -1500,7 +1500,7 @@ const HLEFunction sceUtility[] =
 	{0XCFE7C460, nullptr,                                          "sceUtility_CFE7C460",                    '?', ""   },
 
 	{0XC130D441, nullptr,                                          "sceUtilityPsnShutdownStart",             '?', ""   },
-	{ 0XA7BB7C67, &WrapV_I<sceUtilityPsnInitStart>,				   "sceUtilityPsnInitStart",                 'v', "x"  },
+	{ 0XA7BB7C67, &WrapV_U<sceUtilityPsnInitStart>,				   "sceUtilityPsnInitStart",                 'v', "x"  },
 	{0X0940A1B9, nullptr,                                          "sceUtilityPsnUpdate",                    '?', ""   },
 	{ 0X094198B8, &WrapI_V<sceUtilityPsnGetStatus>,				   "sceUtilityPsnGetStatus",                 'i', ""   },
 
