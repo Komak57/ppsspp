@@ -190,6 +190,20 @@ namespace net {
 				i++;
 			}
 		}
+		return 0;
+	}
+	int RPCNAgent::GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
+		serversPtr->emplace(1, net::CreateNPAgent(net::NPAgentType::PSN, 1, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		serversPtr->emplace(2, net::CreateNPAgent(net::NPAgentType::PSN, 2, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		serversPtr->emplace(3, net::CreateNPAgent(net::NPAgentType::PSN, 3, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		serversPtr->emplace(4, net::CreateNPAgent(net::NPAgentType::PSN, 4, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		serversPtr->emplace(5, net::CreateNPAgent(net::NPAgentType::PSN, 5, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		serversPtr->emplace(6, net::CreateNPAgent(net::NPAgentType::PSN, 6, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		serversPtr->emplace(7, net::CreateNPAgent(net::NPAgentType::PSN, 7, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		serversPtr->emplace(8, net::CreateNPAgent(net::NPAgentType::PSN, 8, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		serversPtr->emplace(9, net::CreateNPAgent(net::NPAgentType::PSN, 9, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		serversPtr->emplace(10, net::CreateNPAgent(net::NPAgentType::PSN, 10, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		return 0;
 	}
 
 	bool NPAgent::Resolve(DNSType type) {
@@ -434,7 +448,8 @@ namespace net {
 		// Disconnect on malformed data
 		return false;
 	}
-	int PSNAgent::GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World> *worldInfoOut) {
+
+	int PSNAgent::GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npTitleId);
 #ifndef AGENT_TESTING
 		if (sock_ <= 0) {
@@ -511,6 +526,7 @@ namespace net {
 		}
 		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
 #endif
+		worldInfoOut->clear();
 		// Should get an array of worlds
 		SceNpMatching2World worldInfo = SceNpMatching2World();
 		worldInfo.worldId = 1;
@@ -526,11 +542,30 @@ namespace net {
 		for(i = 0; i < 32; i++)
 			worldInfo.entitlementId[i] = 0;
 
-		worldInfoOut->push_back(worldInfo);
+		worldInfoOut->emplace(worldInfo.worldId, worldInfo);
 
 		return 0;
 	}
-	int RPCNAgent::GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World>* worldInfoOut) {
+	int RPCNAgent::GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) {
+
+		worldInfoOut->clear();
+		// Should get an array of worlds
+		SceNpMatching2World worldInfo = SceNpMatching2World();
+		worldInfo.worldId = 1;
+
+		worldInfo.numOfLobby = 2;
+		worldInfo.curNumOfTotalLobbyMember = 0;
+		worldInfo.maxNumOfTotalLobbyMember = 12;
+
+		worldInfo.curNumOfRoom = 0;
+		worldInfo.curNumOfTotalRoomMember = 0;
+
+		worldInfo.withEntitlementId = 0;
+		int i;
+		for (i = 0; i < 32; i++)
+			worldInfo.entitlementId[i] = 0;
+
+		worldInfoOut->emplace(worldInfo.worldId, worldInfo);
 		return 0;
 	}
 
@@ -593,9 +628,11 @@ namespace net {
 		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
 #endif
 
+		roomDataOut->roomId = 0; // No Room
 		return 0;
 	}
 	int RPCNAgent::SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) {
+		roomDataOut->roomId = 0; // No Room
 		return 0;
 	}
 
@@ -657,12 +694,19 @@ namespace net {
 		}
 		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
 #endif
+		roomDataOut->roomId = 1;
 
 		return 0;
 	}
-
 	int RPCNAgent::CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) {
+		roomDataOut->roomId = 1;
 		return 0;
 	}
 
+	int PSNAgent::GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut) {
+		return 0;
+	}
+	int RPCNAgent::GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut) {
+		return 0;
+	}
 }

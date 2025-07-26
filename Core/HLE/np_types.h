@@ -572,8 +572,61 @@ enum PS3Matching2RequestEvent
 	SCE_NP_MATCHING2_REQUEST_EVENT_SignalingGetPingInfo = 0x0e01,
 };
 
+// Based on decompiled np_matching2.prx, commented with syscalls where the event id is being used
+#define PSP_NP_MATCHING2_EVENT_0001	0x0001	// GetServerInfo
+#define PSP_NP_MATCHING2_EVENT_0002	0x0002	// GetWorldInfoList
+#define PSP_NP_MATCHING2_EVENT_0003	0x0003	// SetUserInfo
+#define PSP_NP_MATCHING2_EVENT_0004	0x0004	// GetUserInfoList
+#define PSP_NP_MATCHING2_EVENT_0005	0x0005	// GetRoomMemberDataExternalList
+#define PSP_NP_MATCHING2_EVENT_0006	0x0006	// SetRoomDataExternal
+#define PSP_NP_MATCHING2_EVENT_0007	0x0007	// GetRoomDataExternalList
+
+#define PSP_NP_MATCHING2_EVENT_0101	0x0101	// CreateJoinRoom
+#define PSP_NP_MATCHING2_EVENT_0102	0x0102	// JoinRoom
+#define PSP_NP_MATCHING2_EVENT_0103	0x0103	// LeaveRoom
+#define PSP_NP_MATCHING2_EVENT_0104	0x0104	// GrantRoomOwner
+#define PSP_NP_MATCHING2_EVENT_0105	0x0105	// KickoutRoomMember
+#define PSP_NP_MATCHING2_EVENT_0106	0x0106	// SearchRoom
+#define PSP_NP_MATCHING2_EVENT_0107	0x0107	// SendRoomChatMessage
+#define PSP_NP_MATCHING2_EVENT_0108	0x0108	// SendRoomMessage, also used on various places (internal function)
+#define PSP_NP_MATCHING2_EVENT_0109	0x0109	// SetRoomDataInternal
+#define PSP_NP_MATCHING2_EVENT_010A	0x010A	// GetRoomDataInternal
+#define PSP_NP_MATCHING2_EVENT_010B	0x010B	// SetRoomMemberDataInternal
+#define PSP_NP_MATCHING2_EVENT_010C	0x010C	// GetRoomMemberDataInternal
+#define PSP_NP_MATCHING2_EVENT_010D	0x010D	// GetRoomMemberDataInternalList
+#define PSP_NP_MATCHING2_EVENT_010E	0x010E	// SetSignalingOptParam
+
+#define PSP_NP_MATCHING2_EVENT_A102	0xA102	// Used on various places (internal function)
+
+// Either this is an ID, state/status, flags, or might be size of data?
+#define PSP_NP_MATCHING2_STATE_1001	0x1001
+#define PSP_NP_MATCHING2_STATE_1006	0x1006
+#define PSP_NP_MATCHING2_STATE_1007	0x1007
+#define PSP_NP_MATCHING2_STATE_1008	0x1008
+
+#define PSP_NP_MATCHING2_STATE_1200	0x1200
+#define PSP_NP_MATCHING2_STATE_1206	0x1206
+#define PSP_NP_MATCHING2_STATE_1207	0x1207
+#define PSP_NP_MATCHING2_STATE_1208	0x1208
+#define PSP_NP_MATCHING2_STATE_1209	0x1209
+#define PSP_NP_MATCHING2_STATE_120B	0x120B
+#define PSP_NP_MATCHING2_STATE_120C	0x120C
+
+#define PSP_NP_MATCHING2_STATE_3202	0x3202
+#define PSP_NP_MATCHING2_STATE_3203	0x3203
+#define PSP_NP_MATCHING2_STATE_3204	0x3204
+#define PSP_NP_MATCHING2_STATE_3205	0x3205
+#define PSP_NP_MATCHING2_STATE_3206	0x3206
+#define PSP_NP_MATCHING2_STATE_3207	0x3207
+#define PSP_NP_MATCHING2_STATE_3208	0x3208
+#define PSP_NP_MATCHING2_STATE_320A	0x320A
+#define PSP_NP_MATCHING2_STATE_3210	0x3210
+#define PSP_NP_MATCHING2_STATE_3211	0x3211
+
+#define PSP_NP_MATCHING2_MAX_CONTEXTID	7;
+
 // Constants for matching functions and structures
-enum PS3Matching2
+enum
 {
 	SCE_NP_MATCHING2_ALLOWED_USER_MAX = 100,
 	SCE_NP_MATCHING2_BLOCKED_USER_MAX = 100,
@@ -637,58 +690,6 @@ enum PS3Matching2
 	SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_LobbyMessageInfo = 1790,
 	SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_LobbyInvitationInfo = 870,
 };
-// Based on decompiled np_matching2.prx, commented with syscalls where the event id is being used
-#define PSP_NP_MATCHING2_EVENT_0001	0x0001	// GetServerInfo
-#define PSP_NP_MATCHING2_EVENT_0002	0x0002	// GetWorldInfoList
-#define PSP_NP_MATCHING2_EVENT_0003	0x0003	// SetUserInfo
-#define PSP_NP_MATCHING2_EVENT_0004	0x0004	// GetUserInfoList
-#define PSP_NP_MATCHING2_EVENT_0005	0x0005	// GetRoomMemberDataExternalList
-#define PSP_NP_MATCHING2_EVENT_0006	0x0006	// SetRoomDataExternal
-#define PSP_NP_MATCHING2_EVENT_0007	0x0007	// GetRoomDataExternalList
-
-#define PSP_NP_MATCHING2_EVENT_0101	0x0101	// CreateJoinRoom
-#define PSP_NP_MATCHING2_EVENT_0102	0x0102	// JoinRoom
-#define PSP_NP_MATCHING2_EVENT_0103	0x0103	// LeaveRoom
-#define PSP_NP_MATCHING2_EVENT_0104	0x0104	// GrantRoomOwner
-#define PSP_NP_MATCHING2_EVENT_0105	0x0105	// KickoutRoomMember
-#define PSP_NP_MATCHING2_EVENT_0106	0x0106	// SearchRoom
-#define PSP_NP_MATCHING2_EVENT_0107	0x0107	// SendRoomChatMessage
-#define PSP_NP_MATCHING2_EVENT_0108	0x0108	// SendRoomMessage, also used on various places (internal function)
-#define PSP_NP_MATCHING2_EVENT_0109	0x0109	// SetRoomDataInternal
-#define PSP_NP_MATCHING2_EVENT_010A	0x010A	// GetRoomDataInternal
-#define PSP_NP_MATCHING2_EVENT_010B	0x010B	// SetRoomMemberDataInternal
-#define PSP_NP_MATCHING2_EVENT_010C	0x010C	// GetRoomMemberDataInternal
-#define PSP_NP_MATCHING2_EVENT_010D	0x010D	// GetRoomMemberDataInternalList
-#define PSP_NP_MATCHING2_EVENT_010E	0x010E	// SetSignalingOptParam
-
-#define PSP_NP_MATCHING2_EVENT_A102	0xA102	// Used on various places (internal function)
-
-// Either this is an ID, state/status, flags, or might be size of data?
-#define PSP_NP_MATCHING2_STATE_1001	0x1001
-#define PSP_NP_MATCHING2_STATE_1006	0x1006
-#define PSP_NP_MATCHING2_STATE_1007	0x1007
-#define PSP_NP_MATCHING2_STATE_1008	0x1008
-
-#define PSP_NP_MATCHING2_STATE_1200	0x1200
-#define PSP_NP_MATCHING2_STATE_1206	0x1206
-#define PSP_NP_MATCHING2_STATE_1207	0x1207
-#define PSP_NP_MATCHING2_STATE_1208	0x1208
-#define PSP_NP_MATCHING2_STATE_1209	0x1209
-#define PSP_NP_MATCHING2_STATE_120B	0x120B
-#define PSP_NP_MATCHING2_STATE_120C	0x120C
-
-#define PSP_NP_MATCHING2_STATE_3202	0x3202
-#define PSP_NP_MATCHING2_STATE_3203	0x3203
-#define PSP_NP_MATCHING2_STATE_3204	0x3204
-#define PSP_NP_MATCHING2_STATE_3205	0x3205
-#define PSP_NP_MATCHING2_STATE_3206	0x3206
-#define PSP_NP_MATCHING2_STATE_3207	0x3207
-#define PSP_NP_MATCHING2_STATE_3208	0x3208
-#define PSP_NP_MATCHING2_STATE_320A	0x320A
-#define PSP_NP_MATCHING2_STATE_3210	0x3210
-#define PSP_NP_MATCHING2_STATE_3211	0x3211
-
-#define PSP_NP_MATCHING2_MAX_CONTEXTID	7;
 
 // Server status
 enum
@@ -814,6 +815,12 @@ struct RoomInfo {
 	u8 Status;
 	std::string Host;
 	u32_le IPAddr = 910526074; // 910526074 || 0x3645867a || 54.69.134.122 || elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net
+};
+
+struct SceNpMatching2ServerInfo {
+	SceNpMatching2ServerId id;;
+	SceNpMatching2ServerStatus status;
+	u8 padding;
 };
 
 // World
@@ -1061,10 +1068,12 @@ struct SceNpMatching2SearchRoomResponse
 	u32 roomDataExternal;
 };
 
-struct SceNpUserInformation;
-struct SceNpMatching2RoomGroup;
-struct SceNpMatching2IntAttr;
-struct SceNpMatching2BinAttr;
+struct SceNpMatching2Data {
+	u32 worldInfoPtr;
+	std::map<u32, SceNpMatching2World> worlds;
+	u32 roomDataPtr;
+	std::map<u32, SceNpMatching2RoomDataInternal> rooms;
+};
 
 // External room data
 struct SceNpMatching2RoomDataExternal
@@ -1093,5 +1102,44 @@ struct SceNpMatching2RoomDataExternal
 	SceNpMatching2BinAttr* roomBinAttrExternal;
 	u32 roomBinAttrExternalNum;
 };
+
+// Internal room data request parameters
+struct SceNpMatching2GetRoomDataInternalRequest
+{
+	SceNpMatching2RoomId roomId;
+	SceNpMatching2AttributeId* attrId; //SceNpMatching2AttributeId
+	u32 attrIdNum;
+};
+// Internal room data request response data
+struct SceNpMatching2GetRoomDataInternalResponse
+{
+	u32 roomDataInternal; // SceNpMatching2RoomDataInternal
+};
+
+// Set group password
+struct SceNpMatching2RoomGroupPasswordConfig
+{
+	SceNpMatching2RoomGroupId groupId;
+	u8 withPassword;
+	u8 padding[1];
+};
+
+// Internal room data configuration request parameters
+struct SceNpMatching2SetRoomDataInternalRequest
+{
+	SceNpMatching2RoomId roomId;
+	SceNpMatching2FlagAttr flagFilter;
+	SceNpMatching2FlagAttr flagAttr;
+	SceNpMatching2BinAttr* roomBinAttrInternal;
+	u32 roomBinAttrInternalNum;
+	SceNpMatching2RoomGroupPasswordConfig* passwordConfig;
+	u32 passwordConfigNum;
+	SceNpMatching2RoomPasswordSlotMask* passwordSlotMask;
+	SceNpMatching2RoomMemberId* ownerPrivilegeRank;
+	u32 ownerPrivilegeRankNum;
+	u8 padding[4];
+};
+
+
 
 #pragma pack(pop)

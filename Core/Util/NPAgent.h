@@ -51,18 +51,20 @@ namespace net {
 		void Disconnect();
 
 		u8 GetStatus();
-		int GetID() { return ID; }
+		//int GetID() { return ID; }
+		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
 
 		virtual bool Login() = 0;
-		virtual int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World> *worldInfoOut) = 0;
+		virtual int GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) = 0;
 		virtual int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) = 0;
 		virtual int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
+		virtual int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { return sock_; }
 
 	protected:
-		int ID;
+		u16 ID;
 		uintptr_t sock_ = -1;
 		bool canceled = false;
 
@@ -78,11 +80,12 @@ namespace net {
 		~PSNAgent();
 		PSNAgent(int serverId, std::string host, int port, u8 status = 2);
 
+		static int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
 		bool Login();
-		int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World>* worldInfoOut);
+		int GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
 		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
-		static int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
+		int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut);
 	};
 
 	class RPCNAgent : public NPAgent {
@@ -90,10 +93,12 @@ namespace net {
 		~RPCNAgent();
 		RPCNAgent(int serverId);
 
+		static int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
 		bool Login();
-		int GetWorldInfo(char npTitleId[], std::vector<SceNpMatching2World>* worldInfoOut);
+		int GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
 		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
+		int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut);
 	};
 
 	inline std::unique_ptr<NPAgent> CreateNPAgent(NPAgentType type, int serverId, std::string host = "", int port = 0, u8 status = 2) {
