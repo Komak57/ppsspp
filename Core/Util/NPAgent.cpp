@@ -6,10 +6,11 @@
 #include "Common/TimeUtil.h"
 #include "Common/File/FileDescriptor.h"
 #include "Common/SysError.h"
-#include "Common/Net/HTTPClient.h"
 #include <Net\NetBuffer.h>
 #include <Core\HLE\HLE.h>
-#define AGENT_TESTING
+#include <mbedtls\debug.h>
+#include <mbedtls\error.h>
+//#define AGENT_TESTING
 
 bool IsBigEndian() {
 	uint16_t number = 0x1;
@@ -62,156 +63,123 @@ void Packet::Write(std::string data) {
 }
 
 namespace net {
-	PSNAgent::PSNAgent(int serverId, std::string host, int port, u8 status) {
-		this->ID = serverId;
-		this->host_ = host;
-		this->port_ = port;
-		this->status = status;
-	}
-	// FIXME: Populate with actual connection credentials for RPCN
-	RPCNAgent::RPCNAgent(int serverId) {
-		this->ID = serverId;
-		this->host_ = "host";
-		this->port_ = 0;
-		this->status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
-	}
+	int NPAuthAgent::InitializeSSL(std::string certPEM) {
+		WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::InitializeSSL()");
 
-	PSNAgent::~PSNAgent() {
-		Disconnect();
-	}
+		mbedtls_net_init(&netCtx);
+		mbedtls_ssl_init(&sslCtx);
+		mbedtls_ssl_config_init(&sslConfig);
+		mbedtls_ctr_drbg_init(&ctrDrbg);
+		mbedtls_entropy_init(&entropy);
+		mbedtls_debug_set_threshold(4);
 
-	RPCNAgent::~RPCNAgent() {
-		Disconnect();
-	}
-
-	int PSNAgent::GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>> *serversPtr) {
-		Url url("http://static-resource.np.community.playstation.net/np/resource/psp-title/" + std::string(npTitleId.data) + "_00/matching/" + std::string(npTitleId.data) + "_00-matching.xml");
-		http::Client client;
-		bool cancelled = false;
-		net::RequestProgress progress(&cancelled);
-		if (!client.Resolve(url.Host().c_str(), url.Port())) {
-			return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "HTTP failed to resolve %s", url.Resource().c_str());
+		if (mbedtls_ctr_drbg_seed(&ctrDrbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
+			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to seed RNG");
+			return -1;
 		}
 
-		client.SetDataTimeout(20.0);
-		if (client.Connect()) {
-			char requestHeaders[4096];
-			snprintf(requestHeaders, sizeof(requestHeaders),
-				"User-Agent: PS3Community-agent/1.0.0 libhttp/1.0.0\r\n");
-
-			DEBUG_LOG(Log::sceNet, "GET URI: %s", url.ToString().c_str());
-			http::RequestParams req(url.Resource(), "*/*");
-			int err = client.SendRequest("GET", req, requestHeaders, &progress);
-			if (err < 0) {
-				client.Disconnect();
-				return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_FORBIDDEN, "HTTP GET Error = %d", err);
-			}
-
-			net::Buffer readbuf;
-			std::vector<std::string> responseHeaders;
-			int code = client.ReadResponse(&readbuf, &progress);
-			if (code != 200) {
-				client.Disconnect();
-				return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_INTERNAL_SERVER_ERROR, "HTTP Error Code = %d", code);
-			}
-			client.Disconnect();
-
-			std::string entity;
-			size_t readBytes = readbuf.size();
-			readbuf.Take(readBytes, &entity);
-
-			INFO_LOG(Log::sceNet, "Entity Data: %d", entity);
-
-			// TODO: Use XML Parser to get the Tag and it's attributes instead of searching for keywords on the string
-			std::string text;
-			size_t ofs = entity.find("titleid=");
-			if (ofs == std::string::npos)
-				return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "titleid not found");
-
-			ofs += 9;
-			size_t ofs2 = entity.find('"', ofs);
-			text = entity.substr(ofs, ofs2 - ofs);
-			INFO_LOG(Log::sceNet, "%s - Title ID: %s", __FUNCTION__, text.c_str());
-
-			int i = 1;
-			while (true) {
-				ofs = entity.find("<agent-fqdn", ++ofs2);
-				if (ofs == std::string::npos) {
-					if (i == 1)
-						return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent-fqdn not found");
-					else
-						break;
-				}
-
-				size_t frontPos = ++ofs;
-				ofs = entity.find("id=", frontPos);
-				if (ofs == std::string::npos)
-					return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent id not found");
-
-				ofs += 4;
-				ofs2 = entity.find('"', ofs);
-				text = entity.substr(ofs, ofs2 - ofs);
-				int server_id = std::stoi(text.c_str());
-				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d ID: %s", __FUNCTION__, i, text.c_str());
-
-				ofs = entity.find("port=", frontPos);
-				if (ofs == std::string::npos)
-					return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent port not found");
-
-				ofs += 6;
-				ofs2 = entity.find('"', ofs);
-				text = entity.substr(ofs, ofs2 - ofs);
-				int server_port = std::stoi(text.c_str());
-				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Port: %s", __FUNCTION__, i, text.c_str());
-
-				ofs = entity.find("status=", frontPos);
-				if (ofs == std::string::npos)
-					return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent status not found");
-
-				ofs += 8;
-				ofs2 = entity.find('"', ofs);
-				text = entity.substr(ofs, ofs2 - ofs);
-				std::string alive = { 'a','l','i','v','e' };
-				int server_status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
-				if (text == alive)
-					server_status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
-				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Status: %s", __FUNCTION__, i, text.c_str());
-
-				ofs = entity.find('>', ++ofs2);
-				if (ofs == std::string::npos)
-					return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent host not found");
-
-				ofs2 = entity.find("</agent-fqdn", ++ofs);
-				text = entity.substr(ofs, ofs2 - ofs);
-				std::string server_host = text;
-				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Host: %s", __FUNCTION__, i, text.c_str());
-
-				serversPtr->emplace(server_id, net::CreateNPAgent(net::NPAgentType::PSN, server_id, server_host, server_port, server_status));
-				i++;
-			}
+		// Note: certPEM MUST be pointing to a valid certificate, or it will cause a strlen crash
+		mbedtls_x509_crt_init(&caCert);
+		int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
+		if (ret < 0) {
+			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to parse cert: -0x%04x", -ret);
+			return -1;
 		}
+
+		// Setup SSL config
+		if (mbedtls_ssl_config_defaults(&sslConfig,
+			MBEDTLS_SSL_IS_CLIENT,
+			MBEDTLS_SSL_TRANSPORT_STREAM,
+			MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
+			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to set SSL config defaults");
+			return -1;
+		}
+
+		/* OPTIONAL is not optimal for security,
+		 * but makes interop easier in this simplified scenario */
+		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_OPTIONAL);
+		mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
+		mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
+		mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, NULL);
+
+		// Check compiled Ciphers
+		/*const int* ciphers = mbedtls_ssl_list_ciphersuites();
+		int cipherCount = 0;
+		for (const int* c = ciphers; *c != 0; ++c)
+			++cipherCount;
+		INFO_LOG(Log::sceNet, "sceHttpsInit: Parsing %i ciphers", cipherCount);
+		for (int i = 0; i < cipherCount; i++) {
+			INFO_LOG(Log::sceNet, "sceHttpsInit: ciphers[%i] = 0x%04x = %s", i, ciphers[i], mbedtls_ssl_get_ciphersuite_name(ciphers[i]));
+		}*/
+
+		// Limit to TLS 1.0 - TLS 1.2 to match Hardware Limitations
+		mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
+		mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
+
+		SSLEnabled = true;
 		return 0;
 	}
-	int RPCNAgent::GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
-		serversPtr->emplace(1, net::CreateNPAgent(net::NPAgentType::PSN, 1, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
-		serversPtr->emplace(2, net::CreateNPAgent(net::NPAgentType::PSN, 2, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
-		serversPtr->emplace(3, net::CreateNPAgent(net::NPAgentType::PSN, 3, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
-		serversPtr->emplace(4, net::CreateNPAgent(net::NPAgentType::PSN, 4, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
-		serversPtr->emplace(5, net::CreateNPAgent(net::NPAgentType::PSN, 5, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
-		serversPtr->emplace(6, net::CreateNPAgent(net::NPAgentType::PSN, 6, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
-		serversPtr->emplace(7, net::CreateNPAgent(net::NPAgentType::PSN, 7, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
-		serversPtr->emplace(8, net::CreateNPAgent(net::NPAgentType::PSN, 8, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
-		serversPtr->emplace(9, net::CreateNPAgent(net::NPAgentType::PSN, 9, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
-		serversPtr->emplace(10, net::CreateNPAgent(net::NPAgentType::PSN, 10, "revurb.us", 3740, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+	int NPAgent::InitializeSSL(std::string certPEM) {
+		WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::InitializeSSL()");
+
+		mbedtls_net_init(&netCtx);
+		mbedtls_ssl_init(&sslCtx);
+		mbedtls_ssl_config_init(&sslConfig);
+		mbedtls_ctr_drbg_init(&ctrDrbg);
+		mbedtls_entropy_init(&entropy);
+		mbedtls_debug_set_threshold(4);
+
+		if (mbedtls_ctr_drbg_seed(&ctrDrbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
+			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to seed RNG");
+			return -1;
+		}
+
+		// Note: certPEM MUST be pointing to a valid certificate, or it will cause a strlen crash
+		mbedtls_x509_crt_init(&caCert);
+		int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
+		if (ret < 0) {
+			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to parse cert: -0x%04x", -ret);
+			return -1;
+		}
+
+		// Setup SSL config
+		if (mbedtls_ssl_config_defaults(&sslConfig,
+			MBEDTLS_SSL_IS_CLIENT,
+			MBEDTLS_SSL_TRANSPORT_STREAM,
+			MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
+			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to set SSL config defaults");
+			return -1;
+		}
+
+		/* OPTIONAL is not optimal for security,
+		 * but makes interop easier in this simplified scenario */
+		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_OPTIONAL);
+		mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
+		mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
+		mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, NULL);
+
+		// Check compiled Ciphers
+		/*const int* ciphers = mbedtls_ssl_list_ciphersuites();
+		int cipherCount = 0;
+		for (const int* c = ciphers; *c != 0; ++c)
+			++cipherCount;
+		INFO_LOG(Log::sceNet, "sceHttpsInit: Parsing %i ciphers", cipherCount);
+		for (int i = 0; i < cipherCount; i++) {
+			INFO_LOG(Log::sceNet, "sceHttpsInit: ciphers[%i] = 0x%04x = %s", i, ciphers[i], mbedtls_ssl_get_ciphersuite_name(ciphers[i]));
+		}*/
+
+		// Limit to TLS 1.0 - TLS 1.2 to match Hardware Limitations
+		mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
+		mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
+
+		SSLEnabled = true;
 		return 0;
 	}
 
-	bool NPAgent::Resolve(DNSType type) {
-#ifndef AGENT_TESTING
+	bool NPAuthAgent::Resolve(DNSType type) {
 		if ((intptr_t)sock_ != -1) {
 			return false;
 		}
-#endif
 		if (status == SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE) {
 			ERROR_LOG(Log::IO, "Resolve: Server not available");
 			return false;
@@ -223,7 +191,6 @@ namespace net {
 
 		char port_str[16];
 		snprintf(port_str, sizeof(port_str), "%d", port_);
-#ifndef AGENT_TESTING
 		std::string err;
 		if (!net::DNSResolve(host_.c_str(), port_str, &resolved_, err, type)) {
 			switch (type) {
@@ -243,7 +210,43 @@ namespace net {
 			status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
 			return false;
 		}
-#endif
+		return true;
+	}
+
+	bool NPAgent::Resolve(DNSType type) {
+		if ((intptr_t)sock_ != -1) {
+			return false;
+		}
+		if (status == SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE) {
+			ERROR_LOG(Log::IO, "Resolve: Server not available");
+			return false;
+		}
+		if (!host_.c_str() || port_ < 1 || port_ > 65535) {
+			ERROR_LOG(Log::IO, "Resolve: Unable to resolve %s:%d", host_.c_str(), port_);
+			return false;
+		}
+
+		char port_str[16];
+		snprintf(port_str, sizeof(port_str), "%d", port_);
+		std::string err;
+		if (!net::DNSResolve(host_.c_str(), port_str, &resolved_, err, type)) {
+			switch (type) {
+			case DNSType::IPV4:
+				WARN_LOG(Log::IO, "Failed to resolve host '%s': '%s' (IPV4)", host_.c_str(), err.c_str());
+				break;
+			case DNSType::IPV6:
+				WARN_LOG(Log::IO, "Failed to resolve host '%s': '%s' (IPV6)", host_.c_str(), err.c_str());
+				break;
+			case DNSType::ANY:
+				WARN_LOG(Log::IO, "Failed to resolve host '%s': '%s' (ANY)", host_.c_str(), err.c_str());
+				break;
+			default:
+				WARN_LOG(Log::IO, "Failed to resolve host '%s': '%s' (N/A)", host_.c_str(), err.c_str());
+				break;
+			}
+			status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
+			return false;
+		}
 		return true;
 	}
 
@@ -258,13 +261,10 @@ namespace net {
 			break;
 		}
 	}
-#ifdef AGENT_TESTING
-	bool NPAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
-		NOTICE_LOG(Log::sceNet, "NPAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
-		return true;
-	}
-#else
-	bool NPAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
+
+	bool NPAuthAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
+		if (SSLEnabled)
+			return SSLConnect(maxTries, timeout, cancelConnect);
 		NOTICE_LOG(Log::sceNet, "NPAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 		if (port_ <= 0) {
 			ERROR_LOG(Log::IO, "Bad port");
@@ -321,6 +321,11 @@ namespace net {
 				if (maxfd < sock + 1) {
 					maxfd = sock + 1;
 				}
+				conn = possible;
+
+				char addrStr[128]{};
+				FormatAddr(addrStr, sizeof(addrStr), possible);
+				NOTICE_LOG(Log::sceNet, "NPAgent Found Possible at %s", addrStr);
 			}
 
 			int selectResult = 0;
@@ -355,6 +360,7 @@ namespace net {
 					}
 				}
 
+				NOTICE_LOG(Log::sceNet, "NPAgent Connected!");
 				// Great, now we're good to go.
 				return true;
 			}
@@ -374,339 +380,643 @@ namespace net {
 		}
 
 		// Nothing connected, unfortunately.
+		NOTICE_LOG(Log::sceNet, "NPAgent Connection Failed!");
 		return false;
 	}
-#endif
 
+	bool NPAuthAgent::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
+		WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+		if (port_ <= 0) {
+			ERROR_LOG(Log::IO, "SSLConnect - Bad port");
+			return false;
+		}
+		if (connected) {
+			mbedtls_ssl_session_reset(&sslCtx);
+			mbedtls_ssl_config_free(&sslConfig);
+
+			mbedtls_ssl_free(&sslCtx);
+			mbedtls_net_free(&netCtx);
+			connected = false;
+		}
+
+
+		for (int tries = maxTries; tries > 0; --tries) {
+			mbedtls_ssl_setup(&sslCtx, &sslConfig);
+			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
+				if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
+					continue;
+
+				int ret;
+				/*
+				 * 1. Start the connection
+				 */
+				char addrStr[128]{};
+				FormatAddr(addrStr, sizeof(addrStr), possible);
+				char portStr[8]{};
+				memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
+				if ((ret = mbedtls_net_connect(&netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
+					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", addrStr, portStr, (unsigned int)-ret);
+					goto retry;
+				}
+				// Set NonBlocking
+				fd_util::SetNonBlocking(netCtx.fd, true);
+				/*
+				 * 2. Setup stuff
+				 */
+				if ((ret = mbedtls_ssl_setup(&sslCtx, &sslConfig)) != 0) {
+					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_setup returned 0x%04x", ret);
+					goto retry;
+				}
+
+				//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
+				if ((ret = mbedtls_ssl_set_hostname(&sslCtx, host_.c_str())) != 0) {
+					char errbuf[128];
+					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
+					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
+					goto retry;
+				}
+
+				mbedtls_ssl_set_bio(&sslCtx, &netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
+
+				/*
+				 * 4. Handshake
+				 */
+				NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
+
+				while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
+					if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
+						char errbuf[128];
+						mbedtls_strerror(ret, errbuf, sizeof(errbuf));
+						ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
+						goto retry;
+					}
+				}
+
+				/*
+				 * 5. Verify the server certificate
+				 */
+				 // HTTPS Option 28 may relate to disabling this check
+				NOTICE_LOG(Log::sceNet, "SSLConnect - Verifying peer X.509 certificate...");
+
+				/* In real life, we probably want to bail out when ret != 0 */
+				u32 flags;
+				if ((flags = mbedtls_ssl_get_verify_result(&sslCtx)) != 0) {
+					char vrfy_buf[512];
+
+					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
+
+					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
+					goto retry;
+				}
+
+				INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
+				connected = true;
+				return true;
+			retry:
+				INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
+				mbedtls_ssl_session_reset(&sslCtx);
+				mbedtls_ssl_config_free(&sslConfig);
+
+				mbedtls_ssl_free(&sslCtx);
+				mbedtls_net_free(&netCtx);
+
+				continue;
+			}
+			sleep_ms(1, "connect");
+		}
+		return false;
+	}
+
+	bool NPAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
+		if (SSLEnabled)
+			return SSLConnect(maxTries, timeout, cancelConnect);
+		NOTICE_LOG(Log::sceNet, "NPAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+		if (port_ <= 0) {
+			ERROR_LOG(Log::IO, "Bad port");
+			return false;
+		}
+		sock_ = -1;
+
+		for (int tries = maxTries; tries > 0; --tries) {
+			std::vector<uintptr_t> sockets;
+			fd_set fds;
+			int maxfd = 1;
+			FD_ZERO(&fds);
+			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
+				if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
+					continue;
+
+				int sock = socket(possible->ai_family, SOCK_DGRAM, IPPROTO_UDP);
+				if ((intptr_t)sock == -1) {
+					ERROR_LOG(Log::IO, "Bad socket");
+					continue;
+				}
+				// Windows sockets aren't limited by socket number, just by count, so checking FD_SETSIZE there is wrong.
+#if !PPSSPP_PLATFORM(WINDOWS)
+				if (sock >= FD_SETSIZE) {
+					ERROR_LOG(Log::IO, "Socket doesn't fit in FD_SET: %d   We probably have a leak.", sock);
+					closesocket(sock);
+					continue;
+				}
+#endif
+				fd_util::SetNonBlocking(sock, true);
+
+				// Start trying to connect (async with timeout.)
+				errno = 0;
+				if (connect(sock, possible->ai_addr, (int)possible->ai_addrlen) < 0) {
+					int errorCode = socket_errno;
+					std::string errorString = GetStringErrorMsg(errorCode);
+					bool unreachable = errorCode == ENETUNREACH;
+					bool inProgress = errorCode == EINPROGRESS || errorCode == EWOULDBLOCK;
+					if (!inProgress) {
+						char addrStr[128]{};
+						FormatAddr(addrStr, sizeof(addrStr), possible);
+						if (!unreachable) {
+							ERROR_LOG(Log::HTTP, "connect(%d) call to %s failed (%d: %s)", sock, addrStr, errorCode, errorString.c_str());
+						}
+						else {
+							INFO_LOG(Log::HTTP, "connect(%d): Ignoring unreachable resolved address %s", sock, addrStr);
+						}
+						closesocket(sock);
+						continue;
+					}
+				}
+				sockets.push_back(sock);
+				FD_SET(sock, &fds);
+				if (maxfd < sock + 1) {
+					maxfd = sock + 1;
+				}
+				conn = possible;
+
+				char addrStr[128]{};
+				FormatAddr(addrStr, sizeof(addrStr), possible);
+				NOTICE_LOG(Log::sceNet, "NPAgent Found Possible at %s", addrStr);
+			}
+
+			int selectResult = 0;
+			long timeoutHalfSeconds = floor(2 * timeout);
+			while (timeoutHalfSeconds >= 0 && selectResult == 0) {
+				struct timeval tv {};
+				tv.tv_sec = 0;
+				if (timeoutHalfSeconds > 0) {
+					// Wait up to 0.5 seconds between cancel checks.
+					tv.tv_usec = 500000;
+				}
+				else {
+					// Wait the remaining <= 0.5 seconds.  Possibly 0, but that's okay.
+					tv.tv_usec = (timeout - floor(2 * timeout) / 2) * 1000000.0;
+				}
+				--timeoutHalfSeconds;
+
+				selectResult = select(maxfd, nullptr, &fds, nullptr, &tv);
+				if (cancelConnect && *cancelConnect) {
+					WARN_LOG(Log::HTTP, "connect: cancelled (1): %s:%d", host_.c_str(), port_);
+					break;
+				}
+			}
+			if (selectResult > 0) {
+				// Something connected.  Pick the first one that did (if multiple.)
+				for (int sock : sockets) {
+					if ((intptr_t)sock_ == -1 && FD_ISSET(sock, &fds)) {
+						sock_ = sock;
+					}
+					else {
+						closesocket(sock);
+					}
+				}
+
+				NOTICE_LOG(Log::sceNet, "NPAgent Connected!");
+				// Great, now we're good to go.
+				return true;
+			}
+			else {
+				// Fail. Close all the sockets.
+				for (int sock : sockets) {
+					closesocket(sock);
+				}
+			}
+
+			if (cancelConnect && *cancelConnect) {
+				WARN_LOG(Log::HTTP, "connect: cancelled (2): %s:%d", host_.c_str(), port_);
+				break;
+			}
+
+			sleep_ms(1, "connect");
+		}
+
+		// Nothing connected, unfortunately.
+		NOTICE_LOG(Log::sceNet, "NPAgent Connection Failed!");
+		return false;
+	}
+
+	bool NPAgent::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
+		WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+		if (port_ <= 0) {
+			ERROR_LOG(Log::IO, "SSLConnect - Bad port");
+			return false;
+		}
+		if (connected) {
+			mbedtls_ssl_session_reset(&sslCtx);
+			mbedtls_ssl_config_free(&sslConfig);
+
+			mbedtls_ssl_free(&sslCtx);
+			mbedtls_net_free(&netCtx);
+			connected = false;
+		}
+
+
+		for (int tries = maxTries; tries > 0; --tries) {
+			mbedtls_ssl_setup(&sslCtx, &sslConfig);
+			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
+				if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
+					continue;
+
+				int ret;
+				/*
+				 * 1. Start the connection
+				 */
+				char addrStr[128]{};
+				FormatAddr(addrStr, sizeof(addrStr), possible);
+				char portStr[8]{};
+				memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
+				if ((ret = mbedtls_net_connect(&netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
+					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", addrStr, portStr, (unsigned int)-ret);
+					goto retry;
+				}
+				// Set NonBlocking
+				fd_util::SetNonBlocking(netCtx.fd, true);
+				/*
+				 * 2. Setup stuff
+				 */
+				if ((ret = mbedtls_ssl_setup(&sslCtx, &sslConfig)) != 0) {
+					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_setup returned 0x%04x", ret);
+					goto retry;
+				}
+
+				//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
+				if ((ret = mbedtls_ssl_set_hostname(&sslCtx, host_.c_str())) != 0) {
+					char errbuf[128];
+					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
+					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
+					goto retry;
+				}
+
+				mbedtls_ssl_set_bio(&sslCtx, &netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
+
+				/*
+				 * 4. Handshake
+				 */
+				NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
+
+				while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
+					if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
+						char errbuf[128];
+						mbedtls_strerror(ret, errbuf, sizeof(errbuf));
+						ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
+						goto retry;
+					}
+				}
+
+				/*
+				 * 5. Verify the server certificate
+				 */
+				 // HTTPS Option 28 may relate to disabling this check
+				NOTICE_LOG(Log::sceNet, "SSLConnect - Verifying peer X.509 certificate...");
+
+				/* In real life, we probably want to bail out when ret != 0 */
+				u32 flags;
+				if ((flags = mbedtls_ssl_get_verify_result(&sslCtx)) != 0) {
+					char vrfy_buf[512];
+
+					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
+
+					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
+					goto retry;
+				}
+
+				INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
+				connected = true;
+				return true;
+			retry:
+				INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
+				mbedtls_ssl_session_reset(&sslCtx);
+				mbedtls_ssl_config_free(&sslConfig);
+
+				mbedtls_ssl_free(&sslCtx);
+				mbedtls_net_free(&netCtx);
+
+				continue;
+			}
+			sleep_ms(1, "connect");
+		}
+		return false;
+	}
+
+	void NPAuthAgent::Disconnect() {
+		if ((intptr_t)sock_ != -1) {
+			canceled = true;
+			closesocket(sock_);
+			sock_ = -1;
+		}
+	}
 	void NPAgent::Disconnect() {
 		if ((intptr_t)sock_ != -1) {
 			canceled = true;
-#ifndef AGENT_TESTING
 			closesocket(sock_);
-#endif
 			sock_ = -1;
 		}
+	}
+
+	bool NPAuthAgent::Send(Packet* packet, double timeout, bool* cancelled) {
+		if (sock_ <= 0 || conn == nullptr || conn->ai_addr == nullptr) {
+			ERROR_LOG(Log::IO, "Send Failed - Invalid Socket");
+			return false;
+		}
+		static constexpr float CANCEL_INTERVAL = 0.25f;
+
+		bool ready = false;
+		double endTimeout = time_now_d() + timeout;
+		const char* data = reinterpret_cast<const char*>(packet->Data());
+		const char* test_data = "Hello, World";
+		for (size_t pos = 0, end = strlen(test_data); pos < end; ) {
+			if (time_now_d() > endTimeout) {
+				ERROR_LOG(Log::IO, "Send timed out");
+				return false;
+			}
+			int sent = send(sock_, test_data, end - pos, 0);
+			// Only await when we failed to receive data we're expecting
+			if (sent < 0) {
+#if !PPSSPP_PLATFORM(WINDOWS)
+				int err = errno;
+				if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+					ERROR_LOG(Log::IO, "Send Failed - %d", err);
+					return false;
+				}
+#else
+				int err = WSAGetLastError();
+				if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+					ERROR_LOG(Log::IO, "Send Failed - %d", err);
+					return false;
+				}
+#endif
+				ready = false;
+				while (!ready) {
+					if (cancelled && *cancelled)
+						return false;
+					if (sock_ <= 0) {
+						ERROR_LOG(Log::IO, "Socket Failed - Socket lost");
+						return false;
+					}
+					ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, true);
+					if (!ready && time_now_d() > endTimeout) {
+						ERROR_LOG(Log::IO, "Send timed out");
+						return false;
+					}
+				}
+				continue;
+			}
+			pos += sent;
+		}
+		packet->Clear();
+		return true;
+	}
+
+	int NPAuthAgent::Recv(Packet* packet, size_t sz) {
+		if (sock_ <= 0 || conn == nullptr || conn->ai_addr == nullptr) {
+			ERROR_LOG(Log::IO, "Recv Failed - Invalid Socket");
+			return -1;
+		}
+		static constexpr float CANCEL_INTERVAL = 0.25f;
+		double endTimeout = time_now_d() + 5;
+		char buf[4096];
+		int retval = 0;
+
+		int ready = 0;
+		while (sz > 0) {
+			if (time_now_d() > endTimeout) {
+				ERROR_LOG(Log::IO, "Recv timed out");
+				return -2;
+			}
+			int toRead = (int)std::min(sz, sizeof(buf));
+			if (SSLEnabled) {
+				DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read reading %i bytes", toRead);
+				retval = mbedtls_ssl_read(&sslCtx, (unsigned char*)buf, toRead);
+				int ready = 0;
+				if (retval < 0) {
+					switch (retval) {
+					case MBEDTLS_ERR_NET_CONN_RESET:
+					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+						WARN_LOG(Log::HTTP, "Read - Client closed connection gracefully");
+						return (int)packet->Length() > 0 ? (int)packet->Length() : retval;
+					case MBEDTLS_ERR_SSL_TIMEOUT:
+						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
+						return retval;
+					case MBEDTLS_ERR_SSL_WANT_WRITE:
+						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_WRITE");
+						return retval;
+					case MBEDTLS_ERR_SSL_WANT_READ:
+						DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_READ");
+						while (!ready)
+							ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, false);
+						// Read some more!
+						continue;
+					default:
+						char errbuf[128];
+						mbedtls_strerror(retval, errbuf, sizeof(errbuf));
+						ERROR_LOG(Log::HTTP, "Read Failed: -0x%04x -> %s", -retval, errbuf);
+						return retval;
+					}
+				}
+
+			}
+			else {
+				socklen_t addrlen = conn->ai_addrlen;
+				retval = recv(sock_, buf, toRead, MSG_NOSIGNAL);
+
+				if (retval <= 0) {
+#if !PPSSPP_PLATFORM(WINDOWS)
+					int err = errno;
+					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+						ERROR_LOG(Log::IO, "Recv Failed - %d", err);
+						return false;
+					}
+#else
+					int err = WSAGetLastError();
+					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+						ERROR_LOG(Log::IO, "Recv Failed - %d", err);
+						return -err;
+					}
+#endif
+					ready = false;
+					while (!ready) {
+						if (sock_ <= 0) {
+							ERROR_LOG(Log::IO, "Recv Failed - Socket lost");
+							return -1;
+						}
+						ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, true);
+						if (!ready && time_now_d() > endTimeout) {
+							ERROR_LOG(Log::IO, "Recv timed out");
+							return -2;
+						}
+					}
+					continue;
+				}
+			}
+			packet->Append(buf, retval);
+			//memcpy(packet.Data(), buf, retval);
+			sz -= retval;
+			//packet. += retval;
+		}
+
+		return (int)packet->Length() > 0 ? (int)packet->Length() : retval;  // Return -1 or 0 for error, else bytes read
 	}
 
 	u8 NPAgent::GetStatus() {
 		return status;
 	}
 
-	/*
-		< 12010036100100000100100000000000e288f336a613981d1f8b0253f34d40281010000c4e50575230313434365f3030407300020001
-		> 1002002710010000010010000000000019490bc9118fc488581dcbfcb27a4a31001d0003000101
 
-		< 1201002010080000060030009fc689d2397d08a87b9843a0be200fa912534c7a
-		> 1002003e100800000600300000000000d0cdabffde20bcc7878039e8d73746350002001a002a0001002a0012000100000000000000000000000000000000
-
-		< 12010093120c00000700f0009fc689d271347aa95b21d64d3913f164fc6f98a040290002000100040004000100140006000c6400000070400004040000000007000901504c00040000004240050002504c40050002504d40050002504e40050002504f400500025050400500025051400500025052400500025053400500022054400500022055400500022056400500027041
-		> 1002002c120c00000700f00000000000c809b42f3ca80beaca681dd96b39dfa9000300080045000000000000
-		
-		< 1201002612090000080090009fc689d25fc23947f402c1076d1aae5b5dd4e4d0402900020001
-		> 100200c6120900000800900000000000eb31affe08c2641c0b37c26be6173cac403d0002067d0002006e000a0002000a00310d971009002b6c6f6f6b75702d32303930322e77772e6e702e6d61746368696e672e706c617973746174696f6e2e6e6574000a00310d971009002b6c6f6f6b75702d32303930312e77772e6e702e6d61746368696e672e706c617973746174696f6e2e6e65742020002a4e50575230313434365f303000010000067d00000000000000006dec27241755dd350bcd017d44b5c6d1
-		
-		< 12010250120200000b0090009fc689d258a3977d62e8db08ea0a519a436c0323203a00cc4e50575230313434365f303000010000067d000c028400000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011001100000198191326730000000001001f003a02105601000a00320d981009002c73657373696f6e2d32303930312e77772e6e702e6d61746368696e672e706c617973746174696f6e2e6e6574000b0018466f784c6f766573596f7500000000006234757370737000733f2a272b670ef10729d5c1391fb8ad504c000400000042504d000400000001504e000400000001504f0004000000c850500004000000025051000400000001505200040000000050530004000000002054000e42006c00750065002d0030003100205500f80000000000000000b873eaf120fae2000c000201a90000000000000000000000000000000000000000000000a518940300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002056000e2bff49ff54ff53ff55ff4eff45ff
-		> 10020020120200000b00900000000000ab8eeccd790f258682b9a5d037652526
-		
-		< 120100f0120a00000d00b0009fc689d29c022c43b7493dd94310f348fafcd211203a00cc4e50575230313434365f303000010000067d000c028400000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011001100000198191326730000000002001f003a02105601000a00320d981009002c73657373696f6e2d32303930312e77772e6e702e6d61746368696e672e706c617973746174696f6e2e6e6574000b0018466f784c6f766573596f7500000000006234757370737000588e71a258cee4ce5a35d3b4d7ee6451
-		> 10020020120a00000d00b00000000000643099ebe3108749441c284285423847
-		
-		< 00
-		> 00
-		
-		< 00
-		> 00
-		
-		< 00
-		> 00
-		
-		< 00
-		> 00
-		
-		< 00
-		> 00
-	*/
-	char const hex_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
-
-	bool PSNAgent::Login() {
-		return false;
-	}
-	bool RPCNAgent::Login() {
-		// npid
-		// password
-		// token
-
-		// Send CommandType::Login, req_id, data, packet_data
-
-		// Get Reply
-		// online_name
-		// avatar_url
-		// user_id 
-		// friends (PS3)
-
-		// Disconnect on Error
-		// Disconnect on malformed data
-		return false;
-	}
-
-	int PSNAgent::GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) {
-		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npTitleId);
-#ifndef AGENT_TESTING
-		if (sock_ <= 0) {
-			ERROR_LOG(Log::sceNet, "GetWorldInfo: Socket not connected");
-			return -1;
+	bool NPAgent::Send(Packet* packet, double timeout, bool* cancelled) {
+		if (sock_ <= 0 || conn == nullptr || conn->ai_addr == nullptr) {
+			ERROR_LOG(Log::IO, "Send Failed - Invalid Socket");
+			return false;
 		}
+		static constexpr float CANCEL_INTERVAL = 0.25f;
+
+		bool ready = false;
+		double endTimeout = time_now_d() + timeout;
+		const char* data = reinterpret_cast<const char*>(packet->Data());
+		const char* test_data = "Hello, World";
+		for (size_t pos = 0, end = strlen(test_data); pos < end; ) {
+			if (time_now_d() > endTimeout) {
+				ERROR_LOG(Log::IO, "Send timed out");
+				return false;
+			}
+			int sent = send(sock_, test_data, end - pos, 0);
+			// Only await when we failed to receive data we're expecting
+			if (sent < 0) {
+#if !PPSSPP_PLATFORM(WINDOWS)
+				int err = errno;
+				if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+					ERROR_LOG(Log::IO, "Send Failed - %d", err);
+					return false;
+				}
+#else
+				int err = WSAGetLastError();
+				if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+					ERROR_LOG(Log::IO, "Send Failed - %d", err);
+					return false;
+				}
 #endif
-		if (canceled) {
-			ERROR_LOG(Log::sceNet, "GetWorldInfo: Cancelled");
+				ready = false;
+				while (!ready) {
+					if (cancelled && *cancelled)
+						return false;
+					if (sock_ <= 0) {
+						ERROR_LOG(Log::IO, "Socket Failed - Socket lost");
+						return false;
+					}
+					ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, true);
+					if (!ready && time_now_d() > endTimeout) {
+						ERROR_LOG(Log::IO, "Send timed out");
+						return false;
+					}
+				}
+				continue;
+			}
+			pos += sent;
+		}
+		packet->Clear();
+		return true;
+	}
+
+	int NPAgent::Recv(Packet* packet, size_t sz) {
+		if (sock_ <= 0 || conn == nullptr || conn->ai_addr == nullptr) {
+			ERROR_LOG(Log::IO, "Recv Failed - Invalid Socket");
 			return -1;
 		}
-		// 1201 0036 10010000 01001000 00000000 e288f336a613981d1f8b0253f34d4028 1010 000c 4e50575230313434365f3030 4073 0002 0001
-		//
-		u32 packet_size = 0x36;
-		Packet packet = Packet();
+		static constexpr float CANCEL_INTERVAL = 0.25f;
+		double endTimeout = time_now_d() + 5;
+		char buf[4096];
+		int retval = 0;
 
-		uint8_t guid[16] = { 0xe2, 0x88, 0xf3, 0x36, 0xa6, 0x13, 0x98, 0x1d,
-						 0x1f, 0x8b, 0x02, 0x53, 0xf3, 0x4d, 0x40, 0x28 };
+		int ready = 0;
+		while (sz > 0) {
+			if (time_now_d() > endTimeout) {
+				ERROR_LOG(Log::IO, "Recv timed out");
+				return -2;
+			}
+			int toRead = (int)std::min(sz, sizeof(buf));
+			if (SSLEnabled) {
+				DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read reading %i bytes", toRead);
+				retval = mbedtls_ssl_read(&sslCtx, (unsigned char*)buf, toRead);
+				int ready = 0;
+				if (retval < 0) {
+					switch (retval) {
+					case MBEDTLS_ERR_NET_CONN_RESET:
+					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+						WARN_LOG(Log::HTTP, "Read - Client closed connection gracefully");
+						return (int)packet->Length() > 0 ? (int)packet->Length() : retval;
+					case MBEDTLS_ERR_SSL_TIMEOUT:
+						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
+						return retval;
+					case MBEDTLS_ERR_SSL_WANT_WRITE:
+						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_WRITE");
+						return retval;
+					case MBEDTLS_ERR_SSL_WANT_READ:
+						DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_READ");
+						while (!ready)
+							ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, false);
+						// Read some more!
+						continue;
+					default:
+						char errbuf[128];
+						mbedtls_strerror(retval, errbuf, sizeof(errbuf));
+						ERROR_LOG(Log::HTTP, "Read Failed: -0x%04x -> %s", -retval, errbuf);
+						return retval;
+					}
+				}
 
-		packet.Write((u16)0x1201);		// OPCODE ?
-		packet.Write((u16)packet_size);	// PACKET_LEN
-		packet.Write((u32)0x10010000);	// ?
-		packet.Write((u32)0x01001000);	// ?
-		packet.Write((u32)0x00000000);	// padding?
-		int i = 0;
-		for (i = 0; i < 16; i++)
-			packet.Write((u8)guid[i]);	// GUID?
-		packet.Write((u16)0x1010);		// ?
+			}
+			else {
+				socklen_t addrlen = conn->ai_addrlen;
+				retval = recv(sock_, buf, toRead, MSG_NOSIGNAL);
 
-		packet.Write((u16)(sizeof(npTitleId) + 4));	// TITLE_LEN
-		packet.Write(npTitleId);
-		packet.Write("_00");
-
-		packet.Write((u16)0x4073);		// ?
-		packet.Write((u16)0x0002);		// ?
-		packet.Write((u16)0x0001);		// ?
-
-		std::string hexdata = "";
-		for (i = 0; i < packet.Length(); i++) {
-			char const c = packet.Data()[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		INFO_LOG(Log::sceNet, "Request: %s", hexdata.c_str());
-
-#ifndef AGENT_TESTING
-		// packet.Pack(0x0112, packet.Length()+4);
-		net::Buffer buffer;
-		void* dst = buffer.Append(packet_size);
-		memcpy(dst, packet.Data(), packet.Length());
-
-		bool flushed = buffer.FlushSocket(sock(), 60.0, &canceled);
-		if (!flushed) {
-			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return -1;
-		}
-		net::Buffer readbuf;
-		// Read response
-		int ret;
-		if ((ret = readbuf.Read(sock_, 4096, false, nullptr)) < 0) {
-			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
-			return -1;
-		}
-
-		std::string response;
-		readbuf.Take(ret, &response);
-
-		// 1002 0027 10010000 01001000 00000000 19490bc9118fc488581dcbfcb27a4a31 001d 0003 0001 01
-		hexdata = "";
-		for (i = 0; i < response.length(); i++) {
-			int c = response[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
+				if (retval <= 0) {
+#if !PPSSPP_PLATFORM(WINDOWS)
+					int err = errno;
+					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+						ERROR_LOG(Log::IO, "Recv Failed - %d", err);
+						return false;
+					}
+#else
+					int err = WSAGetLastError();
+					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+						ERROR_LOG(Log::IO, "Recv Failed - %d", err);
+						return -err;
+					}
 #endif
-		worldInfoOut->clear();
-		// Should get an array of worlds
-		SceNpMatching2World worldInfo = SceNpMatching2World();
-		worldInfo.worldId = 1;
-
-		worldInfo.numOfLobby = 2;
-		worldInfo.curNumOfTotalLobbyMember = 0;
-		worldInfo.maxNumOfTotalLobbyMember = 12;
-
-		worldInfo.curNumOfRoom = 0;
-		worldInfo.curNumOfTotalRoomMember = 0;
-
-		worldInfo.withEntitlementId = 0;
-		for(i = 0; i < 32; i++)
-			worldInfo.entitlementId[i] = 0;
-
-		worldInfoOut->emplace(worldInfo.worldId, worldInfo);
-
-		return 0;
-	}
-	int RPCNAgent::GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) {
-
-		worldInfoOut->clear();
-		// Should get an array of worlds
-		SceNpMatching2World worldInfo = SceNpMatching2World();
-		worldInfo.worldId = 1;
-
-		worldInfo.numOfLobby = 2;
-		worldInfo.curNumOfTotalLobbyMember = 0;
-		worldInfo.maxNumOfTotalLobbyMember = 12;
-
-		worldInfo.curNumOfRoom = 0;
-		worldInfo.curNumOfTotalRoomMember = 0;
-
-		worldInfo.withEntitlementId = 0;
-		int i;
-		for (i = 0; i < 32; i++)
-			worldInfo.entitlementId[i] = 0;
-
-		worldInfoOut->emplace(worldInfo.worldId, worldInfo);
-		return 0;
-	}
-
-	int PSNAgent::SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) {
-		NOTICE_LOG(Log::sceNet, "NPAgent::SearchRoom()");
-#ifndef AGENT_TESTING
-		if (sock_ <= 0) {
-			ERROR_LOG(Log::sceNet, "SearchRoom: Socket not connected");
-			return -1;
-		}
-#endif
-		if (canceled) {
-			ERROR_LOG(Log::sceNet, "SearchRoom: Cancelled");
-			return -1;
-		}
-		 
-		
-		u32 packet_size = 0x36;
-		Packet packet = Packet();
-
-		int i = 0;
-		std::string hexdata = "";
-		for (i = 0; i < packet.Length(); i++) {
-			char const c = packet.Data()[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		INFO_LOG(Log::sceNet, "Request: %s", hexdata.c_str());
-
-#ifndef AGENT_TESTING
-		// packet.Pack(0x0112, packet.Length()+4);
-		net::Buffer buffer;
-		void* dst = buffer.Append(packet_size);
-		memcpy(dst, packet.Data(), packet.Length());
-
-		bool flushed = buffer.FlushSocket(sock(), 60.0, &canceled);
-		if (!flushed) {
-			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return std::nullopt;
+					ready = false;
+					while (!ready) {
+						if (sock_ <= 0) {
+							ERROR_LOG(Log::IO, "Recv Failed - Socket lost");
+							return -1;
+						}
+						ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, true);
+						if (!ready && time_now_d() > endTimeout) {
+							ERROR_LOG(Log::IO, "Recv timed out");
+							return -2;
+						}
+					}
+					continue;
+				}
+			}
+			packet->Append(buf, retval);
+			//memcpy(packet.Data(), buf, retval);
+			sz -= retval;
+			//packet. += retval;
 		}
 
-		net::Buffer readbuf;
-		// Read response
-		int ret;
-		if ((ret = readbuf.Read(sock_, 4096, false, nullptr)) < 0) {
-			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
-			return std::nullopt;
-		}
-
-		std::string response;
-		readbuf.Take(ret, &response);
-
-		// 1002 0027 10010000 01001000 00000000 19490bc9118fc488581dcbfcb27a4a31 001d 0003 0001 01
-		hexdata = "";
-		for (i = 0; i < response.length(); i++) {
-			int c = response[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
-#endif
-
-		roomDataOut->roomId = 0; // No Room
-		return 0;
-	}
-	int RPCNAgent::SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) {
-		roomDataOut->roomId = 0; // No Room
-		return 0;
-	}
-
-	int PSNAgent::CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) {
-		NOTICE_LOG(Log::sceNet, "NPAgent::CreatJoinRoom()");
-#ifndef AGENT_TESTING
-		if (sock_ <= 0) {
-			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Socket not connected");
-			return -1;
-		}
-#endif
-		if (canceled) {
-			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Cancelled");
-			return -1;
-		}
-
-
-		u32 packet_size = 0x36;
-		Packet packet = Packet();
-
-		int i = 0;
-		std::string hexdata = "";
-		for (i = 0; i < packet.Length(); i++) {
-			char const c = packet.Data()[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		INFO_LOG(Log::sceNet, "Request: %s", hexdata.c_str());
-
-#ifndef AGENT_TESTING
-		// packet.Pack(0x0112, packet.Length()+4);
-		net::Buffer buffer;
-		void* dst = buffer.Append(packet_size);
-		memcpy(dst, packet.Data(), packet.Length());
-
-		bool flushed = buffer.FlushSocket(sock(), 60.0, &canceled);
-		if (!flushed) {
-			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return std::nullopt;
-		}
-
-		net::Buffer readbuf;
-		// Read response
-		int ret;
-		if ((ret = readbuf.Read(sock_, 4096, false, nullptr)) < 0) {
-			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
-			return std::nullopt;
-		}
-
-		std::string response;
-		readbuf.Take(ret, &response);
-
-		// 1002 0027 10010000 01001000 00000000 19490bc9118fc488581dcbfcb27a4a31 001d 0003 0001 01
-		hexdata = "";
-		for (i = 0; i < response.length(); i++) {
-			int c = response[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
-#endif
-		roomDataOut->roomId = 1;
-
-		return 0;
-	}
-	int RPCNAgent::CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) {
-		roomDataOut->roomId = 1;
-		return 0;
-	}
-
-	int PSNAgent::GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut) {
-		return 0;
-	}
-	int RPCNAgent::GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut) {
-		return 0;
+		return (int)packet->Length() > 0 ? (int)packet->Length() : retval;  // Return -1 or 0 for error, else bytes read
 	}
 }

@@ -1357,6 +1357,18 @@
     <ClCompile Include="Util\NPAgent.cpp">
       <Filter>Util</Filter>
     </ClCompile>
+    <ClCompile Include="Util\PSNAgent.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\RPCNAgent.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\PSNAuthAgent.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\RPCNAuthAgent.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ELF\ElfReader.h">

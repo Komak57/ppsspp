@@ -53,6 +53,7 @@
 #include "Core/Dialog/PSPNetconfDialog.h"
 #include "Core/Dialog/PSPNpSigninDialog.h"
 #include "Core/Dialog/PSPScreenshotDialog.h"
+#include <Core\Util\NPAgent.h>
 
 #define PSP_AV_MODULE_AVCODEC     0
 #define PSP_AV_MODULE_SASCORE     1
@@ -1317,13 +1318,51 @@ static int sceUtilityGameSharingGetStatus() {
 	return hleLogError(Log::sceUtility, 0, "UNIMPL");
 }
 
-int dialog_State = PSP_UTILITY_DIALOG_NONE;
+int browser_State = PSP_UTILITY_DIALOG_NONE;
 static int sceUtilityHtmlViewerInitStart(u32 paramsPtr) {
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerInitStart(%08x)", paramsPtr);
+	browser_State = PSP_UTILITY_DIALOG_INIT;
+	return 0;
+}
+static int sceUtilityHtmlViewerGetStatus() {
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerGetStatus() => %i", browser_State);
+	int buf = browser_State;
+	switch (browser_State) {
+	case PSP_UTILITY_DIALOG_INIT:
+		browser_State = PSP_UTILITY_DIALOG_VISIBLE;
+		break;
+	case PSP_UTILITY_DIALOG_QUIT:
+		browser_State = PSP_UTILITY_DIALOG_FINISHED;
+		break;
+	case PSP_UTILITY_DIALOG_FINISHED:
+		browser_State = PSP_UTILITY_DIALOG_NONE;
+		break;
+	default:
+		break;
+	}
+	return buf;
+}
+static int sceUtilityHtmlViewerShutdownStart() {
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerShutdownStart()");
+	browser_State = PSP_UTILITY_DIALOG_QUIT;
+	return 0;
+}
+
+static int sceUtilityHtmlViewerUpdate(int n) {
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerUpdate(%i)", n);
+	// TODO: Render Browser
+	// For now, let's just quit out so the user doesn't get stuck
+	browser_State = PSP_UTILITY_DIALOG_FINISHED;
+	return 0;
+}
+
+int dialog_State = PSP_UTILITY_DIALOG_NONE;
+static int sceUtilityAuthDialogInitStart(u32 paramsPtr) {
 	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerInitStart(%08x)", paramsPtr);
 	dialog_State = PSP_UTILITY_DIALOG_INIT;
 	return 0;
 }
-static int sceUtilityHtmlViewerGetStatus() {
+static int sceUtilityAuthDialogGetStatus() {
 	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerGetStatus() => %i", dialog_State);
 	int buf = dialog_State;
 	switch (dialog_State) {
@@ -1341,20 +1380,19 @@ static int sceUtilityHtmlViewerGetStatus() {
 	}
 	return buf;
 }
-static int sceUtilityHtmlViewerShutdownStart() {
+static int sceUtilityAuthDialogShutdownStart() {
 	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerShutdownStart()");
 	dialog_State = PSP_UTILITY_DIALOG_QUIT;
 	return 0;
 }
 
-static int sceUtilityHtmlViewerUpdate(int n) {
+static int sceUtilityAuthDialogUpdate(int n) {
 	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerUpdate(%i)", n);
 	// TODO: Render Browser
 	// For now, let's just quit out so the user doesn't get stuck
 	dialog_State = PSP_UTILITY_DIALOG_FINISHED;
 	return 0;
 }
-
 static u32 sceUtilityLoadUsbModule(u32 module)
 {
 	if (module < 1 || module > 5)
@@ -1377,25 +1415,49 @@ static u32 sceUtilityUnloadUsbModule(u32 module)
 	return hleNoLog(0);
 }
 
+int PSN_STATE = -1;
+static int sceUtilityPsnShutdownStart()
+{
+	// Related Flag for PSP2i => "JP0177-NPJH50332_00"
+	WARN_LOG_REPORT(Log::sceUtility, "UNIMPL sceUtilityPsnShutdownStart()");
+	PSN_STATE = -1;
+	return 0;
+}
+
 static void sceUtilityPsnInitStart(u32 paramPtr)
 {
 	// Related Flag for PSP2i => "JP0177-NPJH50332_00"
 	WARN_LOG_REPORT(Log::sceUtility, "UNIMPL sceUtilityPsnInitStart(0x%08x)", paramPtr);
+	PSN_STATE = 0;
+	//Memory::Write_U8(0, paramPtr + 0x84); // sceRtcGetCurrentNetworkTick flag
+	Memory::Write_U32(1, paramPtr + 0xa8);
 	return hleNoLogVoid();
 }
 
 static int sceUtilityPsnGetStatus()
 {
 	/* PSN Status Codes
-	0: PSN Login Successful
+	0: PSN Available
 		Flag at 0x84 calls sceRtcGetCurrentNetworkTick
 	1: PSN Busy
 	2: call sceUtilityPsnUpdate
-	3: call local PsnUpdate? => FUN_08dfce7c
-	4: Special Busy State
+	3: call sceUtilityPsnShutdownStart => FUN_08dfce7c
+	4: Still Checking
 	default: Login Failed
 	*/
-	return hleLogError(Log::sceUtility, 0, "UNIMPL");
+	auto server = net::CreateNPAuthAgent(net::NPAgentType::RPCN, "rpcn.revurb.us", 31313);
+
+	if (!server->Resolve()) {
+		return hleLogError(Log::sceUtility, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND, "Could not Resolve");
+	}
+	// Connect to server before we collect information
+	if (!server->Connect()) {
+		return hleLogError(Log::sceUtility, SCE_NP_MATCHING2_ERROR_SERVER_NOT_AVAILABLE, "Could not Connect");
+	}
+	if (!server->Login()) {
+		return hleLogError(Log::sceUtility, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER, "Could not Login");
+	}
+	return 0;
 }
 
 const HLEFunction sceUtility[] =
@@ -1448,10 +1510,10 @@ const HLEFunction sceUtility[] =
 	{0XF5CE1134, &WrapI_V<sceUtilityHtmlViewerShutdownStart>,      "sceUtilityHtmlViewerShutdownStart",      'i', ""   },
 	{0X05AFB9E4, &WrapI_I<sceUtilityHtmlViewerUpdate>,             "sceUtilityHtmlViewerUpdate",             'i', "i"  },
 
-	{0X16A1A8D8, nullptr,                                          "sceUtilityAuthDialogGetStatus",          '?', ""   },
-	{0X943CBA46, nullptr,                                          "sceUtilityAuthDialogInitStart",          '?', ""   },
-	{0X0F3EEAAC, nullptr,                                          "sceUtilityAuthDialogShutdownStart",      '?', ""   },
-	{0X147F7C85, nullptr,                                          "sceUtilityAuthDialogUpdate",             '?', ""   },
+	{0X16A1A8D8, &WrapI_V<sceUtilityAuthDialogGetStatus>,		   "sceUtilityAuthDialogGetStatus",          '?', ""   },
+	{0X943CBA46, &WrapI_U<sceUtilityAuthDialogInitStart>,           "sceUtilityAuthDialogInitStart",          '?', "x"   },
+	{0X0F3EEAAC, &WrapI_V<sceUtilityAuthDialogShutdownStart>,       "sceUtilityAuthDialogShutdownStart",      '?', ""   },
+	{0X147F7C85, &WrapI_I<sceUtilityAuthDialogUpdate>,              "sceUtilityAuthDialogUpdate",             '?', "i"   },
 
 	{0XC629AF26, &WrapU_U<sceUtilityLoadAvModule>,                 "sceUtilityLoadAvModule",                 'x', "x"  },
 	{0XF7D8D092, &WrapU_U<sceUtilityUnloadAvModule>,               "sceUtilityUnloadAvModule",               'x', "x"  },
@@ -1499,10 +1561,10 @@ const HLEFunction sceUtility[] =
 	{0XDB4149EE, nullptr,                                          "sceUtility_DB4149EE",                    '?', ""   },
 	{0XCFE7C460, nullptr,                                          "sceUtility_CFE7C460",                    '?', ""   },
 
-	{0XC130D441, nullptr,                                          "sceUtilityPsnShutdownStart",             '?', ""   },
-	{ 0XA7BB7C67, &WrapV_U<sceUtilityPsnInitStart>,				   "sceUtilityPsnInitStart",                 'v', "x"  },
+	{0XC130D441, &WrapI_V<sceUtilityPsnShutdownStart>,             "sceUtilityPsnShutdownStart",             'i', ""   },
+	{0XA7BB7C67, &WrapV_U<sceUtilityPsnInitStart>,				   "sceUtilityPsnInitStart",                 'v', "x"  },
 	{0X0940A1B9, nullptr,                                          "sceUtilityPsnUpdate",                    '?', ""   },
-	{ 0X094198B8, &WrapI_V<sceUtilityPsnGetStatus>,				   "sceUtilityPsnGetStatus",                 'i', ""   },
+	{0X094198B8, &WrapI_V<sceUtilityPsnGetStatus>,				   "sceUtilityPsnGetStatus",                 'i', ""   },
 
 	{0X9F313D14, nullptr,                                          "sceUtilityAutoConnectShutdownStart",     '?', ""   },
 	{0X3A15CD0A, nullptr,                                          "sceUtilityAutoConnectInitStart",         '?', ""   },

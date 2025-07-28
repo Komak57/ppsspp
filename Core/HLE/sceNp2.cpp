@@ -250,9 +250,10 @@ static int sceNpMatching2ContextStart(int ctxId)
 
 	// TODO: use sceNpGetUserProfile and check server availability using sceNpService_76867C01
 	//npMatching2Ctx.started = true;
+
 	servers.clear();
 	//net::PSNAgent::GetServers(npTitleId, &servers);
-	net::RPCNAgent::GetServers(npTitleId, &servers);
+	net::RPCNAuthAgent::GetServers(npTitleId, &servers);
 
 	npData = {};
 	npData.worlds.clear();
@@ -464,11 +465,9 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 			return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID);
 
 		tServer = serverId;
-		// Connect to server before we collect information
-		servers[tServer]->Connect();
-		servers[tServer]->Login();
+		int ret;
 		// FIXME: Get worldInfo from PSN
-		int ret = servers[tServer]->GetWorldInfo(npTitleId.data, &npData.worlds);
+		ret = servers[tServer]->GetWorldInfo(npTitleId.data, &npData.worlds);
 
 		if (ret < 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
