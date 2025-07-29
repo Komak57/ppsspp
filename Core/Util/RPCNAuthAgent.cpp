@@ -32,7 +32,7 @@ namespace net {
 		packet.Write("password\0");
 		packet.Write("token\0");
 
-		packet.Pack(CommandType::Login, 0);
+		packet.Pack(CommandType::Login, 1);
 
 		int i;
 		std::string hexdata = "";

@@ -1358,12 +1358,12 @@ static int sceUtilityHtmlViewerUpdate(int n) {
 
 int dialog_State = PSP_UTILITY_DIALOG_NONE;
 static int sceUtilityAuthDialogInitStart(u32 paramsPtr) {
-	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerInitStart(%08x)", paramsPtr);
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityAuthDialogInitStart(%08x)", paramsPtr);
 	dialog_State = PSP_UTILITY_DIALOG_INIT;
 	return 0;
 }
 static int sceUtilityAuthDialogGetStatus() {
-	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerGetStatus() => %i", dialog_State);
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityAuthDialogGetStatus() => %i", dialog_State);
 	int buf = dialog_State;
 	switch (dialog_State) {
 	case PSP_UTILITY_DIALOG_INIT:
@@ -1381,13 +1381,13 @@ static int sceUtilityAuthDialogGetStatus() {
 	return buf;
 }
 static int sceUtilityAuthDialogShutdownStart() {
-	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerShutdownStart()");
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityAuthDialogShutdownStart()");
 	dialog_State = PSP_UTILITY_DIALOG_QUIT;
 	return 0;
 }
 
 static int sceUtilityAuthDialogUpdate(int n) {
-	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerUpdate(%i)", n);
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityAuthDialogUpdate(%i)", n);
 	// TODO: Render Dialog
 	// Fox is looking for this trigger. You can uncomment to allow the program to resume and let him know how you got here!
 	dialog_State = PSP_UTILITY_DIALOG_FINISHED;
