@@ -12,7 +12,7 @@ namespace net {
 	RPCNAuthAgent::~RPCNAuthAgent() {
 		Disconnect();
 	}
-	bool RPCNAuthAgent::Login() {
+	bool RPCNAuthAgent::Login(const char* titleId, const char* token, const char* password) {
 		// npid
 		// password
 		// token
@@ -28,9 +28,12 @@ namespace net {
 		// Disconnect on Error
 		// Disconnect on malformed data
 		Packet packet = Packet();
-		packet.Write("NPJH50332\0");
-		packet.Write("password\0");
-		packet.Write("token\0");
+		packet.Write(titleId);
+		packet.Write((u8)0);
+		packet.Write(password);
+		packet.Write((u8)0);
+		packet.Write(token);
+		packet.Write((u8)0);
 
 		packet.Pack(CommandType::Login, 1);
 
@@ -41,6 +44,7 @@ namespace net {
 			hexdata += hex_chars[(c & 0xF0) >> 4];
 			hexdata += hex_chars[(c & 0x0F) >> 0];
 		}
+		// 00 0000 50000000 0100000000000000 4A50303137372D4E504A4835303333325F30300 06C656D6D65696E00 61363866326362612D326536322D346536382D396330382D37663262303431356564636200
 		INFO_LOG(Log::sceNet, "Request: %s", hexdata.c_str());
 
 		// packet.Pack(0x0112, packet.Length()+4);

@@ -48,8 +48,8 @@ struct pspUtilityPsnParam {
 	u32 heapSize;
 	u32 ctxId;
 	u32 target_type;
-	u32 titleId2Ptr;
-	u32 titleIdPtr;
+	char* titleId2Ptr;
+	char* titleIdPtr;
 	u32 exit_code;
 };
 

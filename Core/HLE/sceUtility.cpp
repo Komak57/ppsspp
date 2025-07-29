@@ -1480,7 +1480,8 @@ static int PsnLoginThreadFunc(u32 psnParamPtr) {
 		psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
 		return hleLogError(Log::sceUtility, SCE_NP_MATCHING2_ERROR_SERVER_NOT_AVAILABLE, "Could not Connect");
 	}
-	if (!server->Login()) {
+	// FIXME: uses psnParam.titleId2Ptr
+	if (!server->Login("JP0177-NPJH50332_00", "a68f2cba-2e62-4e68-9c08-7f2b0415edcb", "lemmein")) {
 		psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
 		return hleLogError(Log::sceUtility, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER, "Could not Login");
 	}

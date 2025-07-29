@@ -15,7 +15,7 @@ namespace net {
 		Disconnect();
 	}
 
-	bool PSNAuthAgent::Login() {
+	bool PSNAuthAgent::Login(const char* titleId, const char* token, const char* password) {
 		return false;
 	}
 

@@ -42,13 +42,24 @@ Packet::Packet() {
 Packet::~Packet() {
 
 }
-
-u8* Packet::Pack(CommandType command, u64 packet_id) {
+inline u64 htonll(u64 value) {
+	// Check if the system is little-endian (most common desktop machines)
+	// You could also use a compile-time check for more optimization if your environment supports it
+	static const int one = 1;
+	if (*reinterpret_cast<const char*>(&one) == 1) { // Little-endian system
+		return (static_cast<u64>(htonl(static_cast<u32>(value & 0xFFFFFFFFUL))) << 32) |
+			static_cast<u64>(htonl(static_cast<u32>(value >> 32)));
+	}
+	else { // Big-endian system or unknown
+		return value; // Already in network byte order
+	}
+}
+bool Packet::Pack(CommandType command, u64 packet_id) {
 	int packet_size = this->data_length + RPCN_HEADER_SIZE;
 
 	u8* packet = (u8*)malloc(packet_size);
 	if (!packet)
-		return nullptr;
+		return false;
 
 	packet[0] = static_cast<u8>(PacketType::Request);
 	*reinterpret_cast<u16_le*>(&packet[1]) = static_cast<u16>(command);
@@ -56,7 +67,9 @@ u8* Packet::Pack(CommandType command, u64 packet_id) {
 	*reinterpret_cast<u64_le*>(&packet[7]) = packet_id;
 
 	memcpy(packet + RPCN_HEADER_SIZE, this->dataPtr, this->data_length);
-	return packet;
+	this->dataPtr = packet;
+	this->data_length = packet_size;
+	return true;
 }
 
 void Packet::Write(u8 data) {
@@ -830,7 +843,7 @@ namespace net {
 			return -1;
 		}
 		static constexpr float CANCEL_INTERVAL = 0.25f;
-		double endTimeout = time_now_d() + 1;
+		double endTimeout = time_now_d() + 5;
 		char buf[4096];
 		int retval = 0;
 
@@ -873,7 +886,7 @@ namespace net {
 
 			}
 			else {
-				socklen_t addrlen = conn->ai_addrlen;
+				//socklen_t addrlen = conn->ai_addrlen;
 				retval = recv(sock_, buf, toRead, MSG_NOSIGNAL);
 
 				if (retval <= 0) {

@@ -102,7 +102,7 @@ public:
 	~Packet();
 
 	// Supplies header to packet data
-	u8* Pack(CommandType command, u64 packet_id);
+	bool Pack(CommandType command, u64 packet_id);
 
 	void Write(u8 data);
 	void Write(u16 data);
@@ -221,7 +221,7 @@ namespace net {
 		//int GetID() { return ID; }
 		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
 
-		virtual bool Login() = 0;
+		virtual bool Login(const char* titleId, const char* token, const char* password) = 0;
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { return sock_; }
@@ -252,14 +252,14 @@ namespace net {
 		~PSNAuthAgent();
 		PSNAuthAgent(std::string host, int port);
 		static int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
-		bool Login();
+		bool Login(const char* titleId, const char* token, const char* password);
 	};
 	class RPCNAuthAgent : public NPAuthAgent {
 	public:
 		~RPCNAuthAgent();
 		RPCNAuthAgent(std::string host, int port);
 		static int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
-		bool Login();
+		bool Login(const char* titleId, const char* token, const char* password);
 	};
 
 	inline std::unique_ptr<NPAuthAgent> CreateNPAuthAgent(NPAgentType type, std::string host = "", int port = 0) {
