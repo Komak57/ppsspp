@@ -1388,9 +1388,9 @@ static int sceUtilityAuthDialogShutdownStart() {
 
 static int sceUtilityAuthDialogUpdate(int n) {
 	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerUpdate(%i)", n);
-	// TODO: Render Browser
-	// For now, let's just quit out so the user doesn't get stuck
-	dialog_State = PSP_UTILITY_DIALOG_FINISHED;
+	// TODO: Render Dialog
+	// Fox is looking for this trigger. You can uncomment to allow the program to resume and let him know how you got here!
+	//dialog_State = PSP_UTILITY_DIALOG_FINISHED;
 	return 0;
 }
 static u32 sceUtilityLoadUsbModule(u32 module)
@@ -1427,15 +1427,31 @@ static int sceUtilityPsnShutdownStart()
 static void sceUtilityPsnInitStart(u32 paramPtr)
 {
 	// Related Flag for PSP2i => "JP0177-NPJH50332_00"
-	WARN_LOG_REPORT(Log::sceUtility, "UNIMPL sceUtilityPsnInitStart(0x%08x)", paramPtr);
+	WARN_LOG(Log::sceUtility, "UNIMPL sceUtilityPsnInitStart(0x%08x)", paramPtr);
 	PSN_STATE = 0;
+
+	sceUtilityPsnConfig config;
+	memset(&config, paramPtr, sizeof(config));
+
+	// paramPtr + 28 => skips GetStatus with value 0
+	// paramPtr + 32 => skips GetStatus with value 1
+
+	WARN_LOG(Log::sceUtility, "sceUtilityPsnInitStart(0x%08x) => [%d, %d, %d, %d, %d, %d, %d, %d]", paramPtr, config.var1, config.var2, config.var3, config.var4, config.var5, config.var6, config.var7, config.var8);
 	//Memory::Write_U8(0, paramPtr + 0x84); // sceRtcGetCurrentNetworkTick flag
-	Memory::Write_U32(1, paramPtr + 0xa8);
+	//Memory::Write_U32(0, paramPtr + 0);
+	//Memory::Write_U32(0, paramPtr + 4);
+	//Memory::Write_U32(0, paramPtr + 8);
+	//Memory::Write_U32(0, paramPtr + 12);
+	//Memory::Write_U32(0, paramPtr + 16);
+	//Memory::Write_U32(0, paramPtr + 20);
+	//Memory::Write_U32(1, paramPtr + 24);
+	//Memory::Write_U32(0, paramPtr + 32);
 	return hleNoLogVoid();
 }
 
 static int sceUtilityPsnGetStatus()
 {
+	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityPsnGetStatus()");
 	/* PSN Status Codes
 	0: PSN Available
 		Flag at 0x84 calls sceRtcGetCurrentNetworkTick
@@ -1446,12 +1462,48 @@ static int sceUtilityPsnGetStatus()
 	default: Login Failed
 	*/
 	auto server = net::CreateNPAuthAgent(net::NPAgentType::RPCN, "rpcn.revurb.us", 31313);
+	std::string certPem = "-----BEGIN CERTIFICATE-----\n"
+							"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\n"
+							"-----END CERTIFICATE-----\n";
 
 	if (!server->Resolve()) {
 		return hleLogError(Log::sceUtility, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND, "Could not Resolve");
 	}
+	server->InitializeSSL(certPem);
 	// Connect to server before we collect information
-	if (!server->Connect()) {
+	if (!server->Connect(1)) {
 		return hleLogError(Log::sceUtility, SCE_NP_MATCHING2_ERROR_SERVER_NOT_AVAILABLE, "Could not Connect");
 	}
 	if (!server->Login()) {

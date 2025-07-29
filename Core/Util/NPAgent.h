@@ -64,8 +64,8 @@ namespace net {
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
 		int InitializeSSL(std::string certPEM);
-		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
-		bool SSLConnect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
+		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
+		bool SSLConnect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
 		void Disconnect();
 		bool Send(Packet* packet, double timeout, bool* cancelled);
 		int Recv(Packet* packet, size_t sz);

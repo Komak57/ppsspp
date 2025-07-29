@@ -73,11 +73,11 @@ namespace net {
 		}
 		//net::Buffer readbuf;
 		//// Read response
-		/*int ret;
+		int ret;
 		if ((ret = Recv(&packet, 4096)) < 0) {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
-		}*/
+		}
 
 		//std::string response;
 		//readbuf.Take(ret, &response);

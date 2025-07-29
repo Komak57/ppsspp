@@ -149,6 +149,16 @@ struct ModuleLoadInfo {
 	const int *const dependencies;
 	ModuleLoadCallback notify;
 };
+struct sceUtilityPsnConfig {
+	u32 var1;
+	u32 var2;
+	u32 var3;
+	u32 var4;
+	u32 var5;
+	u32 var6;
+	u32 var7;
+	int var8;
+};
 
 const std::map<int, u32> &__UtilityGetLoadedModules();  // ->first gets the module ID, for use in the following two functions.
 const ModuleLoadInfo *__UtilityModuleInfo(int moduleID);

@@ -160,6 +160,8 @@ int HTTPConnection::InitializeSSL() {
 		INFO_LOG(Log::sceNet, "sceHttpsInit: ciphers[%i] = 0x%04x = %s", i, ciphers[i], mbedtls_ssl_get_ciphersuite_name(ciphers[i]));
 	}*/
 
+	// Enable Legacy Cipher
+	//mbedtls_ssl_conf_ciphersuites(&sslConfig, net::legacy_ciphersuites_array); // optional if you’ve recompiled with weak cipher support
 	// Limit to TLS 1.0 - TLS 1.2 to match Hardware Limitations
 	mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
 	mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);

@@ -11,6 +11,12 @@
 #include <mbedtls\debug.h>
 #include <mbedtls\error.h>
 //#define AGENT_TESTING
+//#undef MBEDTLS_AES_ALT
+//#undef MBEDTLS_SHA256_ALT
+//#undef MBEDTLS_RSA_ALT
+//#define MBEDTLS_AES_ALT
+//#define MBEDTLS_SHA256_ALT
+//#define MBEDTLS_RSA_ALT
 
 bool IsBigEndian() {
 	uint16_t number = 0x1;
@@ -97,7 +103,7 @@ namespace net {
 
 		/* OPTIONAL is not optimal for security,
 		 * but makes interop easier in this simplified scenario */
-		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_OPTIONAL);
+		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_NONE);
 		mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
 		mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
 		mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, NULL);
@@ -111,9 +117,14 @@ namespace net {
 		for (int i = 0; i < cipherCount; i++) {
 			INFO_LOG(Log::sceNet, "sceHttpsInit: ciphers[%i] = 0x%04x = %s", i, ciphers[i], mbedtls_ssl_get_ciphersuite_name(ciphers[i]));
 		}*/
-
-		// Limit to TLS 1.0 - TLS 1.2 to match Hardware Limitations
-		mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
+		//mbedtls_ssl_conf_ciphersuites(&sslConfig, net::legacy_ciphersuites_array)
+		static const int forceCiphers[] = {
+			MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			0
+		};
+		mbedtls_ssl_conf_ciphersuites(&sslConfig, forceCiphers);
+		// Limit to TLS 1.2 - TLS 1.3
+		mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 		mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 
 		SSLEnabled = true;
@@ -415,8 +426,10 @@ namespace net {
 				char portStr[8]{};
 				memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
 				if ((ret = mbedtls_net_connect(&netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", addrStr, portStr, (unsigned int)-ret);
-					goto retry;
+					char errbuf[128];
+					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
+					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call failed with -0x%04x (%s))", addrStr, portStr, ret, errbuf);
+					goto sslretry;
 				}
 				// Set NonBlocking
 				fd_util::SetNonBlocking(netCtx.fd, true);
@@ -425,7 +438,7 @@ namespace net {
 				 */
 				if ((ret = mbedtls_ssl_setup(&sslCtx, &sslConfig)) != 0) {
 					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_setup returned 0x%04x", ret);
-					goto retry;
+					goto sslretry;
 				}
 
 				//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
@@ -433,7 +446,7 @@ namespace net {
 					char errbuf[128];
 					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
 					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
-					goto retry;
+					goto sslretry;
 				}
 
 				mbedtls_ssl_set_bio(&sslCtx, &netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
@@ -448,7 +461,7 @@ namespace net {
 						char errbuf[128];
 						mbedtls_strerror(ret, errbuf, sizeof(errbuf));
 						ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
-						goto retry;
+						goto sslretry;
 					}
 				}
 
@@ -466,13 +479,13 @@ namespace net {
 					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
 
 					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
-					goto retry;
+					goto sslretry;
 				}
 
 				INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
 				connected = true;
 				return true;
-			retry:
+			sslretry:
 				INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
 				mbedtls_ssl_session_reset(&sslCtx);
 				mbedtls_ssl_config_free(&sslConfig);
@@ -728,7 +741,7 @@ namespace net {
 	}
 
 	bool NPAuthAgent::Send(Packet* packet, double timeout, bool* cancelled) {
-		if (sock_ <= 0 || conn == nullptr || conn->ai_addr == nullptr) {
+		if (sock_ <= 0) {
 			ERROR_LOG(Log::IO, "Send Failed - Invalid Socket");
 			return false;
 		}
@@ -847,19 +860,11 @@ namespace net {
 						return -err;
 					}
 #endif
-					ready = false;
-					while (!ready) {
-						if (sock_ <= 0) {
-							ERROR_LOG(Log::IO, "Recv Failed - Socket lost");
-							return -1;
-						}
-						ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, true);
-						if (!ready && time_now_d() > endTimeout) {
-							ERROR_LOG(Log::IO, "Recv timed out");
-							return -2;
-						}
+					if (sock_ <= 0) {
+						ERROR_LOG(Log::IO, "Recv Failed - Socket lost");
+						return -1;
 					}
-					continue;
+					return (int)packet->Length() > 0 ? (int)packet->Length() : retval;
 				}
 			}
 			packet->Append(buf, retval);
