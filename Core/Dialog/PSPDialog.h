@@ -41,6 +41,18 @@ struct pspUtilityDialogCommon {
 	s32_le reserved[4];     /** Set to 0 */
 };
 
+struct pspUtilityPsnParam {
+	pspUtilityDialogCommon DialogCommon;
+	u32 mode;
+	u32 heapPtr;
+	u32 heapSize;
+	u32 ctxId;
+	u32 target_type;
+	u32 titleId2Ptr;
+	u32 titleIdPtr;
+	u32 exit_code;
+};
+
 class PSPDialog {
 public:
 	PSPDialog(UtilityDialogType type) : dialogType_(type) {}

@@ -43,8 +43,20 @@ Packet::~Packet() {
 
 }
 
-u8* Packet::Pack(u16 opcode, u8* data) {
-	return nullptr;
+u8* Packet::Pack(CommandType command, u64 packet_id) {
+	int packet_size = this->data_length + RPCN_HEADER_SIZE;
+
+	u8* packet = (u8*)malloc(packet_size);
+	if (!packet)
+		return nullptr;
+
+	packet[0] = static_cast<u8>(PacketType::Request);
+	*reinterpret_cast<u16_le*>(&packet[1]) = static_cast<u16>(command);
+	*reinterpret_cast<u32_le*>(&packet[3]) = static_cast<u32>(packet_size);
+	*reinterpret_cast<u64_le*>(&packet[7]) = packet_id;
+
+	memcpy(packet + RPCN_HEADER_SIZE, this->dataPtr, this->data_length);
+	return packet;
 }
 
 void Packet::Write(u8 data) {
@@ -750,43 +762,61 @@ namespace net {
 		bool ready = false;
 		double endTimeout = time_now_d() + timeout;
 		const char* data = reinterpret_cast<const char*>(packet->Data());
-		const char* test_data = "Hello, World";
-		for (size_t pos = 0, end = strlen(test_data); pos < end; ) {
+		for (size_t pos = 0, end = strlen(data); pos < end; ) {
 			if (time_now_d() > endTimeout) {
 				ERROR_LOG(Log::IO, "Send timed out");
 				return false;
 			}
-			int sent = send(sock_, test_data, end - pos, 0);
-			// Only await when we failed to receive data we're expecting
-			if (sent < 0) {
+			int sent;
+			if (SSLEnabled) {
+				sent = mbedtls_ssl_write(&sslCtx, (const unsigned char*)data + pos, end - pos);
+				//int sent = send(sock, &data[pos], end - pos, MSG_NOSIGNAL);
+				// TODO: Do we need some retry logic here, instead of just giving up?
+				if (sent <= 0) {
+					switch (sent) {
+					case MBEDTLS_ERR_NET_CONN_RESET:
+					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+						ERROR_LOG(Log::sceNet, "FlushSocket: Client closed connection gracefully");
+						return true;
+					default:
+						ERROR_LOG(Log::sceNet, "SSL write failed: -0x%04x", -sent);
+						return false;
+					}
+				}
+			}
+			else {
+				sent = send(sock_, data, end - pos, 0);
+				// Only await when we failed to receive data we're expecting
+				if (sent < 0) {
 #if !PPSSPP_PLATFORM(WINDOWS)
-				int err = errno;
-				if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
-					ERROR_LOG(Log::IO, "Send Failed - %d", err);
-					return false;
-				}
+					int err = errno;
+					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+						ERROR_LOG(Log::IO, "Send Failed - %d", err);
+						return false;
+					}
 #else
-				int err = WSAGetLastError();
-				if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
-					ERROR_LOG(Log::IO, "Send Failed - %d", err);
-					return false;
-				}
+					int err = WSAGetLastError();
+					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+						ERROR_LOG(Log::IO, "Send Failed - %d", err);
+						return false;
+					}
 #endif
-				ready = false;
-				while (!ready) {
-					if (cancelled && *cancelled)
-						return false;
-					if (sock_ <= 0) {
-						ERROR_LOG(Log::IO, "Socket Failed - Socket lost");
-						return false;
+					ready = false;
+					while (!ready) {
+						if (cancelled && *cancelled)
+							return false;
+						if (sock_ <= 0) {
+							ERROR_LOG(Log::IO, "Socket Failed - Socket lost");
+							return false;
+						}
+						ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, true);
+						if (!ready && time_now_d() > endTimeout) {
+							ERROR_LOG(Log::IO, "Send timed out");
+							return false;
+						}
 					}
-					ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, true);
-					if (!ready && time_now_d() > endTimeout) {
-						ERROR_LOG(Log::IO, "Send timed out");
-						return false;
-					}
+					continue;
 				}
-				continue;
 			}
 			pos += sent;
 		}
@@ -795,12 +825,12 @@ namespace net {
 	}
 
 	int NPAuthAgent::Recv(Packet* packet, size_t sz) {
-		if (sock_ <= 0 || conn == nullptr || conn->ai_addr == nullptr) {
-			ERROR_LOG(Log::IO, "Recv Failed - Invalid Socket");
+		if (sock_ <= 0) {
+			ERROR_LOG(Log::IO, "NPAuthAgent::Recv() Failed - Invalid Socket");
 			return -1;
 		}
 		static constexpr float CANCEL_INTERVAL = 0.25f;
-		double endTimeout = time_now_d() + 5;
+		double endTimeout = time_now_d() + 1;
 		char buf[4096];
 		int retval = 0;
 
@@ -836,7 +866,7 @@ namespace net {
 					default:
 						char errbuf[128];
 						mbedtls_strerror(retval, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::HTTP, "Read Failed: -0x%04x -> %s", -retval, errbuf);
+						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read Failed: -0x%04x -> %s", -retval, errbuf);
 						return retval;
 					}
 				}

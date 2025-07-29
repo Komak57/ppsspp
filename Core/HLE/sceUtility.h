@@ -131,6 +131,16 @@ typedef enum
 
 } pspUtilityDialogState;
 
+typedef enum
+{
+	PSN_STATUS_AVAILABLE = 0,	/**< Server is available */
+	PSN_STATUS_BUSY,			/**< Server is too busy to respond */
+	PSN_STATUS_WRONG_VERSION,	/**< Server requires an update (sceUtilityPsnUpdate) */
+	PSN_STATUS_SHUTDOWN,		/**< Server needs a shutdown (sceUtilityPsnShutdownStart => FUN_08dfce7c) */
+	PSN_STATUS_PROCESSING,		/**< Server is still processing the request */
+	PSN_STATUS_ERROR,			/**< An error occurred */
+} pspUtilityPsnStatus;
+
 void __UtilityInit();
 void __UtilityDoState(PointerWrap &p);
 void __UtilityShutdown();

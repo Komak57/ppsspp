@@ -27,31 +27,14 @@ namespace net {
 
 		// Disconnect on Error
 		// Disconnect on malformed data
-		const char* npTitleId = "NPJH50332";
-		u32 packet_size = 0x36;
 		Packet packet = Packet();
+		packet.Write("NPJH50332\0");
+		packet.Write("password\0");
+		packet.Write("token\0");
 
-		uint8_t guid[16] = { 0xe2, 0x88, 0xf3, 0x36, 0xa6, 0x13, 0x98, 0x1d,
-						 0x1f, 0x8b, 0x02, 0x53, 0xf3, 0x4d, 0x40, 0x28 };
+		packet.Pack(CommandType::Login, 0);
 
-		packet.Write((u16)0x1201);		// OPCODE ?
-		packet.Write((u16)packet_size);	// PACKET_LEN
-		packet.Write((u32)0x10010000);	// ?
-		packet.Write((u32)0x01001000);	// ?
-		packet.Write((u32)0x00000000);	// padding?
-		int i = 0;
-		for (i = 0; i < 16; i++)
-			packet.Write((u8)guid[i]);	// GUID?
-		packet.Write((u16)0x1010);		// ?
-
-		packet.Write((u16)(sizeof(npTitleId) + 4));	// TITLE_LEN
-		packet.Write(npTitleId);
-		packet.Write("_00");
-
-		packet.Write((u16)0x4073);		// ?
-		packet.Write((u16)0x0002);		// ?
-		packet.Write((u16)0x0001);		// ?
-
+		int i;
 		std::string hexdata = "";
 		for (i = 0; i < packet.Length(); i++) {
 			char const c = packet.Data()[i];

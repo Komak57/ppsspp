@@ -20,6 +20,80 @@
 //	std::string Host;
 //	u32_le IPAddr = 910526074; // 910526074 || 0x3645867a || 54.69.134.122 || elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net
 //};
+constexpr int RPCN_HEADER_SIZE = 15;
+
+enum class PacketType : u8
+{
+	Request,
+	Reply,
+	Notification,
+	ServerInfo,
+};
+
+enum class CommandType : u16
+{
+	Login,
+	Terminate,
+	Create,
+	SendToken,
+	SendResetToken,
+	ResetPassword,
+	ResetState,
+	AddFriend,
+	RemoveFriend,
+	AddBlock,
+	RemoveBlock,
+	GetServerList,
+	GetWorldList,
+	CreateRoom,
+	JoinRoom,
+	LeaveRoom,
+	SearchRoom,
+	GetRoomDataExternalList,
+	SetRoomDataExternal,
+	GetRoomDataInternal,
+	SetRoomDataInternal,
+	GetRoomMemberDataInternal,
+	SetRoomMemberDataInternal,
+	SetUserInfo,
+	PingRoomOwner,
+	SendRoomMessage,
+	RequestSignalingInfos,
+	RequestTicket,
+	SendMessage,
+	GetBoardInfos,
+	RecordScore,
+	RecordScoreData,
+	GetScoreData,
+	GetScoreRange,
+	GetScoreFriends,
+	GetScoreNpid,
+	GetNetworkTime,
+	TusSetMultiSlotVariable,
+	TusGetMultiSlotVariable,
+	TusGetMultiUserVariable,
+	TusGetFriendsVariable,
+	TusAddAndGetVariable,
+	TusTryAndSetVariable,
+	TusDeleteMultiSlotVariable,
+	TusSetData,
+	TusGetData,
+	TusGetMultiSlotDataStatus,
+	TusGetMultiUserDataStatus,
+	TusGetFriendsDataStatus,
+	TusDeleteMultiSlotData,
+	SetPresence,
+	CreateRoomGUI,
+	JoinRoomGUI,
+	LeaveRoomGUI,
+	GetRoomListGUI,
+	SetRoomSearchFlagGUI,
+	GetRoomSearchFlagGUI,
+	SetRoomInfoGUI,
+	GetRoomInfoGUI,
+	QuickMatchGUI,
+	SearchJoinRoomGUI,
+};
 
 inline char const hex_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
 class Packet {
@@ -28,7 +102,7 @@ public:
 	~Packet();
 
 	// Supplies header to packet data
-	u8* Pack(u16 opcode, u8* data);
+	u8* Pack(CommandType command, u64 packet_id);
 
 	void Write(u8 data);
 	void Write(u16 data);
