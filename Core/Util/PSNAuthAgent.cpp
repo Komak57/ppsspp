@@ -2,6 +2,9 @@
 #include <Core\HLE\HLE.h>
 #include <Net\URL.h>
 #include "Common/Net/HTTPClient.h"
+#include <mbedtls\error.h>
+#include <File\FileDescriptor.h>
+#include <TimeUtil.h>
 namespace net {
 	// FIXME: Populate with actual connection credentials for PSN
 	PSNAuthAgent::PSNAuthAgent(std::string host, int port) {
@@ -19,6 +22,115 @@ namespace net {
 		return false;
 	}
 
+	bool PSNAuthAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
+		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+		std::string certPem = "-----BEGIN CERTIFICATE-----\n"
+			"\n"
+			"-----END CERTIFICATE-----\n";
+		InitializeSSL(MBEDTLS_SSL_TRANSPORT_STREAM, certPem);
+
+		if (port_ <= 0) {
+			ERROR_LOG(Log::IO, "Connect - Bad port");
+			return false;
+		}
+		if (tls.connected) {
+			mbedtls_ssl_session_reset(&tls.sslCtx);
+			mbedtls_ssl_config_free(&tls.sslConfig);
+
+			mbedtls_ssl_free(&tls.sslCtx);
+			mbedtls_net_free(&tls.netCtx);
+			tls.connected = false;
+		}
+
+
+		for (int tries = maxTries; tries > 0; --tries) {
+			mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig);
+			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
+				if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
+					continue;
+
+				int ret;
+				/*
+				 * 1. Start the connection
+				 */
+				char addrStr[128]{};
+				FormatAddr(addrStr, sizeof(addrStr), possible);
+				char portStr[8]{};
+				memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
+				if ((ret = mbedtls_net_connect(&tls.netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
+					char errbuf[128];
+					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
+					ERROR_LOG(Log::sceNet, "Connect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call failed with -0x%04x (%s))", addrStr, portStr, ret, errbuf);
+					goto sslretry;
+				}
+				// Set NonBlocking
+				fd_util::SetNonBlocking(tls.netCtx.fd, true);
+				/*
+				 * 2. Setup stuff
+				 */
+				if ((ret = mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig)) != 0) {
+					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_setup returned 0x%04x", ret);
+					goto sslretry;
+				}
+
+				//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
+				if ((ret = mbedtls_ssl_set_hostname(&tls.sslCtx, host_.c_str())) != 0) {
+					char errbuf[128];
+					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
+					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
+					goto sslretry;
+				}
+
+				mbedtls_ssl_set_bio(&tls.sslCtx, &tls.netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
+
+				/*
+				 * 4. Handshake
+				 */
+				NOTICE_LOG(Log::sceNet, "Connect - Performing the SSL/TLS handshake...");
+
+				while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
+					if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
+						char errbuf[128];
+						mbedtls_strerror(ret, errbuf, sizeof(errbuf));
+						ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
+						goto sslretry;
+					}
+				}
+
+				/*
+				 * 5. Verify the server certificate
+				 */
+				 // HTTPS Option 28 may relate to disabling this check
+				NOTICE_LOG(Log::sceNet, "Connect - Verifying peer X.509 certificate...");
+
+				/* In real life, we probably want to bail out when ret != 0 */
+				u32 flags;
+				if ((flags = mbedtls_ssl_get_verify_result(&tls.sslCtx)) != 0) {
+					char vrfy_buf[512];
+
+					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
+
+					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
+					goto sslretry;
+				}
+
+				INFO_LOG(Log::sceNet, "Connect - Connection Successful");
+				tls.connected = true;
+				return true;
+			sslretry:
+				INFO_LOG(Log::sceNet, "Connect - Connection Failed, retrying");
+				mbedtls_ssl_session_reset(&tls.sslCtx);
+				mbedtls_ssl_config_free(&tls.sslConfig);
+
+				mbedtls_ssl_free(&tls.sslCtx);
+				mbedtls_net_free(&tls.netCtx);
+
+				continue;
+			}
+			sleep_ms(1, "connect");
+		}
+		return false;
+	}
 	int PSNAuthAgent::GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
 		Url url("http://static-resource.np.community.playstation.net/np/resource/psp-title/" + std::string(npTitleId.data) + "_00/matching/" + std::string(npTitleId.data) + "_00-matching.xml");
 		http::Client client;

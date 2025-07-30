@@ -36,6 +36,7 @@ uint32_t Swap32(uint32_t val) {
 }
 
 Packet::Packet() {
+	memset(data_bytes, 0, sizeof(data_bytes));
 	this->dataPtr = data_bytes;
 	this->data_length = 0;
 }
@@ -94,33 +95,33 @@ void Packet::Write(std::string data) {
 }
 
 namespace net {
-	int NPAuthAgent::InitializeSSL(std::string certPEM) {
+	int NPAgent::InitializeSSL(int transport, std::string certPEM) {
 		WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::InitializeSSL()");
 
-		mbedtls_net_init(&netCtx);
-		mbedtls_ssl_init(&sslCtx);
-		mbedtls_ssl_config_init(&sslConfig);
-		mbedtls_ctr_drbg_init(&ctrDrbg);
-		mbedtls_entropy_init(&entropy);
+		mbedtls_net_init(&tls.netCtx);
+		mbedtls_ssl_init(&tls.sslCtx);
+		mbedtls_ssl_config_init(&tls.sslConfig);
+		mbedtls_ctr_drbg_init(&tls.ctrDrbg);
+		mbedtls_entropy_init(&tls.entropy);
 		mbedtls_debug_set_threshold(4);
 
-		if (mbedtls_ctr_drbg_seed(&ctrDrbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
+		if (mbedtls_ctr_drbg_seed(&tls.ctrDrbg, mbedtls_entropy_func, &tls.entropy, NULL, 0) != 0) {
 			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to seed RNG");
 			return -1;
 		}
 
 		// Note: certPEM MUST be pointing to a valid certificate, or it will cause a strlen crash
-		mbedtls_x509_crt_init(&caCert);
-		int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
+		mbedtls_x509_crt_init(&tls.caCert);
+		int ret = mbedtls_x509_crt_parse(&tls.caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to parse cert: -0x%04x", -ret);
 			return -1;
 		}
 
 		// Setup SSL config
-		if (mbedtls_ssl_config_defaults(&sslConfig,
+		if (mbedtls_ssl_config_defaults(&tls.sslConfig,
 			MBEDTLS_SSL_IS_CLIENT,
-			MBEDTLS_SSL_TRANSPORT_STREAM,
+			transport,
 			MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
 			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to set SSL config defaults");
 			return -1;
@@ -128,10 +129,10 @@ namespace net {
 
 		/* OPTIONAL is not optimal for security,
 		 * but makes interop easier in this simplified scenario */
-		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_NONE);
-		mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
-		mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
-		mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, NULL);
+		mbedtls_ssl_conf_authmode(&tls.sslConfig, MBEDTLS_SSL_VERIFY_NONE);
+		mbedtls_ssl_conf_ca_chain(&tls.sslConfig, &tls.caCert, NULL);
+		mbedtls_ssl_conf_rng(&tls.sslConfig, mbedtls_ctr_drbg_random, &tls.ctrDrbg);
+		mbedtls_ssl_conf_dbg(&tls.sslConfig, ssl_debug, NULL);
 
 		// Check compiled Ciphers
 		/*const int* ciphers = mbedtls_ssl_list_ciphersuites();
@@ -147,41 +148,40 @@ namespace net {
 			MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 			0
 		};
-		mbedtls_ssl_conf_ciphersuites(&sslConfig, forceCiphers);
+		mbedtls_ssl_conf_ciphersuites(&tls.sslConfig, forceCiphers);
 		// Limit to TLS 1.2 - TLS 1.3
-		mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
-		mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
+		mbedtls_ssl_conf_min_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
+		mbedtls_ssl_conf_max_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 
-		SSLEnabled = true;
 		return 0;
 	}
-	int NPAgent::InitializeSSL(std::string certPEM) {
-		WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::InitializeSSL()");
+	int NPAuthAgent::InitializeSSL(int transport, std::string certPEM) {
+		WARN_LOG(Log::sceNet, "UNTESTED NPAuthAgent::InitializeSSL()");
 
-		mbedtls_net_init(&netCtx);
-		mbedtls_ssl_init(&sslCtx);
-		mbedtls_ssl_config_init(&sslConfig);
-		mbedtls_ctr_drbg_init(&ctrDrbg);
-		mbedtls_entropy_init(&entropy);
+		mbedtls_net_init(&tls.netCtx);
+		mbedtls_ssl_init(&tls.sslCtx);
+		mbedtls_ssl_config_init(&tls.sslConfig);
+		mbedtls_ctr_drbg_init(&tls.ctrDrbg);
+		mbedtls_entropy_init(&tls.entropy);
 		mbedtls_debug_set_threshold(4);
 
-		if (mbedtls_ctr_drbg_seed(&ctrDrbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
+		if (mbedtls_ctr_drbg_seed(&tls.ctrDrbg, mbedtls_entropy_func, &tls.entropy, NULL, 0) != 0) {
 			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to seed RNG");
 			return -1;
 		}
 
 		// Note: certPEM MUST be pointing to a valid certificate, or it will cause a strlen crash
-		mbedtls_x509_crt_init(&caCert);
-		int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
+		mbedtls_x509_crt_init(&tls.caCert);
+		int ret = mbedtls_x509_crt_parse(&tls.caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to parse cert: -0x%04x", -ret);
 			return -1;
 		}
 
 		// Setup SSL config
-		if (mbedtls_ssl_config_defaults(&sslConfig,
+		if (mbedtls_ssl_config_defaults(&tls.sslConfig,
 			MBEDTLS_SSL_IS_CLIENT,
-			MBEDTLS_SSL_TRANSPORT_STREAM,
+			transport,
 			MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
 			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to set SSL config defaults");
 			return -1;
@@ -189,10 +189,10 @@ namespace net {
 
 		/* OPTIONAL is not optimal for security,
 		 * but makes interop easier in this simplified scenario */
-		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_OPTIONAL);
-		mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
-		mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
-		mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, NULL);
+		mbedtls_ssl_conf_authmode(&tls.sslConfig, MBEDTLS_SSL_VERIFY_NONE);
+		mbedtls_ssl_conf_ca_chain(&tls.sslConfig, &tls.caCert, NULL);
+		mbedtls_ssl_conf_rng(&tls.sslConfig, mbedtls_ctr_drbg_random, &tls.ctrDrbg);
+		mbedtls_ssl_conf_dbg(&tls.sslConfig, ssl_debug, NULL);
 
 		// Check compiled Ciphers
 		/*const int* ciphers = mbedtls_ssl_list_ciphersuites();
@@ -203,17 +203,22 @@ namespace net {
 		for (int i = 0; i < cipherCount; i++) {
 			INFO_LOG(Log::sceNet, "sceHttpsInit: ciphers[%i] = 0x%04x = %s", i, ciphers[i], mbedtls_ssl_get_ciphersuite_name(ciphers[i]));
 		}*/
-
-		// Limit to TLS 1.0 - TLS 1.2 to match Hardware Limitations
-		mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
-		mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
+		//mbedtls_ssl_conf_ciphersuites(&sslConfig, net::legacy_ciphersuites_array)
+		static const int forceCiphers[] = {
+			MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			0
+		};
+		mbedtls_ssl_conf_ciphersuites(&tls.sslConfig, forceCiphers);
+		// Limit to TLS 1.2 - TLS 1.3
+		mbedtls_ssl_conf_min_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
+		mbedtls_ssl_conf_max_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 
 		SSLEnabled = true;
 		return 0;
 	}
 
 	bool NPAuthAgent::Resolve(DNSType type) {
-		if ((intptr_t)sock_ != -1) {
+		if ((intptr_t)sock() != -1) {
 			return false;
 		}
 		if (status == SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE) {
@@ -222,6 +227,7 @@ namespace net {
 		}
 		if (!host_.c_str() || port_ < 1 || port_ > 65535) {
 			ERROR_LOG(Log::IO, "Resolve: Unable to resolve %s:%d", host_.c_str(), port_);
+			status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
 			return false;
 		}
 
@@ -246,6 +252,7 @@ namespace net {
 			status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
 			return false;
 		}
+		status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
 		return true;
 	}
 
@@ -286,470 +293,6 @@ namespace net {
 		return true;
 	}
 
-	static void FormatAddr(char* addrbuf, size_t bufsize, const addrinfo* info) {
-		switch (info->ai_family) {
-		case AF_INET:
-		case AF_INET6:
-			inet_ntop(info->ai_family, &((sockaddr_in*)info->ai_addr)->sin_addr, addrbuf, bufsize);
-			break;
-		default:
-			snprintf(addrbuf, bufsize, "(Unknown AF %d)", info->ai_family);
-			break;
-		}
-	}
-
-	bool NPAuthAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
-		if (SSLEnabled)
-			return SSLConnect(maxTries, timeout, cancelConnect);
-		NOTICE_LOG(Log::sceNet, "NPAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
-		if (port_ <= 0) {
-			ERROR_LOG(Log::IO, "Bad port");
-			return false;
-		}
-		sock_ = -1;
-
-		for (int tries = maxTries; tries > 0; --tries) {
-			std::vector<uintptr_t> sockets;
-			fd_set fds;
-			int maxfd = 1;
-			FD_ZERO(&fds);
-			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
-				if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
-					continue;
-
-				int sock = socket(possible->ai_family, SOCK_STREAM, IPPROTO_TCP);
-				if ((intptr_t)sock == -1) {
-					ERROR_LOG(Log::IO, "Bad socket");
-					continue;
-				}
-				// Windows sockets aren't limited by socket number, just by count, so checking FD_SETSIZE there is wrong.
-#if !PPSSPP_PLATFORM(WINDOWS)
-				if (sock >= FD_SETSIZE) {
-					ERROR_LOG(Log::IO, "Socket doesn't fit in FD_SET: %d   We probably have a leak.", sock);
-					closesocket(sock);
-					continue;
-				}
-#endif
-				fd_util::SetNonBlocking(sock, true);
-
-				// Start trying to connect (async with timeout.)
-				errno = 0;
-				if (connect(sock, possible->ai_addr, (int)possible->ai_addrlen) < 0) {
-					int errorCode = socket_errno;
-					std::string errorString = GetStringErrorMsg(errorCode);
-					bool unreachable = errorCode == ENETUNREACH;
-					bool inProgress = errorCode == EINPROGRESS || errorCode == EWOULDBLOCK;
-					if (!inProgress) {
-						char addrStr[128]{};
-						FormatAddr(addrStr, sizeof(addrStr), possible);
-						if (!unreachable) {
-							ERROR_LOG(Log::HTTP, "connect(%d) call to %s failed (%d: %s)", sock, addrStr, errorCode, errorString.c_str());
-						}
-						else {
-							INFO_LOG(Log::HTTP, "connect(%d): Ignoring unreachable resolved address %s", sock, addrStr);
-						}
-						closesocket(sock);
-						continue;
-					}
-				}
-				sockets.push_back(sock);
-				FD_SET(sock, &fds);
-				if (maxfd < sock + 1) {
-					maxfd = sock + 1;
-				}
-				conn = possible;
-
-				char addrStr[128]{};
-				FormatAddr(addrStr, sizeof(addrStr), possible);
-				NOTICE_LOG(Log::sceNet, "NPAgent Found Possible at %s", addrStr);
-			}
-
-			int selectResult = 0;
-			long timeoutHalfSeconds = floor(2 * timeout);
-			while (timeoutHalfSeconds >= 0 && selectResult == 0) {
-				struct timeval tv {};
-				tv.tv_sec = 0;
-				if (timeoutHalfSeconds > 0) {
-					// Wait up to 0.5 seconds between cancel checks.
-					tv.tv_usec = 500000;
-				}
-				else {
-					// Wait the remaining <= 0.5 seconds.  Possibly 0, but that's okay.
-					tv.tv_usec = (timeout - floor(2 * timeout) / 2) * 1000000.0;
-				}
-				--timeoutHalfSeconds;
-
-				selectResult = select(maxfd, nullptr, &fds, nullptr, &tv);
-				if (cancelConnect && *cancelConnect) {
-					WARN_LOG(Log::HTTP, "connect: cancelled (1): %s:%d", host_.c_str(), port_);
-					break;
-				}
-			}
-			if (selectResult > 0) {
-				// Something connected.  Pick the first one that did (if multiple.)
-				for (int sock : sockets) {
-					if ((intptr_t)sock_ == -1 && FD_ISSET(sock, &fds)) {
-						sock_ = sock;
-					}
-					else {
-						closesocket(sock);
-					}
-				}
-
-				NOTICE_LOG(Log::sceNet, "NPAgent Connected!");
-				// Great, now we're good to go.
-				return true;
-			}
-			else {
-				// Fail. Close all the sockets.
-				for (int sock : sockets) {
-					closesocket(sock);
-				}
-			}
-
-			if (cancelConnect && *cancelConnect) {
-				WARN_LOG(Log::HTTP, "connect: cancelled (2): %s:%d", host_.c_str(), port_);
-				break;
-			}
-
-			sleep_ms(1, "connect");
-		}
-
-		// Nothing connected, unfortunately.
-		NOTICE_LOG(Log::sceNet, "NPAgent Connection Failed!");
-		return false;
-	}
-
-	bool NPAuthAgent::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
-		WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
-		if (port_ <= 0) {
-			ERROR_LOG(Log::IO, "SSLConnect - Bad port");
-			return false;
-		}
-		if (connected) {
-			mbedtls_ssl_session_reset(&sslCtx);
-			mbedtls_ssl_config_free(&sslConfig);
-
-			mbedtls_ssl_free(&sslCtx);
-			mbedtls_net_free(&netCtx);
-			connected = false;
-		}
-
-
-		for (int tries = maxTries; tries > 0; --tries) {
-			mbedtls_ssl_setup(&sslCtx, &sslConfig);
-			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
-				if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
-					continue;
-
-				int ret;
-				/*
-				 * 1. Start the connection
-				 */
-				char addrStr[128]{};
-				FormatAddr(addrStr, sizeof(addrStr), possible);
-				char portStr[8]{};
-				memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
-				if ((ret = mbedtls_net_connect(&netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
-					char errbuf[128];
-					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call failed with -0x%04x (%s))", addrStr, portStr, ret, errbuf);
-					goto sslretry;
-				}
-				// Set NonBlocking
-				fd_util::SetNonBlocking(netCtx.fd, true);
-				/*
-				 * 2. Setup stuff
-				 */
-				if ((ret = mbedtls_ssl_setup(&sslCtx, &sslConfig)) != 0) {
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_setup returned 0x%04x", ret);
-					goto sslretry;
-				}
-
-				//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
-				if ((ret = mbedtls_ssl_set_hostname(&sslCtx, host_.c_str())) != 0) {
-					char errbuf[128];
-					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
-					goto sslretry;
-				}
-
-				mbedtls_ssl_set_bio(&sslCtx, &netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
-
-				/*
-				 * 4. Handshake
-				 */
-				NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
-
-				while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
-					if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-						char errbuf[128];
-						mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
-						goto sslretry;
-					}
-				}
-
-				/*
-				 * 5. Verify the server certificate
-				 */
-				 // HTTPS Option 28 may relate to disabling this check
-				NOTICE_LOG(Log::sceNet, "SSLConnect - Verifying peer X.509 certificate...");
-
-				/* In real life, we probably want to bail out when ret != 0 */
-				u32 flags;
-				if ((flags = mbedtls_ssl_get_verify_result(&sslCtx)) != 0) {
-					char vrfy_buf[512];
-
-					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
-
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
-					goto sslretry;
-				}
-
-				INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
-				connected = true;
-				return true;
-			sslretry:
-				INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
-				mbedtls_ssl_session_reset(&sslCtx);
-				mbedtls_ssl_config_free(&sslConfig);
-
-				mbedtls_ssl_free(&sslCtx);
-				mbedtls_net_free(&netCtx);
-
-				continue;
-			}
-			sleep_ms(1, "connect");
-		}
-		return false;
-	}
-
-	bool NPAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
-		if (SSLEnabled)
-			return SSLConnect(maxTries, timeout, cancelConnect);
-		NOTICE_LOG(Log::sceNet, "NPAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
-		if (port_ <= 0) {
-			ERROR_LOG(Log::IO, "Bad port");
-			return false;
-		}
-		sock_ = -1;
-
-		for (int tries = maxTries; tries > 0; --tries) {
-			std::vector<uintptr_t> sockets;
-			fd_set fds;
-			int maxfd = 1;
-			FD_ZERO(&fds);
-			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
-				if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
-					continue;
-
-				int sock = socket(possible->ai_family, SOCK_DGRAM, IPPROTO_UDP);
-				if ((intptr_t)sock == -1) {
-					ERROR_LOG(Log::IO, "Bad socket");
-					continue;
-				}
-				// Windows sockets aren't limited by socket number, just by count, so checking FD_SETSIZE there is wrong.
-#if !PPSSPP_PLATFORM(WINDOWS)
-				if (sock >= FD_SETSIZE) {
-					ERROR_LOG(Log::IO, "Socket doesn't fit in FD_SET: %d   We probably have a leak.", sock);
-					closesocket(sock);
-					continue;
-				}
-#endif
-				fd_util::SetNonBlocking(sock, true);
-
-				// Start trying to connect (async with timeout.)
-				errno = 0;
-				if (connect(sock, possible->ai_addr, (int)possible->ai_addrlen) < 0) {
-					int errorCode = socket_errno;
-					std::string errorString = GetStringErrorMsg(errorCode);
-					bool unreachable = errorCode == ENETUNREACH;
-					bool inProgress = errorCode == EINPROGRESS || errorCode == EWOULDBLOCK;
-					if (!inProgress) {
-						char addrStr[128]{};
-						FormatAddr(addrStr, sizeof(addrStr), possible);
-						if (!unreachable) {
-							ERROR_LOG(Log::HTTP, "connect(%d) call to %s failed (%d: %s)", sock, addrStr, errorCode, errorString.c_str());
-						}
-						else {
-							INFO_LOG(Log::HTTP, "connect(%d): Ignoring unreachable resolved address %s", sock, addrStr);
-						}
-						closesocket(sock);
-						continue;
-					}
-				}
-				sockets.push_back(sock);
-				FD_SET(sock, &fds);
-				if (maxfd < sock + 1) {
-					maxfd = sock + 1;
-				}
-				conn = possible;
-
-				char addrStr[128]{};
-				FormatAddr(addrStr, sizeof(addrStr), possible);
-				NOTICE_LOG(Log::sceNet, "NPAgent Found Possible at %s", addrStr);
-			}
-
-			int selectResult = 0;
-			long timeoutHalfSeconds = floor(2 * timeout);
-			while (timeoutHalfSeconds >= 0 && selectResult == 0) {
-				struct timeval tv {};
-				tv.tv_sec = 0;
-				if (timeoutHalfSeconds > 0) {
-					// Wait up to 0.5 seconds between cancel checks.
-					tv.tv_usec = 500000;
-				}
-				else {
-					// Wait the remaining <= 0.5 seconds.  Possibly 0, but that's okay.
-					tv.tv_usec = (timeout - floor(2 * timeout) / 2) * 1000000.0;
-				}
-				--timeoutHalfSeconds;
-
-				selectResult = select(maxfd, nullptr, &fds, nullptr, &tv);
-				if (cancelConnect && *cancelConnect) {
-					WARN_LOG(Log::HTTP, "connect: cancelled (1): %s:%d", host_.c_str(), port_);
-					break;
-				}
-			}
-			if (selectResult > 0) {
-				// Something connected.  Pick the first one that did (if multiple.)
-				for (int sock : sockets) {
-					if ((intptr_t)sock_ == -1 && FD_ISSET(sock, &fds)) {
-						sock_ = sock;
-					}
-					else {
-						closesocket(sock);
-					}
-				}
-
-				NOTICE_LOG(Log::sceNet, "NPAgent Connected!");
-				// Great, now we're good to go.
-				return true;
-			}
-			else {
-				// Fail. Close all the sockets.
-				for (int sock : sockets) {
-					closesocket(sock);
-				}
-			}
-
-			if (cancelConnect && *cancelConnect) {
-				WARN_LOG(Log::HTTP, "connect: cancelled (2): %s:%d", host_.c_str(), port_);
-				break;
-			}
-
-			sleep_ms(1, "connect");
-		}
-
-		// Nothing connected, unfortunately.
-		NOTICE_LOG(Log::sceNet, "NPAgent Connection Failed!");
-		return false;
-	}
-
-	bool NPAgent::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
-		WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
-		if (port_ <= 0) {
-			ERROR_LOG(Log::IO, "SSLConnect - Bad port");
-			return false;
-		}
-		if (connected) {
-			mbedtls_ssl_session_reset(&sslCtx);
-			mbedtls_ssl_config_free(&sslConfig);
-
-			mbedtls_ssl_free(&sslCtx);
-			mbedtls_net_free(&netCtx);
-			connected = false;
-		}
-
-
-		for (int tries = maxTries; tries > 0; --tries) {
-			mbedtls_ssl_setup(&sslCtx, &sslConfig);
-			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
-				if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
-					continue;
-
-				int ret;
-				/*
-				 * 1. Start the connection
-				 */
-				char addrStr[128]{};
-				FormatAddr(addrStr, sizeof(addrStr), possible);
-				char portStr[8]{};
-				memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
-				if ((ret = mbedtls_net_connect(&netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", addrStr, portStr, (unsigned int)-ret);
-					goto retry;
-				}
-				// Set NonBlocking
-				fd_util::SetNonBlocking(netCtx.fd, true);
-				/*
-				 * 2. Setup stuff
-				 */
-				if ((ret = mbedtls_ssl_setup(&sslCtx, &sslConfig)) != 0) {
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_setup returned 0x%04x", ret);
-					goto retry;
-				}
-
-				//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
-				if ((ret = mbedtls_ssl_set_hostname(&sslCtx, host_.c_str())) != 0) {
-					char errbuf[128];
-					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
-					goto retry;
-				}
-
-				mbedtls_ssl_set_bio(&sslCtx, &netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
-
-				/*
-				 * 4. Handshake
-				 */
-				NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
-
-				while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
-					if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-						char errbuf[128];
-						mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
-						goto retry;
-					}
-				}
-
-				/*
-				 * 5. Verify the server certificate
-				 */
-				 // HTTPS Option 28 may relate to disabling this check
-				NOTICE_LOG(Log::sceNet, "SSLConnect - Verifying peer X.509 certificate...");
-
-				/* In real life, we probably want to bail out when ret != 0 */
-				u32 flags;
-				if ((flags = mbedtls_ssl_get_verify_result(&sslCtx)) != 0) {
-					char vrfy_buf[512];
-
-					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
-
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
-					goto retry;
-				}
-
-				INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
-				connected = true;
-				return true;
-			retry:
-				INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
-				mbedtls_ssl_session_reset(&sslCtx);
-				mbedtls_ssl_config_free(&sslConfig);
-
-				mbedtls_ssl_free(&sslCtx);
-				mbedtls_net_free(&netCtx);
-
-				continue;
-			}
-			sleep_ms(1, "connect");
-		}
-		return false;
-	}
-
 	void NPAuthAgent::Disconnect() {
 		if ((intptr_t)sock_ != -1) {
 			canceled = true;
@@ -766,7 +309,7 @@ namespace net {
 	}
 
 	bool NPAuthAgent::Send(Packet* packet, double timeout, bool* cancelled) {
-		if (sock_ <= 0) {
+		if (sock() <= 0) {
 			ERROR_LOG(Log::IO, "Send Failed - Invalid Socket");
 			return false;
 		}
@@ -782,7 +325,7 @@ namespace net {
 			}
 			int sent;
 			if (SSLEnabled) {
-				sent = mbedtls_ssl_write(&sslCtx, (const unsigned char*)data + pos, end - pos);
+				sent = mbedtls_ssl_write(&tls.sslCtx, (const unsigned char*)data + pos, end - pos);
 				//int sent = send(sock, &data[pos], end - pos, MSG_NOSIGNAL);
 				// TODO: Do we need some retry logic here, instead of just giving up?
 				if (sent <= 0) {
@@ -798,7 +341,7 @@ namespace net {
 				}
 			}
 			else {
-				sent = send(sock_, data, end - pos, 0);
+				sent = send(sock(), data, end - pos, 0);
 				// Only await when we failed to receive data we're expecting
 				if (sent < 0) {
 #if !PPSSPP_PLATFORM(WINDOWS)
@@ -818,7 +361,7 @@ namespace net {
 					while (!ready) {
 						if (cancelled && *cancelled)
 							return false;
-						if (sock_ <= 0) {
+						if (sock() <= 0) {
 							ERROR_LOG(Log::IO, "Socket Failed - Socket lost");
 							return false;
 						}
@@ -837,33 +380,34 @@ namespace net {
 		return true;
 	}
 
-	int NPAuthAgent::Recv(Packet* packet, size_t sz) {
-		if (sock_ <= 0) {
-			ERROR_LOG(Log::IO, "NPAuthAgent::Recv() Failed - Invalid Socket");
-			return -1;
-		}
-		static constexpr float CANCEL_INTERVAL = 0.25f;
-		double endTimeout = time_now_d() + 5;
-		char buf[4096];
-		int retval = 0;
+	enum ReadState {
+		Headers,
+		Body,
+		Complete
+	};
 
-		int ready = 0;
-		while (sz > 0) {
-			if (time_now_d() > endTimeout) {
-				ERROR_LOG(Log::IO, "Recv timed out");
-				return -2;
-			}
-			int toRead = (int)std::min(sz, sizeof(buf));
+	int NPAuthAgent::Recv(Packet* packet) {
+		static constexpr float CANCEL_INTERVAL = 0.25f;
+		char buf[4096];
+		// Adjustable read size
+		PacketHeader header;
+		size_t toRead = sizeof(PacketHeader);
+		int retval = 0;
+		size_t received = 0;
+		ReadState state = ReadState::Headers;
+		int content_length = 0;
+
+		while (state != ReadState::Complete) {
 			if (SSLEnabled) {
 				DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read reading %i bytes", toRead);
-				retval = mbedtls_ssl_read(&sslCtx, (unsigned char*)buf, toRead);
-				int ready = 0;
+				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
+				//int ready = 0;
 				if (retval < 0) {
 					switch (retval) {
 					case MBEDTLS_ERR_NET_CONN_RESET:
 					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
 						WARN_LOG(Log::HTTP, "Read - Client closed connection gracefully");
-						return (int)packet->Length() > 0 ? (int)packet->Length() : retval;
+						return (int)received > 0 ? (int)received : retval;
 					case MBEDTLS_ERR_SSL_TIMEOUT:
 						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
 						return retval;
@@ -872,52 +416,148 @@ namespace net {
 						return retval;
 					case MBEDTLS_ERR_SSL_WANT_READ:
 						DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_READ");
-						while (!ready)
-							ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, false);
-						// Read some more!
+						/*while (!ready)
+							ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);*/
+							// Read some more!
 						continue;
 					default:
 						char errbuf[128];
 						mbedtls_strerror(retval, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read Failed: -0x%04x -> %s", -retval, errbuf);
+						ERROR_LOG(Log::HTTP, "Read Failed: -0x%04x -> %s", -retval, errbuf);
 						return retval;
 					}
 				}
 
 			}
 			else {
-				//socklen_t addrlen = conn->ai_addrlen;
-				retval = recv(sock_, buf, toRead, MSG_NOSIGNAL);
+				DEBUG_LOG(Log::HTTP, "socket reading %i bytes", toRead);
+				retval = recv(sock(), buf, toRead, MSG_NOSIGNAL);
 
-				if (retval <= 0) {
-#if !PPSSPP_PLATFORM(WINDOWS)
-					int err = errno;
-					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
-						ERROR_LOG(Log::IO, "Recv Failed - %d", err);
-						return false;
-					}
-#else
-					int err = WSAGetLastError();
-					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
-						ERROR_LOG(Log::IO, "Recv Failed - %d", err);
-						return -err;
-					}
-#endif
-					if (sock_ <= 0) {
-						ERROR_LOG(Log::IO, "Recv Failed - Socket lost");
-						return -1;
-					}
-					return (int)packet->Length() > 0 ? (int)packet->Length() : retval;
-				}
+				if (retval < 0)
+					break;
 			}
 			packet->Append(buf, retval);
-			//memcpy(packet.Data(), buf, retval);
-			sz -= retval;
-			//packet. += retval;
-		}
+			received += retval;
 
-		return (int)packet->Length() > 0 ? (int)packet->Length() : retval;  // Return -1 or 0 for error, else bytes read
+			if (state == ReadState::Headers) {
+				// More data to read?
+				if (received < sizeof(PacketHeader))
+					continue;
+				// Pull Header
+				memcpy(&header, packet->Data(), sizeof(PacketHeader));
+
+				content_length = header.size;
+				toRead = content_length - received;
+				state = ReadState::Body;
+			}
+			if (state == ReadState::Body) {
+				// Should always be true
+				if (received == content_length)
+					state = ReadState::Complete;
+			}
+			if (state == ReadState::Complete) {
+				if (header.request == (u8)PacketType::ServerInfo) {
+					const int body_length = header.size - sizeof(PacketHeader);
+					u32 error = 0;
+					memcpy(&error, packet->Data() + sizeof(PacketHeader), body_length);
+					switch ((CommandType)header.command) {
+					case CommandType::Login:
+						ERROR_LOG(Log::HTTP, "Response Error: Login Failed -> %s", PacketTypeNames[error]);
+						break;
+					default:
+						ERROR_LOG(Log::HTTP, "Response Error: UNHANDLED[%d] -> %s", header.command, PacketTypeNames[error]);
+						break;
+					}
+					return -error;
+				}
+			}
+		}
+		return received;  // Return HTML Status Code or Error Code
 	}
+
+//	int NPAuthAgent::Recv(Packet* packet) {
+//		if (sock() <= 0) {
+//			ERROR_LOG(Log::IO, "NPAuthAgent::Recv() Failed - Invalid Socket");
+//			return -1;
+//		}
+//		static constexpr float CANCEL_INTERVAL = 0.25f;
+//		double endTimeout = time_now_d() + 10; // 10 second standard timeout
+//		char buf[4096];
+//		int retval = 0;
+//		// Pull headers first
+//		size_t sz = RPCN_HEADER_SIZE;
+//
+//		int ready = 0;
+//		while (sz > 0) {
+//			if (time_now_d() > endTimeout) {
+//				ERROR_LOG(Log::IO, "Recv timed out");
+//				return -2;
+//			}
+//			int toRead = (int)std::min(sz, sizeof(buf));
+//			if (SSLEnabled) {
+//				DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read reading %i bytes", toRead);
+//				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
+//				int ready = 0;
+//				if (retval < 0) {
+//					switch (retval) {
+//					case MBEDTLS_ERR_NET_CONN_RESET:
+//					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+//						WARN_LOG(Log::HTTP, "Read - Client closed connection gracefully");
+//						return (int)packet->Length() > 0 ? (int)packet->Length() : retval;
+//					case MBEDTLS_ERR_SSL_TIMEOUT:
+//						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
+//						return retval;
+//					case MBEDTLS_ERR_SSL_WANT_WRITE:
+//						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_WRITE");
+//						return retval;
+//					case MBEDTLS_ERR_SSL_WANT_READ:
+//						DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_READ");
+//						while (!ready)
+//							ready = fd_util::WaitUntilReady(sock(), CANCEL_INTERVAL, false);
+//						// Read some more!
+//						continue;
+//					default:
+//						char errbuf[128];
+//						mbedtls_strerror(retval, errbuf, sizeof(errbuf));
+//						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read Failed: -0x%04x -> %s", -retval, errbuf);
+//						return retval;
+//					}
+//				}
+//
+//			}
+//			else {
+//				//socklen_t addrlen = conn->ai_addrlen;
+//				retval = recv(sock(), buf, toRead, MSG_NOSIGNAL);
+//
+//				if (retval <= 0) {
+//#if !PPSSPP_PLATFORM(WINDOWS)
+//					int err = errno;
+//					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+//						ERROR_LOG(Log::IO, "Recv Failed - %d", err);
+//						return false;
+//					}
+//#else
+//					int err = WSAGetLastError();
+//					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+//						ERROR_LOG(Log::IO, "Recv Failed - %d", err);
+//						return -err;
+//					}
+//#endif
+//					if (sock() <= 0) {
+//						ERROR_LOG(Log::IO, "Recv Failed - Socket lost");
+//						return -1;
+//					}
+//					return (int)packet->Length() > 0 ? (int)packet->Length() : retval;
+//				}
+//			}
+//			packet->Append(buf, retval);
+//			//memcpy(packet.Data(), buf, retval);
+//			sz -= retval;
+//			//packet. += retval;
+//		}
+//
+//		return (int)packet->Length() > 0 ? (int)packet->Length() : retval;  // Return -1 or 0 for error, else bytes read
+//	}
 
 	u8 NPAgent::GetStatus() {
 		return status;
@@ -997,7 +637,7 @@ namespace net {
 			int toRead = (int)std::min(sz, sizeof(buf));
 			if (SSLEnabled) {
 				DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read reading %i bytes", toRead);
-				retval = mbedtls_ssl_read(&sslCtx, (unsigned char*)buf, toRead);
+				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
 				int ready = 0;
 				if (retval < 0) {
 					switch (retval) {

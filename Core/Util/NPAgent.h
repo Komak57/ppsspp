@@ -1,4 +1,5 @@
 #pragma once
+#include "Common/Net/SocketCompat.h"
 #include "Common/Net/Resolve.h"
 #include <CommonTypes.h>
 #include <optional>
@@ -11,6 +12,7 @@
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/x509_crt.h"
+#include <mbedtls\timing.h>
 
 // 0x88 bytes
 //struct RoomInfo {
@@ -95,7 +97,129 @@ enum class CommandType : u16
 	SearchJoinRoomGUI,
 };
 
+enum class NotificationType : u16
+{
+	UserJoinedRoom,
+	UserLeftRoom,
+	RoomDestroyed,
+	UpdatedRoomDataInternal,
+	UpdatedRoomMemberDataInternal,
+	FriendQuery,  // Other user sent a friend request
+	FriendNew,    // Add a friend to the friendlist(either accepted a friend request or friend accepted it)
+	FriendLost,   // Remove friend from the friendlist(user removed friend or friend removed friend)
+	FriendStatus, // Set status of friend to Offline or Online
+	RoomMessageReceived,
+	MessageReceived,
+	FriendPresenceChanged,
+	SignalingHelper,
+	MemberJoinedRoomGUI,
+	MemberLeftRoomGUI,
+	RoomDisappearedGUI,
+	RoomOwnerChangedGUI,
+	UserKickedGUI,
+	QuickMatchCompleteGUI,
+};
+
+enum class rpcn_state
+{
+	failure_no_failure,
+	failure_input,
+	failure_wolfssl,
+	failure_resolve,
+	failure_binding,
+	failure_connect,
+	failure_id,
+	failure_id_already_logged_in,
+	failure_id_username,
+	failure_id_password,
+	failure_id_token,
+	failure_protocol,
+	failure_other,
+};
+
+enum class ErrorType : u8
+{
+	NoError,                     // No error
+	Malformed,                   // Query was malformed, critical error that should close the connection
+	Invalid,                     // The request type is invalid(wrong stage?)
+	InvalidInput,                // The Input doesn't fit the constraints of the request
+	TooSoon,                     // Time limited operation attempted too soon
+	LoginError,                  // An error happened related to login
+	LoginAlreadyLoggedIn,        // Can't log in because you're already logged in
+	LoginInvalidUsername,        // Invalid username
+	LoginInvalidPassword,        // Invalid password
+	LoginInvalidToken,           // Invalid token
+	CreationError,               // An error happened related to account creation
+	CreationExistingUsername,    // Specific to Account Creation: username exists already
+	CreationBannedEmailProvider, // Specific to Account Creation: the email provider is banned
+	CreationExistingEmail,       // Specific to Account Creation: that email is already registered to an account
+	RoomMissing,                 // User tried to interact with a non existing room
+	RoomAlreadyJoined,           // User tried to join a room he's already part of
+	RoomFull,                    // User tried to join a full room
+	RoomPasswordMismatch,        // Room password didn't match
+	RoomPasswordMissing,         // A password was missing during room creation
+	RoomGroupNoJoinLabel,        // Tried to join a group room without a label
+	RoomGroupFull,               // Room group is full
+	RoomGroupJoinLabelNotFound,  // Join label was invalid in some way
+	RoomGroupMaxSlotMismatch,    // Mismatch between max_slot and the listed slots in groups
+	Unauthorized,                // User attempted an unauthorized operation
+	DbFail,                      // Generic failure on db side
+	EmailFail,                   // Generic failure related to email
+	NotFound,                    // Object of the query was not found(user, etc), use RoomMissing for rooms instead
+	Blocked,                     // The operation can't complete because you've been blocked
+	AlreadyFriend,               // Can't add friend because already friend
+	ScoreNotBest,                // A better score is already registered for that user/character_id
+	ScoreInvalid,                // Score for player was found but wasn't what was expected
+	ScoreHasData,                // Score already has data
+	CondFail,                    // Condition related to query failed
+	Unsupported,
+};
+constexpr const char* PacketTypeNames[] = {
+	"NoError",                     // No error
+	"Malformed",                   // Query was malformed, critical error that should close the connection
+	"Invalid",                     // The request type is invalid(wrong stage?)
+	"InvalidInput",                // The Input doesn't fit the constraints of the request
+	"TooSoon",                     // Time limited operation attempted too soon
+	"LoginError",                  // An error happened related to login
+	"LoginAlreadyLoggedIn",        // Can't log in because you're already logged in
+	"LoginInvalidUsername",        // Invalid username
+	"LoginInvalidPassword",        // Invalid password
+	"LoginInvalidToken",           // Invalid token
+	"CreationError",               // An error happened related to account creation
+	"CreationExistingUsername",    // Specific to Account Creation: username exists already
+	"CreationBannedEmailProvider", // Specific to Account Creation: the email provider is banned
+	"CreationExistingEmail",       // Specific to Account Creation: that email is already registered to an account
+	"RoomMissing",                 // User tried to interact with a non existing room
+	"RoomAlreadyJoined",           // User tried to join a room he's already part of
+	"RoomFull",                    // User tried to join a full room
+	"RoomPasswordMismatch",        // Room password didn't match
+	"RoomPasswordMissing",         // A password was missing during room creation
+	"RoomGroupNoJoinLabel",        // Tried to join a group room without a label
+	"RoomGroupFull",               // Room group is full
+	"RoomGroupJoinLabelNotFound",  // Join label was invalid in some way
+	"RoomGroupMaxSlotMismatch",    // Mismatch between max_slot and the listed slots in groups
+	"Unauthorized",                // User attempted an unauthorized operation
+	"DbFail",                      // Generic failure on db side
+	"EmailFail",                   // Generic failure related to email
+	"NotFound",                    // Object of the query was not found(user, etc), use RoomMissing for rooms instead
+	"Blocked",                     // The operation can't complete because you've been blocked
+	"AlreadyFriend",               // Can't add friend because already friend
+	"ScoreNotBest",                // A better score is already registered for that user/character_id
+	"ScoreInvalid",                // Score for player was found but wasn't what was expected
+	"ScoreHasData",                // Score already has data
+	"CondFail",                    // Condition related to query failed
+	"Unsupported"
+};
 inline char const hex_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+#pragma pack(push, 1)
+struct PacketHeader {
+	u8 request;
+	u16_le command;
+	u32_le size;
+	u64 reqId;
+};
+#pragma pack(pop)
+#pragma pack(push, 1)
 class Packet {
 public:
 	Packet();
@@ -110,36 +234,60 @@ public:
 	void Write(std::string data);
 
 	void Append(const char* data, int len) {
-		memcpy(dataPtr, data, len);
+		memcpy(dataPtr + data_length, data, len);
 		data_length += len;
 	}
 
 	u8* Data() { return dataPtr; }
 	int Length() { return data_length; }
-	void Clear() { data_length = 0; }
+	void Clear() { data_length = 0; memset(dataPtr, 0, sizeof(data_bytes)); }
 private:
 	int data_length = 0;
 	u8 data_bytes[1024];
 	u8* dataPtr;
 };
+#pragma pack(pop)
+
+inline static void FormatAddr(char* addrbuf, size_t bufsize, const addrinfo* info) {
+	switch (info->ai_family) {
+	case AF_INET:
+	case AF_INET6:
+		inet_ntop(info->ai_family, &((sockaddr_in*)info->ai_addr)->sin_addr, addrbuf, bufsize);
+		break;
+	default:
+		snprintf(addrbuf, bufsize, "(Unknown AF %d)", info->ai_family);
+		break;
+	}
+}
+
 // Forward Declare
 struct SceNpMatching2World;
 struct SceNpMatching2RoomDataExternal;
 struct SceNpMatching2RoomDataInternal;
 namespace net {
-	enum class NPAgentType { PSN, RPCN };
-	class NPAgent {
+	class MBEDTLS_Connection {
 	public:
+		bool connected = false;
 		mbedtls_ssl_context sslCtx;
 		mbedtls_net_context netCtx;
 
+		mbedtls_ssl_config sslConfig;
+		mbedtls_ctr_drbg_context ctrDrbg;
+		mbedtls_entropy_context entropy;
+		mbedtls_x509_crt caCert;
+		// For UDP retransmissions
+		mbedtls_timing_delay_context timerCtx;
+	};
+	enum class NPAgentType { PSN, RPCN };
+	class NPAgent {
+	public:
+		MBEDTLS_Connection tls;
 		virtual ~NPAgent() = default;
 
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
-		int InitializeSSL(std::string certPEM);
-		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
-		bool SSLConnect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
+		int InitializeSSL(int transport, std::string certPEM);
+		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) = 0;
 		void Disconnect();
 		bool Send(Packet* packet, double timeout, bool* cancelled);
 		int Recv(Packet* packet, size_t sz);
@@ -155,7 +303,7 @@ namespace net {
 		virtual int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
 
 		// Only to be used for bring-up and debugging.
-		uintptr_t sock() const { return sock_; }
+		uintptr_t sock() const { if (SSLEnabled) return tls.netCtx.fd; else return sock_; }
 		bool isSslEnabled() { return SSLEnabled; }
 
 	protected:
@@ -169,14 +317,9 @@ namespace net {
 		addrinfo* resolved_ = nullptr;
 		addrinfo* conn = nullptr;
 
-		bool connected = false;
 
 		bool SSLEnabled = false;
 
-		mbedtls_ssl_config sslConfig;
-		mbedtls_ctr_drbg_context ctrDrbg;
-		mbedtls_entropy_context entropy;
-		mbedtls_x509_crt caCert;
 	};
 
 	class PSNAgent : public NPAgent {
@@ -184,6 +327,7 @@ namespace net {
 		~PSNAgent();
 		PSNAgent(int serverId, std::string host, int port, u8 status = 2);
 
+		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
 		int GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
 		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
@@ -195,6 +339,7 @@ namespace net {
 		~RPCNAgent();
 		RPCNAgent(int serverId, std::string host, int port, u8 status = 2);
 
+		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
 		int GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
 		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
@@ -203,29 +348,28 @@ namespace net {
 
 	class NPAuthAgent {
 	public:
-		mbedtls_ssl_context sslCtx;
-		mbedtls_net_context netCtx;
+		MBEDTLS_Connection tls;
 
 		virtual ~NPAuthAgent() = default;
 
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
-		int InitializeSSL(std::string certPEM);
-		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
-		bool SSLConnect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
+		int InitializeSSL(int transport, std::string certPEM);
+		virtual bool Connect(int maxTries = 1, double timeout = 20.0f, bool* cancelConnect = nullptr) = 0;
 		void Disconnect();
 
 		bool Send(Packet* packet, double timeout, bool* cancelled);
-		int Recv(Packet* packet, size_t sz);
+		int Recv(Packet* packet);
 
 		//int GetID() { return ID; }
 		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
 
-		virtual bool Login(const char* titleId, const char* token, const char* password) = 0;
+		virtual bool Login(const char* npid, const char* token, const char* password) = 0;
 
 		// Only to be used for bring-up and debugging.
-		uintptr_t sock() const { return sock_; }
+		uintptr_t sock() const { if (SSLEnabled) return tls.netCtx.fd; else return sock_; }
 		bool isSslEnabled() { return SSLEnabled; }
+
 
 	protected:
 		u16 ID;
@@ -238,28 +382,24 @@ namespace net {
 		addrinfo* resolved_ = nullptr;
 		addrinfo* conn = nullptr;
 
-		bool connected = false;
-
 		bool SSLEnabled = false;
-
-		mbedtls_ssl_config sslConfig;
-		mbedtls_ctr_drbg_context ctrDrbg;
-		mbedtls_entropy_context entropy;
-		mbedtls_x509_crt caCert;
 	};
 	class PSNAuthAgent : public NPAuthAgent {
 	public:
 		~PSNAuthAgent();
 		PSNAuthAgent(std::string host, int port);
+		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 		static int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
-		bool Login(const char* titleId, const char* token, const char* password);
+		bool Login(const char* npid, const char* token, const char* password);
 	};
 	class RPCNAuthAgent : public NPAuthAgent {
 	public:
 		~RPCNAuthAgent();
 		RPCNAuthAgent(std::string host, int port);
+		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 		static int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
-		bool Login(const char* titleId, const char* token, const char* password);
+		static std::string generate_npid();
+		bool Login(const char* npid, const char* token, const char* password);
 	};
 
 	inline std::unique_ptr<NPAuthAgent> CreateNPAuthAgent(NPAgentType type, std::string host = "", int port = 0) {
