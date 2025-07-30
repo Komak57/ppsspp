@@ -458,8 +458,7 @@ namespace net {
 			if (state == ReadState::Complete) {
 				if (header.request == (u8)PacketType::ServerInfo) {
 					const int body_length = header.size - sizeof(PacketHeader);
-					u32 error = 0;
-					memcpy(&error, packet->Data() + sizeof(PacketHeader), body_length);
+					u8 error = packet->Data()[sizeof(PacketHeader)];
 					switch ((CommandType)header.command) {
 					case CommandType::Login:
 						ERROR_LOG(Log::HTTP, "Response Error: Login Failed -> %s", PacketTypeNames[error]);
