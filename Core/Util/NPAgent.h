@@ -219,7 +219,6 @@ struct PacketHeader {
 	u64 reqId;
 };
 #pragma pack(pop)
-#pragma pack(push, 1)
 class Packet {
 public:
 	Packet();
@@ -246,7 +245,6 @@ private:
 	u8 data_bytes[1024];
 	u8* dataPtr;
 };
-#pragma pack(pop)
 
 inline static void FormatAddr(char* addrbuf, size_t bufsize, const addrinfo* info) {
 	switch (info->ai_family) {
@@ -287,20 +285,23 @@ namespace net {
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
 		int InitializeSSL(int transport, std::string certPEM);
-		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) = 0;
 		void Disconnect();
 		bool Send(Packet* packet, double timeout, bool* cancelled);
-		int Recv(Packet* packet, size_t sz);
+		int Recv(Packet* packet, size_t sz = 4096);
 
-
-		u8 GetStatus();
-		//int GetID() { return ID; }
-		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
+		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) = 0;
+		virtual bool Login(const char* npid, const char* token, const char* password) = 0;
+		virtual bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
 
 		virtual int GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) = 0;
 		virtual int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) = 0;
 		virtual int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
 		virtual int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
+
+
+		u8 GetStatus();
+		//int GetID() { return ID; }
+		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (SSLEnabled) return tls.netCtx.fd; else return sock_; }
@@ -328,6 +329,9 @@ namespace net {
 		PSNAgent(int serverId, std::string host, int port, u8 status = 2);
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
+		virtual bool Login(const char* npid, const char* token, const char* password);
+		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+
 		int GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
 		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
@@ -340,6 +344,9 @@ namespace net {
 		RPCNAgent(int serverId, std::string host, int port, u8 status = 2);
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
+		bool Login(const char* npid, const char* token, const char* password);
+		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+
 		int GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
 		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
@@ -365,6 +372,7 @@ namespace net {
 		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
 
 		virtual bool Login(const char* npid, const char* token, const char* password) = 0;
+		virtual bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (SSLEnabled) return tls.netCtx.fd; else return sock_; }
@@ -391,6 +399,7 @@ namespace net {
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 		static int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
 		bool Login(const char* npid, const char* token, const char* password);
+		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 	};
 	class RPCNAuthAgent : public NPAuthAgent {
 	public:
@@ -400,6 +409,7 @@ namespace net {
 		static int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
 		static std::string generate_npid();
 		bool Login(const char* npid, const char* token, const char* password);
+		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 	};
 
 	inline std::unique_ptr<NPAuthAgent> CreateNPAuthAgent(NPAgentType type, std::string host = "", int port = 0) {

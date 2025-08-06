@@ -1363,11 +1363,12 @@ bool trigerLogin = 1;
 pspUtilityPsnStatus psnStatus = pspUtilityPsnStatus::PSN_STATUS_SHUTDOWN;
 static std::atomic<bool> psnStopRequested{ false };
 int dialog_State = PSP_UTILITY_DIALOG_NONE;
+std::unique_ptr<net::NPAuthAgent> server;
 
 static void PsnLoginThreadFunc(void) {
 	NOTICE_LOG(Log::sceUtility, "PsnLoginThreadFunc is starting");
 	// TODO: Move this to sceUtilityAuthDialogUpdate
-	auto server = net::CreateNPAuthAgent(net::NPAgentType::RPCN, "rpcn.revurb.us", 31313);
+	std::string npid = net::RPCNAuthAgent::generate_npid();
 
 	if (!server->Resolve()) {
 		psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
@@ -1382,9 +1383,15 @@ static void PsnLoginThreadFunc(void) {
 		// TODO: Notify User and process out cleanly
 		goto exit_label;
 	}
+
 	// FIXME: uses psnParam.titleId2Ptr
-	//std::string npid = net::RPCNAuthAgent::generate_npid();
-	if (!server->Login("FoxLovesYou", "a68f2cba-2e62-4e68-9c08-7f2b0415edcb", "lemmein")) {
+	if (!server->CreateAccount(npid.c_str(), "lemmein", "foxlovesyou", "", "test@email.com")) {
+		psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
+		ERROR_LOG(Log::sceUtility, "Could not Register"); // SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER
+		// TODO: Notify User and process out cleanly
+		goto exit_label;
+	}
+	if (!server->Login(npid.c_str(), "a68f2cba-2e62-4e68-9c08-7f2b0415edcb", "lemmein")) {
 		psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
 		ERROR_LOG(Log::sceUtility, "Could not Login"); // SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER
 		// TODO: Notify User and process out cleanly
@@ -1392,7 +1399,9 @@ static void PsnLoginThreadFunc(void) {
 	}
 
 	psnStatus = pspUtilityPsnStatus::PSN_STATUS_AVAILABLE;
-	exit_label:
+exit_label:
+	if (psnStatus == pspUtilityPsnStatus::PSN_STATUS_ERROR)
+		server->Disconnect();
 	dialog_State = PSP_UTILITY_DIALOG_QUIT; // will execute sceUtilityAuthDialogShutdownStart
 	psnLoginThreadProcessing = false;
 	NOTICE_LOG(Log::sceUtility, "PsnLoginThreadFunc is closing");
@@ -1405,6 +1414,9 @@ static int sceUtilityAuthDialogInitStart(u32 paramsPtr) {
 	dialog_State = PSP_UTILITY_DIALOG_INIT;
 	if (psnLoginThread.joinable())
 		psnLoginThread.join();  // In case it was left dangling
+
+	//pspUtilityPsnParam psnParam;
+	//Memory::Memcpy(&psnParam, paramsPtr, sizeof(psnParam));
 	// TODO: Render Dialog GUI
 	return 0;
 }
@@ -1488,8 +1500,6 @@ bool psnDialogThreadProcessing = 0;
 
 static void PsnDialogAuthThreadFunc(u32 psnParamPtr) {
 	NOTICE_LOG(Log::sceUtility, "PsnDialogAuthThreadFunc is starting");
-	pspUtilityPsnParam psnParam;
-	Memory::Memcpy(&psnParam, psnParamPtr, sizeof(psnParam));
 
 	sceUtilityAuthDialogInitStart(psnParamPtr);
 	while (true) {
@@ -1524,6 +1534,8 @@ static int sceUtilityPsnShutdownStart()
 			psnStopRequested = true; // wait for thread to close (not implemented)
 		psnDialogThread.join();
 	}
+	if (server != nullptr)
+		server->Disconnect();
 	psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
 	return 0;
 }
@@ -1543,8 +1555,18 @@ static void sceUtilityPsnInitStart(u32 paramPtr)
 	if (psnDialogThread.joinable())
 		psnDialogThread.join();  // In case it was left dangling
 
+	server = net::CreateNPAuthAgent(net::NPAgentType::RPCN, "rpcn.revurb.us", 31313);
+
 	psnStatus = pspUtilityPsnStatus::PSN_STATUS_PROCESSING;
-	psnDialogThread = std::thread(PsnDialogAuthThreadFunc, paramPtr);
+	//psnDialogThread = std::thread(PsnDialogAuthThreadFunc, paramPtr);
+
+	if (!server->Resolve()) {
+		psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
+		ERROR_LOG(Log::sceUtility, "Could not Resolve"); // SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND
+		// TODO: Notify User and process out cleanly
+		return hleNoLogVoid();
+	}
+	psnStatus = pspUtilityPsnStatus::PSN_STATUS_AVAILABLE;
 	//psnDialogThread.detach();
 
 	return hleNoLogVoid();
@@ -1553,7 +1575,7 @@ static void sceUtilityPsnInitStart(u32 paramPtr)
 static int sceUtilityPsnGetStatus()
 {
 	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityPsnGetStatus() => %d", psnStatus);
-	if (psnStatus != pspUtilityPsnStatus::PSN_STATUS_PROCESSING) {
+	if (psnStatus == pspUtilityPsnStatus::PSN_STATUS_ERROR) {
 		if (psnLoginThreadProcessing) {
 			while (!psnLoginThread.joinable())
 				psnStopRequested = true; // wait for thread to close (not implemented)
@@ -1566,6 +1588,8 @@ static int sceUtilityPsnGetStatus()
 			NOTICE_LOG(Log::sceUtility, "psnDialogThread.join()");
 			psnDialogThread.join();
 		}
+		if (server != nullptr)
+			server->Disconnect();
 	}
 	/* PSN Status Codes
 	0: PSN Available

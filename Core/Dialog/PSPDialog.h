@@ -29,6 +29,7 @@ class PointerWrap;
 #define SCE_UTILITY_DIALOG_RESULT_CANCEL       1
 #define SCE_UTILITY_DIALOG_RESULT_ABORT        2
 
+#pragma pack(push, 1)
 struct pspUtilityDialogCommon {
 	u32_le size;            /** Size of the structure */
 	s32_le language;        /** Language */
@@ -40,7 +41,8 @@ struct pspUtilityDialogCommon {
 	s32_le result;          /** Result */
 	s32_le reserved[4];     /** Set to 0 */
 };
-
+#pragma pack(pop)
+#pragma pack(push, 1)
 struct pspUtilityPsnParam {
 	pspUtilityDialogCommon DialogCommon;
 	u32 mode;
@@ -48,10 +50,11 @@ struct pspUtilityPsnParam {
 	u32 heapSize;
 	u32 ctxId;
 	u32 target_type;
-	char* titleId2Ptr;
-	char* titleIdPtr;
+	u32 titleId2Ptr;
+	u32 titleIdPtr;
 	u32 exit_code;
 };
+#pragma pack(pop)
 
 class PSPDialog {
 public:

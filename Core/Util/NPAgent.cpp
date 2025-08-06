@@ -56,20 +56,23 @@ inline u64 htonll(u64 value) {
 	}
 }
 bool Packet::Pack(CommandType command, u64 packet_id) {
-	int packet_size = this->data_length + RPCN_HEADER_SIZE;
+	const int packet_size = this->data_length + RPCN_HEADER_SIZE;
 
-	u8* packet = (u8*)malloc(packet_size);
-	if (!packet)
-		return false;
-
-	packet[0] = static_cast<u8>(PacketType::Request);
-	*reinterpret_cast<u16_le*>(&packet[1]) = static_cast<u16>(command);
-	*reinterpret_cast<u32_le*>(&packet[3]) = static_cast<u32>(packet_size);
-	*reinterpret_cast<u64_le*>(&packet[7]) = packet_id;
-
+	// Transfer data from dataPtr to allocate space for HEADER
+	// Can also allocate the space in the first Write() function
+	u8 packet[1024];// = new u8[packet_size];
 	memcpy(packet + RPCN_HEADER_SIZE, this->dataPtr, this->data_length);
-	this->dataPtr = packet;
+	memset(this->dataPtr, 0, packet_size);
+	memcpy(this->dataPtr, packet, packet_size);
 	this->data_length = packet_size;
+
+	// Write HEADER
+	dataPtr[0] = static_cast<u8>(PacketType::Request);
+
+	*reinterpret_cast<u16*>(&dataPtr[1]) = static_cast<u16>(command);
+	*reinterpret_cast<u32*>(&dataPtr[3]) = static_cast<u32>(packet_size);
+	*reinterpret_cast<u64*>(&dataPtr[7]) = packet_id;
+
 	return true;
 }
 
@@ -89,8 +92,9 @@ void Packet::Write(u32 data) {
 }
 void Packet::Write(std::string data) {
 	int i = 0;
-	for (i = 0; i < data.length(); i++)
-		memcpy(dataPtr + data_length + i, &data[i], 1);
+	memcpy(dataPtr + data_length, data.c_str(), data.length());
+	//for (i = 0; i < data.length(); i++)
+		//memcpy(dataPtr + data_length + i, &data[i], 1);
 	data_length += data.length();
 }
 
@@ -153,6 +157,7 @@ namespace net {
 		mbedtls_ssl_conf_min_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 		mbedtls_ssl_conf_max_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 
+		SSLEnabled = true;
 		return 0;
 	}
 	int NPAuthAgent::InitializeSSL(int transport, std::string certPEM) {
@@ -294,10 +299,19 @@ namespace net {
 	}
 
 	void NPAuthAgent::Disconnect() {
-		if ((intptr_t)sock_ != -1) {
-			canceled = true;
-			closesocket(sock_);
-			sock_ = -1;
+		if (SSLEnabled) {
+			mbedtls_ssl_close_notify(&tls.sslCtx);
+			mbedtls_ssl_free(&tls.sslCtx);
+			mbedtls_ssl_config_free(&tls.sslConfig);
+			mbedtls_net_free(&tls.netCtx);
+			SSLEnabled = false;
+		}
+		else {
+			if ((intptr_t)sock_ != -1) {
+				canceled = true;
+				closesocket(sock_);
+				sock_ = -1;
+			}
 		}
 	}
 	void NPAgent::Disconnect() {
@@ -474,142 +488,84 @@ namespace net {
 		return received;  // Return HTML Status Code or Error Code
 	}
 
-//	int NPAuthAgent::Recv(Packet* packet) {
-//		if (sock() <= 0) {
-//			ERROR_LOG(Log::IO, "NPAuthAgent::Recv() Failed - Invalid Socket");
-//			return -1;
-//		}
-//		static constexpr float CANCEL_INTERVAL = 0.25f;
-//		double endTimeout = time_now_d() + 10; // 10 second standard timeout
-//		char buf[4096];
-//		int retval = 0;
-//		// Pull headers first
-//		size_t sz = RPCN_HEADER_SIZE;
-//
-//		int ready = 0;
-//		while (sz > 0) {
-//			if (time_now_d() > endTimeout) {
-//				ERROR_LOG(Log::IO, "Recv timed out");
-//				return -2;
-//			}
-//			int toRead = (int)std::min(sz, sizeof(buf));
-//			if (SSLEnabled) {
-//				DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read reading %i bytes", toRead);
-//				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
-//				int ready = 0;
-//				if (retval < 0) {
-//					switch (retval) {
-//					case MBEDTLS_ERR_NET_CONN_RESET:
-//					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-//						WARN_LOG(Log::HTTP, "Read - Client closed connection gracefully");
-//						return (int)packet->Length() > 0 ? (int)packet->Length() : retval;
-//					case MBEDTLS_ERR_SSL_TIMEOUT:
-//						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
-//						return retval;
-//					case MBEDTLS_ERR_SSL_WANT_WRITE:
-//						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_WRITE");
-//						return retval;
-//					case MBEDTLS_ERR_SSL_WANT_READ:
-//						DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_READ");
-//						while (!ready)
-//							ready = fd_util::WaitUntilReady(sock(), CANCEL_INTERVAL, false);
-//						// Read some more!
-//						continue;
-//					default:
-//						char errbuf[128];
-//						mbedtls_strerror(retval, errbuf, sizeof(errbuf));
-//						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read Failed: -0x%04x -> %s", -retval, errbuf);
-//						return retval;
-//					}
-//				}
-//
-//			}
-//			else {
-//				//socklen_t addrlen = conn->ai_addrlen;
-//				retval = recv(sock(), buf, toRead, MSG_NOSIGNAL);
-//
-//				if (retval <= 0) {
-//#if !PPSSPP_PLATFORM(WINDOWS)
-//					int err = errno;
-//					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
-//						ERROR_LOG(Log::IO, "Recv Failed - %d", err);
-//						return false;
-//					}
-//#else
-//					int err = WSAGetLastError();
-//					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
-//						ERROR_LOG(Log::IO, "Recv Failed - %d", err);
-//						return -err;
-//					}
-//#endif
-//					if (sock() <= 0) {
-//						ERROR_LOG(Log::IO, "Recv Failed - Socket lost");
-//						return -1;
-//					}
-//					return (int)packet->Length() > 0 ? (int)packet->Length() : retval;
-//				}
-//			}
-//			packet->Append(buf, retval);
-//			//memcpy(packet.Data(), buf, retval);
-//			sz -= retval;
-//			//packet. += retval;
-//		}
-//
-//		return (int)packet->Length() > 0 ? (int)packet->Length() : retval;  // Return -1 or 0 for error, else bytes read
-//	}
-
 	u8 NPAgent::GetStatus() {
 		return status;
 	}
 
 
 	bool NPAgent::Send(Packet* packet, double timeout, bool* cancelled) {
-		if (sock_ <= 0 || conn == nullptr || conn->ai_addr == nullptr) {
+		if (sock() <= 0) {
 			ERROR_LOG(Log::IO, "Send Failed - Invalid Socket");
 			return false;
 		}
+
+		int i;
+		std::string hexdata = "";
+		for (i = 0; i < packet->Length(); i++) {
+			char const c = packet->Data()[i];
+			hexdata += hex_chars[(c & 0xF0) >> 4];
+			hexdata += hex_chars[(c & 0x0F) >> 0];
+		}
+		INFO_LOG(Log::sceNet, "NPAgent::Send('%s')", hexdata.c_str());
 		static constexpr float CANCEL_INTERVAL = 0.25f;
 
 		bool ready = false;
 		double endTimeout = time_now_d() + timeout;
-		const char* data = reinterpret_cast<const char*>(packet->Data());
-		const char* test_data = "Hello, World";
-		for (size_t pos = 0, end = strlen(test_data); pos < end; ) {
+		//const char* data = reinterpret_cast<const char*>(packet->Data());
+		for (size_t pos = 0, end = packet->Length(); pos < end; ) {
 			if (time_now_d() > endTimeout) {
 				ERROR_LOG(Log::IO, "Send timed out");
 				return false;
 			}
-			int sent = send(sock_, test_data, end - pos, 0);
-			// Only await when we failed to receive data we're expecting
-			if (sent < 0) {
+			int sent;
+			if (SSLEnabled) {
+				sent = mbedtls_ssl_write(&tls.sslCtx, packet->Data() + pos, end - pos);
+				// TODO: Do we need some retry logic here, instead of just giving up?
+				if (sent <= 0) {
+					switch (sent) {
+					case MBEDTLS_ERR_NET_CONN_RESET:
+					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+						ERROR_LOG(Log::sceNet, "FlushSocket: Client closed connection gracefully");
+						return true;
+					default:
+						ERROR_LOG(Log::sceNet, "SSL write failed: -0x%04x", -sent);
+						return false;
+					}
+				}
+			}
+			else {
+				sent = send(sock(), (const char*)packet->Data() + pos, end - pos, 0);
+				// Only await when we failed to receive data we're expecting
+				if (sent < 0) {
 #if !PPSSPP_PLATFORM(WINDOWS)
-				int err = errno;
-				if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
-					ERROR_LOG(Log::IO, "Send Failed - %d", err);
-					return false;
-				}
+					int err = errno;
+					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+						ERROR_LOG(Log::IO, "Send Failed - %d", err);
+						return false;
+					}
 #else
-				int err = WSAGetLastError();
-				if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
-					ERROR_LOG(Log::IO, "Send Failed - %d", err);
-					return false;
-				}
+					int err = WSAGetLastError();
+					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+						ERROR_LOG(Log::IO, "Send Failed - %d", err);
+						return false;
+					}
 #endif
-				ready = false;
-				while (!ready) {
-					if (cancelled && *cancelled)
-						return false;
-					if (sock_ <= 0) {
-						ERROR_LOG(Log::IO, "Socket Failed - Socket lost");
-						return false;
+					ready = false;
+					while (!ready) {
+						if (cancelled && *cancelled)
+							return false;
+						if (sock() <= 0) {
+							ERROR_LOG(Log::IO, "Socket Failed - Socket lost");
+							return false;
+						}
+						ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, true);
+						if (!ready && time_now_d() > endTimeout) {
+							ERROR_LOG(Log::IO, "Send timed out");
+							return false;
+						}
 					}
-					ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, true);
-					if (!ready && time_now_d() > endTimeout) {
-						ERROR_LOG(Log::IO, "Send timed out");
-						return false;
-					}
+					continue;
 				}
-				continue;
 			}
 			pos += sent;
 		}
@@ -618,32 +574,27 @@ namespace net {
 	}
 
 	int NPAgent::Recv(Packet* packet, size_t sz) {
-		if (sock_ <= 0 || conn == nullptr || conn->ai_addr == nullptr) {
-			ERROR_LOG(Log::IO, "Recv Failed - Invalid Socket");
-			return -1;
-		}
 		static constexpr float CANCEL_INTERVAL = 0.25f;
-		double endTimeout = time_now_d() + 5;
 		char buf[4096];
+		// Adjustable read size
+		PacketHeader header;
+		size_t toRead = sizeof(PacketHeader);
 		int retval = 0;
+		size_t received = 0;
+		ReadState state = ReadState::Headers;
+		int content_length = 0;
 
-		int ready = 0;
-		while (sz > 0) {
-			if (time_now_d() > endTimeout) {
-				ERROR_LOG(Log::IO, "Recv timed out");
-				return -2;
-			}
-			int toRead = (int)std::min(sz, sizeof(buf));
+		while (state != ReadState::Complete) {
 			if (SSLEnabled) {
 				DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read reading %i bytes", toRead);
 				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
-				int ready = 0;
+				//int ready = 0;
 				if (retval < 0) {
 					switch (retval) {
 					case MBEDTLS_ERR_NET_CONN_RESET:
 					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
 						WARN_LOG(Log::HTTP, "Read - Client closed connection gracefully");
-						return (int)packet->Length() > 0 ? (int)packet->Length() : retval;
+						return (int)received > 0 ? (int)received : retval;
 					case MBEDTLS_ERR_SSL_TIMEOUT:
 						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
 						return retval;
@@ -652,9 +603,9 @@ namespace net {
 						return retval;
 					case MBEDTLS_ERR_SSL_WANT_READ:
 						DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_READ");
-						while (!ready)
-							ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, false);
-						// Read some more!
+						/*while (!ready)
+							ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);*/
+							// Read some more!
 						continue;
 					default:
 						char errbuf[128];
@@ -666,44 +617,47 @@ namespace net {
 
 			}
 			else {
-				socklen_t addrlen = conn->ai_addrlen;
-				retval = recv(sock_, buf, toRead, MSG_NOSIGNAL);
+				DEBUG_LOG(Log::HTTP, "socket reading %i bytes", toRead);
+				retval = recv(sock(), buf, toRead, MSG_NOSIGNAL);
 
-				if (retval <= 0) {
-#if !PPSSPP_PLATFORM(WINDOWS)
-					int err = errno;
-					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
-						ERROR_LOG(Log::IO, "Recv Failed - %d", err);
-						return false;
-					}
-#else
-					int err = WSAGetLastError();
-					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
-						ERROR_LOG(Log::IO, "Recv Failed - %d", err);
-						return -err;
-					}
-#endif
-					ready = false;
-					while (!ready) {
-						if (sock_ <= 0) {
-							ERROR_LOG(Log::IO, "Recv Failed - Socket lost");
-							return -1;
-						}
-						ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, true);
-						if (!ready && time_now_d() > endTimeout) {
-							ERROR_LOG(Log::IO, "Recv timed out");
-							return -2;
-						}
-					}
-					continue;
-				}
+				if (retval < 0)
+					break;
 			}
 			packet->Append(buf, retval);
-			//memcpy(packet.Data(), buf, retval);
-			sz -= retval;
-			//packet. += retval;
-		}
+			received += retval;
 
-		return (int)packet->Length() > 0 ? (int)packet->Length() : retval;  // Return -1 or 0 for error, else bytes read
+			if (state == ReadState::Headers) {
+				// More data to read?
+				if (received < sizeof(PacketHeader))
+					continue;
+				// Pull Header
+				memcpy(&header, packet->Data(), sizeof(PacketHeader));
+
+				content_length = header.size;
+				toRead = content_length - received;
+				state = ReadState::Body;
+			}
+			if (state == ReadState::Body) {
+				// Should always be true
+				if (received == content_length)
+					state = ReadState::Complete;
+			}
+			if (state == ReadState::Complete) {
+				if (header.request == (u8)PacketType::ServerInfo) {
+					const int body_length = header.size - sizeof(PacketHeader);
+					u8 error = packet->Data()[sizeof(PacketHeader)];
+					switch ((CommandType)header.command) {
+					case CommandType::Login:
+						WARN_LOG(Log::HTTP, "Response: Server Info & Login -> %s", PacketTypeNames[error]);
+						break;
+					default:
+						ERROR_LOG(Log::HTTP, "Response: Server Info & UNHANDLED[%d] -> %s", header.command, PacketTypeNames[error]);
+						break;
+					}
+					//return -error;
+				}
+			}
+		}
+		return received;  // Return HTML Status Code or Error Code
 	}
 }

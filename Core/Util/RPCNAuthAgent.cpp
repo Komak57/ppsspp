@@ -200,16 +200,17 @@ namespace net {
 
 		packet.Pack(CommandType::Login, 1);
 
-		int i;
-		std::string hexdata = "";
-		for (i = 0; i < packet.Length(); i++) {
-			char const c = packet.Data()[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		// 00 0000 4D000000 0100000000000000 52504353335F6969516F34513032494600 6C656D6D65696E00 61363866326362612D326536322D346536382D396330382D37663262303431356564636200
-		// 00 0000 0000004D 0000000000000001 52504353335F5039663465543266377100 6C656D6D65696E00 61363866326362612D326536322D346536382D396330382D37663262303431356564636200
-		INFO_LOG(Log::sceNet, "Request: %s", hexdata.c_str());
+		//int i;
+		//std::string hexdata = "";
+		//for (i = 0; i < packet.Length(); i++) {
+		//	char const c = packet.Data()[i];
+		//	hexdata += hex_chars[(c & 0xF0) >> 4];
+		//	hexdata += hex_chars[(c & 0x0F) >> 0];
+		//}
+		//// 00 0000 4D000000 0100000000000000 52504353335F6969516F34513032494600 6C656D6D65696E00 61363866326362612D326536322D346536382D396330382D37663262303431356564636200
+		//// 00 0000 0000004D 0000000000000001 52504353335F5039663465543266377100 6C656D6D65696E00 61363866326362612D326536322D346536382D396330382D37663262303431356564636200
+		//INFO_LOG(Log::sceNet, "Request: %s", hexdata.c_str());
+		INFO_LOG(Log::sceNet, "Sending Login Request");
 
 		// packet.Pack(0x0112, packet.Length()+4);
 		//net::Buffer buffer;
@@ -252,9 +253,40 @@ namespace net {
 		return true;
 	}
 
+	bool RPCNAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
+		Packet packet = Packet();
+		packet.Write(npid);
+		packet.Write((u8)0);
+		packet.Write(password);
+		packet.Write((u8)0);
+		packet.Write(online_name);
+		packet.Write((u8)0);
+		packet.Write(avatar_url);
+		packet.Write((u8)0);
+		packet.Write(email);
+		packet.Write((u8)0);
+
+		packet.Pack(CommandType::Create, 2);
+
+		INFO_LOG(Log::sceNet, "Sending Registration Request");
+
+		bool flushed = Send(&packet, 5.0, &canceled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return false;
+		}
+
+		int ret = Recv(&packet);
+		if (ret < 0) {
+			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
+			return false;
+		}
+		return true;
+	}
+
 	int RPCNAuthAgent::GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
-		serversPtr->emplace(1, net::CreateNPAgent(net::NPAgentType::RPCN, 1, "rpcn.revurb.us", 3657, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
-		serversPtr->emplace(2, net::CreateNPAgent(net::NPAgentType::RPCN, 2, "rpcn.revurb.us", 3657, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		serversPtr->emplace(1, net::CreateNPAgent(net::NPAgentType::RPCN, 1, "rpcn.revurb.us", 31313, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		//serversPtr->emplace(2, net::CreateNPAgent(net::NPAgentType::RPCN, 2, "rpcn.revurb.us", 3657, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
 		return 0;
 	}
 }

@@ -154,6 +154,14 @@ namespace net {
 		return false;
 	}
 
+	bool PSNAgent::Login(const char* npid, const char* token, const char* password) {
+		return false;
+	}
+
+	bool PSNAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
+		return false;
+	}
+
 	int PSNAgent::GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npTitleId);
 #ifndef AGENT_TESTING

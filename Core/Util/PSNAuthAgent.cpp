@@ -21,6 +21,10 @@ namespace net {
 	bool PSNAuthAgent::Login(const char* titleId, const char* token, const char* password) {
 		return false;
 	}
+	bool PSNAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
+		return false;
+	}
+
 
 	bool PSNAuthAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
 		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);

@@ -465,10 +465,29 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 			return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID);
 
 		tServer = serverId;
+
+		std::string npid = net::RPCNAuthAgent::generate_npid();
 		int ret;
+		ret = servers[tServer]->Connect();
+		if (ret < 0) {
+			ERROR_LOG(Log::sceNet, "Could not connect.");
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
+		}
+
+		/*ret = servers[tServer]->CreateAccount(npid.c_str(), "lemmein", "fox", "http://DummyAvatarUrl", "test2@email.com");
+		if (ret < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to Register");
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
+		}*/
+
+		ret = servers[tServer]->Login("RPCS3_ZSgScc4D7x", "4D571528FECEBD1A", "lemmein");
+		if (ret < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to Log In");
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
+		}
+
 		// FIXME: Get worldInfo from PSN
 		ret = servers[tServer]->GetWorldInfo(npTitleId.data, &npData.worlds);
-
 		if (ret < 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 
