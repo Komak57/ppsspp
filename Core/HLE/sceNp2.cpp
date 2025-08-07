@@ -83,6 +83,32 @@ static u32 GenerateCallbackInfo(int ctxId, u32 optParamPtr, u32 assignedReqIdPtr
 	return reqId;
 }
 
+/* Thread-safe Abort Return for all Callback threads
+ * @param appReqId Related System Request ID
+ * @param dataPtr Pointer to a Struct generated for the request
+ * @param errorCode System Error Code
+ * @return u32 System Error Code (unused)
+ * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
+ */
+static int abortNpMatching2Handlers() {
+
+	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
+	for (std::map<u32, NpMatching2Handler>::iterator it = npMatching2Handlers.begin(); it != npMatching2Handlers.end(); ++it) {
+
+		u32_le args[6];
+		args[0] = it->second.ctx_id;			// ContextID
+		args[1] = 0;							// RequestId || 0 indicates aborted request
+		args[2] = it->second.event_type;		// Event
+		args[3] = SCE_NP_MATCHING2_ERROR_ABORTED;// ErrorCode || 0 is OK
+		args[4] = 0;							// Response struct
+		args[5] = it->second.cb_arg;				// Request Arguments?
+
+		// Call the function immediately
+		hleEnqueueCall(it->second.cb, 6, args);
+	}
+
+	return SCE_NP_MATCHING2_ERROR_ABORTED;
+}
 /* Thread-safe Notify Return for related Callback
  * @param appReqId Related System Request ID
  * @param dataPtr Pointer to a Struct generated for the request
@@ -189,6 +215,8 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 static int sceNpMatching2Term()
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s() at %08x", __FUNCTION__, currentMIPS->pc);
+	abortNpMatching2Handlers();
+
 	npMatching2Inited = false;
 	npMatching2Handlers.clear();
 	npMatching2Events.clear();
