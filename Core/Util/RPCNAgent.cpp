@@ -263,9 +263,11 @@ namespace net {
 		return true;
 	}
 
-	int RPCNAgent::GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) {
+	int RPCNAgent::GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) {
 		Packet packet = Packet();
-		packet.Write((u16)0);
+		packet.Write(npTitleId);
+		packet.Write("_00");
+		packet.Write((u16)server_id);
 		packet.Pack(CommandType::GetWorldList, 3);
 
 		INFO_LOG(Log::sceNet, "Requesting World Info");
@@ -281,6 +283,8 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
 		}
+		// 00 0C00 1D000000 0300000000000000 4E50575230313434365F30300001
+		// 01 0C00 14000000 0300000000000000 0000000000
 
 		int i;
 		std::string hexdata = "";
@@ -308,7 +312,7 @@ namespace net {
 		for (ent_i = 0; ent_i < 32; ent_i++)
 			worldInfo.entitlementId[ent_i] = 0;
 
-		worldInfoOut->emplace(worldInfo.worldId, worldInfo);
+		//worldInfoOut->emplace(worldInfo.worldId, worldInfo);
 		return worldInfoOut->size();
 	}
 

@@ -35,6 +35,17 @@ uint32_t Swap32(uint32_t val) {
 		(val << 24);
 }
 
+uint32_t Swap64(uint64_t val) {
+	return ((val & 0x00000000000000FFULL) << 56) |
+		((val & 0x000000000000FF00ULL) << 40) |
+		((val & 0x0000000000FF0000ULL) << 24) |
+		((val & 0x00000000FF000000ULL) << 8) |
+		((val & 0x000000FF00000000ULL) >> 8) |
+		((val & 0x0000FF0000000000ULL) >> 24) |
+		((val & 0x00FF000000000000ULL) >> 40) |
+		((val & 0xFF00000000000000ULL) >> 56);
+}
+
 Packet::Packet() {
 	memset(data_bytes, 0, sizeof(data_bytes));
 	this->dataPtr = data_bytes;
@@ -89,6 +100,11 @@ void Packet::Write(u32 data) {
 	if (!IsBigEndian()) data = Swap32(data);
 	memcpy(dataPtr + data_length, &data, 4);
 	data_length += 4;
+}
+void Packet::Write(u64 data) {
+	if (!IsBigEndian()) data = Swap64(data);
+	memcpy(dataPtr + data_length, &data, 8);
+	data_length += 8;
 }
 void Packet::Write(std::string data) {
 	int i = 0;

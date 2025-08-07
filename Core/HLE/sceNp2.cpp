@@ -487,7 +487,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		}
 
 		// FIXME: Get worldInfo from PSN
-		ret = servers[tServer]->GetWorldInfo(npTitleId.data, &npData.worlds);
+		ret = servers[tServer]->GetWorldInfo(tServer, npTitleId.data, &npData.worlds);
 		if (ret < 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 

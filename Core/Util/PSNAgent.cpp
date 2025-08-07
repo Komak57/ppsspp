@@ -162,7 +162,7 @@ namespace net {
 		return false;
 	}
 
-	int PSNAgent::GetWorldInfo(char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) {
+	int PSNAgent::GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npTitleId);
 #ifndef AGENT_TESTING
 		if (sock_ <= 0) {
