@@ -46,6 +46,9 @@ namespace net {
 		this->host_ = host;
 		this->port_ = port;
 		this->status = status;
+
+		this->worlds.clear();
+		this->rooms.clear();
 	}
 	PSNAgent::~PSNAgent() {
 		Disconnect();

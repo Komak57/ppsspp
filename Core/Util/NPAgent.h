@@ -289,11 +289,13 @@ namespace net {
 		void Disconnect();
 		bool Send(Packet* packet, double timeout, bool* cancelled);
 		int Recv(Packet* packet, size_t sz = 4096);
-
+		
 		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) = 0;
+		// NPAuthAgent Functions
 		virtual bool Login(const char* npid, const char* token, const char* password) = 0;
 		virtual bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
 
+		// NPAgent Functions
 		virtual int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) = 0;
 		virtual int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) = 0;
 		virtual int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
@@ -308,6 +310,10 @@ namespace net {
 		uintptr_t sock() const { if (SSLEnabled) return tls.netCtx.fd; else return sock_; }
 		bool isSslEnabled() { return SSLEnabled; }
 
+		u32 worldInfoPtr;
+		std::map<u32, SceNpMatching2World> worlds;
+		u32 roomDataPtr;
+		std::map<u32, SceNpMatching2RoomDataInternal> rooms;
 	protected:
 		u16 ID;
 		uintptr_t sock_ = -1;
@@ -374,11 +380,11 @@ namespace net {
 
 		virtual bool Login(const char* npid, const char* token, const char* password) = 0;
 		virtual bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
+		//virtual int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) = 0;
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (SSLEnabled) return tls.netCtx.fd; else return sock_; }
 		bool isSslEnabled() { return SSLEnabled; }
-
 
 	protected:
 		u16 ID;

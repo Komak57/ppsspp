@@ -1068,13 +1068,6 @@ struct SceNpMatching2SearchRoomResponse
 	u32 roomDataExternal;
 };
 
-struct SceNpMatching2Data {
-	u32 worldInfoPtr;
-	std::map<u32, SceNpMatching2World> worlds;
-	u32 roomDataPtr;
-	std::map<u32, SceNpMatching2RoomDataInternal> rooms;
-};
-
 // External room data
 struct SceNpMatching2RoomDataExternal
 {

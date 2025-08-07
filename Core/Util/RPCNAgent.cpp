@@ -11,6 +11,8 @@ namespace net {
 		this->port_ = port;
 		this->status = status;
 
+		this->worlds.clear();
+		this->rooms.clear();
 		//std::string certificate = "";
 		//InitializeSSL(certificate);
 	}
