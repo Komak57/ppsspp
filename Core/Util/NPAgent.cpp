@@ -88,30 +88,56 @@ bool Packet::Pack(CommandType command, u64 packet_id) {
 }
 
 void Packet::Write(u8 data) {
+	if (data_length + 1 > sizeof(dataPtr)) {
+		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
+		return;
+	}
 	memcpy(dataPtr + data_length, &data, 1);
 	data_length += 1;
 }
 void Packet::Write(u16 data) {
+	if (data_length + 2 > sizeof(dataPtr)) {
+		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
+		return;
+	}
 	if (!IsBigEndian()) data = Swap16(data);
 	memcpy(dataPtr + data_length, &data, 2);
 	data_length += 2;
 }
 void Packet::Write(u32 data) {
+	if (data_length + 4 > sizeof(dataPtr)) {
+		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
+		return;
+	}
 	if (!IsBigEndian()) data = Swap32(data);
 	memcpy(dataPtr + data_length, &data, 4);
 	data_length += 4;
 }
 void Packet::Write(u64 data) {
+	if (data_length + 8 > sizeof(dataPtr)) {
+		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
+		return;
+	}
 	if (!IsBigEndian()) data = Swap64(data);
 	memcpy(dataPtr + data_length, &data, 8);
 	data_length += 8;
 }
 void Packet::Write(std::string data) {
+	if (data_length + data.length() > sizeof(dataPtr)) {
+		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
+		return;
+	}
 	int i = 0;
 	memcpy(dataPtr + data_length, data.c_str(), data.length());
-	//for (i = 0; i < data.length(); i++)
-		//memcpy(dataPtr + data_length + i, &data[i], 1);
 	data_length += data.length();
+}
+void Packet::Write(const std::vector<u8>& data) {
+	if (data_length + data.size() > sizeof(dataPtr)) {
+		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
+		return;
+	}
+	memcpy(dataPtr + data_length, data.data(), data.size());
+	data_length += data.size();
 }
 
 namespace net {

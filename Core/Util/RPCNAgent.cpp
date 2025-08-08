@@ -318,7 +318,85 @@ namespace net {
 		return worldInfoOut->size();
 	}
 
-	int RPCNAgent::SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) {
+	int RPCNAgent::SearchRoom(SceNpMatching2SearchRoomRequest* req, SceNpMatching2RoomDataExternal* roomDataOut) {
+		Packet packet = Packet();
+
+		// Header structure
+		SceNpMatching2SearchRoomPacket header{};
+		header.option = req->option;
+		header.worldId = req->worldId;
+		header.lobbyId = req->lobbyId;
+		header.range_startIndex = req->rangeFilter.startIndex;
+		header.range_max = req->rangeFilter.max;
+		header.flagFilter = req->flagFilter;
+		header.flagAttr = req->flagAttr;
+		header.intFilterNum = req->intFilterNum;
+		header.binFilterNum = req->binFilterNum;
+		header.attrIdNum = req->attrIdNum;
+
+
+		std::vector<u8> data;
+		data.insert(data.end(), reinterpret_cast<u8*>(&header), reinterpret_cast<u8*>(&header) + sizeof(header));
+
+		// Serialize intFilter
+		for (u32 i = 0; i < req->intFilterNum; ++i)
+		{
+			IntFilter f;
+			f.searchOperator = req->intFilter[i].searchOperator;
+			f.attr_id = req->intFilter[i].attr.id;
+			f.attr_num = req->intFilter[i].attr.num;
+
+			data.insert(data.end(), reinterpret_cast<u8*>(&f), reinterpret_cast<u8*>(&f) + sizeof(f));
+		}
+
+		// Serialize binFilter
+		for (u32 i = 0; i < req->binFilterNum; ++i)
+		{
+			BinFilter f;
+			f.searchOperator = req->binFilter[i].searchOperator;
+			f.attr_id = req->binFilter[i].attr.id;
+			f.data_size = req->binFilter[i].attr.size;
+
+			data.insert(data.end(), reinterpret_cast<u8*>(&f), reinterpret_cast<u8*>(&f) + sizeof(f));
+			data.insert(data.end(), req->binFilter[i].attr.ptr,
+				req->binFilter[i].attr.ptr + req->binFilter[i].attr.size);
+		}
+
+		// Serialize attrId[]
+		for (u32 i = 0; i < req->attrIdNum; ++i)
+		{
+			u16 attr_id = req->attrId[i];
+			data.insert(data.end(), reinterpret_cast<u8*>(&attr_id), reinterpret_cast<u8*>(&attr_id) + sizeof(u16));
+		}
+		packet.Write(data);
+
+		packet.Pack(CommandType::SearchRoom, 3);
+
+		INFO_LOG(Log::sceNet, "Requesting Room List");
+
+		bool flushed = Send(&packet, 5.0, &canceled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return false;
+		}
+		Packet response = Packet();
+		int ret = Recv(&response);
+		if (ret < 0) {
+			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
+			return false;
+		}
+		// 00 0C00 1D000000 0300000000000000 4E50575230313434365F30300001
+		// 01 0C00 14000000 0300000000000000 0000000000
+
+		int i;
+		std::string hexdata = "";
+		for (i = 0; i < response.Length(); i++) {
+			char const c = response.Data()[i];
+			hexdata += hex_chars[(c & 0xF0) >> 4];
+			hexdata += hex_chars[(c & 0x0F) >> 0];
+		}
+		INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+
 		roomDataOut->roomId = 0; // No Room
 		return 0;
 	}

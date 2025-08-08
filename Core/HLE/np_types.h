@@ -1052,7 +1052,20 @@ struct SceNpMatching2SearchRoomRequest
 	SceNpMatching2AttributeId* attrId;
 	u32 attrIdNum;
 };
+#pragma pack(push, 1)
+struct IntFilter {
+	u8 searchOperator;
+	u16 attr_id;
+	s32 attr_num;
+};
 
+struct BinFilter {
+	u8 searchOperator;
+	u16 attr_id;
+	u16 data_size;
+	// Followed by: u8 data[data_size]
+};
+#pragma pack(pop)
 // Range of result
 struct SceNpMatching2Range
 {
@@ -1060,6 +1073,27 @@ struct SceNpMatching2Range
 	u32 total;
 	u32 size;
 };
+
+#pragma pack(push, 1)
+struct SceNpMatching2SearchRoomPacket {
+	u32 option;
+	u32 worldId;
+	u32 lobbyId;
+	u16 range_startIndex;
+	u16 range_max;
+	u32 flagFilter;
+	u32 flagAttr;
+
+	u8 intFilterNum;
+	u8 binFilterNum;
+	u8 attrIdNum;
+
+	// Followed by:
+	//   IntFilter[intFilterNum]
+	//   BinFilter[binFilterNum]
+	//   u16 attrId[attrIdNum]
+};
+#pragma pack(pop)
 
 // Room search response data
 struct SceNpMatching2SearchRoomResponse
@@ -1132,6 +1166,7 @@ struct SceNpMatching2SetRoomDataInternalRequest
 	u32 ownerPrivilegeRankNum;
 	u8 padding[4];
 };
+
 
 
 

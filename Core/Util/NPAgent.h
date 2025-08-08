@@ -232,6 +232,7 @@ public:
 	void Write(u32 data);
 	void Write(u64 data);
 	void Write(std::string data);
+	void Write(const std::vector<u8>& data);
 
 	void Append(const char* data, int len) {
 		memcpy(dataPtr + data_length, data, len);
@@ -297,7 +298,7 @@ namespace net {
 
 		// NPAgent Functions
 		virtual int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) = 0;
-		virtual int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) = 0;
+		virtual int SearchRoom(SceNpMatching2SearchRoomRequest* req, SceNpMatching2RoomDataExternal* roomDataOut) = 0;
 		virtual int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
 		virtual int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
 
@@ -340,7 +341,7 @@ namespace net {
 		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
 		int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
-		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
+		int SearchRoom(SceNpMatching2SearchRoomRequest* req, SceNpMatching2RoomDataExternal* roomDataOut);
 		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
 		int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut);
 	};
@@ -355,7 +356,7 @@ namespace net {
 		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
 		int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
-		int SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut);
+		int SearchRoom(SceNpMatching2SearchRoomRequest* req, SceNpMatching2RoomDataExternal* roomDataOut);
 		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
 		int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut);
 	};

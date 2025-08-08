@@ -84,11 +84,8 @@ static u32 GenerateCallbackInfo(int ctxId, u32 optParamPtr, u32 assignedReqIdPtr
 }
 
 /* Thread-safe Abort Return for all Callback threads
- * @param appReqId Related System Request ID
- * @param dataPtr Pointer to a Struct generated for the request
- * @param errorCode System Error Code
- * @return u32 System Error Code (unused)
- * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
+ * @return u32 System Error Code (SCE_NP_MATCHING2_ERROR_ABORTED)
+ * @note The tasks aren't stopped, they still process in the background. But, without the handler, they'll simply fail.
  */
 static int abortNpMatching2Handlers() {
 
@@ -215,7 +212,6 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 static int sceNpMatching2Term()
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s() at %08x", __FUNCTION__, currentMIPS->pc);
-	abortNpMatching2Handlers();
 
 	npMatching2Inited = false;
 	npMatching2Handlers.clear();
@@ -304,6 +300,7 @@ static int sceNpMatching2ContextStop(int ctxId)
 	//npMatching2Ctx.started = false;
 
 	//TODO: Cancel all async tasks and return SCE_NP_MATCHING2_ERROR_ABORTED for each.
+	abortNpMatching2Handlers();
 
 	return 0;
 }
@@ -552,61 +549,6 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 	return 0;
 }
 
-/* Incomplete - Leaves the current Lobby/Party
- * @param reqParamPtr ?
- * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqId Pointer to the index of a unique callback
- * @return 0; System Errors are entirely ignored
- * @note Performs the operations in an async lambda function
- */
-static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
-{
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
-	u32 request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom);
-
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
-		if (!npMatching2Inited)
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
-
-		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
-
-		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
-	});
-	tasks.emplace(request_id, std::move(task));
-
-	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
-	return 0;
-}
-
-/* Incomplete - Unknown
- * @param reqParamPtr ?
- * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqId Pointer to the index of a unique callback
- * @return 0; System Errors are entirely ignored
- * @note Performs the operations in an async lambda function
- */
-static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr) {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
-	u32 request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal);
-
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
-		if (!npMatching2Inited)
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
-
-		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
-
-		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
-	});
-	tasks.emplace(request_id, std::move(task));
-
-	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
-	return 0;
-}
-
 /* Incomplete - Searches for all Lobbies/Parties
  * @param reqParamPtr SceNpMatching2SearchRoomRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
@@ -636,18 +578,9 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 
 		// FIXME: Populate all relevant data from req into memory as required
 		SceNpMatching2RoomDataExternal roomData{};
-		roomData.serverId = servers[tServer]->GetServerInfo().id;
-		//req.option
-		roomData.worldId = req.worldId;
-		roomData.lobbyId = req.lobbyId;
-		//roomData.roomId
-		//roomData.curMemberNum
-		//req.rangeFilter.startIndex
-		//req.flagFilter
-		roomData.flagAttr = req.flagAttr;
 
 		// FIXME: Get roomData from PSN
-		int ret = servers[tServer]->SearchRoom(&roomData);
+		int ret = servers[tServer]->SearchRoom(&req, &roomData);
 
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to retrieve Room Info");
@@ -764,6 +697,34 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	return 0;
 }
 
+/* Incomplete - Leaves the current Lobby/Party
+ * @param reqParamPtr ?
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqId Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ * @note Performs the operations in an async lambda function
+ */
+static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	u32 request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom);
+
+	// ThreadStart
+	std::future<int> task = std::async(std::launch::async, [=]() -> int {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+	tasks.emplace(request_id, std::move(task));
+
+	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
+	return 0;
+}
+
 /* Incomplete - Requests attributes of a specific Lobby/Party
  * @param reqParamPtr SceNpMatching2GetRoomDataInternalRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
@@ -821,6 +782,33 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 	});
 	tasks.emplace(request_id, std::move(task));
 
+	return 0;
+}
+
+/* Incomplete - Unknown
+ * @param reqParamPtr ?
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqId Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ * @note Performs the operations in an async lambda function
+ */
+static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr) {
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	u32 request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal);
+
+	// ThreadStart
+	std::future<int> task = std::async(std::launch::async, [=]() -> int {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+	});
+	tasks.emplace(request_id, std::move(task));
+
+	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
 	return 0;
 }
 

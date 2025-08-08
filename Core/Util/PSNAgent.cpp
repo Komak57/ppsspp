@@ -261,7 +261,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::SearchRoom(SceNpMatching2RoomDataExternal* roomDataOut) {
+	int PSNAgent::SearchRoom(SceNpMatching2SearchRoomRequest* req, SceNpMatching2RoomDataExternal* roomDataOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::SearchRoom()");
 		if (sock_ <= 0) {
 			ERROR_LOG(Log::sceNet, "SearchRoom: Socket not connected");
