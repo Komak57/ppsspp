@@ -244,6 +244,7 @@ public:
 	void Clear() { data_length = 0; memset(dataPtr, 0, sizeof(data_bytes)); }
 private:
 	int data_length = 0;
+	const int data_size = 1024;
 	u8 data_bytes[1024];
 	u8* dataPtr;
 };

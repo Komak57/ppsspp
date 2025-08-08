@@ -88,7 +88,7 @@ bool Packet::Pack(CommandType command, u64 packet_id) {
 }
 
 void Packet::Write(u8 data) {
-	if (data_length + 1 > sizeof(dataPtr)) {
+	if (data_length + 1 > data_size) {
 		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
 		return;
 	}
@@ -96,7 +96,7 @@ void Packet::Write(u8 data) {
 	data_length += 1;
 }
 void Packet::Write(u16 data) {
-	if (data_length + 2 > sizeof(dataPtr)) {
+	if (data_length + 2 > data_size) {
 		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
 		return;
 	}
@@ -105,7 +105,7 @@ void Packet::Write(u16 data) {
 	data_length += 2;
 }
 void Packet::Write(u32 data) {
-	if (data_length + 4 > sizeof(dataPtr)) {
+	if (data_length + 4 > data_size) {
 		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
 		return;
 	}
@@ -114,7 +114,7 @@ void Packet::Write(u32 data) {
 	data_length += 4;
 }
 void Packet::Write(u64 data) {
-	if (data_length + 8 > sizeof(dataPtr)) {
+	if (data_length + 8 > data_size) {
 		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
 		return;
 	}
@@ -123,7 +123,7 @@ void Packet::Write(u64 data) {
 	data_length += 8;
 }
 void Packet::Write(std::string data) {
-	if (data_length + data.length() > sizeof(dataPtr)) {
+	if (data_length + data.length() > data_size) {
 		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
 		return;
 	}
@@ -132,7 +132,7 @@ void Packet::Write(std::string data) {
 	data_length += data.length();
 }
 void Packet::Write(const std::vector<u8>& data) {
-	if (data_length + data.size() > sizeof(dataPtr)) {
+	if (data_length + data.size() > data_size) {
 		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
 		return;
 	}
