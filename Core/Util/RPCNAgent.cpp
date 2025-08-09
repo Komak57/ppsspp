@@ -3,6 +3,8 @@
 #include <File\FileDescriptor.h>
 #include <mbedtls\error.h>
 #include <TimeUtil.h>
+#include "Core/MemMapHelpers.h"
+
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN
 	RPCNAgent::RPCNAgent(int serverId, std::string host, int port, u8 status) {
@@ -18,7 +20,62 @@ namespace net {
 	}
 
 	RPCNAgent::~RPCNAgent() {
+		stop_read_thread();
 		Disconnect();
+	}
+
+	void RPCNAgent::start_read_thread() {
+		if (running) return;
+		running = true;
+		read_thread = std::thread(&RPCNAgent::read_loop, this);
+	}
+
+	void RPCNAgent::stop_read_thread() {
+		running = false;
+		if (read_thread.joinable()) {
+			read_thread.join();
+		}
+	}
+
+	// Blocking wait for a specific request_id
+	std::vector<u8> RPCNAgent::wait_for_responses(u64 request_id) {
+		std::unique_lock<std::mutex> lock(buffer_mutex);
+		buffer_cv.wait(lock, [&]() {
+			return responses.find(request_id) != responses.end();
+		});
+
+		auto data = std::move(responses[request_id]);
+		responses.erase(request_id);
+		return data;
+	}
+
+	void RPCNAgent::read_loop() {
+		while (running) {
+			Packet packet;
+			int ret = Recv(&packet); // Uses NPAuthAgent::Recv
+			if (ret <= 0) {
+				running = false;
+				break;
+			}
+
+			PacketHeader header;
+			memcpy(&header, packet.Data(), sizeof(PacketHeader));
+
+			std::lock_guard<std::mutex> lock(buffer_mutex);
+			auto& buf = responses[header.reqId];
+			buf.insert(buf.end(), packet.Data(), packet.Data() + packet.Length());
+
+			int i;
+			std::string hexdata = "";
+			for (i = 0; i < packet.Length(); i++) {
+				char const c = packet.Data()[i];
+				hexdata += hex_chars[(c & 0xF0) >> 4];
+				hexdata += hex_chars[(c & 0x0F) >> 0];
+			}
+			INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+
+			buffer_cv.notify_all();
+		}
 	}
 
 	bool RPCNAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
@@ -149,11 +206,13 @@ namespace net {
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful. TLS: %s, Cipher: %s", mbedtls_ssl_get_version(&tls.sslCtx), mbedtls_ssl_get_ciphersuite(&tls.sslCtx));
 				tls.connected = true;
 
+				// Start reading data
+				start_read_thread();
 				// Get Version Info
-				ret = Recv(&packet);
+				/*ret = Recv(&packet);
 				if (ret < 0) {
 					ERROR_LOG(Log::sceNet, "Unable to retrieve Version info.");
-				}
+				}*/
 				return true;
 			sslretry:
 				INFO_LOG(Log::sceNet, "Connect - Connection Failed, retrying");
@@ -203,21 +262,22 @@ namespace net {
 			return false;
 		}
 
-		Packet response = Packet();
+		/*Packet response = Packet();
 		int ret = Recv(&response);
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
-		}
+		}*/
+		auto response = wait_for_responses(1);
 
-		int i;
+		/*int i;
 		std::string hexdata = "";
-		for (i = 0; i < response.Length(); i++) {
-			char const c = response.Data()[i];
+		for (i = 0; i < response.size(); i++) {
+			char const c = response[i];
 			hexdata += hex_chars[(c & 0xF0) >> 4];
 			hexdata += hex_chars[(c & 0x0F) >> 0];
 		}
-		INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+		INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());*/
 
 		PacketHeader header;
 		memcpy(&header, packet.Data(), sizeof(PacketHeader));
@@ -247,21 +307,22 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return false;
 		}
-		Packet response = Packet();
+		/*Packet response = Packet();
 		int ret = Recv(&response);
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
-		}
+		}*/
+		auto response = wait_for_responses(2);
 
-		int i;
+		/*int i;
 		std::string hexdata = "";
-		for (i = 0; i < response.Length(); i++) {
-			char const c = response.Data()[i];
+		for (i = 0; i < response.size(); i++) {
+			char const c = response[i];
 			hexdata += hex_chars[(c & 0xF0) >> 4];
 			hexdata += hex_chars[(c & 0x0F) >> 0];
 		}
-		INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+		INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());*/
 		return true;
 	}
 
@@ -279,40 +340,39 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return false;
 		}
-		Packet response = Packet();
+		/*Packet response = Packet();
 		int ret = Recv(&response);
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
-		}
-		// 00 0C00 1D000000 0300000000000000 4E50575230313434365F30300001
-		// 01 0C00 14000000 0300000000000000 0000000000
+		}*/
+		auto response = wait_for_responses(3);
 
-		int i;
-		std::string hexdata = "";
-		for (i = 0; i < response.Length(); i++) {
-			char const c = response.Data()[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
-
+		//int i;
+		//std::string hexdata = "";
+		//for (i = 0; i < response.size(); i++) {
+		//	char const c = response[i];
+		//	hexdata += hex_chars[(c & 0xF0) >> 4];
+		//	hexdata += hex_chars[(c & 0x0F) >> 0];
+		//}
+		//INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+		// 01 0C00 18000000 0300000000000000 00010000 00010000 00
+		// 010C00180000000300000000000000000100000001000000
 		worldInfoOut->clear();
-		// Should get an array of worlds
-		SceNpMatching2World worldInfo = SceNpMatching2World();
-		worldInfo.worldId = 1;
 
-		worldInfo.numOfLobby = 2;
-		worldInfo.curNumOfTotalLobbyMember = 0;
-		worldInfo.maxNumOfTotalLobbyMember = 12;
+		size_t offset = 0;
 
-		worldInfo.curNumOfRoom = 0;
-		worldInfo.curNumOfTotalRoomMember = 0;
+		SceNpMatching2GetWorldInfoListResponse worldInfoResp;
+		memcpy(&worldInfoResp, response.data() + RPCN_HEADER_SIZE, sizeof(worldInfoResp));
 
-		worldInfo.withEntitlementId = 0;
-		int ent_i;
-		for (ent_i = 0; ent_i < 32; ent_i++)
-			worldInfo.entitlementId[ent_i] = 0;
+		// Now, iterate and read `worldNum` entries of `SceNpMatching2World`
+		for (u32 i = 0; i < worldInfoResp.worldNum; ++i)
+		{
+			SceNpMatching2World world;
+			Memory::Memcpy(&world, worldInfoResp.worldNum + offset, sizeof(SceNpMatching2World));
+			offset += sizeof(SceNpMatching2World);
+			worldInfoOut->emplace(world.worldId, world);
+		}
 
 		//worldInfoOut->emplace(worldInfo.worldId, worldInfo);
 		return worldInfoOut->size();
@@ -379,23 +439,22 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return false;
 		}
-		Packet response = Packet();
+		/*Packet response = Packet();
 		int ret = Recv(&response);
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
-		}
-		// 00 0C00 1D000000 0300000000000000 4E50575230313434365F30300001
-		// 01 0C00 14000000 0300000000000000 0000000000
+		}*/
+		auto response = wait_for_responses(3);
 
-		int i;
+		/*int i;
 		std::string hexdata = "";
-		for (i = 0; i < response.Length(); i++) {
-			char const c = response.Data()[i];
+		for (i = 0; i < response.size(); i++) {
+			char const c = response[i];
 			hexdata += hex_chars[(c & 0xF0) >> 4];
 			hexdata += hex_chars[(c & 0x0F) >> 0];
 		}
-		INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+		INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());*/
 
 		roomDataOut->roomId = 0; // No Room
 		return 0;

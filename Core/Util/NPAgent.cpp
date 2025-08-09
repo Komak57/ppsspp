@@ -512,18 +512,42 @@ namespace net {
 					state = ReadState::Complete;
 			}
 			if (state == ReadState::Complete) {
-				if (header.request == (u8)PacketType::ServerInfo) {
-					const int body_length = header.size - sizeof(PacketHeader);
-					u8 error = packet->Data()[sizeof(PacketHeader)];
-					switch ((CommandType)header.command) {
-					case CommandType::Login:
-						ERROR_LOG(Log::HTTP, "Response Error: Login Failed -> %s", PacketTypeNames[error]);
+				switch ((PacketType)header.request) {
+				case PacketType::Request:
+					ERROR_LOG(Log::HTTP, "Response Error: Request made to Client not allowed");
+					break;
+				case PacketType::Reply:
+					// Proper response to a request
+					//u8 body = packet->Data()[sizeof(PacketHeader)];
+					//INFO_LOG(Log::HTTP, "Response Error: Login Failed -> %s", PacketTypeNames[error]);
+					break;
+				case PacketType::Notification:
+					switch ((NotificationType)header.command) {
+					case NotificationType::FriendNew:
+					case NotificationType::FriendLost:
+					case NotificationType::FriendQuery:
+					case NotificationType::FriendStatus:
+					case NotificationType::FriendPresenceChanged:
+						// Friends not supported on PSP
+						//handle_friend_notification
 						break;
+					case NotificationType::MessageReceived:
+						// Private messages not supported on PSP?
+						// handle_message
 					default:
-						ERROR_LOG(Log::HTTP, "Response Error: UNHANDLED[%d] -> %s", header.command, PacketTypeNames[error]);
+						// Append all other notifications for later requests
+						// notifications
 						break;
 					}
-					return -error;
+					break;
+				case PacketType::ServerInfo: {
+					u8 version = packet->Data()[sizeof(PacketHeader)];
+					INFO_LOG(Log::HTTP, "Server is communicating on version %d", version);
+					break;
+				}
+				default:
+					ERROR_LOG(Log::HTTP, "Unexpected Packet Type - %d", header.request);
+					break;
 				}
 			}
 		}
@@ -615,7 +639,7 @@ namespace net {
 		return true;
 	}
 
-	int NPAgent::Recv(Packet* packet, size_t sz) {
+	int NPAgent::Recv(Packet* packet) {
 		static constexpr float CANCEL_INTERVAL = 0.25f;
 		char buf[4096];
 		// Adjustable read size
@@ -685,18 +709,42 @@ namespace net {
 					state = ReadState::Complete;
 			}
 			if (state == ReadState::Complete) {
-				if (header.request == (u8)PacketType::ServerInfo) {
-					const int body_length = header.size - sizeof(PacketHeader);
-					u8 error = packet->Data()[sizeof(PacketHeader)];
-					switch ((CommandType)header.command) {
-					case CommandType::Login:
-						WARN_LOG(Log::HTTP, "Response: Server Info & Login -> %s", PacketTypeNames[error]);
+				switch ((PacketType)header.request) {
+				case PacketType::Request:
+					ERROR_LOG(Log::HTTP, "Response Error: Request made to Client not allowed");
+					break;
+				case PacketType::Reply:
+					// Proper response to a request
+					//u8 body = packet->Data()[sizeof(PacketHeader)];
+					//INFO_LOG(Log::HTTP, "Response Error: Login Failed -> %s", PacketTypeNames[error]);
+					break;
+				case PacketType::Notification:
+					switch ((NotificationType)header.command) {
+					case NotificationType::FriendNew:
+					case NotificationType::FriendLost:
+					case NotificationType::FriendQuery:
+					case NotificationType::FriendStatus:
+					case NotificationType::FriendPresenceChanged:
+						// Friends not supported on PSP
+						//handle_friend_notification
 						break;
+					case NotificationType::MessageReceived:
+						// Private messages not supported on PSP?
+						// handle_message
 					default:
-						ERROR_LOG(Log::HTTP, "Response: Server Info & UNHANDLED[%d] -> %s", header.command, PacketTypeNames[error]);
+						// Append all other notifications for later requests
+						// notifications
 						break;
 					}
-					//return -error;
+					break;
+				case PacketType::ServerInfo: {
+					u8 version = packet->Data()[sizeof(PacketHeader)];
+					INFO_LOG(Log::HTTP, "Server is communicating on version %d", version);
+					break;
+				}
+				default:
+					ERROR_LOG(Log::HTTP, "Unexpected Packet Type - %d", header.request);
+					break;
 				}
 			}
 		}

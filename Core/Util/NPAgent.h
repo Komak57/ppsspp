@@ -13,6 +13,7 @@
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/x509_crt.h"
 #include <mbedtls\timing.h>
+#include <unordered_map>
 
 // 0x88 bytes
 //struct RoomInfo {
@@ -290,7 +291,7 @@ namespace net {
 		int InitializeSSL(int transport, std::string certPEM);
 		void Disconnect();
 		bool Send(Packet* packet, double timeout, bool* cancelled);
-		int Recv(Packet* packet, size_t sz = 4096);
+		int Recv(Packet* packet);
 		
 		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) = 0;
 		// NPAuthAgent Functions
@@ -360,6 +361,22 @@ namespace net {
 		int SearchRoom(SceNpMatching2SearchRoomRequest* req, SceNpMatching2RoomDataExternal* roomDataOut);
 		int CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut);
 		int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut);
+
+		void start_read_thread();
+		void stop_read_thread();
+
+		// Waits for a response matching request_id
+		// Blocks until the full packet for that request is ready
+		std::vector<u8> wait_for_responses(u64 request_id);
+	private:
+		void read_loop();
+
+		std::thread read_thread;
+		bool running = false;
+
+		std::mutex buffer_mutex;
+		std::condition_variable buffer_cv;
+		std::unordered_map<u64, std::vector<u8>> responses;
 	};
 
 	class NPAuthAgent {
