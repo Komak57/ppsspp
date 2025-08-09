@@ -572,9 +572,35 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 		if (tServer == 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
-		SceNpMatching2SearchRoomRequest req;
-		Memory::Memcpy(&req, reqParamPtr, sizeof(req));
+		// TODO: Fix structs to let Memcpy obtain PSP Pointers as objects
+		SceNpMatching2SearchRoomRequestRAW raw;
+		Memory::Memcpy(&raw, reqParamPtr, sizeof(raw));
 
+		SceNpMatching2SearchRoomRequest req;
+		req.option = raw.option;
+		req.worldId = raw.worldId;
+		req.lobbyId = raw.lobbyId;
+		req.rangeFilter = raw.rangeFilter;
+		req.flagFilter = raw.flagFilter;
+		req.flagAttr = raw.flagAttr;
+
+		req.intFilter = new SceNpMatching2IntSearchFilter[raw.intFilterNum];
+		req.intFilterNum = raw.intFilterNum;
+		if (raw.intFilterPtr != 0 && raw.intFilterNum > 0) {
+			Memory::Memcpy(req.intFilter, raw.intFilterPtr, sizeof(SceNpMatching2IntSearchFilter) * raw.intFilterNum);
+		}
+
+		req.binFilter = new SceNpMatching2BinSearchFilter[raw.binFilterNum];
+		req.binFilterNum = raw.binFilterNum;
+		if (raw.binFilterPtr != 0 && raw.binFilterNum > 0) {
+			Memory::Memcpy(req.binFilter, raw.binFilterPtr, sizeof(SceNpMatching2BinSearchFilter) * raw.binFilterNum);
+		}
+
+		req.attrId = new SceNpMatching2AttributeId[raw.attrIdNum];
+		req.attrIdNum = raw.attrIdNum;
+		if (raw.attrIdPtr != 0 && raw.attrIdNum > 0) {
+			Memory::Memcpy(req.attrId, raw.attrIdPtr, sizeof(SceNpMatching2AttributeId) * raw.attrIdNum);
+		}
 
 		// FIXME: Populate all relevant data from req into memory as required
 		SceNpMatching2RoomDataExternal roomData{};

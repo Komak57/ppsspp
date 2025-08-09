@@ -814,11 +814,11 @@ struct RoomInfo {
 	u16 Port;
 	u8 Status;
 	std::string Host;
-	u32_le IPAddr = 910526074; // 910526074 || 0x3645867a || 54.69.134.122 || elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net
+	//u32_le IPAddr = 910526074; // 910526074 || 0x3645867a || 54.69.134.122 || elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net
 };
 
 struct SceNpMatching2ServerInfo {
-	SceNpMatching2ServerId id;;
+	SceNpMatching2ServerId id;
 	SceNpMatching2ServerStatus status;
 	u8 padding;
 };
@@ -1045,11 +1045,27 @@ struct SceNpMatching2SearchRoomRequest
 	SceNpMatching2RangeFilter rangeFilter;
 	SceNpMatching2FlagAttr flagFilter;
 	SceNpMatching2FlagAttr flagAttr;
-	SceNpMatching2IntSearchFilter* intFilter;
+	SceNpMatching2IntSearchFilter* intFilter; // SceNpMatching2IntSearchFilter
 	u32 intFilterNum;
-	SceNpMatching2BinSearchFilter* binFilter;
+	SceNpMatching2BinSearchFilter* binFilter; // SceNpMatching2BinSearchFilter
 	u32 binFilterNum;
-	SceNpMatching2AttributeId* attrId;
+	SceNpMatching2AttributeId* attrId; // SceNpMatching2AttributeId
+	u32 attrIdNum;
+};
+// Room search parameters
+struct SceNpMatching2SearchRoomRequestRAW
+{
+	s32 option;
+	SceNpMatching2WorldId worldId;
+	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2RangeFilter rangeFilter;
+	SceNpMatching2FlagAttr flagFilter;
+	SceNpMatching2FlagAttr flagAttr;
+	u32 intFilterPtr; // SceNpMatching2IntSearchFilter
+	u32 intFilterNum;
+	u32 binFilterPtr; // SceNpMatching2BinSearchFilter
+	u32 binFilterNum;
+	u32 attrIdPtr; // SceNpMatching2AttributeId
 	u32 attrIdNum;
 };
 #pragma pack(push, 1)
