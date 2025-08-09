@@ -157,11 +157,11 @@ namespace net {
 		return false;
 	}
 
-	bool PSNAgent::Login(const char* npid, const char* token, const char* password) {
+	int PSNAgent::Login(const char* npid, const char* token, const char* password) {
 		return false;
 	}
 
-	bool PSNAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
+	int PSNAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
 		return false;
 	}
 

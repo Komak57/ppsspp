@@ -295,8 +295,8 @@ namespace net {
 		
 		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) = 0;
 		// NPAuthAgent Functions
-		virtual bool Login(const char* npid, const char* token, const char* password) = 0;
-		virtual bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
+		virtual int Login(const char* npid, const char* token, const char* password) = 0;
+		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
 
 		// NPAgent Functions
 		virtual int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) = 0;
@@ -341,8 +341,8 @@ namespace net {
 		PSNAgent(int serverId, std::string host, int port, u8 status = 2);
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
-		virtual bool Login(const char* npid, const char* token, const char* password);
-		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		int Login(const char* npid, const char* token, const char* password);
+		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
 		int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2SearchRoomRequest* req, SceNpMatching2RoomDataExternal* roomDataOut);
@@ -356,8 +356,8 @@ namespace net {
 		RPCNAgent(int serverId, std::string host, int port, u8 status = 2);
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
-		bool Login(const char* npid, const char* token, const char* password);
-		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		int Login(const char* npid, const char* token, const char* password);
+		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
 		int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2SearchRoomRequest* req, SceNpMatching2RoomDataExternal* roomDataOut);

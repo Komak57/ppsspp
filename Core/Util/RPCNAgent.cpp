@@ -60,21 +60,41 @@ namespace net {
 
 			PacketHeader header;
 			memcpy(&header, packet.Data(), sizeof(PacketHeader));
+			u8 error = packet.Data()[RPCN_HEADER_SIZE];
+			switch ((ErrorType)error) {
+			case ErrorType::NoError:
+				{
+					auto data_length = packet.Length() - (RPCN_HEADER_SIZE + 1);
 
-			std::lock_guard<std::mutex> lock(buffer_mutex);
-			auto& buf = responses[header.reqId];
-			buf.insert(buf.end(), packet.Data(), packet.Data() + packet.Length());
+					std::lock_guard<std::mutex> lock(buffer_mutex);
+					auto& buf = responses[header.reqId];
+					buf.insert(buf.end(), packet.Data() + RPCN_HEADER_SIZE, packet.Data() + packet.Length());
 
-			int i;
-			std::string hexdata = "";
-			for (i = 0; i < packet.Length(); i++) {
-				char const c = packet.Data()[i];
-				hexdata += hex_chars[(c & 0xF0) >> 4];
-				hexdata += hex_chars[(c & 0x0F) >> 0];
+					int i;
+					std::string hexdata = "";
+					for (i = 0; i < packet.Length(); i++) {
+						char const c = packet.Data()[i];
+						hexdata += hex_chars[(c & 0xF0) >> 4];
+						hexdata += hex_chars[(c & 0x0F) >> 0];
+					}
+					INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+
+					buffer_cv.notify_all();
+					break;
+				}
+			default:
+				{
+					INFO_LOG(Log::sceNet, "RPCN Read Error 0x%01X: %s", error, PacketTypeNames[error]);
+
+					std::lock_guard<std::mutex> lock(buffer_mutex);
+					auto& buf = responses[header.reqId];
+					buf.insert(buf.end(), packet.Data() + RPCN_HEADER_SIZE, packet.Data() + packet.Length());
+
+					buffer_cv.notify_all();
+					Disconnect();
+					break;
+				}
 			}
-			INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
-
-			buffer_cv.notify_all();
 		}
 	}
 
@@ -229,7 +249,7 @@ namespace net {
 		return false;
 	}
 
-	bool RPCNAgent::Login(const char* npid, const char* token, const char* password) {
+	int RPCNAgent::Login(const char* npid, const char* token, const char* password) {
 		// npid
 		// password
 		// token
@@ -270,6 +290,9 @@ namespace net {
 			return false;
 		}*/
 		auto response = wait_for_responses(reqId);
+		u8 error = response.data()[0];
+		if (error != (u8)ErrorType::NoError)
+			return -error;
 
 		/*int i;
 		std::string hexdata = "";
@@ -286,7 +309,7 @@ namespace net {
 		return true;
 	}
 
-	bool RPCNAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
+	int RPCNAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
 		Packet packet = Packet();
 		packet.Write(npid);
 		packet.Write((u8)0);
@@ -316,6 +339,9 @@ namespace net {
 			return false;
 		}*/
 		auto response = wait_for_responses(reqId);
+		u8 error = response.data()[0];
+		if (error != (u8)ErrorType::NoError)
+			return -error;
 
 		/*int i;
 		std::string hexdata = "";
@@ -351,7 +377,9 @@ namespace net {
 			return false;
 		}*/
 		auto response = wait_for_responses(reqId);
-
+		u8 error = response.data()[0];
+		if (error != (u8)ErrorType::NoError)
+			return -error;
 		//int i;
 		//std::string hexdata = "";
 		//for (i = 0; i < response.size(); i++) {
@@ -365,7 +393,7 @@ namespace net {
 		worldInfoOut->clear();
 
 		// Currently under the assumption that the first byte is some error code
-		size_t offset = RPCN_HEADER_SIZE + 1;
+		size_t offset = 1;
 
 		u32 num_worlds = 0;
 		memcpy(&num_worlds, response.data() + offset, sizeof(num_worlds));
@@ -455,6 +483,9 @@ namespace net {
 			return false;
 		}*/
 		auto response = wait_for_responses(reqId);
+		u8 error = response.data()[0];
+		if (error != (u8)ErrorType::NoError)
+			return -error;
 		// 01 1000 10000000 0100000000000000 01
 
 		roomDataOut->roomId = 0; // No Room

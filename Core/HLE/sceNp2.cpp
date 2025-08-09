@@ -511,7 +511,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		// FIXME: Get worldInfo from PSN
 		ret = servers[tServer]->GetWorldInfo(tServer, npTitleId.data, &servers[tServer]->worlds);
 		if (ret < 0)
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 
 		NOTICE_LOG(Log::sceNet, "Received %d worlds", servers[tServer]->worlds.size());
 
@@ -610,7 +610,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to retrieve Room Info");
-			return -1;
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 		}
 
 		u32 infoSize = sizeof(SceNpMatching2RoomDataExternal);
