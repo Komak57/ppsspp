@@ -333,7 +333,6 @@ namespace net {
 		packet.Write(npTitleId);
 		packet.Write("_00");
 		packet.Write((u16)server_id);
-		packet.Pack(CommandType::GetWorldList, 3);
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::GetWorldList, reqId);
@@ -365,18 +364,22 @@ namespace net {
 		// 010C00180000000300000000000000000100000001000000
 		worldInfoOut->clear();
 
-		size_t offset = 0;
+		// Currently under the assumption that the first byte is some error code
+		size_t offset = RPCN_HEADER_SIZE + 1;
 
-		SceNpMatching2GetWorldInfoListResponse worldInfoResp;
-		memcpy(&worldInfoResp, response.data() + RPCN_HEADER_SIZE, sizeof(worldInfoResp));
-
-		// Now, iterate and read `worldNum` entries of `SceNpMatching2World`
-		for (u32 i = 0; i < worldInfoResp.worldNum; ++i)
+		u32 num_worlds = 0;
+		memcpy(&num_worlds, response.data() + offset, sizeof(num_worlds));
+		offset += 4;
+		for (u32 i = 0; i < num_worlds; ++i)
 		{
+			u32 worldId = 0;
+			memcpy(&worldId, response.data() + offset, sizeof(worldId));
+
 			SceNpMatching2World world;
-			Memory::Memcpy(&world, worldInfoResp.worldNum + offset, sizeof(SceNpMatching2World));
-			offset += sizeof(SceNpMatching2World);
+			world.worldId = worldId;
+
 			worldInfoOut->emplace(world.worldId, world);
+			offset += 4;
 		}
 
 		//worldInfoOut->emplace(worldInfo.worldId, worldInfo);
