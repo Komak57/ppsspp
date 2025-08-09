@@ -364,6 +364,22 @@ namespace net {
 		}
 	}
 
+	u64 NPAgent::generate_request_id()
+	{
+		static u64 fallback_id = 1; // In case map is empty
+
+		if (responses.empty())
+			return fallback_id++;
+
+		u64 max_key = 0;
+		for (const auto& [key, _] : responses)
+		{
+			if (key > max_key)
+				max_key = key;
+		}
+		return max_key + 1;
+	}
+
 	bool NPAuthAgent::Send(Packet* packet, double timeout, bool* cancelled) {
 		if (sock() <= 0) {
 			ERROR_LOG(Log::IO, "Send Failed - Invalid Socket");

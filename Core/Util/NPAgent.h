@@ -308,6 +308,7 @@ namespace net {
 		u8 GetStatus();
 		//int GetID() { return ID; }
 		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
+		u64 generate_request_id();
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (SSLEnabled) return tls.netCtx.fd; else return sock_; }
@@ -331,6 +332,7 @@ namespace net {
 
 		bool SSLEnabled = false;
 
+		std::unordered_map<u64, std::vector<u8>> responses;
 	};
 
 	class PSNAgent : public NPAgent {
@@ -376,7 +378,6 @@ namespace net {
 
 		std::mutex buffer_mutex;
 		std::condition_variable buffer_cv;
-		std::unordered_map<u64, std::vector<u8>> responses;
 	};
 
 	class NPAuthAgent {

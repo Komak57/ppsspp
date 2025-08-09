@@ -252,7 +252,8 @@ namespace net {
 		packet.Write(token);
 		packet.Write((u8)0);
 
-		packet.Pack(CommandType::Login, 1);
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::Login, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Login Request");
 
@@ -268,7 +269,7 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
 		}*/
-		auto response = wait_for_responses(1);
+		auto response = wait_for_responses(reqId);
 
 		/*int i;
 		std::string hexdata = "";
@@ -298,7 +299,8 @@ namespace net {
 		packet.Write(email);
 		packet.Write((u8)0);
 
-		packet.Pack(CommandType::Create, 2);
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::Create, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Registration Request");
 
@@ -313,7 +315,7 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
 		}*/
-		auto response = wait_for_responses(2);
+		auto response = wait_for_responses(reqId);
 
 		/*int i;
 		std::string hexdata = "";
@@ -333,6 +335,9 @@ namespace net {
 		packet.Write((u16)server_id);
 		packet.Pack(CommandType::GetWorldList, 3);
 
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::GetWorldList, reqId);
+
 		INFO_LOG(Log::sceNet, "Requesting World Info");
 
 		bool flushed = Send(&packet, 5.0, &canceled);
@@ -346,7 +351,7 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
 		}*/
-		auto response = wait_for_responses(3);
+		auto response = wait_for_responses(reqId);
 
 		//int i;
 		//std::string hexdata = "";
@@ -430,7 +435,8 @@ namespace net {
 		}
 		packet.Write(data);
 
-		packet.Pack(CommandType::SearchRoom, 3);
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::SearchRoom, reqId);
 
 		INFO_LOG(Log::sceNet, "Requesting Room List");
 
@@ -445,16 +451,8 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
 		}*/
-		auto response = wait_for_responses(3);
-
-		/*int i;
-		std::string hexdata = "";
-		for (i = 0; i < response.size(); i++) {
-			char const c = response[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());*/
+		auto response = wait_for_responses(reqId);
+		// 01 1000 10000000 0100000000000000 01
 
 		roomDataOut->roomId = 0; // No Room
 		return 0;
