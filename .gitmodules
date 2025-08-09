@@ -68,3 +68,6 @@
 [submodule "ext/mbedtls"]
 	path = ext/mbedtls
 	url = https://github.com/Mbed-TLS/mbedtls.git
+[submodule "ext/ext/flatbuffers"]
+	path = ext/ext/flatbuffers
+	url = https://github.com/google/flatbuffers.git
