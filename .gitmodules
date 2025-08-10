@@ -71,3 +71,6 @@
 [submodule "ext/ext/flatbuffers"]
 	path = ext/ext/flatbuffers
 	url = https://github.com/google/flatbuffers.git
+[submodule "ext/flatbuffers"]
+	path = ext/flatbuffers
+	url = https://github.com/google/flatbuffers.git
