@@ -261,7 +261,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::SearchRoom(SceNpMatching2SearchRoomRequest* req, SceNpMatching2RoomDataExternal* roomDataOut) {
+	int PSNAgent::SearchRoom(SceNpMatching2SearchRoomRequest* req, SearchRoomResponse*& roomResp) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::SearchRoom()");
 		if (sock_ <= 0) {
 			ERROR_LOG(Log::sceNet, "SearchRoom: Socket not connected");
@@ -304,23 +304,23 @@ namespace net {
 			return -1;
 		}
 
-		std::string response;
-		readbuf.Take(ret, &response);
+		//std::string response;
+		//readbuf.Take(ret, &response);
 
-		// 1002 0027 10010000 01001000 00000000 19490bc9118fc488581dcbfcb27a4a31 001d 0003 0001 01
-		hexdata = "";
-		for (i = 0; i < response.length(); i++) {
-			int c = response[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
+		//// 1002 0027 10010000 01001000 00000000 19490bc9118fc488581dcbfcb27a4a31 001d 0003 0001 01
+		//hexdata = "";
+		//for (i = 0; i < response.length(); i++) {
+		//	int c = response[i];
+		//	hexdata += hex_chars[(c & 0xF0) >> 4];
+		//	hexdata += hex_chars[(c & 0x0F) >> 0];
+		//}
+		//INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
 
-		roomDataOut->roomId = 0; // No Room
+		//roomDataOut->roomId = 0; // No Room
 		return 0;
 	}
 
-	int PSNAgent::CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) {
+	int PSNAgent::CreatJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::CreatJoinRoom()");
 		if (sock_ <= 0) {
 			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Socket not connected");

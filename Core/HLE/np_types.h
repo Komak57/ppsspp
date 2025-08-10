@@ -691,15 +691,6 @@ enum
 	SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_LobbyInvitationInfo = 870,
 };
 
-// Server status
-enum
-{
-	SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE = 1,
-	SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE = 2,
-	SCE_NP_MATCHING2_SERVER_STATUS_BUSY = 3,
-	SCE_NP_MATCHING2_SERVER_STATUS_MAINTENANCE = 4,
-};
-
 // Request callback function
 //using SceNpMatching2RequestCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey,
 //	s32 errorCode, u32 dataSize, PSPPointer<void> arg);
@@ -745,6 +736,220 @@ typedef u64 SceNpMatching2RoomJoinedSlotMask;
 typedef u16 SceNpMatching2Event;
 typedef u32 SceNpMatching2EventKey;
 typedef u32 SceNpMatching2SignalingRequestId;
+
+
+enum
+{
+	SCE_NP_MATCHING2_TITLE_PASSPHRASE_SIZE = 128
+};
+
+// Comparison operator specified as the search condition
+enum
+{
+	SCE_NP_MATCHING2_OPERATOR_EQ = 1,
+	SCE_NP_MATCHING2_OPERATOR_NE = 2,
+	SCE_NP_MATCHING2_OPERATOR_LT = 3,
+	SCE_NP_MATCHING2_OPERATOR_LE = 4,
+	SCE_NP_MATCHING2_OPERATOR_GT = 5,
+	SCE_NP_MATCHING2_OPERATOR_GE = 6,
+};
+
+// Message cast type
+enum
+{
+	SCE_NP_MATCHING2_CASTTYPE_BROADCAST = 1,
+	SCE_NP_MATCHING2_CASTTYPE_UNICAST = 2,
+	SCE_NP_MATCHING2_CASTTYPE_MULTICAST = 3,
+	SCE_NP_MATCHING2_CASTTYPE_MULTICAST_TEAM = 4,
+};
+
+// Session type
+enum
+{
+	SCE_NP_MATCHING2_SESSION_TYPE_LOBBY = 1,
+	SCE_NP_MATCHING2_SESSION_TYPE_ROOM = 2,
+};
+
+// Signaling type
+enum
+{
+	SCE_NP_MATCHING2_SIGNALING_TYPE_NONE = 0,
+	SCE_NP_MATCHING2_SIGNALING_TYPE_MESH = 1,
+	SCE_NP_MATCHING2_SIGNALING_TYPE_STAR = 2,
+};
+
+enum
+{
+	SCE_NP_MATCHING2_SIGNALING_FLAG_MANUAL_MODE = 0x01
+};
+
+// Event cause
+enum
+{
+	SCE_NP_MATCHING2_EVENT_CAUSE_LEAVE_ACTION = 1,
+	SCE_NP_MATCHING2_EVENT_CAUSE_KICKOUT_ACTION = 2,
+	SCE_NP_MATCHING2_EVENT_CAUSE_GRANT_OWNER_ACTION = 3,
+	SCE_NP_MATCHING2_EVENT_CAUSE_SERVER_OPERATION = 4,
+	SCE_NP_MATCHING2_EVENT_CAUSE_MEMBER_DISAPPEARED = 5,
+	SCE_NP_MATCHING2_EVENT_CAUSE_SERVER_INTERNAL = 6,
+	SCE_NP_MATCHING2_EVENT_CAUSE_CONNECTION_ERROR = 7,
+	SCE_NP_MATCHING2_EVENT_CAUSE_NP_SIGNED_OUT = 8,
+	SCE_NP_MATCHING2_EVENT_CAUSE_SYSTEM_ERROR = 9,
+	SCE_NP_MATCHING2_EVENT_CAUSE_CONTEXT_ERROR = 10,
+	SCE_NP_MATCHING2_EVENT_CAUSE_CONTEXT_ACTION = 11,
+};
+
+// Server status
+enum
+{
+	SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE = 1,
+	SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE = 2,
+	SCE_NP_MATCHING2_SERVER_STATUS_BUSY = 3,
+	SCE_NP_MATCHING2_SERVER_STATUS_MAINTENANCE = 4,
+};
+
+// Member role
+enum
+{
+	SCE_NP_MATCHING2_ROLE_MEMBER = 1,
+	SCE_NP_MATCHING2_ROLE_OWNER = 2,
+};
+
+// Status of kicked-out member with regards to rejoining
+enum
+{
+	SCE_NP_MATCHING2_BLOCKKICKFLAG_OK = 0,
+	SCE_NP_MATCHING2_BLOCKKICKFLAG_NG = 1,
+};
+
+// Sort method
+enum
+{
+	SCE_NP_MATCHING2_SORT_METHOD_JOIN_DATE = 0,
+	SCE_NP_MATCHING2_SORT_METHOD_SLOT_NUMBER = 1,
+};
+
+// Context options (matching)
+enum
+{
+	SCE_NP_MATCHING2_CONTEXT_OPTION_USE_ONLINENAME = 0x01,
+	SCE_NP_MATCHING2_CONTEXT_OPTION_USE_AVATARURL = 0x02,
+};
+
+// User information acquisition option
+enum
+{
+	SCE_NP_MATCHING2_GET_USER_INFO_LIST_OPTION_WITH_ONLINENAME = 0x01,
+	SCE_NP_MATCHING2_GET_USER_INFO_LIST_OPTION_WITH_AVATARURL = 0x02,
+};
+
+// Room search options
+enum
+{
+	SCE_NP_MATCHING2_SEARCH_ROOM_OPTION_WITH_NPID = 0x01,
+	SCE_NP_MATCHING2_SEARCH_ROOM_OPTION_WITH_ONLINENAME = 0x02,
+	SCE_NP_MATCHING2_SEARCH_ROOM_OPTION_WITH_AVATARURL = 0x04,
+	SCE_NP_MATCHING2_SEARCH_ROOM_OPTION_NAT_TYPE_FILTER = 0x08,
+	SCE_NP_MATCHING2_SEARCH_ROOM_OPTION_RANDOM = 0x10,
+};
+
+// Send options
+enum
+{
+	SCE_NP_MATCHING2_SEND_MSG_OPTION_WITH_NPID = 0x01,
+	SCE_NP_MATCHING2_SEND_MSG_OPTION_WITH_ONLINENAME = 0x02,
+	SCE_NP_MATCHING2_SEND_MSG_OPTION_WITH_AVATARURL = 0x04,
+};
+
+enum
+{
+	SCE_NP_MATCHING2_ROOM_ALLOWED_USER_MAX = 100,
+	SCE_NP_MATCHING2_ROOM_BLOCKED_USER_MAX = 100,
+};
+
+// Flag-type lobby attribute
+enum
+{
+	SCE_NP_MATCHING2_LOBBY_FLAG_ATTR_PERMANENT = 0x80000000,
+	SCE_NP_MATCHING2_LOBBY_FLAG_ATTR_CLAN = 0x40000000,
+	SCE_NP_MATCHING2_LOBBY_FLAG_ATTR_MEMBER_NOTIFICATION = 0x20000000,
+};
+
+// Attribute ID of lobby member internal binary attribute
+enum
+{
+	SCE_NP_MATCHING2_LOBBYMEMBER_BIN_ATTR_INTERNAL_1_ID = 0x0039,
+};
+
+// Flag-type room attribute
+enum
+{
+	SCE_NP_MATCHING2_ROOM_FLAG_ATTR_OWNER_AUTO_GRANT = 0x80000000,
+	SCE_NP_MATCHING2_ROOM_FLAG_ATTR_CLOSED = 0x40000000,
+	SCE_NP_MATCHING2_ROOM_FLAG_ATTR_FULL = 0x20000000,
+	SCE_NP_MATCHING2_ROOM_FLAG_ATTR_HIDDEN = 0x10000000,
+	SCE_NP_MATCHING2_ROOM_FLAG_ATTR_NAT_TYPE_RESTRICTION = 0x04000000,
+	SCE_NP_MATCHING2_ROOM_FLAG_ATTR_PROHIBITIVE_MODE = 0x02000000,
+};
+
+// Flah-type room member attribute
+enum
+{
+	SCE_NP_MATCHING2_LOBBYMEMBER_FLAG_ATTR_OWNER = 0x80000000,
+	SCE_NP_MATCHING2_ROOMMEMBER_FLAG_ATTR_OWNER = 0x80000000,
+};
+
+// ID of external room search integer attribute
+enum
+{
+	SCE_NP_MATCHING2_ROOM_SEARCHABLE_INT_ATTR_EXTERNAL_1_ID = 0x004c,
+	SCE_NP_MATCHING2_ROOM_SEARCHABLE_INT_ATTR_EXTERNAL_2_ID = 0x004d,
+	SCE_NP_MATCHING2_ROOM_SEARCHABLE_INT_ATTR_EXTERNAL_3_ID = 0x004e,
+	SCE_NP_MATCHING2_ROOM_SEARCHABLE_INT_ATTR_EXTERNAL_4_ID = 0x004f,
+	SCE_NP_MATCHING2_ROOM_SEARCHABLE_INT_ATTR_EXTERNAL_5_ID = 0x0050,
+	SCE_NP_MATCHING2_ROOM_SEARCHABLE_INT_ATTR_EXTERNAL_6_ID = 0x0051,
+	SCE_NP_MATCHING2_ROOM_SEARCHABLE_INT_ATTR_EXTERNAL_7_ID = 0x0052,
+	SCE_NP_MATCHING2_ROOM_SEARCHABLE_INT_ATTR_EXTERNAL_8_ID = 0x0053,
+};
+
+// ID of external room search binary attribute
+enum
+{
+	SCE_NP_MATCHING2_ROOM_SEARCHABLE_BIN_ATTR_EXTERNAL_1_ID = 0x0054,
+};
+
+// ID of external room binary attribute
+enum
+{
+	SCE_NP_MATCHING2_ROOM_BIN_ATTR_EXTERNAL_1_ID = 0x0055,
+	SCE_NP_MATCHING2_ROOM_BIN_ATTR_EXTERNAL_2_ID = 0x0056,
+};
+
+// ID of internal lobby binary attribute
+enum
+{
+	SCE_NP_MATCHING2_LOBBY_BIN_ATTR_INTERNAL_1_ID = 0x0037,
+	SCE_NP_MATCHING2_LOBBY_BIN_ATTR_INTERNAL_2_ID = 0x0038,
+};
+
+// ID of internal room binary attribute
+enum
+{
+	SCE_NP_MATCHING2_ROOM_BIN_ATTR_INTERNAL_1_ID = 0x0057,
+	SCE_NP_MATCHING2_ROOM_BIN_ATTR_INTERNAL_2_ID = 0x0058,
+};
+
+// ID of internal room member binary attribute
+enum
+{
+	SCE_NP_MATCHING2_ROOMMEMBER_BIN_ATTR_INTERNAL_1_ID = 0x0059,
+};
+
+// Attribute ID of user binary attribute
+enum
+{
+	SCE_NP_MATCHING2_USER_BIN_ATTR_1_ID = 0x005f,
+};
 
 // Option parameters for requests
 //struct SceNpMatching2RequestOptParam
@@ -994,6 +1199,38 @@ struct SceNpMatching2RoomDataInternal
 };
 
 // Create-and-join room request parameters
+struct SceNpMatching2CreateJoinRoomRequestRAW
+{
+	SceNpMatching2WorldId worldId;
+	u8 padding1[4];
+	SceNpMatching2LobbyId lobbyId;
+	u32 maxSlot;
+	u32 flagAttr;
+	u32 roomBinAttrInternal; // SceNpMatching2BinAttr*
+	u32 roomBinAttrInternalNum;
+	u32 roomSearchableIntAttrExternal; // SceNpMatching2IntAttr*
+	u32 roomSearchableIntAttrExternalNum;
+	u32 roomSearchableBinAttrExternal; // SceNpMatching2BinAttr*
+	u32 roomSearchableBinAttrExternalNum;
+	u32 roomBinAttrExternal; // SceNpMatching2BinAttr*
+	u32 roomBinAttrExternalNum;
+	SceNpMatching2SessionPassword* roomPassword;
+	u32 groupConfig; // SceNpMatching2RoomGroupConfig*
+	u32 groupConfigNum;
+	SceNpMatching2RoomPasswordSlotMask* passwordSlotMask;
+	u32 allowedUser; // SceNpId*
+	u32 allowedUserNum;
+	u32 blockedUser; // SceNpId*
+	u32 blockedUserNum;
+	SceNpMatching2GroupLabel* joinRoomGroupLabel;
+	u32 roomMemberBinAttrInternal; // SceNpMatching2BinAttr*
+	u32 roomMemberBinAttrInternalNum;
+	SceNpMatching2TeamId teamId;
+	u8 padding2[3];
+	SceNpMatching2SignalingOptParam* sigOptParam;
+	u8 padding3[4];
+};
+// Create-and-join room request parameters
 struct SceNpMatching2CreateJoinRoomRequest
 {
 	SceNpMatching2WorldId worldId;
@@ -1001,28 +1238,28 @@ struct SceNpMatching2CreateJoinRoomRequest
 	SceNpMatching2LobbyId lobbyId;
 	u32 maxSlot;
 	u32 flagAttr;
-	SceNpMatching2BinAttr* roomBinAttrInternal;
+	PSPPointer<SceNpMatching2BinAttr*> roomBinAttrInternal;
 	u32 roomBinAttrInternalNum;
-	SceNpMatching2IntAttr* roomSearchableIntAttrExternal;
+	PSPPointer<SceNpMatching2IntAttr*> roomSearchableIntAttrExternal;
 	u32 roomSearchableIntAttrExternalNum;
-	SceNpMatching2BinAttr* roomSearchableBinAttrExternal;
+	PSPPointer<SceNpMatching2BinAttr*> roomSearchableBinAttrExternal;
 	u32 roomSearchableBinAttrExternalNum;
-	SceNpMatching2BinAttr* roomBinAttrExternal;
+	PSPPointer<SceNpMatching2BinAttr*> roomBinAttrExternal;
 	u32 roomBinAttrExternalNum;
-	SceNpMatching2SessionPassword* roomPassword;
-	SceNpMatching2RoomGroupConfig* groupConfig;
+	PSPPointer<SceNpMatching2SessionPassword> roomPassword;
+	PSPPointer<SceNpMatching2RoomGroupConfig*> groupConfig;
 	u32 groupConfigNum;
-	SceNpMatching2RoomPasswordSlotMask* passwordSlotMask;
-	SceNpId* allowedUser;
+	PSPPointer<SceNpMatching2RoomPasswordSlotMask> passwordSlotMask;
+	PSPPointer<SceNpId*> allowedUser;
 	u32 allowedUserNum;
-	SceNpId* blockedUser;
+	PSPPointer<SceNpId*> blockedUser;
 	u32 blockedUserNum;
-	SceNpMatching2GroupLabel* joinRoomGroupLabel;
-	SceNpMatching2BinAttr* roomMemberBinAttrInternal;
+	PSPPointer<SceNpMatching2GroupLabel> joinRoomGroupLabel;
+	PSPPointer<SceNpMatching2BinAttr*> roomMemberBinAttrInternal;
 	u32 roomMemberBinAttrInternalNum;
 	SceNpMatching2TeamId teamId;
 	u8 padding2[3];
-	SceNpMatching2SignalingOptParam* sigOptParam;
+	PSPPointer<SceNpMatching2SignalingOptParam> sigOptParam;
 	u8 padding3[4];
 };
 

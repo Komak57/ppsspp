@@ -416,7 +416,7 @@ namespace net {
 		return worldInfoOut->size();
 	}
 
-	int RPCNAgent::SearchRoom(SceNpMatching2SearchRoomRequest* req, SceNpMatching2RoomDataExternal* roomDataOut) {
+	int RPCNAgent::SearchRoom(SceNpMatching2SearchRoomRequest* req, SearchRoomResponse*& roomResp) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 
 		// Build intFilter vector
@@ -502,19 +502,215 @@ namespace net {
 			return false;
 		}
 
-		auto response = wait_for_responses(reqId);
-		u8 error = response.data()[0];
+		auto resp = wait_for_responses(reqId);
+		u8 error = resp.data()[0];
 		if (error != (u8)ErrorType::NoError)
-			return -error;
+			return -1;
 		// NPAgent::Recv('01100028000000010000000000000000 140000000C00000000000600080004000600000001000000')
 
-		roomDataOut->roomId = 0; // No Room (or parse from response)
+		roomResp = flatbuffers::GetMutableRoot<SearchRoomResponse>(resp.data());
+		if (roomResp == nullptr)
+			return -1;
 
 		return 0;
 	}
 
-	int RPCNAgent::CreatJoinRoom(SceNpMatching2RoomDataInternal* roomDataOut) {
-		roomDataOut->roomId = 1;
+	bool is_valid_npid(const SceNpId& npid)
+	{
+		if (!std::all_of(npid.handle.data, npid.handle.data + 16, [](char c) { return std::isalnum(c) || c == '-' || c == '_' || c == 0; })
+			|| npid.handle.data[16] != 0
+			|| !std::all_of(npid.handle.dummy, npid.handle.dummy + 3, [](char val) { return val == 0; }))
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	int RPCNAgent::CreatJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
+		flatbuffers::FlatBufferBuilder builder(1024);
+
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntAttr>>> final_searchintattrexternal_vec;
+		if (req->roomSearchableIntAttrExternalNum && req->roomSearchableIntAttrExternal)
+		{
+			std::vector<flatbuffers::Offset<IntAttr>> davec;
+			for (u32 i = 0; i < req->roomSearchableIntAttrExternalNum; i++)
+			{
+				auto bin = CreateIntAttr(builder, req->roomSearchableIntAttrExternal[i]->id, req->roomSearchableIntAttrExternal[i]->num);
+				davec.push_back(bin);
+			}
+			final_searchintattrexternal_vec = builder.CreateVector(davec);
+		}
+
+		// WWE SmackDown vs. RAW 2009 passes roomBinAttrExternal in roomSearchableBinAttrExternal so we parse based on attribute ids
+
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_binattrinternal_vec;
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_searchbinattrexternal_vec;
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_binattrexternal_vec;
+
+		std::vector<flatbuffers::Offset<BinAttr>> davec_binattrinternal;
+		std::vector<flatbuffers::Offset<BinAttr>> davec_searchable_binattrexternal;
+		std::vector<flatbuffers::Offset<BinAttr>> davec_binattrexternal;
+
+		auto put_binattr = [&](SceNpMatching2AttributeId id, flatbuffers::Offset<BinAttr> bin)
+		{
+			switch (id)
+			{
+			case SCE_NP_MATCHING2_ROOM_BIN_ATTR_INTERNAL_1_ID:
+			case SCE_NP_MATCHING2_ROOM_BIN_ATTR_INTERNAL_2_ID:
+				davec_binattrinternal.push_back(bin);
+				break;
+			case SCE_NP_MATCHING2_ROOM_BIN_ATTR_EXTERNAL_1_ID:
+			case SCE_NP_MATCHING2_ROOM_BIN_ATTR_EXTERNAL_2_ID:
+				davec_binattrexternal.push_back(bin);
+				break;
+			case SCE_NP_MATCHING2_ROOM_SEARCHABLE_BIN_ATTR_EXTERNAL_1_ID:
+				davec_searchable_binattrexternal.push_back(bin);
+				break;
+			default:
+				ERROR_LOG(Log::sceNet, "Unexpected bin attribute id in createjoin_room request: 0x%x", id);
+				break;
+			}
+		};
+
+		if (req->roomBinAttrInternalNum && req->roomBinAttrInternal)
+		{
+			for (u32 i = 0; i < req->roomBinAttrInternalNum; i++)
+			{
+				auto bin = CreateBinAttr(builder, req->roomBinAttrInternal[i]->id, builder.CreateVector(req->roomBinAttrInternal[i]->ptr, req->roomBinAttrInternal[i]->size));
+				put_binattr(req->roomBinAttrInternal[i]->id, bin);
+			}
+		}
+
+		if (req->roomSearchableBinAttrExternalNum && req->roomSearchableBinAttrExternal)
+		{
+			for (u32 i = 0; i < req->roomSearchableBinAttrExternalNum; i++)
+			{
+				auto bin = CreateBinAttr(builder, req->roomSearchableBinAttrExternal[i]->id, builder.CreateVector(req->roomSearchableBinAttrExternal[i]->ptr, req->roomSearchableBinAttrExternal[i]->size));
+				put_binattr(req->roomSearchableBinAttrExternal[i]->id, bin);
+			}
+		}
+
+		if (req->roomBinAttrExternalNum && req->roomBinAttrExternal)
+		{
+			for (u32 i = 0; i < req->roomBinAttrExternalNum; i++)
+			{
+				auto bin = CreateBinAttr(builder, req->roomBinAttrExternal[i]->id, builder.CreateVector(req->roomBinAttrExternal[i]->ptr, req->roomBinAttrExternal[i]->size));
+				put_binattr(req->roomBinAttrExternal[i]->id, bin);
+			}
+		}
+
+		if (!davec_binattrinternal.empty())
+			final_binattrinternal_vec = builder.CreateVector(davec_binattrinternal);
+
+		if (!davec_searchable_binattrexternal.empty())
+			final_searchbinattrexternal_vec = builder.CreateVector(davec_searchable_binattrexternal);
+
+		if (!davec_binattrexternal.empty())
+			final_binattrexternal_vec = builder.CreateVector(davec_binattrexternal);
+
+		flatbuffers::Offset<flatbuffers::Vector<u8>> final_roompassword;
+		if (req->roomPassword)
+			final_roompassword = builder.CreateVector(req->roomPassword->data, 8);
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<GroupConfig>>> final_groupconfigs_vec;
+		if (req->groupConfigNum && req->groupConfig)
+		{
+			std::vector<flatbuffers::Offset<GroupConfig>> davec;
+			for (u32 i = 0; i < req->groupConfigNum; i++)
+			{
+				auto bin = CreateGroupConfig(builder, req->groupConfig[i]->slotNum, req->groupConfig[i]->withLabel ? builder.CreateVector(req->groupConfig[i]->label.data, 8) : 0, req->groupConfig[i]->withPassword);
+				davec.push_back(bin);
+			}
+			final_groupconfigs_vec = builder.CreateVector(davec);
+		}
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> final_allowedusers_vec;
+		if (req->allowedUserNum && req->allowedUser)
+		{
+			std::vector<flatbuffers::Offset<flatbuffers::String>> davec;
+			for (u32 i = 0; i < req->allowedUserNum; i++)
+			{
+				// Some games just give us garbage, make sure npid is valid before passing
+				// Ex: Aquapazza (gives uninitialized buffer on the stack and allowedUserNum is hardcoded to 100)
+				if (!is_valid_npid(*req->allowedUser[i]))
+				{
+					continue;
+				}
+
+				auto bin = builder.CreateString(req->allowedUser[i]->handle.data);
+				davec.push_back(bin);
+			}
+			final_allowedusers_vec = builder.CreateVector(davec);
+		}
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> final_blockedusers_vec;
+		if (req->blockedUserNum && req->blockedUser)
+		{
+			std::vector<flatbuffers::Offset<flatbuffers::String>> davec;
+			for (u32 i = 0; i < req->blockedUserNum; i++)
+			{
+				if (!is_valid_npid(*req->blockedUser[i]))
+				{
+					continue;
+				}
+
+				auto bin = builder.CreateString(req->blockedUser[i]->handle.data);
+				davec.push_back(bin);
+			}
+			final_blockedusers_vec = builder.CreateVector(davec);
+		}
+		flatbuffers::Offset<flatbuffers::Vector<u8>> final_grouplabel;
+		if (req->joinRoomGroupLabel)
+			final_grouplabel = builder.CreateVector(req->joinRoomGroupLabel->data, 8);
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_memberbinattrinternal_vec;
+		if (req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal)
+		{
+			std::vector<flatbuffers::Offset<BinAttr>> davec;
+			for (u32 i = 0; i < req->roomMemberBinAttrInternalNum; i++)
+			{
+				auto bin = CreateBinAttr(
+					builder, req->roomMemberBinAttrInternal[i]->id, builder.CreateVector(reinterpret_cast<const u8*>(req->roomMemberBinAttrInternal[i]->ptr), req->roomMemberBinAttrInternal[i]->size));
+				davec.push_back(bin);
+			}
+			final_memberbinattrinternal_vec = builder.CreateVector(davec);
+		}
+		flatbuffers::Offset<OptParam> final_optparam;
+		if (req->sigOptParam)
+			final_optparam = CreateOptParam(builder, req->sigOptParam->type, req->sigOptParam->flag, req->sigOptParam->hubMemberId);
+		u64 final_passwordSlotMask = 0;
+		if (req->passwordSlotMask)
+			final_passwordSlotMask = *req->passwordSlotMask;
+
+		auto req_finished = CreateCreateJoinRoomRequest(builder, req->worldId, req->lobbyId, req->maxSlot, req->flagAttr, final_binattrinternal_vec, final_searchintattrexternal_vec,
+			final_searchbinattrexternal_vec, final_binattrexternal_vec, final_roompassword, final_groupconfigs_vec, final_passwordSlotMask, final_allowedusers_vec, final_blockedusers_vec, final_grouplabel,
+			final_memberbinattrinternal_vec, req->teamId, final_optparam);
+		builder.Finish(req_finished);
+
+		auto bufsize = builder.GetSize();
+		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
+		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
+		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
+		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
+
+		// Wrap and send the packet
+		Packet packet;
+		packet.Write(data);
+
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::CreateRoom, reqId);
+
+		INFO_LOG(Log::sceNet, "Requesting Room List");
+
+		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
+		bool flushed = Send(&packet, 5.0, &canceled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return false;
+		}
+
+		auto resp = wait_for_responses(reqId);
+		u8 error = resp.data()[0];
+		if (error != (u8)ErrorType::NoError)
+			return -1;
+
 		return 0;
 	}
 
