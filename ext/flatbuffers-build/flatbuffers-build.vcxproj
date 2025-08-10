@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\flatbuffers\src\annotated_binary_text_gen.cpp" />
+    <ClCompile Include="..\flatbuffers\src\bfbs_gen_lua.cpp" />
+    <ClCompile Include="..\flatbuffers\src\bfbs_gen_nim.cpp" />
+    <ClCompile Include="..\flatbuffers\src\binary_annotator.cpp" />
+    <ClCompile Include="..\flatbuffers\src\code_generators.cpp" />
+    <ClCompile Include="..\flatbuffers\src\file_binary_writer.cpp" />
+    <ClCompile Include="..\flatbuffers\src\file_name_saving_file_manager.cpp" />
+    <ClCompile Include="..\flatbuffers\src\file_writer.cpp" />
+    <ClCompile Include="..\flatbuffers\src\flatc.cpp" />
+    <ClCompile Include="..\flatbuffers\src\flatc_main.cpp" />
+    <ClCompile Include="..\flatbuffers\src\flathash.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_binary.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_cpp.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_csharp.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_dart.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_fbs.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_go.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_grpc.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_java.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_json_schema.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_kotlin.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_kotlin_kmp.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_lobster.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_php.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_python.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_rust.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_swift.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_text.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_gen_ts.cpp" />
+    <ClCompile Include="..\flatbuffers\src\idl_parser.cpp" />
+    <ClCompile Include="..\flatbuffers\src\reflection.cpp" />
+    <ClCompile Include="..\flatbuffers\src\util.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\flatbuffers\src\annotated_binary_text_gen.h" />
+    <ClInclude Include="..\flatbuffers\src\bfbs_gen.h" />
+    <ClInclude Include="..\flatbuffers\src\bfbs_gen_lua.h" />
+    <ClInclude Include="..\flatbuffers\src\bfbs_gen_nim.h" />
+    <ClInclude Include="..\flatbuffers\src\bfbs_namer.h" />
+    <ClInclude Include="..\flatbuffers\src\binary_annotator.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_binary.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_cpp.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_csharp.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_dart.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_fbs.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_go.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_java.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_json_schema.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_kotlin.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_lobster.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_php.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_python.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_rust.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_swift.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_text.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_gen_ts.h" />
+    <ClInclude Include="..\flatbuffers\src\idl_namer.h" />
+    <ClInclude Include="..\flatbuffers\src\namer.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\flatbuffers\src\BUILD.bazel" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{a7028526-e923-419f-89ce-f98caa83c810}</ProjectGuid>
+    <RootNamespace>flatbuffersbuild</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>..\ext\flatbuffers\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

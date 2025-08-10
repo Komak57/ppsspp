@@ -1,0 +1,185 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="src">
+      <UniqueIdentifier>{83ed2004-1649-4b65-a3de-573bcabd55cc}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\flatbuffers\src\annotated_binary_text_gen.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\bfbs_gen_lua.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\bfbs_gen_nim.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\binary_annotator.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\code_generators.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\file_binary_writer.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\file_name_saving_file_manager.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\file_writer.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\flatc.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\flatc_main.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\flathash.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_binary.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_cpp.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_csharp.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_dart.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_fbs.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_go.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_grpc.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_java.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_json_schema.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_kotlin.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_kotlin_kmp.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_lobster.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_php.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_python.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_rust.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_swift.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_text.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_gen_ts.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\idl_parser.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\reflection.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\flatbuffers\src\util.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\flatbuffers\src\annotated_binary_text_gen.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\bfbs_gen.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\bfbs_gen_lua.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\bfbs_gen_nim.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\bfbs_namer.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\binary_annotator.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_binary.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_cpp.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_csharp.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_dart.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_fbs.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_go.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_java.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_json_schema.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_kotlin.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_lobster.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_php.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_python.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_rust.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_swift.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_text.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_gen_ts.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\idl_namer.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\flatbuffers\src\namer.h">
+      <Filter>src</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\flatbuffers\src\BUILD.bazel">
+      <Filter>src</Filter>
+    </None>
+  </ItemGroup>
+</Project>

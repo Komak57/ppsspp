@@ -2211,6 +2211,9 @@
     <ClInclude Include="HLE\np_types.h">
       <Filter>HLE\Libraries</Filter>
     </ClInclude>
+    <ClInclude Include="np2_structs_generated.h">
+      <Filter>HLE</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\LICENSE.TXT" />
@@ -2227,6 +2230,9 @@
       <Filter>Ext\libzip</Filter>
     </None>
     <None Include="..\assets\infra-dns.json" />
+    <None Include="np2_structs.fbs">
+      <Filter>HLE</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\ext\sha1\CMakeLists.txt">

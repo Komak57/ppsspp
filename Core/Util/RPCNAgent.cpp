@@ -355,10 +355,11 @@ namespace net {
 	}
 
 	int RPCNAgent::GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) {
+		// TODO: Possibly unsafe. Need to test
+		memcpy(this->npTitleId, npTitleId, sizeof(this->npTitleId));
+
 		Packet packet = Packet();
-		packet.Write(npTitleId);
-		packet.Write("_00");
-		packet.Write((u16)server_id);
+		packet.Write(this->GetCommHeader());
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::GetWorldList, reqId);
@@ -415,55 +416,72 @@ namespace net {
 	}
 
 	int RPCNAgent::SearchRoom(SceNpMatching2SearchRoomRequest* req, SceNpMatching2RoomDataExternal* roomDataOut) {
-		Packet packet = Packet();
+		flatbuffers::FlatBufferBuilder builder(1024);
 
-		// Header structure
-		SceNpMatching2SearchRoomPacket header{};
-		header.option = req->option;
-		header.worldId = req->worldId;
-		header.lobbyId = req->lobbyId;
-		header.range_startIndex = req->rangeFilter.startIndex;
-		header.range_max = req->rangeFilter.max;
-		header.flagFilter = req->flagFilter;
-		header.flagAttr = req->flagAttr;
-		header.intFilterNum = req->intFilterNum;
-		header.binFilterNum = req->binFilterNum;
-		header.attrIdNum = req->attrIdNum;
+		// Build intFilter vector
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntSearchFilter>>> final_intfilter_vec;
+		if (req->intFilterNum && req->intFilter) {
+			std::vector<flatbuffers::Offset<IntSearchFilter>> intFilters;
+			intFilters.reserve(req->intFilterNum);
 
-
-		std::vector<u8> data;
-		data.insert(data.end(), reinterpret_cast<u8*>(&header), reinterpret_cast<u8*>(&header) + sizeof(header));
-
-		// Serialize intFilter
-		for (u32 i = 0; i < req->intFilterNum; ++i)
-		{
-			IntFilter f;
-			f.searchOperator = req->intFilter[i].searchOperator;
-			f.attr_id = req->intFilter[i].attr.id;
-			f.attr_num = req->intFilter[i].attr.num;
-
-			data.insert(data.end(), reinterpret_cast<u8*>(&f), reinterpret_cast<u8*>(&f) + sizeof(f));
+			for (u32 i = 0; i < req->intFilterNum; ++i) {
+				auto int_attr = CreateIntAttr(builder, req->intFilter[i].attr.id, req->intFilter[i].attr.num);
+				auto filter = CreateIntSearchFilter(builder, req->intFilter[i].searchOperator, int_attr);
+				intFilters.push_back(filter);
+			}
+			final_intfilter_vec = builder.CreateVector(intFilters);
 		}
 
-		// Serialize binFilter
-		for (u32 i = 0; i < req->binFilterNum; ++i)
-		{
-			BinFilter f;
-			f.searchOperator = req->binFilter[i].searchOperator;
-			f.attr_id = req->binFilter[i].attr.id;
-			f.data_size = req->binFilter[i].attr.size;
+		// Build binFilter vector
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinSearchFilter>>> final_binfilter_vec;
+		if (req->binFilterNum && req->binFilter) {
+			std::vector<flatbuffers::Offset<BinSearchFilter>> binFilters;
+			binFilters.reserve(req->binFilterNum);
 
-			data.insert(data.end(), reinterpret_cast<u8*>(&f), reinterpret_cast<u8*>(&f) + sizeof(f));
-			data.insert(data.end(), req->binFilter[i].attr.ptr,
-				req->binFilter[i].attr.ptr + req->binFilter[i].attr.size);
+			for (u32 i = 0; i < req->binFilterNum; ++i) {
+				auto dataVec = builder.CreateVector(
+					req->binFilter[i].attr.ptr,
+					req->binFilter[i].attr.size
+				);
+				auto bin_attr = CreateBinAttr(builder, req->binFilter[i].attr.id, dataVec);
+				auto filter = CreateBinSearchFilter(builder, req->binFilter[i].searchOperator, bin_attr);
+				binFilters.push_back(filter);
+			}
+			final_binfilter_vec = builder.CreateVector(binFilters);
 		}
 
-		// Serialize attrId[]
-		for (u32 i = 0; i < req->attrIdNum; ++i)
-		{
-			u16 attr_id = req->attrId[i];
-			data.insert(data.end(), reinterpret_cast<u8*>(&attr_id), reinterpret_cast<u8*>(&attr_id) + sizeof(u16));
+		// Build attrId vector
+		flatbuffers::Offset<flatbuffers::Vector<u16>> attrid_vec;
+		if (req->attrIdNum && req->attrId) {
+			std::vector<u16> attr_ids(req->attrId, req->attrId + req->attrIdNum);
+			attrid_vec = builder.CreateVector(attr_ids);
 		}
+		// Build the main SearchRoomRequest
+		SearchRoomRequestBuilder s_req(builder);
+		s_req.add_option(req->option);
+		s_req.add_worldId(req->worldId);
+		s_req.add_lobbyId(req->lobbyId);
+		s_req.add_rangeFilter_startIndex(req->rangeFilter.startIndex);
+		s_req.add_rangeFilter_max(req->rangeFilter.max);
+		s_req.add_flagFilter(req->flagFilter);
+		s_req.add_flagAttr(req->flagAttr);
+		if (req->intFilterNum) s_req.add_intFilter(final_intfilter_vec);
+		if (req->binFilterNum) s_req.add_binFilter(final_binfilter_vec);
+		if (req->attrIdNum) s_req.add_attrId(attrid_vec);
+
+		auto req_finished = s_req.Finish();
+		builder.Finish(req_finished);
+
+		// Super overcomplicated system to attach the CommHeader to the packet
+		auto bufsize = builder.GetSize();
+		std::vector<u8> header = this->GetCommHeader();
+		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
+		data.insert(data.begin(), header.begin(), header.end());
+		reinterpret_cast<u32&>(data[COMMUNICATION_ID_SIZE]) = static_cast<u32>(bufsize);
+		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
+
+		// Wrap and send the packet
+		Packet packet;
 		packet.Write(data);
 
 		auto reqId = generate_request_id();
@@ -471,24 +489,21 @@ namespace net {
 
 		INFO_LOG(Log::sceNet, "Requesting Room List");
 
+		// NPAgent::Send('001000BB00000001000000000000004E50575230313434365F303001008C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F0000000000000000000000000000000000')
 		bool flushed = Send(&packet, 5.0, &canceled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return false;
 		}
-		/*Packet response = Packet();
-		int ret = Recv(&response);
-		if (ret < 0) {
-			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
-			return false;
-		}*/
+
 		auto response = wait_for_responses(reqId);
 		u8 error = response.data()[0];
 		if (error != (u8)ErrorType::NoError)
 			return -error;
 		// 01 1000 10000000 0100000000000000 01
 
-		roomDataOut->roomId = 0; // No Room
+		roomDataOut->roomId = 0; // No Room (or parse from response)
+
 		return 0;
 	}
 
