@@ -84,7 +84,7 @@ namespace net {
 				}
 			default:
 				{
-					INFO_LOG(Log::sceNet, "RPCN Read Error 0x%01X: %s", error, PacketTypeNames[error]);
+					ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", error, PacketTypeNames[error]);
 
 					std::lock_guard<std::mutex> lock(buffer_mutex);
 					auto& buf = responses[header.reqId];
@@ -360,6 +360,7 @@ namespace net {
 
 		Packet packet = Packet();
 		packet.Write(this->GetCommHeader());
+		packet.Write((u16)this->ID);
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::GetWorldList, reqId);
@@ -473,11 +474,16 @@ namespace net {
 		builder.Finish(req_finished);
 
 		// Super overcomplicated system to attach the CommHeader to the packet
-		auto bufsize = builder.GetSize();
+		/*auto bufsize = builder.GetSize();
 		std::vector<u8> header = this->GetCommHeader();
 		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
 		data.insert(data.begin(), header.begin(), header.end());
 		reinterpret_cast<u32&>(data[COMMUNICATION_ID_SIZE]) = static_cast<u32>(bufsize);
+		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);*/
+		auto bufsize = builder.GetSize();
+		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
+		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
+		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
 		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
 
 		// Wrap and send the packet
@@ -489,7 +495,7 @@ namespace net {
 
 		INFO_LOG(Log::sceNet, "Requesting Room List");
 
-		// NPAgent::Send('001000BB00000001000000000000004E50575230313434365F303001008C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F0000000000000000000000000000000000')
+		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
 		bool flushed = Send(&packet, 5.0, &canceled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
@@ -500,7 +506,7 @@ namespace net {
 		u8 error = response.data()[0];
 		if (error != (u8)ErrorType::NoError)
 			return -error;
-		// 01 1000 10000000 0100000000000000 01
+		// NPAgent::Recv('01100028000000010000000000000000 140000000C00000000000600080004000600000001000000')
 
 		roomDataOut->roomId = 0; // No Room (or parse from response)
 

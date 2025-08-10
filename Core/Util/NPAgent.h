@@ -26,7 +26,7 @@
 //	u32_le IPAddr = 910526074; // 910526074 || 0x3645867a || 54.69.134.122 || elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net
 //};
 constexpr int RPCN_HEADER_SIZE = 15;
-constexpr int COMMUNICATION_ID_SIZE = (9 + 3 + 2);
+constexpr int COMMUNICATION_ID_SIZE = (9 + 3);
 
 enum class PacketType : u8
 {
@@ -316,7 +316,6 @@ namespace net {
 			u8* data = new u8[COMMUNICATION_ID_SIZE];
 			memcpy(data, npTitleId, 9);		// NPWR01446
 			memcpy(data + 9, "_00", 3);		// _00
-			memcpy(data + 12, &ID, 2);		// 0x0100
 			std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
 			return ret;
 		}
