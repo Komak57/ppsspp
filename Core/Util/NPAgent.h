@@ -304,7 +304,7 @@ namespace net {
 		// NPAgent Functions
 		virtual int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) = 0;
 		virtual int SearchRoom(SceNpMatching2SearchRoomRequest* req, SearchRoomResponse*& roomResp) = 0;
-		virtual int CreatJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) = 0;
+		virtual int CreateJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) = 0;
 		virtual int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
 
 
@@ -357,7 +357,7 @@ namespace net {
 
 		int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2SearchRoomRequest* req, SearchRoomResponse*& roomResp);
-		int CreatJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
+		int CreateJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
 		int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut);
 	};
 
@@ -372,7 +372,7 @@ namespace net {
 
 		int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(SceNpMatching2SearchRoomRequest* req, SearchRoomResponse*& roomResp);
-		int CreatJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
+		int CreateJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
 		int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut);
 
 		void start_read_thread();

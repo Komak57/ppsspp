@@ -1238,24 +1238,24 @@ struct SceNpMatching2CreateJoinRoomRequest
 	SceNpMatching2LobbyId lobbyId;
 	u32 maxSlot;
 	u32 flagAttr;
-	PSPPointer<SceNpMatching2BinAttr*> roomBinAttrInternal;
+	PSPPointer<SceNpMatching2BinAttr> roomBinAttrInternal;
 	u32 roomBinAttrInternalNum;
-	PSPPointer<SceNpMatching2IntAttr*> roomSearchableIntAttrExternal;
+	PSPPointer<SceNpMatching2IntAttr> roomSearchableIntAttrExternal;
 	u32 roomSearchableIntAttrExternalNum;
-	PSPPointer<SceNpMatching2BinAttr*> roomSearchableBinAttrExternal;
+	PSPPointer<SceNpMatching2BinAttr> roomSearchableBinAttrExternal;
 	u32 roomSearchableBinAttrExternalNum;
-	PSPPointer<SceNpMatching2BinAttr*> roomBinAttrExternal;
+	PSPPointer<SceNpMatching2BinAttr> roomBinAttrExternal;
 	u32 roomBinAttrExternalNum;
 	PSPPointer<SceNpMatching2SessionPassword> roomPassword;
-	PSPPointer<SceNpMatching2RoomGroupConfig*> groupConfig;
+	PSPPointer<SceNpMatching2RoomGroupConfig> groupConfig;
 	u32 groupConfigNum;
 	PSPPointer<SceNpMatching2RoomPasswordSlotMask> passwordSlotMask;
-	PSPPointer<SceNpId*> allowedUser;
+	PSPPointer<SceNpId> allowedUser;
 	u32 allowedUserNum;
-	PSPPointer<SceNpId*> blockedUser;
+	PSPPointer<SceNpId> blockedUser;
 	u32 blockedUserNum;
 	PSPPointer<SceNpMatching2GroupLabel> joinRoomGroupLabel;
-	PSPPointer<SceNpMatching2BinAttr*> roomMemberBinAttrInternal;
+	PSPPointer<SceNpMatching2BinAttr> roomMemberBinAttrInternal;
 	u32 roomMemberBinAttrInternalNum;
 	SceNpMatching2TeamId teamId;
 	u8 padding2[3];
@@ -1282,29 +1282,14 @@ struct SceNpMatching2SearchRoomRequest
 	SceNpMatching2RangeFilter rangeFilter;
 	SceNpMatching2FlagAttr flagFilter;
 	SceNpMatching2FlagAttr flagAttr;
-	SceNpMatching2IntSearchFilter* intFilter; // SceNpMatching2IntSearchFilter
+	PSPPointer<SceNpMatching2IntSearchFilter> intFilter;
 	u32 intFilterNum;
-	SceNpMatching2BinSearchFilter* binFilter; // SceNpMatching2BinSearchFilter
+	PSPPointer<SceNpMatching2BinSearchFilter> binFilter;
 	u32 binFilterNum;
-	SceNpMatching2AttributeId* attrId; // SceNpMatching2AttributeId
+	PSPPointer<SceNpMatching2AttributeId> attrId;
 	u32 attrIdNum;
 };
-// Room search parameters
-struct SceNpMatching2SearchRoomRequestRAW
-{
-	s32 option;
-	SceNpMatching2WorldId worldId;
-	SceNpMatching2LobbyId lobbyId;
-	SceNpMatching2RangeFilter rangeFilter;
-	SceNpMatching2FlagAttr flagFilter;
-	SceNpMatching2FlagAttr flagAttr;
-	u32 intFilterPtr; // SceNpMatching2IntSearchFilter
-	u32 intFilterNum;
-	u32 binFilterPtr; // SceNpMatching2BinSearchFilter
-	u32 binFilterNum;
-	u32 attrIdPtr; // SceNpMatching2AttributeId
-	u32 attrIdNum;
-};
+
 #pragma pack(push, 1)
 struct IntFilter {
 	u8 searchOperator;

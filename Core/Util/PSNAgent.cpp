@@ -320,7 +320,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::CreatJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
+	int PSNAgent::CreateJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::CreatJoinRoom()");
 		if (sock_ <= 0) {
 			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Socket not connected");

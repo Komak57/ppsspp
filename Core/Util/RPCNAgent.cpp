@@ -453,10 +453,16 @@ namespace net {
 
 		// Build attrId vector
 		flatbuffers::Offset<flatbuffers::Vector<u16>> attrid_vec;
-		if (req->attrIdNum && req->attrId) {
-			std::vector<u16> attr_ids(req->attrId, req->attrId + req->attrIdNum);
+		if (req->attrIdNum && req->attrId)
+		{
+			std::vector<u16> attr_ids;
+			for (u32 i = 0; i < req->attrIdNum; i++)
+			{
+				attr_ids.push_back(req->attrId[i]);
+			}
 			attrid_vec = builder.CreateVector(attr_ids);
 		}
+
 		// Build the main SearchRoomRequest
 		SearchRoomRequestBuilder s_req(builder);
 		s_req.add_option(req->option);
@@ -527,8 +533,9 @@ namespace net {
 		return true;
 	}
 
-	int RPCNAgent::CreatJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
-		flatbuffers::FlatBufferBuilder builder(1024);
+	int RPCNAgent::CreateJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
+
+		flatbuffers::FlatBufferBuilder builder(4096);
 
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntAttr>>> final_searchintattrexternal_vec;
 		if (req->roomSearchableIntAttrExternalNum && req->roomSearchableIntAttrExternal)
@@ -536,7 +543,7 @@ namespace net {
 			std::vector<flatbuffers::Offset<IntAttr>> davec;
 			for (u32 i = 0; i < req->roomSearchableIntAttrExternalNum; i++)
 			{
-				auto bin = CreateIntAttr(builder, req->roomSearchableIntAttrExternal[i]->id, req->roomSearchableIntAttrExternal[i]->num);
+				auto bin = CreateIntAttr(builder, req->roomSearchableIntAttrExternal[i].id, req->roomSearchableIntAttrExternal[i].num);
 				davec.push_back(bin);
 			}
 			final_searchintattrexternal_vec = builder.CreateVector(davec);
@@ -577,8 +584,8 @@ namespace net {
 		{
 			for (u32 i = 0; i < req->roomBinAttrInternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomBinAttrInternal[i]->id, builder.CreateVector(req->roomBinAttrInternal[i]->ptr, req->roomBinAttrInternal[i]->size));
-				put_binattr(req->roomBinAttrInternal[i]->id, bin);
+				auto bin = CreateBinAttr(builder, req->roomBinAttrInternal[i].id, builder.CreateVector(req->roomBinAttrInternal[i].ptr, req->roomBinAttrInternal[i].size));
+				put_binattr(req->roomBinAttrInternal[i].id, bin);
 			}
 		}
 
@@ -586,8 +593,8 @@ namespace net {
 		{
 			for (u32 i = 0; i < req->roomSearchableBinAttrExternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomSearchableBinAttrExternal[i]->id, builder.CreateVector(req->roomSearchableBinAttrExternal[i]->ptr, req->roomSearchableBinAttrExternal[i]->size));
-				put_binattr(req->roomSearchableBinAttrExternal[i]->id, bin);
+				auto bin = CreateBinAttr(builder, req->roomSearchableBinAttrExternal[i].id, builder.CreateVector(req->roomSearchableBinAttrExternal[i].ptr, req->roomSearchableBinAttrExternal[i].size));
+				put_binattr(req->roomSearchableBinAttrExternal[i].id, bin);
 			}
 		}
 
@@ -595,8 +602,8 @@ namespace net {
 		{
 			for (u32 i = 0; i < req->roomBinAttrExternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomBinAttrExternal[i]->id, builder.CreateVector(req->roomBinAttrExternal[i]->ptr, req->roomBinAttrExternal[i]->size));
-				put_binattr(req->roomBinAttrExternal[i]->id, bin);
+				auto bin = CreateBinAttr(builder, req->roomBinAttrExternal[i].id, builder.CreateVector(req->roomBinAttrExternal[i].ptr, req->roomBinAttrExternal[i].size));
+				put_binattr(req->roomBinAttrExternal[i].id, bin);
 			}
 		}
 
@@ -618,7 +625,7 @@ namespace net {
 			std::vector<flatbuffers::Offset<GroupConfig>> davec;
 			for (u32 i = 0; i < req->groupConfigNum; i++)
 			{
-				auto bin = CreateGroupConfig(builder, req->groupConfig[i]->slotNum, req->groupConfig[i]->withLabel ? builder.CreateVector(req->groupConfig[i]->label.data, 8) : 0, req->groupConfig[i]->withPassword);
+				auto bin = CreateGroupConfig(builder, req->groupConfig[i].slotNum, req->groupConfig[i].withLabel ? builder.CreateVector(req->groupConfig[i].label.data, 8) : 0, req->groupConfig[i].withPassword);
 				davec.push_back(bin);
 			}
 			final_groupconfigs_vec = builder.CreateVector(davec);
@@ -631,12 +638,12 @@ namespace net {
 			{
 				// Some games just give us garbage, make sure npid is valid before passing
 				// Ex: Aquapazza (gives uninitialized buffer on the stack and allowedUserNum is hardcoded to 100)
-				if (!is_valid_npid(*req->allowedUser[i]))
+				if (!is_valid_npid(req->allowedUser[i]))
 				{
 					continue;
 				}
 
-				auto bin = builder.CreateString(req->allowedUser[i]->handle.data);
+				auto bin = builder.CreateString(req->allowedUser[i].handle.data);
 				davec.push_back(bin);
 			}
 			final_allowedusers_vec = builder.CreateVector(davec);
@@ -647,12 +654,12 @@ namespace net {
 			std::vector<flatbuffers::Offset<flatbuffers::String>> davec;
 			for (u32 i = 0; i < req->blockedUserNum; i++)
 			{
-				if (!is_valid_npid(*req->blockedUser[i]))
+				if (!is_valid_npid(req->blockedUser[i]))
 				{
 					continue;
 				}
 
-				auto bin = builder.CreateString(req->blockedUser[i]->handle.data);
+				auto bin = builder.CreateString(req->blockedUser[i].handle.data);
 				davec.push_back(bin);
 			}
 			final_blockedusers_vec = builder.CreateVector(davec);
@@ -667,7 +674,7 @@ namespace net {
 			for (u32 i = 0; i < req->roomMemberBinAttrInternalNum; i++)
 			{
 				auto bin = CreateBinAttr(
-					builder, req->roomMemberBinAttrInternal[i]->id, builder.CreateVector(reinterpret_cast<const u8*>(req->roomMemberBinAttrInternal[i]->ptr), req->roomMemberBinAttrInternal[i]->size));
+					builder, req->roomMemberBinAttrInternal[i].id, builder.CreateVector(reinterpret_cast<const u8*>(req->roomMemberBinAttrInternal[i].ptr), req->roomMemberBinAttrInternal[i].size));
 				davec.push_back(bin);
 			}
 			final_memberbinattrinternal_vec = builder.CreateVector(davec);
