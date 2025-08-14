@@ -245,12 +245,26 @@ struct SceNpUserInformation
 	u8 reserved[52];
 };
 
+// Online Name structure
+struct SceNpOnlineName
+{
+	char data[48 + 1]; // char term;
+	char padding[3];
+};
+
+// User information structure
+struct SceNpUserInfo
+{
+	SceNpId userId;
+	SceNpOnlineName name;
+	SceNpAvatarUrl icon;
+};
 // User information structure
 struct SceNpUserInfo2
 {
 	SceNpId npId;
-	SceNpOnlineId* onlineName;
-	SceNpAvatarUrl* avatarUrl;
+	PSPPointer<SceNpOnlineId> onlineName;
+	PSPPointer<SceNpAvatarUrl> avatarUrl;
 };
 
 // Language Code (ie. 1033 for "en-US")?
@@ -691,21 +705,6 @@ enum
 	SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_LobbyInvitationInfo = 870,
 };
 
-// Request callback function
-//using SceNpMatching2RequestCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey,
-//	s32 errorCode, u32 dataSize, PSPPointer<void> arg);
-//using SceNpMatching2RoomEventCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey,
-//	s32 errorCode, u32 dataSize, PSPPointer<void> arg);
-//using SceNpMatching2RoomMessageCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId srcMemberId, SceNpMatching2Event event,
-//	SceNpMatching2EventKey eventKey, s32 errorCode, u32 dataSize, PSPPointer<void> arg);
-//using SceNpMatching2LobbyEventCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2LobbyId lobbyId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey,
-//	s32 errorCode, u32 dataSize, PSPPointer<void> arg);
-//using SceNpMatching2LobbyMessageCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2LobbyId lobbyId, SceNpMatching2LobbyMemberId srcMemberId, SceNpMatching2Event event,
-//	SceNpMatching2EventKey eventKey, s32 errorCode, u32 dataSize, PSPPointer<void> arg);
-//using SceNpMatching2SignalingCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId peerMemberId, SceNpMatching2Event event,
-//	s32 errorCode, PSPPointer<void> arg);
-//using SceNpMatching2ContextCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2Event event, SceNpMatching2EventCause eventCause, s32 errorCode, PSPPointer<void> arg);
-
 typedef u16 SceNpMatching2ServerId;
 typedef u32 SceNpMatching2WorldId;
 typedef u16 SceNpMatching2WorldNumber;
@@ -736,6 +735,15 @@ typedef u64 SceNpMatching2RoomJoinedSlotMask;
 typedef u16 SceNpMatching2Event;
 typedef u32 SceNpMatching2EventKey;
 typedef u32 SceNpMatching2SignalingRequestId;
+
+// Request callback function
+using SceNpMatching2RequestCallback =		void(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId,	SceNpMatching2Event event,				SceNpMatching2EventKey eventKey,	s32 errorCode,					u32 dataSize,		PSPPointer<u8> arg); // PSPPointer<void> arg
+using SceNpMatching2RoomEventCallback =		void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId,	SceNpMatching2Event event,				SceNpMatching2EventKey eventKey,	s32 errorCode,					u32 dataSize,		PSPPointer<u8> arg); // PSPPointer<void> arg
+using SceNpMatching2RoomMessageCallback =	void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId,	SceNpMatching2RoomMemberId srcMemberId, SceNpMatching2Event event,			SceNpMatching2EventKey eventKey, s32 errorCode,		u32 dataSize,		PSPPointer<u8> arg); // PSPPointer<void> arg
+using SceNpMatching2LobbyEventCallback =	void(SceNpMatching2ContextId ctxId, SceNpMatching2LobbyId lobbyId,	SceNpMatching2Event event,				SceNpMatching2EventKey eventKey,	s32 errorCode,					u32 dataSize,		PSPPointer<u8> arg); // PSPPointer<void> arg
+using SceNpMatching2LobbyMessageCallback =	void(SceNpMatching2ContextId ctxId, SceNpMatching2LobbyId lobbyId,	SceNpMatching2LobbyMemberId srcMemberId, SceNpMatching2Event event,			SceNpMatching2EventKey eventKey, s32 errorCode,		u32 dataSize,		PSPPointer<u8> arg); // PSPPointer<void> arg
+using SceNpMatching2SignalingCallback =		void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId,	SceNpMatching2RoomMemberId peerMemberId, SceNpMatching2Event event,			s32 errorCode,					PSPPointer<u8> arg); // PSPPointer<void> arg
+using SceNpMatching2ContextCallback =		void(SceNpMatching2ContextId ctxId, SceNpMatching2Event event,		SceNpMatching2EventCause eventCause,	s32 errorCode,						PSPPointer<u8> arg); // PSPPointer<void> arg
 
 
 enum
@@ -951,27 +959,10 @@ enum
 	SCE_NP_MATCHING2_USER_BIN_ATTR_1_ID = 0x005f,
 };
 
-// Option parameters for requests
-//struct SceNpMatching2RequestOptParam
-//{
-//	PSPPointer<SceNpMatching2RequestCallback> cbFunc;
-//	PSPPointer<void> cbFuncArg;
-//	u32 timeout;
-//	u16 appReqId;
-//	u8 padding[2];
-//};
-struct SceNpMatching2RequestOptParam
-{
-	u32 cbFunc;
-	u32 cbFuncArg;
-	//u32 timeout;	// Not present in PSP
-	//u32 reqIdPtr;	// Not present in PSP
-};
-
 struct NpMatching2Handler {
 	u32 ctx_id;
-	u32 cb;
-	u32 cb_arg;
+	PSPPointer<SceNpMatching2RequestCallback> cb;
+	PSPPointer<u8> cb_arg;
 	u32 event_type;
 };
 
@@ -1013,6 +1004,12 @@ struct NpMatching2Args {
 
 };
 
+struct SceNpMatching2ServerInfo {
+	SceNpMatching2ServerId id;
+	SceNpMatching2ServerStatus status;
+	u8 padding;
+};
+
 // 0x88 bytes
 struct RoomInfo {
 	u16_le ID;
@@ -1022,55 +1019,22 @@ struct RoomInfo {
 	//u32_le IPAddr = 910526074; // 910526074 || 0x3645867a || 54.69.134.122 || elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net
 };
 
-struct SceNpMatching2ServerInfo {
-	SceNpMatching2ServerId id;
-	SceNpMatching2ServerStatus status;
-	u8 padding;
+struct CellRtcTick
+{
+	u64 tick;
 };
 
-// World
-struct SceNpMatching2World
+// Session password
+struct SceNpMatching2SessionPassword
 {
-	u32 worldId;
-	u32 numOfLobby;
-	u32 maxNumOfTotalLobbyMember;
-	u32 curNumOfTotalLobbyMember;
-	u32 curNumOfRoom;
-	u32 curNumOfTotalRoomMember;
-	u8 withEntitlementId;
-	u8 entitlementId[32];
-	u8 padding[3];
+	u8 data[SCE_NP_MATCHING2_SESSION_PASSWORD_SIZE];
 };
 
-// World data list request response data
-struct SceNpMatching2GetWorldInfoListResponse
+// Optional presence data
+struct SceNpMatching2PresenceOptionData
 {
-	u32 worldInfoPtr;
-	u32 worldNum;
-};
-
-// Range filter
-struct SceNpMatching2RangeFilter
-{
-	u32 startIndex;
-	u32 max;
-};
-
-// Binary-type attribute
-struct SceNpMatching2BinAttr
-{
-	SceNpMatching2AttributeId id;
-	u8 padding[2];
-	u8* ptr;
-	u32 size;
-};
-
-// Binary-type search condition
-struct SceNpMatching2BinSearchFilter
-{
-	SceNpMatching2Operator searchOperator;
-	u8 padding[3];
-	SceNpMatching2BinAttr attr;
+	u8 data[SCE_NP_MATCHING2_PRESENCE_OPTION_DATA_SIZE];
+	u32 length;
 };
 
 // Integer-type attribute
@@ -1081,6 +1045,22 @@ struct SceNpMatching2IntAttr
 	u32 num;
 };
 
+// Binary-type attribute
+struct SceNpMatching2BinAttr
+{
+	SceNpMatching2AttributeId id;
+	u8 padding[2];
+	PSPPointer<u8> ptr;
+	u32 size;
+};
+
+// Range filter
+struct SceNpMatching2RangeFilter
+{
+	u32 startIndex;
+	u32 max;
+};
+
 // Integer-type search condition
 struct SceNpMatching2IntSearchFilter
 {
@@ -1089,10 +1069,154 @@ struct SceNpMatching2IntSearchFilter
 	SceNpMatching2IntAttr attr;
 };
 
-// Session password
-struct SceNpMatching2SessionPassword
+// Binary-type search condition
+struct SceNpMatching2BinSearchFilter
 {
-	u8 data[SCE_NP_MATCHING2_SESSION_PASSWORD_SIZE];
+	SceNpMatching2Operator searchOperator;
+	u8 padding[3];
+	SceNpMatching2BinAttr attr;
+};
+
+// Range of result
+struct SceNpMatching2Range
+{
+	u32 startIndex;
+	u32 total;
+	u32 size;
+};
+
+// Session information about a session joined by the user
+struct SceNpMatching2JoinedSessionInfo
+{
+	u8 sessionType;
+	u8 padding1[1];
+	SceNpMatching2ServerId serverId;
+	SceNpMatching2WorldId worldId;
+	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2RoomId roomId;
+	CellRtcTick joinDate;
+};
+
+// User information
+struct SceNpMatching2UserInfo
+{
+	PSPPointer<SceNpMatching2UserInfo> next;
+	SceNpUserInfo2 userInfo;
+	PSPPointer<SceNpMatching2BinAttr> userBinAttr;
+	u32 userBinAttrNum;
+	SceNpMatching2JoinedSessionInfo joinedSessionInfo;
+	u32 joinedSessionInfoNum;
+};
+
+// Server
+struct SceNpMatching2Server
+{
+	SceNpMatching2ServerId serverId;
+	SceNpMatching2ServerStatus status;
+	u8 padding[1];
+};
+
+// World
+struct SceNpMatching2World
+{
+	u8 padding0[4];
+	SceNpMatching2WorldId worldId;
+	u32 numOfLobby;
+	u32 maxNumOfTotalLobbyMember;
+	u32 curNumOfTotalLobbyMember;
+	u32 curNumOfRoom;
+	u32 curNumOfTotalRoomMember;
+	u8 withEntitlementId;
+	SceNpEntitlementId entitlementId;
+	u8 padding[3];
+};
+
+// Lobby member internal binary attribute
+struct SceNpMatching2LobbyMemberBinAttrInternal
+{
+	CellRtcTick updateDate;
+	SceNpMatching2BinAttr data;
+	u8 padding[4];
+};
+
+// Lobby-internal lobby member information
+struct SceNpMatching2LobbyMemberDataInternal
+{
+	PSPPointer<SceNpMatching2LobbyMemberDataInternal> next;
+	SceNpUserInfo2 userInfo;
+	CellRtcTick joinDate;
+	SceNpMatching2LobbyMemberId memberId;
+	u8 padding[2];
+	SceNpMatching2FlagAttr flagAttr;
+	PSPPointer<SceNpMatching2JoinedSessionInfo> joinedSessionInfo;
+	u32 joinedSessionInfoNum;
+	PSPPointer<SceNpMatching2LobbyMemberBinAttrInternal> lobbyMemberBinAttrInternal;
+	u32 lobbyMemberBinAttrInternalNum; // Unsigned ints are u32 not uint, right?
+};
+
+// Lobby member ID list
+struct SceNpMatching2LobbyMemberIdList
+{
+	SceNpMatching2LobbyMemberId memberId;
+	u32 memberIdNum;
+	SceNpMatching2LobbyMemberId me;
+	u8 padding[6];
+};
+
+// Lobby-internal binary attribute
+struct SceNpMatching2LobbyBinAttrInternal
+{
+	CellRtcTick updateDate;
+	SceNpMatching2LobbyMemberId updateMemberId;
+	u8 padding[2];
+	SceNpMatching2BinAttr data;
+};
+
+// Lobby-external lobby information
+struct SceNpMatching2LobbyDataExternal
+{
+	PSPPointer<SceNpMatching2LobbyDataExternal> next;
+	SceNpMatching2ServerId serverId;
+	u8 padding1[2];
+	SceNpMatching2WorldId worldId;
+	u8 padding2[4];
+	SceNpMatching2LobbyId	 lobbyId;
+	u32 maxSlot;
+	u32 curMemberNum;
+	u32 flagAttr;
+	PSPPointer<SceNpMatching2IntAttr> lobbySearchableIntAttrExternal;
+	u32 lobbySearchableIntAttrExternalNum;
+	PSPPointer<SceNpMatching2BinAttr> lobbySearchableBinAttrExternal;
+	u32 lobbySearchableBinAttrExternalNum;
+	PSPPointer<SceNpMatching2BinAttr> lobbyBinAttrExternal;
+	u32 lobbyBinAttrExternalNum;
+	u8 padding3[4];
+};
+
+// Lobby-internal lobby information
+struct SceNpMatching2LobbyDataInternal
+{
+	SceNpMatching2ServerId serverId;
+	u8 padding1[2];
+	SceNpMatching2WorldId worldId;
+	SceNpMatching2LobbyId lobbyId;
+	u32 maxSlot;
+	SceNpMatching2LobbyMemberIdList memberIdList;
+	SceNpMatching2FlagAttr flagAttr;
+	PSPPointer<SceNpMatching2LobbyBinAttrInternal> lobbyBinAttrInternal;
+	u32 lobbyBinAttrInternalNum;
+};
+
+// Lobby message transmission destination
+union SceNpMatching2LobbyMessageDestination
+{
+	SceNpMatching2LobbyMemberId unicastTarget;
+
+	struct multicastTarget
+	{
+		PSPPointer<SceNpMatching2LobbyMemberId> memberId;
+		u32 memberIdNum;
+	};
 };
 
 // Group label
@@ -1111,26 +1235,12 @@ struct SceNpMatching2RoomGroupConfig
 	u8 padding[2];
 };
 
-// Signaling option parameter
-struct SceNpMatching2SignalingOptParam
+// Set group password
+struct SceNpMatching2RoomGroupPasswordConfig
 {
-	SceNpMatching2SignalingType type;
-	SceNpMatching2SignalingFlag flag;
-	SceNpMatching2RoomMemberId hubMemberId;
-	u8 reserved2[4];
-};
-
-struct CellRtcTick
-{
-	u64 tick;
-};
-
-// Internal room member binary attribute
-struct SceNpMatching2RoomMemberBinAttrInternal
-{
-	CellRtcTick updateDate;
-	SceNpMatching2BinAttr data;
-	u8 padding[4];
+	SceNpMatching2RoomGroupId groupId;
+	u8 withPassword;
+	u8 padding[1];
 };
 
 // Group (of slots in a room)
@@ -1145,6 +1255,24 @@ struct SceNpMatching2RoomGroup
 	u32 curGroupMemberNum;
 };
 
+// Internal room member binary attribute
+struct SceNpMatching2RoomMemberBinAttrInternal
+{
+	CellRtcTick updateDate;
+	SceNpMatching2BinAttr data;
+	u8 padding[4];
+};
+
+// External room member data
+struct SceNpMatching2RoomMemberDataExternal
+{
+	PSPPointer<SceNpMatching2RoomMemberDataExternal> next;
+	SceNpUserInfo2 userInfo;
+	CellRtcTick joinDate;
+	SceNpMatching2Role role;
+	u8 padding[7];
+};
+
 // Internal room member data
 struct SceNpMatching2RoomMemberDataInternal
 {
@@ -1154,21 +1282,21 @@ struct SceNpMatching2RoomMemberDataInternal
 	SceNpMatching2RoomMemberId memberId;
 	SceNpMatching2TeamId teamId;
 	u8 padding1[1];
-	SceNpMatching2RoomGroup* roomGroup;
+	PSPPointer<SceNpMatching2RoomGroup> roomGroup;
 	SceNpMatching2NatType natType;
 	u8 padding2[3];
 	SceNpMatching2FlagAttr flagAttr;
-	SceNpMatching2RoomMemberBinAttrInternal* roomMemberBinAttrInternal;
+	PSPPointer<SceNpMatching2RoomMemberBinAttrInternal> roomMemberBinAttrInternal;
 	u32 roomMemberBinAttrInternalNum;
 };
 
 // Internal room member data list
 struct SceNpMatching2RoomMemberDataInternalList
 {
-	SceNpMatching2RoomMemberDataInternal* members;
+	PSPPointer<SceNpMatching2RoomMemberDataInternal> members;
 	u32 membersNum;
-	SceNpMatching2RoomMemberDataInternal* me;
-	SceNpMatching2RoomMemberDataInternal* owner;
+	PSPPointer<SceNpMatching2RoomMemberDataInternal> me;
+	PSPPointer<SceNpMatching2RoomMemberDataInternal> owner;
 };
 
 // Internal room binary attribute
@@ -1178,6 +1306,34 @@ struct SceNpMatching2RoomBinAttrInternal
 	SceNpMatching2RoomMemberId updateMemberId;
 	u8 padding[2];
 	SceNpMatching2BinAttr data;
+};
+
+// External room data
+struct SceNpMatching2RoomDataExternal
+{
+	PSPPointer<SceNpMatching2RoomDataExternal> next;
+	SceNpMatching2ServerId serverId;
+	u8 padding1[2];
+	SceNpMatching2WorldId worldId;
+	u16 publicSlotNum;
+	u16 privateSlotNum;
+	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2RoomId roomId;
+	u16 openPublicSlotNum;
+	u16 maxSlot;
+	u16 openPrivateSlotNum;
+	u16 curMemberNum;
+	SceNpMatching2RoomPasswordSlotMask passwordSlotMask;
+	PSPPointer<SceNpUserInfo2> owner;
+	PSPPointer<SceNpMatching2RoomGroup> roomGroup;
+	u32 roomGroupNum;
+	u32 flagAttr;
+	PSPPointer<SceNpMatching2IntAttr> roomSearchableIntAttrExternal;
+	u32 roomSearchableIntAttrExternalNum;
+	PSPPointer<SceNpMatching2BinAttr> roomSearchableBinAttrExternal;
+	u32 roomSearchableBinAttrExternalNum;
+	PSPPointer<SceNpMatching2BinAttr> roomBinAttrExternal;
+	u32 roomBinAttrExternalNum;
 };
 
 // Internal room data
@@ -1191,45 +1347,174 @@ struct SceNpMatching2RoomDataInternal
 	SceNpMatching2RoomPasswordSlotMask passwordSlotMask;
 	u32 maxSlot;
 	SceNpMatching2RoomMemberDataInternalList memberList;
-	SceNpMatching2RoomGroup* roomGroup;
+	PSPPointer<SceNpMatching2RoomGroup> roomGroup;
 	u32 roomGroupNum;
 	SceNpMatching2FlagAttr flagAttr;
-	SceNpMatching2RoomBinAttrInternal* roomBinAttrInternal;
+	PSPPointer<SceNpMatching2RoomBinAttrInternal> roomBinAttrInternal;
 	u32 roomBinAttrInternalNum;
 };
 
-// Create-and-join room request parameters
-struct SceNpMatching2CreateJoinRoomRequestRAW
+// Room message recipient
+union SceNpMatching2RoomMessageDestination
 {
-	SceNpMatching2WorldId worldId;
-	u8 padding1[4];
-	SceNpMatching2LobbyId lobbyId;
-	u32 maxSlot;
-	u32 flagAttr;
-	u32 roomBinAttrInternal; // SceNpMatching2BinAttr*
-	u32 roomBinAttrInternalNum;
-	u32 roomSearchableIntAttrExternal; // SceNpMatching2IntAttr*
-	u32 roomSearchableIntAttrExternalNum;
-	u32 roomSearchableBinAttrExternal; // SceNpMatching2BinAttr*
-	u32 roomSearchableBinAttrExternalNum;
-	u32 roomBinAttrExternal; // SceNpMatching2BinAttr*
-	u32 roomBinAttrExternalNum;
-	SceNpMatching2SessionPassword* roomPassword;
-	u32 groupConfig; // SceNpMatching2RoomGroupConfig*
-	u32 groupConfigNum;
-	SceNpMatching2RoomPasswordSlotMask* passwordSlotMask;
-	u32 allowedUser; // SceNpId*
-	u32 allowedUserNum;
-	u32 blockedUser; // SceNpId*
-	u32 blockedUserNum;
-	SceNpMatching2GroupLabel* joinRoomGroupLabel;
-	u32 roomMemberBinAttrInternal; // SceNpMatching2BinAttr*
-	u32 roomMemberBinAttrInternalNum;
-	SceNpMatching2TeamId teamId;
-	u8 padding2[3];
-	SceNpMatching2SignalingOptParam* sigOptParam;
-	u8 padding3[4];
+	SceNpMatching2RoomMemberId unicastTarget;
+
+	struct multicastTarget
+	{
+		PSPPointer<SceNpMatching2RoomMemberId> memberId;
+		u32 memberIdNum;
+	} multicastTarget;
+
+	SceNpMatching2TeamId multicastTargetTeamId;
 };
+
+// Invitation data
+struct SceNpMatching2InvitationData
+{
+	PSPPointer<SceNpMatching2JoinedSessionInfo> targetSession;
+	u32 targetSessionNum;
+	PSPPointer<u8> optData; // PSPPointer<void>
+	u32 optDataLen;
+};
+
+// Signaling option parameter
+struct SceNpMatching2SignalingOptParam
+{
+	SceNpMatching2SignalingType type;
+	SceNpMatching2SignalingFlag flag;
+	SceNpMatching2RoomMemberId hubMemberId;
+	u8 reserved2[4];
+};
+
+// Option parameters for requests
+struct SceNpMatching2RequestOptParam
+{
+	PSPPointer<SceNpMatching2RequestCallback> cbFunc;
+	PSPPointer<u8> cbFuncArg; // PSPPointer<void>
+	// Discrepency between PS3 and PSP
+	//u32 timeout;
+	//u16 appReqId;
+	//u8 padding[2];
+};
+
+// Room slot information
+struct SceNpMatching2RoomSlotInfo
+{
+	SceNpMatching2RoomId roomId;
+	SceNpMatching2RoomJoinedSlotMask joinedSlotMask;
+	SceNpMatching2RoomPasswordSlotMask passwordSlotMask;
+	u16 publicSlotNum;
+	u16 privateSlotNum;
+	u16 openPublicSlotNum;
+	u16 openPrivateSlotNum;
+};
+
+// Server data request parameter
+struct SceNpMatching2GetServerInfoRequest
+{
+	SceNpMatching2ServerId serverId;
+};
+
+// Server data request response data
+struct SceNpMatching2GetServerInfoResponse
+{
+	SceNpMatching2Server server;
+};
+
+// Request parameter for creating a server context
+struct SceNpMatching2CreateServerContextRequest
+{
+	SceNpMatching2ServerId serverId;
+};
+
+// Request parameter for deleting a server context
+struct SceNpMatching2DeleteServerContextRequest
+{
+	SceNpMatching2ServerId serverId;
+};
+
+// World data list request parameter
+struct SceNpMatching2GetWorldInfoListRequest
+{
+	SceNpMatching2ServerId serverId;
+};
+
+// World data list request response data
+struct SceNpMatching2GetWorldInfoListResponse
+{
+	PSPPointer<SceNpMatching2World> world;
+	u32 worldNum;
+};
+
+// User information setting request parameter
+struct SceNpMatching2SetUserInfoRequest
+{
+	SceNpMatching2ServerId serverId;
+	u8 padding[2];
+	PSPPointer<SceNpMatching2BinAttr> userBinAttr;
+	u32 userBinAttrNum;
+};
+
+// User information list acquisition request parameter
+struct SceNpMatching2GetUserInfoListRequest
+{
+	SceNpMatching2ServerId serverId;
+	u8 padding[2];
+	PSPPointer<SceNpId> npId;
+	u32 npIdNum;
+	PSPPointer<SceNpMatching2AttributeId> attrId;
+	u32 attrIdNum;
+	s32 option; // int should be be_t<s32, right?
+};
+
+// User information list acquisition response data
+struct SceNpMatching2GetUserInfoListResponse
+{
+	PSPPointer<SceNpMatching2UserInfo> userInfo;
+	u32 userInfoNum;
+};
+
+// External room member data list request parameter
+struct SceNpMatching2GetRoomMemberDataExternalListRequest
+{
+	SceNpMatching2RoomId roomId;
+};
+
+// External room member data list request response data
+struct SceNpMatching2GetRoomMemberDataExternalListResponse
+{
+	PSPPointer<SceNpMatching2RoomMemberDataExternal> roomMemberDataExternal;
+	u32 roomMemberDataExternalNum;
+};
+
+// External room data configuration request parameters
+struct SceNpMatching2SetRoomDataExternalRequest
+{
+	SceNpMatching2RoomId roomId;
+	PSPPointer<SceNpMatching2IntAttr> roomSearchableIntAttrExternal;
+	u32 roomSearchableIntAttrExternalNum;
+	PSPPointer<SceNpMatching2BinAttr> roomSearchableBinAttrExternal;
+	u32 roomSearchableBinAttrExternalNum;
+	PSPPointer<SceNpMatching2BinAttr> roomBinAttrExternal;
+	u32 roomBinAttrExternalNum;
+};
+
+// External room data list request parameters
+struct SceNpMatching2GetRoomDataExternalListRequest
+{
+	PSPPointer<SceNpMatching2RoomId> roomId;
+	u32 roomIdNum;
+	PSPPointer<SceNpMatching2AttributeId> attrId;
+	u32 attrIdNum;
+};
+
+// External room data list request response data
+struct SceNpMatching2GetRoomDataExternalListResponse
+{
+	PSPPointer<SceNpMatching2RoomDataExternal> roomDataExternal;
+	u32 roomDataExternalNum;
+};
+
 // Create-and-join room request parameters
 struct SceNpMatching2CreateJoinRoomRequest
 {
@@ -1266,13 +1551,55 @@ struct SceNpMatching2CreateJoinRoomRequest
 // Create-and-join room request response data
 struct SceNpMatching2CreateJoinRoomResponse
 {
-	u32 roomDataInternal; // SceNpMatching2RoomDataInternal
+	PSPPointer<SceNpMatching2RoomDataInternal> roomDataInternal;
 };
+
+// Join room request parameters
+struct SceNpMatching2JoinRoomRequest
+{
+	SceNpMatching2RoomId roomId;
+	PSPPointer<SceNpMatching2SessionPassword> roomPassword;
+	PSPPointer<SceNpMatching2GroupLabel> joinRoomGroupLabel;
+	PSPPointer<SceNpMatching2BinAttr> roomMemberBinAttrInternal;
+	u32 roomMemberBinAttrInternalNum;
+	SceNpMatching2PresenceOptionData optData;
+	SceNpMatching2TeamId teamId;
+	u8 padding[3];
+};
+
 // Join room request response data
 struct SceNpMatching2JoinRoomResponse
 {
-	u32 roomDataInternal; // SceNpMatching2RoomDataInternal
+	PSPPointer<SceNpMatching2RoomDataInternal> roomDataInternal;
 };
+
+// Leave room request parameters
+struct SceNpMatching2LeaveRoomRequest
+{
+	SceNpMatching2RoomId roomId;
+	SceNpMatching2PresenceOptionData optData;
+	u8 padding[4];
+};
+
+// Room ownership grant request parameters
+struct SceNpMatching2GrantRoomOwnerRequest
+{
+	SceNpMatching2RoomId roomId;
+	SceNpMatching2RoomMemberId newOwner;
+	u8 padding[2];
+	SceNpMatching2PresenceOptionData optData;
+};
+
+// Kickout request parameters
+struct SceNpMatching2KickoutRoomMemberRequest
+{
+	SceNpMatching2RoomId roomId;
+	SceNpMatching2RoomMemberId target;
+	SceNpMatching2BlockKickFlag blockKickFlag;
+	u8 padding[1];
+	SceNpMatching2PresenceOptionData optData;
+};
+
 // Room search parameters
 struct SceNpMatching2SearchRoomRequest
 {
@@ -1290,103 +1617,41 @@ struct SceNpMatching2SearchRoomRequest
 	u32 attrIdNum;
 };
 
-#pragma pack(push, 1)
-struct IntFilter {
-	u8 searchOperator;
-	u16 attr_id;
-	s32 attr_num;
-};
-
-struct BinFilter {
-	u8 searchOperator;
-	u16 attr_id;
-	u16 data_size;
-	// Followed by: u8 data[data_size]
-};
-#pragma pack(pop)
-// Range of result
-struct SceNpMatching2Range
-{
-	u32 startIndex;
-	u32 total;
-	u32 size;
-};
-
-#pragma pack(push, 1)
-struct SceNpMatching2SearchRoomPacket {
-	u32 option;
-	u32 worldId;
-	u32 lobbyId;
-	u16 range_startIndex;
-	u16 range_max;
-	u32 flagFilter;
-	u32 flagAttr;
-
-	u8 intFilterNum;
-	u8 binFilterNum;
-	u8 attrIdNum;
-
-	// Followed by:
-	//   IntFilter[intFilterNum]
-	//   BinFilter[binFilterNum]
-	//   u16 attrId[attrIdNum]
-};
-#pragma pack(pop)
-
 // Room search response data
 struct SceNpMatching2SearchRoomResponse
 {
 	SceNpMatching2Range range;
-	u32 roomDataExternal;
+	PSPPointer<SceNpMatching2RoomDataExternal> roomDataExternal;
 };
 
-// External room data
-struct SceNpMatching2RoomDataExternal
-{
-	SceNpMatching2RoomDataExternal* next;
-	SceNpMatching2ServerId serverId;
-	u8 padding1[2];
-	SceNpMatching2WorldId worldId;
-	u16 publicSlotNum;
-	u16 privateSlotNum;
-	SceNpMatching2LobbyId lobbyId;
-	SceNpMatching2RoomId roomId;
-	u16 openPublicSlotNum;
-	u16 maxSlot;
-	u16 openPrivateSlotNum;
-	u16 curMemberNum;
-	SceNpMatching2RoomPasswordSlotMask passwordSlotMask;
-	SceNpUserInformation* owner;
-	SceNpMatching2RoomGroup* roomGroup;
-	u32 roomGroupNum;
-	u32 flagAttr;
-	SceNpMatching2IntAttr* roomSearchableIntAttrExternal;
-	u32 roomSearchableIntAttrExternalNum;
-	SceNpMatching2BinAttr* roomSearchableBinAttrExternal;
-	u32 roomSearchableBinAttrExternalNum;
-	SceNpMatching2BinAttr* roomBinAttrExternal;
-	u32 roomBinAttrExternalNum;
-};
-
-// Internal room data request parameters
-struct SceNpMatching2GetRoomDataInternalRequest
+// Room message send request parameters
+struct SceNpMatching2SendRoomMessageRequest
 {
 	SceNpMatching2RoomId roomId;
-	SceNpMatching2AttributeId* attrId; //SceNpMatching2AttributeId
-	u32 attrIdNum;
-};
-// Internal room data request response data
-struct SceNpMatching2GetRoomDataInternalResponse
-{
-	u32 roomDataInternal; // SceNpMatching2RoomDataInternal
+	SceNpMatching2CastType castType;
+	u8 padding[3];
+	SceNpMatching2RoomMessageDestination dst;
+	PSPPointer<u8> msg; // PSPPointer<void>
+	u32 msgLen;
+	s32 option;
 };
 
-// Set group password
-struct SceNpMatching2RoomGroupPasswordConfig
+// Room chat message send request parameters
+struct SceNpMatching2SendRoomChatMessageRequest
 {
-	SceNpMatching2RoomGroupId groupId;
-	u8 withPassword;
-	u8 padding[1];
+	SceNpMatching2RoomId roomId;
+	SceNpMatching2CastType castType;
+	u8 padding[3];
+	SceNpMatching2RoomMessageDestination dst;
+	PSPPointer<u8> msg; // PSPPointer<void>
+	u32 msgLen;
+	s32 option;
+};
+
+// Room chat message send request response data
+struct SceNpMatching2SendRoomChatMessageResponse
+{
+	u8 filtered;
 };
 
 // Internal room data configuration request parameters
@@ -1395,16 +1660,379 @@ struct SceNpMatching2SetRoomDataInternalRequest
 	SceNpMatching2RoomId roomId;
 	SceNpMatching2FlagAttr flagFilter;
 	SceNpMatching2FlagAttr flagAttr;
-	SceNpMatching2BinAttr* roomBinAttrInternal;
+	PSPPointer<SceNpMatching2BinAttr> roomBinAttrInternal;
 	u32 roomBinAttrInternalNum;
-	SceNpMatching2RoomGroupPasswordConfig* passwordConfig;
+	PSPPointer<SceNpMatching2RoomGroupPasswordConfig> passwordConfig;
 	u32 passwordConfigNum;
-	SceNpMatching2RoomPasswordSlotMask* passwordSlotMask;
-	SceNpMatching2RoomMemberId* ownerPrivilegeRank;
+	PSPPointer<SceNpMatching2RoomPasswordSlotMask> passwordSlotMask;
+	PSPPointer<SceNpMatching2RoomMemberId> ownerPrivilegeRank;
 	u32 ownerPrivilegeRankNum;
 	u8 padding[4];
 };
 
+// Internal room data request parameters
+struct SceNpMatching2GetRoomDataInternalRequest
+{
+	SceNpMatching2RoomId roomId;
+	PSPPointer<SceNpMatching2AttributeId> attrId;
+	u32 attrIdNum;
+};
+
+// Internal room data request response data
+struct SceNpMatching2GetRoomDataInternalResponse
+{
+	PSPPointer<SceNpMatching2RoomDataInternal> roomDataInternal;
+};
+
+// Internal room member data configuration request parameters
+struct SceNpMatching2SetRoomMemberDataInternalRequest
+{
+	SceNpMatching2RoomId roomId;
+	SceNpMatching2RoomMemberId memberId;
+	SceNpMatching2TeamId teamId;
+	u8 padding[5];
+	SceNpMatching2FlagAttr flagFilter;
+	SceNpMatching2FlagAttr flagAttr;
+	PSPPointer<SceNpMatching2BinAttr> roomMemberBinAttrInternal;
+	u32 roomMemberBinAttrInternalNum;
+};
+
+// Internal room member data request parameters
+struct SceNpMatching2GetRoomMemberDataInternalRequest
+{
+	SceNpMatching2RoomId roomId;
+	SceNpMatching2RoomMemberId memberId;
+	u8 padding[6];
+	PSPPointer<SceNpMatching2AttributeId> attrId;
+	u32 attrIdNum;
+};
+
+// Internal room member data request response data
+struct SceNpMatching2GetRoomMemberDataInternalResponse
+{
+	PSPPointer<SceNpMatching2RoomMemberDataInternal> roomMemberDataInternal;
+};
+
+// Signaling option parameter setting request parameter
+struct SceNpMatching2SetSignalingOptParamRequest
+{
+	SceNpMatching2RoomId roomId;
+	SceNpMatching2SignalingOptParam sigOptParam;
+};
+
+// Lobby information list acquisition request parameter
+struct SceNpMatching2GetLobbyInfoListRequest
+{
+	SceNpMatching2WorldId worldId;
+	SceNpMatching2RangeFilter rangeFilter;
+	PSPPointer<SceNpMatching2AttributeId> attrId;
+	u32 attrIdNum;
+};
+
+// Lobby information list acquisition response data
+struct SceNpMatching2GetLobbyInfoListResponse
+{
+	SceNpMatching2Range range;
+	PSPPointer<SceNpMatching2LobbyDataExternal> lobbyDataExternal;
+};
+
+// Lobby joining request parameter
+struct SceNpMatching2JoinLobbyRequest
+{
+	SceNpMatching2LobbyId lobbyId;
+	PSPPointer<SceNpMatching2JoinedSessionInfo> joinedSessionInfo;
+	u32 joinedSessionInfoNum;
+	PSPPointer<SceNpMatching2BinAttr> lobbyMemberBinAttrInternal;
+	u32 lobbyMemberBinAttrInternalNum;
+	SceNpMatching2PresenceOptionData optData;
+	u8 padding[4];
+};
+
+// Lobby joining response data
+struct SceNpMatching2JoinLobbyResponse
+{
+	PSPPointer<SceNpMatching2LobbyDataInternal> lobbyDataInternal;
+};
+
+// Lobby leaving request parameter
+struct SceNpMatching2LeaveLobbyRequest
+{
+	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2PresenceOptionData optData;
+	u8 padding[4];
+};
+
+// Lobby chat message sending request parameter
+struct SceNpMatching2SendLobbyChatMessageRequest
+{
+	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2CastType castType;
+	u8 padding[3];
+	SceNpMatching2LobbyMessageDestination dst;
+	PSPPointer<u8> msg; // PSPPointer<void>
+	u32 msgLen;
+	s32 option;
+};
+
+// Lobby chat message sending response data
+struct SceNpMatching2SendLobbyChatMessageResponse
+{
+	u8 filtered;
+};
+
+// Lobby invitation message sending request parameter
+struct SceNpMatching2SendLobbyInvitationRequest
+{
+	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2CastType castType;
+	u8 padding[3];
+	SceNpMatching2LobbyMessageDestination dst;
+	SceNpMatching2InvitationData invitationData;
+	s32 option;
+};
+
+// Lobby-internal lobby member information setting request parameter
+struct SceNpMatching2SetLobbyMemberDataInternalRequest
+{
+	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2LobbyMemberId memberId;
+	u8 padding1[2];
+	SceNpMatching2FlagAttr flagFilter;
+	SceNpMatching2FlagAttr flagAttr;
+	PSPPointer<SceNpMatching2JoinedSessionInfo> joinedSessionInfo;
+	u32 joinedSessionInfoNum;
+	PSPPointer<SceNpMatching2BinAttr> lobbyMemberBinAttrInternal;
+	u32 lobbyMemberBinAttrInternalNum;
+	u8 padding2[4];
+};
+
+// Lobby-internal lobby member information acquisition request parameter
+struct SceNpMatching2GetLobbyMemberDataInternalRequest
+{
+	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2LobbyMemberId memberId;
+	u8 padding[6];
+	PSPPointer<SceNpMatching2AttributeId> attrId;
+	u32 attrIdNum;
+};
+
+// Lobby-internal lobby member information acquisition response data
+struct SceNpMatching2GetLobbyMemberDataInternalResponse
+{
+	PSPPointer<SceNpMatching2LobbyMemberDataInternal> lobbyMemberDataInternal;
+};
+
+// Request parameters for obtaining a list of lobby-internal lobby member information
+struct SceNpMatching2GetLobbyMemberDataInternalListRequest
+{
+	SceNpMatching2LobbyId lobbyId;
+	PSPPointer<SceNpMatching2LobbyMemberId> memberId;
+	u32 memberIdNum;
+	PSPPointer<SceNpMatching2AttributeId> attrId;
+	u32 attrIdNum;
+	u8 extendedData;
+	u8 padding[7];
+};
+
+// Reponse data for obtaining a list of lobby-internal lobby member information
+struct SceNpMatching2GetLobbyMemberDataInternalListResponse
+{
+	PSPPointer<SceNpMatching2LobbyMemberDataInternal> lobbyMemberDataInternal;
+	u32 lobbyMemberDataInternalNum;
+};
+
+// Request parameters for obtaining Ping information
+struct SceNpMatching2SignalingGetPingInfoRequest
+{
+	SceNpMatching2RoomId roomId;
+	u8 reserved[16];
+};
+
+// Response data for obtaining Ping information
+struct SceNpMatching2SignalingGetPingInfoResponse
+{
+	SceNpMatching2ServerId serverId;
+	u8 padding1[2];
+	SceNpMatching2WorldId worldId;
+	SceNpMatching2RoomId roomId;
+	u32 rtt;
+	u8 reserved[20];
+};
+
+// Join request parameters for room in prohibitive mode
+struct SceNpMatching2JoinProhibitiveRoomRequest
+{
+	SceNpMatching2JoinRoomRequest joinParam;
+	PSPPointer<SceNpId> blockedUser;
+	u32 blockedUserNum;
+};
+
+// Room member update information
+struct SceNpMatching2RoomMemberUpdateInfo
+{
+	PSPPointer<SceNpMatching2RoomMemberDataInternal> roomMemberDataInternal;
+	SceNpMatching2EventCause eventCause;
+	u8 padding[3];
+	SceNpMatching2PresenceOptionData optData;
+};
+
+// Room owner update information
+struct SceNpMatching2RoomOwnerUpdateInfo
+{
+	SceNpMatching2RoomMemberId prevOwner;
+	SceNpMatching2RoomMemberId newOwner;
+	SceNpMatching2EventCause eventCause;
+	u8 padding[3];
+	PSPPointer<SceNpMatching2SessionPassword> roomPassword;
+	SceNpMatching2PresenceOptionData optData;
+};
+
+// Room update information
+struct SceNpMatching2RoomUpdateInfo
+{
+	SceNpMatching2EventCause eventCause;
+	u8 padding[3];
+	s32 errorCode;
+	SceNpMatching2PresenceOptionData optData;
+};
+
+// Internal room data update information
+struct SceNpMatching2RoomDataInternalUpdateInfo
+{
+	PSPPointer<SceNpMatching2RoomDataInternal> newRoomDataInternal;
+	PSPPointer<SceNpMatching2FlagAttr> newFlagAttr;
+	PSPPointer<SceNpMatching2FlagAttr> prevFlagAttr;
+	PSPPointer<SceNpMatching2RoomPasswordSlotMask> newRoomPasswordSlotMask;
+	PSPPointer<SceNpMatching2RoomPasswordSlotMask> prevRoomPasswordSlotMask;
+	PSPPointer<SceNpMatching2RoomGroup> newRoomGroup;
+	u32 newRoomGroupNum;
+	PSPPointer<SceNpMatching2RoomBinAttrInternal> newRoomBinAttrInternal;
+	u32 newRoomBinAttrInternalNum;
+};
+
+// Internal room member data update information
+struct SceNpMatching2RoomMemberDataInternalUpdateInfo
+{
+	PSPPointer<SceNpMatching2RoomMemberDataInternal> newRoomMemberDataInternal;
+	PSPPointer<SceNpMatching2FlagAttr> newFlagAttr;
+	PSPPointer<SceNpMatching2FlagAttr> prevFlagAttr;
+	PSPPointer<SceNpMatching2TeamId> newTeamId;
+	PSPPointer<SceNpMatching2RoomMemberBinAttrInternal> newRoomMemberBinAttrInternal;
+	u32 newRoomMemberBinAttrInternalNum;
+};
+
+// Room message information
+struct SceNpMatching2RoomMessageInfo
+{
+	u8 filtered;
+	SceNpMatching2CastType castType;
+	u8 padding[2];
+	PSPPointer<SceNpMatching2RoomMessageDestination> dst;
+	PSPPointer<SceNpUserInfo2> srcMember;
+	PSPPointer<u8> msg; // PSPPointer<void>
+	u32 msgLen;
+};
+
+// Lobby member update information
+struct SceNpMatching2LobbyMemberUpdateInfo
+{
+	PSPPointer<SceNpMatching2LobbyMemberDataInternal> lobbyMemberDataInternal;
+	SceNpMatching2EventCause eventCause;
+	u8 padding[3];
+	SceNpMatching2PresenceOptionData optData;
+};
+
+// Lobby update information
+struct SceNpMatching2LobbyUpdateInfo
+{
+	SceNpMatching2EventCause eventCause;
+	u8 padding[3];
+	s32 errorCode;
+};
+
+// Lobby-internal lobby member information update information
+struct SceNpMatching2LobbyMemberDataInternalUpdateInfo
+{
+	SceNpMatching2LobbyMemberId memberId;
+	u8 padding[2];
+	SceNpId npId;
+	SceNpMatching2FlagAttr flagFilter;
+	SceNpMatching2FlagAttr newFlagAttr;
+	SceNpMatching2JoinedSessionInfo newJoinedSessionInfo;
+	u32 newJoinedSessionInfoNum;
+	PSPPointer<SceNpMatching2LobbyMemberBinAttrInternal> newLobbyMemberBinAttrInternal;
+	u32 newLobbyMemberBinAttrInternalNum;
+};
+
+// Lobby message information
+struct SceNpMatching2LobbyMessageInfo
+{
+	u8 filtered;
+	SceNpMatching2CastType castType;
+	u8 padding[2];
+	PSPPointer<SceNpMatching2LobbyMessageDestination> dst;
+	PSPPointer<SceNpUserInfo2> srcMember;
+	PSPPointer<u8> msg; // PSPPointer<void>
+	u32 msgLen;
+};
+
+// Lobby invitation message information
+struct SceNpMatching2LobbyInvitationInfo
+{
+	SceNpMatching2CastType castType;
+	u8 padding[3];
+	PSPPointer<SceNpMatching2LobbyMessageDestination> dst;
+	PSPPointer<SceNpUserInfo2> srcMember;
+	SceNpMatching2InvitationData invitationData;
+};
+
+// Update information of the signaling option parameter
+struct SceNpMatching2SignalingOptParamUpdateInfo
+{
+	SceNpMatching2SignalingOptParam newSignalingOptParam;
+};
+
+// Matching2 utility intilization parameters
+struct SceNpMatching2UtilityInitParam
+{
+	u32 containerId;
+	u32 requestCbQueueLen;
+	u32 sessionEventCbQueueLen;
+	u32 sessionMsgCbQueueLen;
+	u8 reserved[16];
+};
+
+// Matching2 memory information
+struct SceNpMatching2MemoryInfo
+{
+	u32 totalMemSize;
+	u32 curMemUsage;
+	u32 maxMemUsage;
+	u8 reserved[12];
+};
+
+// Matching2 information on the event data queues in the system
+struct SceNpMatching2CbQueueInfo
+{
+	u32 requestCbQueueLen;
+	u32 curRequestCbQueueLen;
+	u32 maxRequestCbQueueLen;
+	u32 sessionEventCbQueueLen;
+	u32 curSessionEventCbQueueLen;
+	u32 maxSessionEventCbQueueLen;
+	u32 sessionMsgCbQueueLen;
+	u32 curSessionMsgCbQueueLen;
+	u32 maxSessionMsgCbQueueLen;
+	u8 reserved[12];
+};
+
+struct SceNpMatching2SignalingNetInfo
+{
+	u32 size;
+	u32 localAddr;
+	u32 mappedAddr;
+	u32 natStatus;
+};
 
 
 
