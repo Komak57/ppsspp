@@ -63,7 +63,7 @@ static u32 GenerateCallbackInfo(int ctxId, u32 optParamPtr, u32 assignedReqIdPtr
 	Memory::Memcpy(&req, optParamPtr, sizeof(req));
 	INFO_LOG(Log::sceNet, "%s - optParam[%08x, %08x]", __FUNCTION__, req.cbFunc, req.cbFuncArg);
 
-	if (req.cbFunc == 0 || !Memory::IsValidAddress(req.cbFunc)) {
+	if (!req.cbFunc || !Memory::IsValidAddress(req.cbFunc.ptr)) {
 		ERROR_LOG(Log::sceNet, "%s - Invalid Callback FUN_%08x(%08x) for appReqId(%d)", __FUNCTION__, req.cbFunc, req.cbFuncArg, event_type);
 		return 0; // Abort Request
 	}
@@ -98,10 +98,10 @@ static int abortNpMatching2Handlers() {
 		args[2] = it->second.event_type;		// Event
 		args[3] = SCE_NP_MATCHING2_ERROR_ABORTED;// ErrorCode || 0 is OK
 		args[4] = 0;							// Response struct
-		args[5] = it->second.cb_arg;				// Request Arguments?
+		args[5] = it->second.cb_arg.ptr;		// Request Arguments?
 
 		// Call the function immediately
-		hleEnqueueCall(it->second.cb, 6, args);
+		hleEnqueueCall(it->second.cb.ptr, 6, args);
 	}
 
 	return SCE_NP_MATCHING2_ERROR_ABORTED;
@@ -128,7 +128,7 @@ static int notifyNpMatching2Handlers(u32 appReqId, u32 dataPtr, u32 errorCode = 
 	args[2] = handler.event_type;			// Event
 	args[3] = errorCode;					// ErrorCode || 0 is OK
 	args[4] = dataPtr;						// Response struct
-	args[5] = handler.cb_arg;				// Request Arguments?
+	args[5] = handler.cb_arg.ptr;			// Request Arguments?
 
 	npMatching2Events.push_back(NpMatching2Args(appReqId, 6, args));
 	if (appReqId == 0)
@@ -157,9 +157,9 @@ bool NpMatching2ProcessEvents() {
 		if (it->first == event.reqId)
 		{
 			//DEBUG_LOG(Log::sceNet, "NpMatching2Callback [HandlerID=%i][EventID=%04x][State=%04x][ArgsPtr=%08x]", it->first, event, stat, it->second.argument);
-			NOTICE_LOG(Log::sceNet, "%s - FUN_%08x(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", __FUNCTION__, it->second.cb,
+			NOTICE_LOG(Log::sceNet, "%s - FUN_%08x(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", __FUNCTION__, it->second.cb.ptr,
 				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]);
-			hleEnqueueCall(it->second.cb, event.argc, event.args);
+			hleEnqueueCall(it->second.cb.ptr, event.argc, event.args);
 			return true;
 		}
 	}
@@ -574,7 +574,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 		if (tServer == 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
-		auto req = PSPPointer<SceNpMatching2SearchRoomRequest>::Create(reqParamPtr);
+		PSPPointer<SceNpMatching2SearchRoomRequest> req = PSPPointer<SceNpMatching2SearchRoomRequest>::Create(reqParamPtr);
 
 		// FIXME: Populate all relevant data from req into memory as required
 		// WARNING! This is a constant, and thus read-only
