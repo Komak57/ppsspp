@@ -71,21 +71,21 @@ namespace net {
 			buf.error = error;
 			buf.data.insert(buf.data.end(), packet.Data() + RPCN_HEADER_SIZE + 1, packet.Data() + packet.Length());
 
-					int i;
-					std::string hexdata = "";
-					for (i = 0; i < packet.Length(); i++) {
-						char const c = packet.Data()[i];
-						hexdata += hex_chars[(c & 0xF0) >> 4];
-						hexdata += hex_chars[(c & 0x0F) >> 0];
-					}
-					INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+			int i;
+			std::string hexdata = "";
+			for (i = 0; i < packet.Length(); i++) {
+				char const c = packet.Data()[i];
+				hexdata += hex_chars[(c & 0xF0) >> 4];
+				hexdata += hex_chars[(c & 0x0F) >> 0];
+			}
+			INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
 
-					std::lock_guard<std::mutex> lock(buffer_mutex);
+			std::lock_guard<std::mutex> lock(buffer_mutex);
 			responses[header.reqId] = buf;
 
-					buffer_cv.notify_all();
-				}
-			}
+			buffer_cv.notify_all();
+		}
+	}
 
 	bool RPCNAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
 		std::string certPem = "-----BEGIN CERTIFICATE-----\n"
@@ -365,25 +365,22 @@ namespace net {
 		worldInfoOut->clear();
 
 		// Currently under the assumption that the first byte is some error code
-		size_t offset = 1;
+		size_t offset = 0;
 
 		u32 num_worlds = 0;
-		memcpy(&num_worlds, response.data() + offset, sizeof(num_worlds));
+		memcpy(&num_worlds, response.data.data() + offset, sizeof(num_worlds));
 		offset += 4;
 		for (u32 i = 0; i < num_worlds; ++i)
 		{
-			u32 worldId = 0;
-			memcpy(&worldId, response.data() + offset, sizeof(worldId));
-
-			SceNpMatching2World world;
-			world.worldId = worldId;
+			SceNpMatching2World world{};
+			memcpy(&world.worldId, response.data.data() + offset, sizeof(world.worldId));
 
 			worldInfoOut->emplace(world.worldId, world);
 			offset += 4;
 		}
 
 		//worldInfoOut->emplace(worldInfo.worldId, worldInfo);
-		return worldInfoOut->size();
+		return 0;
 	}
 
 	int RPCNAgent::SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, SearchRoomResponse*& roomResp) {
