@@ -363,6 +363,7 @@ namespace net {
 
 	class RPCNAgent : public NPAgent {
 	public:
+		static const u32 PROTOCOL_VERSION = 26;
 		~RPCNAgent();
 		RPCNAgent(int serverId, std::string host, int port, u8 status = 2);
 
