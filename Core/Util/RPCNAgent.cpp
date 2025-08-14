@@ -386,44 +386,36 @@ namespace net {
 		return worldInfoOut->size();
 	}
 
-	int RPCNAgent::SearchRoom(SceNpMatching2SearchRoomRequest* req, SearchRoomResponse*& roomResp) {
+	int RPCNAgent::SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, SearchRoomResponse*& roomResp) {
+
 		flatbuffers::FlatBufferBuilder builder(1024);
-
-		// Build intFilter vector
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntSearchFilter>>> final_intfilter_vec;
-		if (req->intFilterNum && req->intFilter) {
-			std::vector<flatbuffers::Offset<IntSearchFilter>> intFilters;
-			intFilters.reserve(req->intFilterNum);
-
-			for (u32 i = 0; i < req->intFilterNum; ++i) {
+		if (req->intFilterNum && req->intFilter.IsValid())
+		{
+			std::vector<flatbuffers::Offset<IntSearchFilter>> davec{};
+			for (u32 i = 0; i < req->intFilterNum; i++)
+			{
 				auto int_attr = CreateIntAttr(builder, req->intFilter[i].attr.id, req->intFilter[i].attr.num);
-				auto filter = CreateIntSearchFilter(builder, req->intFilter[i].searchOperator, int_attr);
-				intFilters.push_back(filter);
+				auto bin = CreateIntSearchFilter(builder, req->intFilter[i].searchOperator, int_attr);
+				davec.push_back(bin);
 			}
-			final_intfilter_vec = builder.CreateVector(intFilters);
+			final_intfilter_vec = builder.CreateVector(davec);
 		}
-
-		// Build binFilter vector
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinSearchFilter>>> final_binfilter_vec;
-		if (req->binFilterNum && req->binFilter) {
-			std::vector<flatbuffers::Offset<BinSearchFilter>> binFilters;
-			binFilters.reserve(req->binFilterNum);
-
-			for (u32 i = 0; i < req->binFilterNum; ++i) {
-				auto dataVec = builder.CreateVector(
-					req->binFilter[i].attr.ptr,
-					req->binFilter[i].attr.size
-				);
-				auto bin_attr = CreateBinAttr(builder, req->binFilter[i].attr.id, dataVec);
-				auto filter = CreateBinSearchFilter(builder, req->binFilter[i].searchOperator, bin_attr);
-				binFilters.push_back(filter);
+		if (req->binFilterNum && req->binFilter.IsValid())
+		{
+			std::vector<flatbuffers::Offset<BinSearchFilter>> davec;
+			for (u32 i = 0; i < req->binFilterNum; i++)
+			{
+				auto bin_attr = CreateBinAttr(builder, req->binFilter[i].attr.id, builder.CreateVector((u8*)req->binFilter[i].attr.ptr, req->binFilter[i].attr.size));
+				auto bin = CreateBinSearchFilter(builder, req->binFilter[i].searchOperator, bin_attr);
+				davec.push_back(bin);
 			}
-			final_binfilter_vec = builder.CreateVector(binFilters);
+			final_binfilter_vec = builder.CreateVector(davec);
 		}
 
-		// Build attrId vector
 		flatbuffers::Offset<flatbuffers::Vector<u16>> attrid_vec;
-		if (req->attrIdNum && req->attrId)
+		if (req->attrIdNum && req->attrId.IsValid())
 		{
 			std::vector<u16> attr_ids;
 			for (u32 i = 0; i < req->attrIdNum; i++)
@@ -433,7 +425,6 @@ namespace net {
 			attrid_vec = builder.CreateVector(attr_ids);
 		}
 
-		// Build the main SearchRoomRequest
 		SearchRoomRequestBuilder s_req(builder);
 		s_req.add_option(req->option);
 		s_req.add_worldId(req->worldId);
@@ -442,20 +433,17 @@ namespace net {
 		s_req.add_rangeFilter_max(req->rangeFilter.max);
 		s_req.add_flagFilter(req->flagFilter);
 		s_req.add_flagAttr(req->flagAttr);
-		if (req->intFilterNum) s_req.add_intFilter(final_intfilter_vec);
-		if (req->binFilterNum) s_req.add_binFilter(final_binfilter_vec);
-		if (req->attrIdNum) s_req.add_attrId(attrid_vec);
+		if (req->intFilterNum)
+			s_req.add_intFilter(final_intfilter_vec);
+		if (req->binFilterNum)
+			s_req.add_binFilter(final_binfilter_vec);
+		if (req->attrIdNum)
+			s_req.add_attrId(attrid_vec);
 
 		auto req_finished = s_req.Finish();
 		builder.Finish(req_finished);
 
 		// Super overcomplicated system to attach the CommHeader to the packet
-		/*auto bufsize = builder.GetSize();
-		std::vector<u8> header = this->GetCommHeader();
-		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
-		data.insert(data.begin(), header.begin(), header.end());
-		reinterpret_cast<u32&>(data[COMMUNICATION_ID_SIZE]) = static_cast<u32>(bufsize);
-		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);*/
 		auto bufsize = builder.GetSize();
 		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
 		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
@@ -469,13 +457,13 @@ namespace net {
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::SearchRoom, reqId);
 
-		INFO_LOG(Log::sceNet, "Requesting Room List");
+		INFO_LOG(Log::sceNet, "Requesting Search Room for World #%d, Lobby #%d", req->worldId, req->lobbyId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
 		bool flushed = Send(&packet, 5.0, &canceled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return false;
+			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
 		}
 
 		auto resp = take_pending_request(reqId);
@@ -497,9 +485,11 @@ namespace net {
 			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
 		}
 
-		roomResp = flatbuffers::GetMutableRoot<SearchRoomResponse>(resp.data());
+		//vec_stream reply(resp.data);
+		//const auto* resp = reply.get_flatbuffer<SearchRoomResponse>();
+		/*roomResp = flatbuffers::GetMutableRoot<SearchRoomResponse>(resp.data.data());
 		if (roomResp == nullptr)
-			return -1;
+			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;*/
 
 		return 0;
 	}

@@ -576,6 +576,14 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 
 		PSPPointer<SceNpMatching2SearchRoomRequest> req = PSPPointer<SceNpMatching2SearchRoomRequest>::Create(reqParamPtr);
 
+		INFO_LOG(Log::sceNet, "SceNpMatching2SearchRoomRequest(%08X):(%08X)", req.ptr, reqParamPtr);
+		INFO_LOG(Log::sceNet, " - worldId: %d / %d", req->worldId, Memory::Read_U32(reqParamPtr + 4));
+		INFO_LOG(Log::sceNet, " - lobbyId: %d / %d", req->lobbyId, Memory::Read_U32(reqParamPtr + 8));
+		if (req->worldId < 0) {
+			ERROR_LOG(Log::sceNet, "Invalid Room ID");
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM));
+		}
+			
 		// FIXME: Populate all relevant data from req into memory as required
 		// WARNING! This is a constant, and thus read-only
 		SearchRoomResponse* roomResp;
@@ -583,9 +591,9 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 		// FIXME: We want SearchRoomResponse so we can manipulate the PSP memory for it's handling. PPSSPP will crash here!
 		int ret = servers[tServer]->SearchRoom(req, roomResp);
 
-		if (ret < 0) {
+		if (ret != 0) {
 			ERROR_LOG(Log::sceNet, "Unable to retrieve Room Info");
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST));
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 		}
 
 		// Minimal processing example
@@ -623,19 +631,44 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 					roomDataOut.openPrivateSlotNum = fb_room->openPrivateSlotNum();
 					roomDataOut.curMemberNum = fb_room->curMemberNum();
 					roomDataOut.passwordSlotMask = fb_room->passwordSlotMask();
-					//roomDataOut.owner = fb_room->owner(); // Incompatible types between PS3 Users vs PSP Users
+
+					// Incompatible types between PS3 Users vs PSP Users
+					u32 userSize = sizeof(SceNpUserInfo2);
+					u32 userInfoPtr = np_memory.Alloc(userSize);
+					Write_Struct(fb_room->owner(), userInfoPtr, "SceNpUserInfo2", 15);
+					roomDataOut.owner = roomInfoPtr;
+
 					roomDataOut.flagAttr = fb_room->flagAttr();
 					// Arrays
 					roomDataOut.roomGroupNum = fb_room->roomGroup()->size();
-					//roomDataOut.roomGroup = fb_room->roomGroup();
-					roomDataOut.roomSearchableIntAttrExternalNum = fb_room->roomSearchableIntAttrExternal()->size();
-					//roomDataOut.roomSearchableIntAttrExternal = ;
-					roomDataOut.roomSearchableBinAttrExternalNum = fb_room->roomSearchableBinAttrExternal()->size();
-					//roomDataOut.roomSearchableBinAttrExternal = ;
-					roomDataOut.roomBinAttrExternalNum = fb_room->roomBinAttrExternal()->size();
-					//roomDataOut.roomBinAttrExternal = ;
 
-					Write_Struct(roomDataOut, roomInfoPtr, "SceNpMatching2RoomDataExternal", 31);
+					u32 groupSize = sizeof(SceNpMatching2RoomGroup);
+					u32 groupPtr = np_memory.Alloc(groupSize);
+					Write_Struct(fb_room->roomGroup(), groupPtr, "SceNpMatching2RoomGroup", 24);
+					roomDataOut.roomGroup = groupPtr;
+
+					roomDataOut.roomSearchableIntAttrExternalNum = fb_room->roomSearchableIntAttrExternal()->size();
+					u32 sintAttrSize = sizeof(SceNpMatching2IntAttr) * roomDataOut.roomSearchableIntAttrExternalNum;
+					u32 sintAttrPtr = np_memory.Alloc(sintAttrSize);
+					for(int a = 0; a < roomDataOut.roomSearchableIntAttrExternalNum; a++)
+						Write_Struct(fb_room->roomSearchableIntAttrExternal()[a], sintAttrPtr + (sizeof(SceNpMatching2IntAttr) * a), "roomSearchableIntAttrExternal", 22);
+					roomDataOut.roomSearchableIntAttrExternal = sintAttrPtr;
+
+					roomDataOut.roomSearchableBinAttrExternalNum = fb_room->roomSearchableBinAttrExternal()->size();
+					u32 sintBinSize = sizeof(SceNpMatching2BinAttr) * roomDataOut.roomSearchableBinAttrExternalNum;
+					u32 sintBinPtr = np_memory.Alloc(sintBinSize);
+					for (int a = 0; a < roomDataOut.roomSearchableBinAttrExternalNum; a++)
+						Write_Struct(fb_room->roomSearchableIntAttrExternal()[a], sintBinPtr + (sizeof(SceNpMatching2BinAttr) * a), "roomSearchableBinAttrExternal", 22);
+					roomDataOut.roomSearchableBinAttrExternal = sintBinPtr;
+
+					roomDataOut.roomBinAttrExternalNum = fb_room->roomBinAttrExternal()->size();
+					u32 intBinSize = sizeof(SceNpMatching2BinAttr) * roomDataOut.roomBinAttrExternalNum;
+					u32 intBinPtr = np_memory.Alloc(intBinSize);
+					for (int a = 0; a < roomDataOut.roomBinAttrExternalNum; a++)
+						Write_Struct(fb_room->roomSearchableIntAttrExternal()[a], intBinPtr + (sizeof(SceNpMatching2BinAttr) * a), "roomBinAttrExternal", 22);
+					roomDataOut.roomBinAttrExternal = intBinPtr;
+
+					Write_Struct(roomDataOut, roomInfoPtr+(sizeof(SceNpMatching2RoomDataExternal)*i), "SceNpMatching2RoomDataExternal", 31);
 				}
 			}
 		}
