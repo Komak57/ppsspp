@@ -724,91 +724,136 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		auto req = PSPPointer<SceNpMatching2CreateJoinRoomRequest>::Create(reqParamPtr);
 		//Memory::Memcpy(&req, reqParamPtr, sizeof(req));
 
-		/*req.worldId = raw.worldId;
-		req.lobbyId = raw.lobbyId;
-		req.maxSlot = raw.maxSlot;
-		req.flagAttr = raw.flagAttr;
-
-		req.roomBinAttrInternal = new SceNpMatching2BinAttr[raw.roomBinAttrInternalNum];
-		req.roomBinAttrInternalNum = raw.roomBinAttrInternalNum;
-		if (raw.roomBinAttrInternal != 0 && raw.roomBinAttrInternalNum > 0) {
-			Memory::Memcpy(req.roomBinAttrInternal, raw.roomBinAttrInternal, sizeof(SceNpMatching2IntSearchFilter) * raw.roomBinAttrInternalNum);
-		}
-
-		req.roomSearchableIntAttrExternal = new SceNpMatching2IntAttr[raw.roomSearchableIntAttrExternalNum];
-		req.roomSearchableIntAttrExternalNum = raw.roomSearchableIntAttrExternalNum;
-		if (raw.roomSearchableIntAttrExternal != 0 && raw.roomSearchableIntAttrExternalNum > 0) {
-			Memory::Memcpy(req.roomSearchableIntAttrExternal, raw.roomSearchableIntAttrExternal, sizeof(SceNpMatching2IntSearchFilter) * raw.roomSearchableIntAttrExternalNum);
-		}
-
-		req.roomSearchableBinAttrExternal = new SceNpMatching2BinAttr[raw.roomSearchableBinAttrExternalNum];
-		req.roomSearchableBinAttrExternalNum = raw.roomSearchableBinAttrExternalNum;
-		if (raw.roomSearchableBinAttrExternal != 0 && raw.roomSearchableBinAttrExternalNum > 0) {
-			Memory::Memcpy(req.roomSearchableBinAttrExternal, raw.roomSearchableBinAttrExternal, sizeof(SceNpMatching2IntSearchFilter) * raw.roomSearchableBinAttrExternalNum);
-		}
-
-		req.roomBinAttrExternal = new SceNpMatching2BinAttr[raw.roomBinAttrExternalNum];
-		req.roomBinAttrExternalNum = raw.roomBinAttrExternalNum;
-		if (raw.roomBinAttrExternal != 0 && raw.roomBinAttrExternalNum > 0) {
-			Memory::Memcpy(req.roomBinAttrExternal, raw.roomBinAttrExternal, sizeof(SceNpMatching2IntSearchFilter) * raw.roomBinAttrExternalNum);
-		}
-
-		req.roomPassword = raw.roomPassword;
-
-		req.groupConfig = new SceNpMatching2RoomGroupConfig[raw.groupConfigNum];
-		req.groupConfigNum = raw.groupConfigNum;
-		if (raw.groupConfig != 0 && raw.groupConfigNum > 0) {
-			Memory::Memcpy(req.groupConfig, raw.groupConfig, sizeof(SceNpMatching2IntSearchFilter) * raw.groupConfigNum);
-		}
-
-		req.passwordSlotMask = raw.passwordSlotMask;
-
-		req.allowedUser = new SceNpId[raw.allowedUserNum];
-		req.allowedUserNum = raw.allowedUserNum;
-		if (raw.allowedUser != 0 && raw.allowedUserNum > 0) {
-			Memory::Memcpy(req.allowedUser, raw.allowedUser, sizeof(SceNpMatching2IntSearchFilter) * raw.allowedUserNum);
-		}
-
-		req.blockedUser = new SceNpId[raw.blockedUserNum];
-		req.blockedUserNum = raw.blockedUserNum;
-		if (raw.blockedUser != 0 && raw.blockedUserNum > 0) {
-			Memory::Memcpy(req.blockedUser, raw.blockedUser, sizeof(SceNpMatching2IntSearchFilter) * raw.blockedUserNum);
-		}
-
-		req.joinRoomGroupLabel = raw.joinRoomGroupLabel;
-
-		req.roomMemberBinAttrInternal = new SceNpMatching2BinAttr[raw.roomMemberBinAttrInternalNum];
-		req.roomMemberBinAttrInternalNum = raw.roomMemberBinAttrInternalNum;
-		if (raw.roomMemberBinAttrInternal != 0 && raw.roomMemberBinAttrInternalNum > 0) {
-			Memory::Memcpy(req.roomMemberBinAttrInternal, raw.roomMemberBinAttrInternal, sizeof(SceNpMatching2IntSearchFilter) * raw.roomMemberBinAttrInternalNum);
-		}
-
-		req.teamId = raw.teamId;
-		req.sigOptParam = raw.sigOptParam;*/
 
 		// FIXME: Populate all relevant data from req into memory as required
-		SceNpMatching2RoomDataInternal roomData{};
+		RoomDataInternal* roomData;
 
 		// FIXME: Get roomData from PSN
-		int ret = servers[tServer]->CreatJoinRoom(req, &roomData);
-		if (ret < 0)
+		int ret = servers[tServer]->CreateJoinRoom(req, roomData);
+		if (ret != 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 
+		u32 infoSize = sizeof(SceNpMatching2RoomDataInternal);
+		u32 roomDataPtr = np_memory.Alloc(infoSize);
 
-		u32 infoSize = sizeof(roomData);
-		u32 roomInfoPtr = np_memory.Alloc(infoSize);
-
-		if (!Memory::IsValidAddress(roomInfoPtr)) {
+		if (!Memory::IsValidAddress(roomDataPtr)) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataExternal");
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
 		}
-		Write_Struct(roomData, roomInfoPtr, "SceNpMatching2RoomDataExternal", 31);
 
-		servers[tServer]->rooms.emplace(roomData.roomId, roomData);
-		servers[tServer]->roomDataPtr = roomInfoPtr;
+		// FIXME: Pull these parameters from context?
+		bool include_onlinename = false;
+		bool include_avatarurl = false;
+		SceNpMatching2RoomDataInternal room{};
+
+		// Scalars
+		room.serverId = roomData->serverId();
+		room.worldId = roomData->worldId();
+		room.lobbyId = roomData->lobbyId();
+		room.roomId = roomData->roomId();
+		room.passwordSlotMask = roomData->passwordSlotMask();
+		room.maxSlot = roomData->maxSlot();
+
+		// Room groups (optional)
+		if (roomData->roomGroup() && roomData->roomGroup()->size() > 0) {
+			const u32 n = roomData->roomGroup()->size();
+			room.roomGroupNum = n;
+			auto groups = new SceNpMatching2RoomGroup[n];
+			infoSize = sizeof(SceNpMatching2RoomGroup) * n;
+			u32 roomGroupPtr = np_memory.Alloc(infoSize);
+			room.roomGroup = roomGroupPtr;
+
+			for (u32 i = 0; i < n; ++i) {
+				auto* gfb = roomData->roomGroup()->Get(i);
+				groups[i].slotNum = gfb->slotNum();
+				groups[i].withLabel = (gfb->label()->size() > 0? 1 : 0);
+				if (gfb->label() && gfb->label()->size() > 0) {
+					// PSP label is fixed 8 bytes in your structs; copy/minimize safely.
+					const u32 copy_len = std::min<u32>(8, gfb->label()->size());
+					memcpy(groups[i].label.data, gfb->label()->data(), copy_len);
+					if (copy_len < 8) memset(groups[i].label.data + copy_len, 0, 8 - copy_len);
+				}
+				groups[i].withPassword = gfb->withPassword();
+			}
+			Write_Struct(groups, roomGroupPtr, "SceNpMatching2RoomGroups", 25);
+		}
+
+		// Member list
+		if (roomData->memberList() && roomData->memberList()->size() > 0) {
+			const u32 n = roomData->memberList()->size();
+			room.memberList.membersNum = n;
+
+			auto members = new SceNpMatching2RoomMemberDataInternal[n];
+			infoSize = sizeof(SceNpMatching2RoomMemberDataInternal) * n;
+			u32 roomMembersPtr = np_memory.Alloc(infoSize);
+			//auto [mem_addr, members] = psp_alloc_array<SceNpMatching2RoomMemberDataInternal>(n);
+			//psp_set_ptr(room->memberList.members, mem_addr);
+
+			// Link the singly-linked list via 'next'
+			for (u32 i = 0; i + 1 < n; ++i) {
+				members[i].next = roomMembersPtr;
+				//psp_set_ptr(members[i].next, mem_addr + (i + 1) * sizeof(SceNpMatching2RoomMemberDataInternal));
+			}
+
+			// Fill each member (copy only the fields you actually use on PSP)
+			for (u32 i = 0; i < n; ++i) {
+				auto* mfb = roomData->memberList()->Get(i);
+				auto& sm = members[i];
+
+				sm.memberId = mfb->memberId();
+				// userInfo / npId (handle) if available
+				if (mfb->userInfo() && mfb->userInfo()->npId()) {
+					const auto* h = mfb->userInfo()->npId();
+					if (h) {
+						const auto* cstr = h->c_str(); // FlatBuffers string is zero-terminated
+						const size_t len = std::min<size_t>(sizeof(sm.userInfo.npId.handle.data) - 1, strlen(cstr));
+						memcpy(sm.userInfo.npId.handle.data, cstr, len);
+						sm.userInfo.npId.handle.data[len] = '\0';
+					}
+				}
+
+				// Optional online name / avatar (only if your PSP structs expect and you asked to include)
+				if (include_onlinename && mfb->userInfo() && mfb->userInfo()->onlineName()) {
+					const auto* n = mfb->userInfo()->onlineName();
+					const auto* c = n->c_str();
+					const size_t len = std::min<size_t>(sizeof(sm.userInfo.onlineName->data) - 1, strlen(c));
+					memcpy(sm.userInfo.onlineName->data, c, len);
+					sm.userInfo.onlineName->data[len] = '\0';
+				}
+				if (include_avatarurl && mfb->userInfo() && mfb->userInfo()->avatarUrl()) {
+					const auto* a = mfb->userInfo()->avatarUrl();
+					const auto* c = a->c_str();
+					const size_t len = std::min<size_t>(sizeof(sm.userInfo.avatarUrl->data) - 1, strlen(c));
+					memcpy(sm.userInfo.avatarUrl->data, c, len);
+					sm.userInfo.avatarUrl->data[len] = '\0';
+				}
+			}
+
+			// Find "me"
+			for (u32 i = 0; i < n; ++i) {
+				if (strcmp(members[i].userInfo.npId.handle.data, "RPCS3_ZSgScc4D7x") == 0) {
+					room.memberList.me = roomMembersPtr + i * sizeof(SceNpMatching2RoomMemberDataInternal);
+					break;
+				}
+			}
+
+			// Find owner by memberId
+			for (u32 i = 0; i < n; ++i) {
+				if (members[i].memberId == roomData->ownerId()) {
+					room.memberList.me = roomMembersPtr + i * sizeof(SceNpMatching2RoomMemberDataInternal);
+					break;
+				}
+			}
+			Write_Struct(members, roomMembersPtr, "SceNpMatching2RoomMemberDataInternals", 38);
+		}
+
+
+		Write_Struct(room, roomDataPtr, "RoomDataInternal", 17);
+
+		//servers[tServer]->rooms.emplace(roomData->roomId, roomData);
 
 		SceNpMatching2CreateJoinRoomResponse respData{};
-		respData.roomDataInternal = roomInfoPtr;
+		respData.roomDataInternal = roomDataPtr;
 
 		u32 respSize = sizeof(respData);
 		u32 respPtr = np_memory.Alloc(respSize);

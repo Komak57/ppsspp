@@ -254,7 +254,7 @@ namespace net {
 
 		worldInfo.withEntitlementId = 0;
 		for (i = 0; i < 32; i++)
-			worldInfo.entitlementId[i] = 0;
+			worldInfo.entitlementId.data[i] = 0;
 
 		worldInfoOut->emplace(worldInfo.worldId, worldInfo);
 
@@ -320,7 +320,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::CreateJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
+	int PSNAgent::CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::CreatJoinRoom()");
 		if (sock_ <= 0) {
 			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Socket not connected");
@@ -374,7 +374,7 @@ namespace net {
 			hexdata += hex_chars[(c & 0x0F) >> 0];
 		}
 		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
-		roomDataOut->roomId = 1;
+		//roomDataOut->roomId = 1;
 
 		return 0;
 	}

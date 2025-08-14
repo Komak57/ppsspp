@@ -506,12 +506,12 @@ namespace net {
 		return true;
 	}
 
-	int RPCNAgent::CreateJoinRoom(SceNpMatching2CreateJoinRoomRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
+	int RPCNAgent::CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut) {
 
 		flatbuffers::FlatBufferBuilder builder(4096);
 
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntAttr>>> final_searchintattrexternal_vec;
-		if (req->roomSearchableIntAttrExternalNum && req->roomSearchableIntAttrExternal)
+		if (req->roomSearchableIntAttrExternalNum && req->roomSearchableIntAttrExternal.IsValid())
 		{
 			std::vector<flatbuffers::Offset<IntAttr>> davec;
 			for (u32 i = 0; i < req->roomSearchableIntAttrExternalNum; i++)
@@ -553,29 +553,29 @@ namespace net {
 			}
 		};
 
-		if (req->roomBinAttrInternalNum && req->roomBinAttrInternal)
+		if (req->roomBinAttrInternalNum && req->roomBinAttrInternal.IsValid())
 		{
 			for (u32 i = 0; i < req->roomBinAttrInternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomBinAttrInternal[i].id, builder.CreateVector(req->roomBinAttrInternal[i].ptr, req->roomBinAttrInternal[i].size));
+				auto bin = CreateBinAttr(builder, req->roomBinAttrInternal[i].id, builder.CreateVector((u8*)req->roomBinAttrInternal[i].ptr, req->roomBinAttrInternal[i].size));
 				put_binattr(req->roomBinAttrInternal[i].id, bin);
 			}
 		}
 
-		if (req->roomSearchableBinAttrExternalNum && req->roomSearchableBinAttrExternal)
+		if (req->roomSearchableBinAttrExternalNum && req->roomSearchableBinAttrExternal.IsValid())
 		{
 			for (u32 i = 0; i < req->roomSearchableBinAttrExternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomSearchableBinAttrExternal[i].id, builder.CreateVector(req->roomSearchableBinAttrExternal[i].ptr, req->roomSearchableBinAttrExternal[i].size));
+				auto bin = CreateBinAttr(builder, req->roomSearchableBinAttrExternal[i].id, builder.CreateVector((u8*)req->roomSearchableBinAttrExternal[i].ptr, req->roomSearchableBinAttrExternal[i].size));
 				put_binattr(req->roomSearchableBinAttrExternal[i].id, bin);
 			}
 		}
 
-		if (req->roomBinAttrExternalNum && req->roomBinAttrExternal)
+		if (req->roomBinAttrExternalNum && req->roomBinAttrExternal.IsValid())
 		{
 			for (u32 i = 0; i < req->roomBinAttrExternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomBinAttrExternal[i].id, builder.CreateVector(req->roomBinAttrExternal[i].ptr, req->roomBinAttrExternal[i].size));
+				auto bin = CreateBinAttr(builder, req->roomBinAttrExternal[i].id, builder.CreateVector((u8*)req->roomBinAttrExternal[i].ptr, req->roomBinAttrExternal[i].size));
 				put_binattr(req->roomBinAttrExternal[i].id, bin);
 			}
 		}
@@ -590,10 +590,10 @@ namespace net {
 			final_binattrexternal_vec = builder.CreateVector(davec_binattrexternal);
 
 		flatbuffers::Offset<flatbuffers::Vector<u8>> final_roompassword;
-		if (req->roomPassword)
+		if (req->roomPassword.IsValid())
 			final_roompassword = builder.CreateVector(req->roomPassword->data, 8);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<GroupConfig>>> final_groupconfigs_vec;
-		if (req->groupConfigNum && req->groupConfig)
+		if (req->groupConfigNum && req->groupConfig.IsValid())
 		{
 			std::vector<flatbuffers::Offset<GroupConfig>> davec;
 			for (u32 i = 0; i < req->groupConfigNum; i++)
@@ -604,7 +604,7 @@ namespace net {
 			final_groupconfigs_vec = builder.CreateVector(davec);
 		}
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> final_allowedusers_vec;
-		if (req->allowedUserNum && req->allowedUser)
+		if (req->allowedUserNum && req->allowedUser.IsValid())
 		{
 			std::vector<flatbuffers::Offset<flatbuffers::String>> davec;
 			for (u32 i = 0; i < req->allowedUserNum; i++)
@@ -622,7 +622,7 @@ namespace net {
 			final_allowedusers_vec = builder.CreateVector(davec);
 		}
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> final_blockedusers_vec;
-		if (req->blockedUserNum && req->blockedUser)
+		if (req->blockedUserNum && req->blockedUser.IsValid())
 		{
 			std::vector<flatbuffers::Offset<flatbuffers::String>> davec;
 			for (u32 i = 0; i < req->blockedUserNum; i++)
@@ -638,25 +638,25 @@ namespace net {
 			final_blockedusers_vec = builder.CreateVector(davec);
 		}
 		flatbuffers::Offset<flatbuffers::Vector<u8>> final_grouplabel;
-		if (req->joinRoomGroupLabel)
+		if (req->joinRoomGroupLabel.IsValid())
 			final_grouplabel = builder.CreateVector(req->joinRoomGroupLabel->data, 8);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_memberbinattrinternal_vec;
-		if (req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal)
+		if (req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal.IsValid())
 		{
 			std::vector<flatbuffers::Offset<BinAttr>> davec;
 			for (u32 i = 0; i < req->roomMemberBinAttrInternalNum; i++)
 			{
 				auto bin = CreateBinAttr(
-					builder, req->roomMemberBinAttrInternal[i].id, builder.CreateVector(reinterpret_cast<const u8*>(req->roomMemberBinAttrInternal[i].ptr), req->roomMemberBinAttrInternal[i].size));
+					builder, req->roomMemberBinAttrInternal[i].id, builder.CreateVector((u8*)req->roomMemberBinAttrInternal[i].ptr, req->roomMemberBinAttrInternal[i].size));
 				davec.push_back(bin);
 			}
 			final_memberbinattrinternal_vec = builder.CreateVector(davec);
 		}
 		flatbuffers::Offset<OptParam> final_optparam;
-		if (req->sigOptParam)
+		if (req->sigOptParam.IsValid())
 			final_optparam = CreateOptParam(builder, req->sigOptParam->type, req->sigOptParam->flag, req->sigOptParam->hubMemberId);
 		u64 final_passwordSlotMask = 0;
-		if (req->passwordSlotMask)
+		if (req->passwordSlotMask.IsValid())
 			final_passwordSlotMask = *req->passwordSlotMask;
 
 		auto req_finished = CreateCreateJoinRoomRequest(builder, req->worldId, req->lobbyId, req->maxSlot, req->flagAttr, final_binattrinternal_vec, final_searchintattrexternal_vec,
@@ -677,19 +677,30 @@ namespace net {
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::CreateRoom, reqId);
 
-		INFO_LOG(Log::sceNet, "Requesting Room List");
+		INFO_LOG(Log::sceNet, "Requesting Create Join for World #%d, Lobby #%d", req->worldId, req->lobbyId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
 		bool flushed = Send(&packet, 5.0, &canceled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return false;
+			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
 		}
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return resp.error;
-			return -1;
+
+		// 01 0D00 84010000 0100000000000000 00 700100002000000000001A00280026002000000018000000140010000E000000080004001A000000240000000000008400001000780000000C00000008000000000000000100000000000001020000003800000004000000DAFFFFFF000010000C000000E9118EA058FCE20068FFFFFF00005800040000000000000000000A0014000C00060008000A000000000010000C000000E9118EA058FCE20098FFFFFF000057000400000000000000010000001800000014001C000800140006000000000005000C001000140000000002100058000000000000800C000000FC118EA058FCE200010000000C00000008001000080004000800000014000000FC118EA058FCE20008000C00060008000800000000005900040000000000000000000A001000040008000C000A00000030000000240000000400000015000000687474703A2F2F44756D6D7941766174617255726C00000003000000666F78001000000052504353335F5A53675363633444377800000000
+
+		roomDataOut = const_cast<RoomDataInternal*>(flatbuffers::GetRoot<RoomDataInternal>(resp.data.data()));
+		roomDataOut = flatbuffers::GetMutableRoot<RoomDataInternal>(resp.data.data());
+		flatbuffers::Verifier verifier(resp.data.data(), resp.data.size());
+
+		if (!roomDataOut->Verify(verifier))
+		{
+			roomDataOut = nullptr;
+			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
+		}
 
 		return 0;
 	}
