@@ -510,29 +510,14 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 
 		// FIXME: Get worldInfo from PSN
 		ret = servers[tServer]->GetWorldInfo(tServer, npTitleId.data, &servers[tServer]->worlds);
-		if (ret < 0)
+		if (ret != 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 
 		NOTICE_LOG(Log::sceNet, "Received %d worlds", servers[tServer]->worlds.size());
 
-		u32 worldInfoSize = sizeof(SceNpMatching2World) * servers[tServer]->worlds.size();
-		// Allocate space, and write value into the pool
-		u32 worldInfoPtr = np_memory.Alloc(worldInfoSize);
-		if (!Memory::IsValidAddress(worldInfoPtr) || worldInfoPtr == 0) {
-			ERROR_LOG(Log::sceNet, "Unable to allocate memory for WorldInfo");
-			return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY);
-		}
-		servers[tServer]->worldInfoPtr = worldInfoPtr;
-		
-		int i = 0;
-		for (const auto& [worldId, world] : servers[tServer]->worlds) {
-			Write_Struct(world, worldInfoPtr + (i * sizeof(SceNpMatching2World)), "world%i", 8);
-			i++;
-		}
-
+		// First, allocate the Response. Then allocate and write worlds, then write the response
 		SceNpMatching2GetWorldInfoListResponse resp{};
 		resp.worldNum = servers[tServer]->worlds.size();
-		resp.worldInfoPtr = worldInfoPtr;
 
 		u32 infoSize = sizeof(SceNpMatching2GetWorldInfoListResponse);
 		// Allocate space, and write value into the pool
@@ -540,6 +525,23 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		if (!Memory::IsValidAddress(worldInfoResponsePtr) || worldInfoResponsePtr == 0) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for WorldInfo");
 			return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY);
+		}
+
+		u32 worldInfoSize = sizeof(SceNpMatching2World) * servers[tServer]->worlds.size();
+		if (worldInfoSize > SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList)
+			worldInfoSize = SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList;
+		// Allocate space, and write value into the pool
+		u32 worldInfoPtr = np_memory.Alloc(worldInfoSize);
+		if (!Memory::IsValidAddress(worldInfoPtr) || worldInfoPtr == 0) {
+			ERROR_LOG(Log::sceNet, "Unable to allocate memory for WorldInfo");
+			return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY);
+		}
+		resp.world = worldInfoPtr; // may need world.ptr?
+		
+		int i = 0;
+		for (const auto& [worldId, world] : servers[tServer]->worlds) {
+			Write_Struct(world, worldInfoPtr + (i * sizeof(SceNpMatching2World)), "world%i", 8);
+			i++;
 		}
 		Write_Struct(resp, worldInfoResponsePtr, "SceNpMatching2World", 20);
 
