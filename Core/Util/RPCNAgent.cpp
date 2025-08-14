@@ -38,7 +38,7 @@ namespace net {
 	}
 
 	// Blocking wait for a specific request_id
-	std::vector<u8> RPCNAgent::wait_for_responses(u64 request_id) {
+	RPCNResponse RPCNAgent::take_pending_request(u64 request_id) {
 		std::unique_lock<std::mutex> lock(buffer_mutex);
 		buffer_cv.wait(lock, [&]() {
 			return responses.find(request_id) != responses.end();
@@ -61,14 +61,15 @@ namespace net {
 			PacketHeader header;
 			memcpy(&header, packet.Data(), sizeof(PacketHeader));
 			u8 error = packet.Data()[RPCN_HEADER_SIZE];
-			switch ((ErrorType)error) {
-			case ErrorType::NoError:
-				{
-					auto data_length = packet.Length() - (RPCN_HEADER_SIZE + 1);
-
-					std::lock_guard<std::mutex> lock(buffer_mutex);
-					auto& buf = responses[header.reqId];
-					buf.insert(buf.end(), packet.Data() + RPCN_HEADER_SIZE, packet.Data() + packet.Length());
+			if ((ErrorType)error != ErrorType::NoError) {
+				if ((PacketType)header.request != PacketType::ServerInfo)
+					ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", error, PacketTypeNames[error]);
+			}
+			// Get data and assign it to the request id related buffer
+			RPCNResponse buf;
+			buf.header = header;
+			buf.error = error;
+			buf.data.insert(buf.data.end(), packet.Data() + RPCN_HEADER_SIZE + 1, packet.Data() + packet.Length());
 
 					int i;
 					std::string hexdata = "";
@@ -79,24 +80,12 @@ namespace net {
 					}
 					INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
 
-					buffer_cv.notify_all();
-					break;
-				}
-			default:
-				{
-					ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", error, PacketTypeNames[error]);
-
 					std::lock_guard<std::mutex> lock(buffer_mutex);
-					auto& buf = responses[header.reqId];
-					buf.insert(buf.end(), packet.Data() + RPCN_HEADER_SIZE, packet.Data() + packet.Length());
+			responses[header.reqId] = buf;
 
 					buffer_cv.notify_all();
-					Disconnect();
-					break;
 				}
 			}
-		}
-	}
 
 	bool RPCNAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
 		std::string certPem = "-----BEGIN CERTIFICATE-----\n"
@@ -289,10 +278,9 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
 		}*/
-		auto response = wait_for_responses(reqId);
-		u8 error = response.data()[0];
-		if (error != (u8)ErrorType::NoError)
-			return -error;
+		auto response = take_pending_request(reqId);
+		if (response.error != (u8)ErrorType::NoError)
+			return response.error;
 
 		/*int i;
 		std::string hexdata = "";
@@ -338,10 +326,9 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
 		}*/
-		auto response = wait_for_responses(reqId);
-		u8 error = response.data()[0];
-		if (error != (u8)ErrorType::NoError)
-			return -error;
+		auto response = take_pending_request(reqId);
+		if (response.error != (u8)ErrorType::NoError)
+			return response.error;
 
 		/*int i;
 		std::string hexdata = "";
@@ -372,26 +359,9 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return false;
 		}
-		/*Packet response = Packet();
-		int ret = Recv(&response);
-		if (ret < 0) {
-			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
-			return false;
-		}*/
-		auto response = wait_for_responses(reqId);
-		u8 error = response.data()[0];
-		if (error != (u8)ErrorType::NoError)
-			return -error;
-		//int i;
-		//std::string hexdata = "";
-		//for (i = 0; i < response.size(); i++) {
-		//	char const c = response[i];
-		//	hexdata += hex_chars[(c & 0xF0) >> 4];
-		//	hexdata += hex_chars[(c & 0x0F) >> 0];
-		//}
-		//INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
-		// 01 0C00 18000000 0300000000000000 00010000 00010000 00
-		// 010C00180000000300000000000000000100000001000000
+		auto response = take_pending_request(reqId);
+		if (response.error != (u8)ErrorType::NoError)
+			return response.error;
 		worldInfoOut->clear();
 
 		// Currently under the assumption that the first byte is some error code
@@ -508,11 +478,24 @@ namespace net {
 			return false;
 		}
 
-		auto resp = wait_for_responses(reqId);
-		u8 error = resp.data()[0];
-		if (error != (u8)ErrorType::NoError)
-			return -1;
-		// NPAgent::Recv('01100028000000010000000000000000 140000000C00000000000600080004000600000001000000')
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return resp.error;
+		//                                                     20       12       0    6    8    4    6        1
+		// NPAgent::Recv('01 1000 28000000 0100000000000000 00 14000000 0C000000 0000 0600 0800 0400 06000000 01000000')
+		//if (flatbuffers::Verifier(reinterpret_cast<const uint8_t*>(resp.data() + 1), resp.size()-1).VerifyBuffer<SearchRoomResponse>())
+		//flatbuffers::Verifier v(reinterpret_cast<const uint8_t*>(resp.data.data()), resp.data.size());
+		//if (!v.VerifyBuffer<SearchRoomResponse>())
+			//return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
+
+		roomResp = const_cast<SearchRoomResponse*>(flatbuffers::GetRoot<SearchRoomResponse>(resp.data.data()));
+		flatbuffers::Verifier verifier(resp.data.data(), resp.data.size());
+
+		if (!roomResp->Verify(verifier))
+		{
+			roomResp = nullptr;
+			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
+		}
 
 		roomResp = flatbuffers::GetMutableRoot<SearchRoomResponse>(resp.data());
 		if (roomResp == nullptr)
@@ -713,9 +696,9 @@ namespace net {
 			return false;
 		}
 
-		auto resp = wait_for_responses(reqId);
-		u8 error = resp.data()[0];
-		if (error != (u8)ErrorType::NoError)
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return resp.error;
 			return -1;
 
 		return 0;

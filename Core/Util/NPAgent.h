@@ -270,6 +270,11 @@ struct SceNpMatching2World;
 struct SceNpMatching2RoomDataExternal;
 struct SceNpMatching2RoomDataInternal;
 namespace net {
+	struct RPCNResponse {
+		PacketHeader header;
+		u8 error;
+		std::vector<u8> data;
+	};
 	class MBEDTLS_Connection {
 	public:
 		bool connected = false;
@@ -342,7 +347,7 @@ namespace net {
 
 		bool SSLEnabled = false;
 
-		std::unordered_map<u64, std::vector<u8>> responses;
+		std::unordered_map<u64, RPCNResponse> responses;
 		char npTitleId[9];
 	};
 
@@ -381,7 +386,7 @@ namespace net {
 
 		// Waits for a response matching request_id
 		// Blocks until the full packet for that request is ready
-		std::vector<u8> wait_for_responses(u64 request_id);
+		RPCNResponse take_pending_request(u64 request_id);
 	private:
 		void read_loop();
 
