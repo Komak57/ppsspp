@@ -280,7 +280,7 @@ namespace net {
 		}*/
 		auto response = take_pending_request(reqId);
 		if (response.error != (u8)ErrorType::NoError)
-			return response.error;
+			return ErrorToPSPError[response.error];
 
 		/*int i;
 		std::string hexdata = "";
@@ -328,7 +328,7 @@ namespace net {
 		}*/
 		auto response = take_pending_request(reqId);
 		if (response.error != (u8)ErrorType::NoError)
-			return response.error;
+			return ErrorToPSPError[response.error];
 
 		/*int i;
 		std::string hexdata = "";
@@ -359,21 +359,21 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return false;
 		}
-		auto response = take_pending_request(reqId);
-		if (response.error != (u8)ErrorType::NoError)
-			return response.error;
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return ErrorToPSPError[resp.error];
 		worldInfoOut->clear();
 
 		// Currently under the assumption that the first byte is some error code
 		size_t offset = 0;
 
 		u32 num_worlds = 0;
-		memcpy(&num_worlds, response.data.data() + offset, sizeof(num_worlds));
+		memcpy(&num_worlds, resp.data.data() + offset, sizeof(num_worlds));
 		offset += 4;
 		for (u32 i = 0; i < num_worlds; ++i)
 		{
 			SceNpMatching2World world{};
-			memcpy(&world.worldId, response.data.data() + offset, sizeof(world.worldId));
+			memcpy(&world.worldId, resp.data.data() + offset, sizeof(world.worldId));
 
 			worldInfoOut->emplace(world.worldId, world);
 			offset += 4;
@@ -465,13 +465,10 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return resp.error;
-		//                                                     20       12       0    6    8    4    6        1
-		// NPAgent::Recv('01 1000 28000000 0100000000000000 00 14000000 0C000000 0000 0600 0800 0400 06000000 01000000')
-		//if (flatbuffers::Verifier(reinterpret_cast<const uint8_t*>(resp.data() + 1), resp.size()-1).VerifyBuffer<SearchRoomResponse>())
-		//flatbuffers::Verifier v(reinterpret_cast<const uint8_t*>(resp.data.data()), resp.data.size());
-		//if (!v.VerifyBuffer<SearchRoomResponse>())
-			//return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
+			return ErrorToPSPError[resp.error];
+
+		//                                                     20       12       0        8        6        1    
+		// NPAgent::Recv('01 1000 28000000 0100000000000000 00 14000000 0C000000 00000600 08000400 06000000 01000000')
 
 		roomResp = const_cast<SearchRoomResponse*>(flatbuffers::GetRoot<SearchRoomResponse>(resp.data.data()));
 		flatbuffers::Verifier verifier(resp.data.data(), resp.data.size());
@@ -685,7 +682,7 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return resp.error;
+			return ErrorToPSPError[resp.error];
 
 		// 01 0D00 84010000 0100000000000000 00 700100002000000000001A00280026002000000018000000140010000E000000080004001A000000240000000000008400001000780000000C00000008000000000000000100000000000001020000003800000004000000DAFFFFFF000010000C000000E9118EA058FCE20068FFFFFF00005800040000000000000000000A0014000C00060008000A000000000010000C000000E9118EA058FCE20098FFFFFF000057000400000000000000010000001800000014001C000800140006000000000005000C001000140000000002100058000000000000800C000000FC118EA058FCE200010000000C00000008001000080004000800000014000000FC118EA058FCE20008000C00060008000800000000005900040000000000000000000A001000040008000C000A00000030000000240000000400000015000000687474703A2F2F44756D6D7941766174617255726C00000003000000666F78001000000052504353335F5A53675363633444377800000000
 
@@ -750,6 +747,7 @@ namespace net {
 
 	int RPCNAgent::GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut) {
 	}
+			return ErrorToPSPError[resp.error];
 		return 0;
 	}
 }

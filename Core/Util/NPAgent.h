@@ -178,6 +178,42 @@ enum class ErrorType : u8
 	CondFail,                    // Condition related to query failed
 	Unsupported,
 };
+inline const u32 ErrorToPSPError[] = {
+	SCE_NP_MATCHING2_OKAY,									// No error
+	SCE_NP_MATCHING2_ERROR_INVALID_ALIGNMENT,				// Query was malformed, critical error that should close the connection
+	SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST,				// The request type is invalid(wrong stage?)
+	SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT,				// The Input doesn't fit the constraints of the request
+	SCE_NP_MATCHING2_SERVER_ERROR_BUSY,                     // Time limited operation attempted too soon
+	SCE_NP_MATCHING2_SERVER_ERROR_REQUEST_OVERFLOW,         // An error happened related to login
+	SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED,			// Can't log in because you're already logged in
+	SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER,				// Invalid username
+	SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH,        // Invalid password
+	SCE_NP_MATCHING2_SERVER_ERROR_INVALID_TICKET,           // Invalid token
+	SCE_NP_MATCHING2_SERVER_ERROR_INTERNAL_SERVER_ERROR,    // An error happened related to account creation
+	SCE_NP_MATCHING2_SERVER_ERROR_INTERNAL_SERVER_ERROR,    // Specific to Account Creation: username exists already
+	SCE_NP_MATCHING2_SERVER_ERROR_INTERNAL_SERVER_ERROR,	// Specific to Account Creation: the email provider is banned
+	SCE_NP_MATCHING2_SERVER_ERROR_INTERNAL_SERVER_ERROR,    // Specific to Account Creation: that email is already registered to an account
+	SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND,					// User tried to interact with a non existing room
+	SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED,           // User tried to join a room he's already part of
+	SCE_NP_MATCHING2_SERVER_ERROR_ROOM_FULL,                // User tried to join a full room
+	SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH,        // Room password didn't match
+	SCE_NP_MATCHING2_SERVER_ERROR_INVALID_PASSWORD_SLOT_MASK,// A password was missing during room creation
+	SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM_INSTANCE,    // Tried to join a group room without a label
+	SCE_NP_MATCHING2_SERVER_ERROR_GROUP_FULL,               // Room group is full
+	SCE_NP_MATCHING2_SERVER_ERROR_NO_ROOMGROUP,				// Join label was invalid in some way
+	SCE_NP_MATCHING2_SERVER_ERROR_INVALID_GROUP_SLOT_NUM,   // Mismatch between max_slot and the listed slots in groups
+	SCE_NP_MATCHING2_SERVER_ERROR_FORBIDDEN,                // User attempted an unauthorized operation
+	SCE_NP_MATCHING2_SERVER_ERROR_INTERNAL_SERVER_ERROR,    // Generic failure on db side
+	SCE_NP_MATCHING2_SERVER_ERROR_PLAYER_BANNED,            // Generic failure related to email
+	SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER,             // Object of the query was not found(user, etc), use RoomMissing for rooms instead
+	SCE_NP_MATCHING2_SERVER_ERROR_BLOCKED,                  // The operation can't complete because you've been blocked
+	SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_CONTEXT,          // Can't add friend because already friend
+	SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_CONTEXT,          // A better score is already registered for that user/character_id
+	SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_CONTEXT,          // Score for player was found but wasn't what was expected
+	SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_CONTEXT,          // Score already has data
+	SCE_NP_MATCHING2_SERVER_ERROR_INTERNAL_SERVER_ERROR,    // Condition related to query failed
+	SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_CONTEXT
+};
 constexpr const char* PacketTypeNames[] = {
 	"NoError",                     // No error
 	"Malformed",                   // Query was malformed, critical error that should close the connection
