@@ -587,9 +587,16 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 
 		PSPPointer<SceNpMatching2SearchRoomRequest> req = PSPPointer<SceNpMatching2SearchRoomRequest>::Create(reqParamPtr);
 
-		INFO_LOG(Log::sceNet, "SceNpMatching2SearchRoomRequest(%08X):(%08X)", req.ptr, reqParamPtr);
-		INFO_LOG(Log::sceNet, " - worldId: %d / %d", req->worldId, Memory::Read_U32(reqParamPtr + 4));
-		INFO_LOG(Log::sceNet, " - lobbyId: %d / %d", req->lobbyId, Memory::Read_U32(reqParamPtr + 8));
+		INFO_LOG(Log::sceNet, "SceNpMatching2SearchRoomRequest(%08X)", req.ptr);
+		INFO_LOG(Log::sceNet, " - option:       %d", req->option);
+		INFO_LOG(Log::sceNet, " - worldId:      %d", req->worldId);
+		INFO_LOG(Log::sceNet, " - lobbyId:      %d", req->lobbyId);
+		INFO_LOG(Log::sceNet, " - rangeFilter:  %d", req->rangeFilter);
+		INFO_LOG(Log::sceNet, " - flagFilter:   %d", req->flagFilter);
+		INFO_LOG(Log::sceNet, " - flagAttr:     %d", req->flagAttr);
+		INFO_LOG(Log::sceNet, " - intFilterNum: %d", req->intFilterNum);
+		INFO_LOG(Log::sceNet, " - binFilterNum: %d", req->binFilterNum);
+		INFO_LOG(Log::sceNet, " - attrIdNum:    %d", req->attrIdNum);
 		if (req->worldId < 0) {
 			ERROR_LOG(Log::sceNet, "Invalid Room ID");
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM));
@@ -735,6 +742,22 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		auto req = PSPPointer<SceNpMatching2CreateJoinRoomRequest>::Create(reqParamPtr);
 		//Memory::Memcpy(&req, reqParamPtr, sizeof(req));
 
+		INFO_LOG(Log::sceNet, "SceNpMatching2CreateJoinRoomRequest(%08X)", req.ptr);
+		INFO_LOG(Log::sceNet, " - worldId:          %d", req->worldId);
+		INFO_LOG(Log::sceNet, " - lobbyId:          %d", req->lobbyId);
+		INFO_LOG(Log::sceNet, " - maxSlot:          %d", req->maxSlot);
+		INFO_LOG(Log::sceNet, " - flagAttr:         %d", req->flagAttr);
+		INFO_LOG(Log::sceNet, " - roomBinAttrInternalNum: %d", req->roomBinAttrInternalNum);
+		INFO_LOG(Log::sceNet, " - roomSearchableIntAttrExternalNum: %d", req->roomSearchableIntAttrExternalNum);
+		INFO_LOG(Log::sceNet, " - roomSearchableBinAttrExternalNum: %d", req->roomSearchableBinAttrExternalNum);
+		INFO_LOG(Log::sceNet, " - roomBinAttrExternalNum: %d", req->roomBinAttrExternalNum);
+		INFO_LOG(Log::sceNet, " - roomPassword:     %s", req->roomPassword->data);
+		INFO_LOG(Log::sceNet, " - groupConfigNum:   %d", req->groupConfigNum);
+		INFO_LOG(Log::sceNet, " - passwordSlotMask: %d", req->passwordSlotMask);
+		INFO_LOG(Log::sceNet, " - allowedUserNum:   %d", req->allowedUserNum);
+		INFO_LOG(Log::sceNet, " - blockedUserNum:   %d", req->blockedUserNum);
+		INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternalNum: %d", req->roomMemberBinAttrInternalNum);
+		INFO_LOG(Log::sceNet, " - teamId:           %d", req->teamId);
 
 		// FIXME: Populate all relevant data from req into memory as required
 		RoomDataInternal* roomData;
