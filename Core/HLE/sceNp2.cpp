@@ -962,7 +962,7 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 	return 0;
 }
 
-/* Incomplete - Unknown
+/* Incomplete - Unconfirmed. Similar to sceNpMatching2SetRoomDataInternal
  * @param reqParamPtr ?
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqId Pointer to the index of a unique callback
@@ -1013,8 +1013,11 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 		if (tServer == 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
-		SceNpMatching2SetRoomDataInternalRequest req;
-		Memory::Memcpy(&req, reqParamPtr, sizeof(req));
+		auto req = PSPPointer<SceNpMatching2SetRoomDataInternalRequest>::Create(reqParamPtr);
+
+		int ret;
+		if ((ret = servers[tServer]->SetRoomDataInternal(req)) != 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 
 		return notifyNpMatching2Handlers(request_id, 0);
 	});

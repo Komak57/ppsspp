@@ -745,9 +745,75 @@ namespace net {
 		return 0;
 	}
 
-	int RPCNAgent::GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut) {
+	int RPCNAgent::SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req) {
+		flatbuffers::FlatBufferBuilder builder(1024);
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_binattrinternal_vec;
+		if (req->roomBinAttrInternalNum && req->roomBinAttrInternal.IsValid())
+		{
+			std::vector<flatbuffers::Offset<BinAttr>> davec;
+			for (u32 i = 0; i < req->roomBinAttrInternalNum; i++)
+			{
+				auto bin = CreateBinAttr(builder, req->roomBinAttrInternal[i].id, builder.CreateVector((u8*)req->roomBinAttrInternal[i].ptr, req->roomBinAttrInternal[i].size));
+				davec.push_back(bin);
+			}
+			final_binattrinternal_vec = builder.CreateVector(davec);
+		}
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<RoomGroupPasswordConfig>>> final_grouppasswordconfig_vec;
+		if (req->passwordConfigNum && req->passwordConfig.IsValid())
+		{
+			std::vector<flatbuffers::Offset<RoomGroupPasswordConfig>> davec;
+			for (u32 i = 0; i < req->passwordConfigNum; i++)
+			{
+				auto rg = CreateRoomGroupPasswordConfig(builder, req->passwordConfig[i].groupId, req->passwordConfig[i].withPassword);
+				davec.push_back(rg);
+			}
+			final_grouppasswordconfig_vec = builder.CreateVector(davec);
+		}
+		u64 final_passwordSlotMask = 0;
+		if (req->passwordSlotMask.IsValid())
+			final_passwordSlotMask = *req->passwordSlotMask;
+
+		flatbuffers::Offset<flatbuffers::Vector<u16>> final_ownerprivilege_vec;
+		if (req->ownerPrivilegeRankNum && req->ownerPrivilegeRank.IsValid())
+		{
+			std::vector<u16> priv_ranks;
+			for (u32 i = 0; i < req->ownerPrivilegeRankNum; i++)
+			{
+				priv_ranks.push_back(req->ownerPrivilegeRank[i]);
+			}
+			final_ownerprivilege_vec = builder.CreateVector(priv_ranks);
+		}
+
+		auto req_finished =
+			CreateSetRoomDataInternalRequest(builder, req->roomId, req->flagFilter, req->flagAttr, final_binattrinternal_vec, final_grouppasswordconfig_vec, final_passwordSlotMask, final_ownerprivilege_vec);
+		builder.Finish(req_finished);
+
+		auto bufsize = builder.GetSize();
+		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
+		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
+		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
+		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
+
+		// Wrap and send the packet
+		Packet packet;
+		packet.Write(data);
+
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::CreateRoom, reqId);
+
+		INFO_LOG(Log::sceNet, "Setting Room Data Internal for Room #%d", req->roomId);
+
+		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
+		bool flushed = Send(&packet, 5.0, &canceled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
 	}
+
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
 			return ErrorToPSPError[resp.error];
+
 		return 0;
 	}
 }

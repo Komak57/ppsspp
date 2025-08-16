@@ -347,6 +347,7 @@ namespace net {
 		virtual int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, SearchRoomResponse*& roomResp) = 0;
 		virtual int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut) = 0;
 		virtual int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) = 0;
+		virtual int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req) = 0;
 
 
 		u8 GetStatus();
@@ -400,6 +401,7 @@ namespace net {
 		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, SearchRoomResponse*& roomResp);
 		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut);
 		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
+		int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req);
 	};
 
 	class RPCNAgent : public NPAgent {
@@ -416,6 +418,7 @@ namespace net {
 		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, SearchRoomResponse*& roomResp);
 		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut);
 		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
+		int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req);
 
 		void start_read_thread();
 		void stop_read_thread();
