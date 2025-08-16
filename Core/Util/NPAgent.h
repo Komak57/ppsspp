@@ -310,7 +310,7 @@ namespace net {
 		virtual int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) = 0;
 		virtual int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, SearchRoomResponse*& roomResp) = 0;
 		virtual int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut) = 0;
-		virtual int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut) = 0;
+		virtual int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) = 0;
 
 
 		u8 GetStatus();
@@ -363,7 +363,7 @@ namespace net {
 		int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, SearchRoomResponse*& roomResp);
 		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut);
-		int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut);
+		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
 	};
 
 	class RPCNAgent : public NPAgent {
@@ -379,7 +379,7 @@ namespace net {
 		int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, SearchRoomResponse*& roomResp);
 		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut);
-		int GetRoomDataInternal(SceNpMatching2RoomDataInternal* roomDataOut);
+		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
 
 		void start_read_thread();
 		void stop_read_thread();

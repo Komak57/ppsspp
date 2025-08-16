@@ -927,14 +927,14 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
 
-		SceNpMatching2GetRoomDataInternalRequest req{};
+		auto req = PSPPointer<SceNpMatching2GetRoomDataInternalRequest>::Create(reqParamPtr);
 		Memory::Memcpy(&req, reqParamPtr, sizeof(req));
 
-		auto roomData = &servers[tServer]->rooms[req.roomId];
+		auto roomData = &servers[tServer]->rooms[req->roomId];
 
 		int ret;
-		if ((ret = servers[tServer]->GetRoomDataInternal(roomData)) < 0)
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED));
+		if ((ret = servers[tServer]->GetRoomDataInternal(req, roomData)) != 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 		
 		//u32 respSize = sizeof(SceNpMatching2RoomDataInternal);
 		//u32 roomDataPtr = np_memory.Alloc(respSize);
