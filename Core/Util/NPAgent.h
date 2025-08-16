@@ -301,10 +301,6 @@ inline static void FormatAddr(char* addrbuf, size_t bufsize, const addrinfo* inf
 	}
 }
 
-// Forward Declare
-struct SceNpMatching2World;
-struct SceNpMatching2RoomDataExternal;
-struct SceNpMatching2RoomDataInternal;
 namespace net {
 	struct RPCNResponse {
 		PacketHeader header;
