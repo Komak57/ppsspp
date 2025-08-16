@@ -87,6 +87,18 @@ namespace net {
 		}
 	}
 
+	bool is_valid_npid(const SceNpId& npid)
+	{
+		if (!std::all_of(npid.handle.data, npid.handle.data + 16, [](char c) { return std::isalnum(c) || c == '-' || c == '_' || c == 0; })
+			|| npid.handle.data[16] != 0
+			|| !std::all_of(npid.handle.dummy, npid.handle.dummy + 3, [](char val) { return val == 0; }))
+		{
+			return false;
+		}
+
+		return true;
+	}
+
 	bool RPCNAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
 		std::string certPem = "-----BEGIN CERTIFICATE-----\n"
 			"MIIGITCCBAmgAwIBAgIUdkeQlAaaQsrixKtU72S0ug43r9YwDQYJKoZIhvcNAQEL"
@@ -479,25 +491,7 @@ namespace net {
 			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
 		}
 
-		//vec_stream reply(resp.data);
-		//const auto* resp = reply.get_flatbuffer<SearchRoomResponse>();
-		/*roomResp = flatbuffers::GetMutableRoot<SearchRoomResponse>(resp.data.data());
-		if (roomResp == nullptr)
-			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;*/
-
 		return 0;
-	}
-
-	bool is_valid_npid(const SceNpId& npid)
-	{
-		if (!std::all_of(npid.handle.data, npid.handle.data + 16, [](char c) { return std::isalnum(c) || c == '-' || c == '_' || c == 0; })
-			|| npid.handle.data[16] != 0
-			|| !std::all_of(npid.handle.dummy, npid.handle.dummy + 3, [](char val) { return val == 0; }))
-		{
-			return false;
-		}
-
-		return true;
 	}
 
 	int RPCNAgent::CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut) {
@@ -808,7 +802,7 @@ namespace net {
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-	}
+		}
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
