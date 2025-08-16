@@ -35,6 +35,7 @@ BlockAllocator np_memory;
 std::recursive_mutex npMatching2EvtMtx;
 std::deque<NpMatching2Args> npMatching2Events;
 std::map<u32, NpMatching2Handler> npMatching2Handlers;
+NpMatching2Handler npSignalingCallback;
 //std::map<int, NpMatching2Context> npMatching2Contexts;
 u16 tServer;
 std::map<u16, std::unique_ptr<net::NPAgent>> servers;
@@ -357,15 +358,15 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 	}
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
-	struct NpMatching2Handler handler;
-	memset(&handler, 0, sizeof(handler));
+	//struct NpMatching2Handler handler;
+	npSignalingCallback = {};
 
-	handler.ctx_id = ctxId; // double handle
-	handler.cb = callbackFunctionAddr;
-	handler.cb_arg = callbackArgument;
+	npSignalingCallback.ctx_id = ctxId; // double handle
+	npSignalingCallback.cb = callbackFunctionAddr;
+	npSignalingCallback.cb_arg = callbackArgument;
 
-	npMatching2Handlers[0] = handler;
-	NOTICE_LOG(Log::sceNet, "%s - Added SignalingCallback FUN_%08x(%08x) with appReqId(%d)", __FUNCTION__, handler.cb, handler.cb_arg, 0);
+	//npMatching2Handlers[0] = handler;
+	NOTICE_LOG(Log::sceNet, "%s - Added SignalingCallback FUN_%08x(%08x)", __FUNCTION__, npSignalingCallback.cb, npSignalingCallback.cb_arg);
 	/*if (npMatching2Handlers.find(ctxId) == npMatching2Handlers.end()) {
 		npMatching2Handlers[ctxId] = handler;
 		WARN_LOG(Log::sceNet, "%s - Added handler(%08x, %08x) : %d", __FUNCTION__, handler.cb, handler.cb_arg, ctxId);
@@ -382,8 +383,18 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 	return 0;
 }
 
-static int sceNpMatching2SignalingGetConnectionStatus(int unk) {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d) at %08x", __FUNCTION__, unk, currentMIPS->pc);
+static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 roomId, u32 memberId, u32 connStatus, u32 peerAddr, u32 peerPort) {
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08X, %08X, %08X, %08X, %08X) at %08x", __FUNCTION__, ctxId, roomId, memberId, connStatus, peerAddr, peerPort, currentMIPS->pc);
+	if (!npMatching2Inited)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
+
+	if (connStatus == 0 || !Memory::IsValidAddress(connStatus))
+		return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
+
+	// Write Connection Status to connStatus
+	// Write IPAddress to peerAddr
+	// Write Port to peerPort
+
 	return 0;
 }
 
@@ -1182,6 +1193,28 @@ static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqI
 static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 roomId, u32 memberId, u32 code, u32 connInfoPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, memberId, code, connInfoPtr, currentMIPS->pc);
+	if (!npMatching2Inited)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
+
+	if (connInfoPtr == 0 || !Memory::IsValidAddress(connInfoPtr))
+		return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
+
+	switch (code) {
+	case SCE_NP_SIGNALING_CONN_INFO_RTT:
+		break;
+	case SCE_NP_SIGNALING_CONN_INFO_BANDWIDTH:
+		break;
+	case SCE_NP_SIGNALING_CONN_INFO_PEER_NPID:
+		break;
+	case SCE_NP_SIGNALING_CONN_INFO_PEER_ADDRESS:
+		break;
+	case SCE_NP_SIGNALING_CONN_INFO_MAPPED_ADDRESS:
+		break;
+	case SCE_NP_SIGNALING_CONN_INFO_PACKET_LOSS:
+		break;
+	default:
+		return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
+	}
 
 	return 0;
 }
@@ -1423,7 +1456,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0xDFEDB642, &WrapI_IUU<sceNpMatching2SignalingGetPeerNetInfoResult>,	"sceNpMatching2SignalingGetPeerNetInfoResult",	'i', "ixx"    },
 	{0x9462C05A, &WrapI_IU<sceNpMatching2SignalingCancelPeerNetInfo>,		"sceNpMatching2SignalingCancelPeerNetInfo",		'i', "ix"     },
 	{0x3892E9A6, &WrapI_IUUUU<sceNpMatching2SignalingGetConnectionInfo>,	"sceNpMatching2SignalingGetConnectionInfo",		'i', "ixxxx"  },
-	{0x6D6D0C75, &WrapI_I<sceNpMatching2SignalingGetConnectionStatus>,		"sceNpMatching2SignalingGetConnectionStatus",	'i', "i" 	  },
+	{0x6D6D0C75, &WrapI_IUUUUU<sceNpMatching2SignalingGetConnectionStatus>,	"sceNpMatching2SignalingGetConnectionStatus",	'i', "ixxxxx" },
 
 	{0x2E61F6E1, &WrapI_IIII<sceNpMatching2Init>,							"sceNpMatching2Init",							'i', "iiii"   },
 	{0x8BF37D8C, &WrapI_V<sceNpMatching2Term>,								"sceNpMatching2Term",							'i', ""       },
