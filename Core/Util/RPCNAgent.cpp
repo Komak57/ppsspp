@@ -82,7 +82,6 @@ namespace net {
 			}
 			// Get data and assign it to the request id related buffer
 			RPCNResponse buf;
-			buf.original.insert(buf.original.end(), packet.Data(), packet.Data() + packet.Length());
 			buf.header = header;
 			buf.error = error;
 			buf.data.insert(buf.data.end(), packet.Data() + RPCN_HEADER_SIZE + 1, packet.Data() + packet.Length());
@@ -96,7 +95,7 @@ namespace net {
 				hexdata += hex_chars[(c & 0xF0) >> 4];
 				hexdata += hex_chars[(c & 0x0F) >> 0];
 			}
-			INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+			DEBUG_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
 
 			std::lock_guard<std::mutex> lock(buffer_mutex);
 			responses[header.reqId] = buf;
@@ -502,22 +501,32 @@ namespace net {
 
 		//std::vector<u8> _data;
 		//_data.insert(_data.end(), resp.data.data(), resp.data.data() + resp.data.size());
-		resp.stream = new vec_stream(resp.data);
 
+		u32 size;// = get<u32>();
+		memcpy(&size, &resp.data[0], sizeof(u32));
+		if (sizeof(u32) + size > resp.data.size()) {
+			roomResp = nullptr;
+			return SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED;
+		}
+
+		std::vector<u8> buf;
+		std::copy(resp.data.begin() + sizeof(u32), resp.data.begin() + sizeof(u32) + size, std::back_inserter(buf));
+
+		roomResp = flatbuffers::GetRoot<SearchRoomResponse>(buf.data());
+		flatbuffers::Verifier verifier(buf.data(), buf.size());
+
+		if (!roomResp->Verify(verifier))
+		{
+			roomResp = nullptr;
+			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
+		}
+
+		/*resp.stream = new vec_stream(resp.data);
 		const auto* _resp = resp.stream->get_flatbuffer<SearchRoomResponse>();
 		if (resp.stream->is_error()) {
 			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
-		}
-		//std::vector rawdata = get_rawdata(resp.data);
-		//auto srr = flatbuffers::GetMutableRoot<SearchRoomResponse>(rawdata.data());
-		
-		//flatbuffers::Verifier verifier(resp.data.data(), resp.data.size());
-
-		//if (!_resp->Verify(verifier)) {
-		//	roomResp = nullptr;
-		//	return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
-		//}
-		roomResp = _resp;
+		}*/
+		//roomResp = _resp;
 
 		return 0;
 	}
@@ -708,22 +717,30 @@ namespace net {
 
 		// 01 0D00 84010000 0100000000000000 00 700100002000000000001A00280026002000000018000000140010000E000000080004001A000000240000000000008400001000780000000C00000008000000000000000100000000000001020000003800000004000000DAFFFFFF000010000C000000E9118EA058FCE20068FFFFFF00005800040000000000000000000A0014000C00060008000A000000000010000C000000E9118EA058FCE20098FFFFFF000057000400000000000000010000001800000014001C000800140006000000000005000C001000140000000002100058000000000000800C000000FC118EA058FCE200010000000C00000008001000080004000800000014000000FC118EA058FCE20008000C00060008000800000000005900040000000000000000000A001000040008000C000A00000030000000240000000400000015000000687474703A2F2F44756D6D7941766174617255726C00000003000000666F78001000000052504353335F5A53675363633444377800000000
 
-		resp.stream = new vec_stream(resp.data);
-
-		roomDataOut = resp.stream->get_flatbuffer<RoomDataInternal>();
-		if (resp.stream->is_error()) {
-			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
+		u32 size;// = get<u32>();
+		memcpy(&size, &resp.data[0], sizeof(u32));
+		if (sizeof(u32) + size > resp.data.size()) {
+			roomDataOut = nullptr;
+			return SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED;
 		}
+		std::vector<u8> buf;
+		std::copy(resp.data.begin() + sizeof(u32), resp.data.begin() + sizeof(u32) + size, std::back_inserter(buf));
 
-		/*std::vector rawdata = get_rawdata(resp.data);
-		roomDataOut = flatbuffers::GetMutableRoot<RoomDataInternal>(rawdata.data());
-		flatbuffers::Verifier verifier(rawdata.data(), rawdata.size());
+		roomDataOut = flatbuffers::GetRoot<RoomDataInternal>(buf.data());
+		flatbuffers::Verifier verifier(buf.data(), buf.size());
 
 		if (!roomDataOut->Verify(verifier))
 		{
 			roomDataOut = nullptr;
+			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
+		}
+		/*resp.stream = new vec_stream(resp.data);
+
+		roomDataOut = resp.stream->get_flatbuffer<RoomDataInternal>();
+		if (resp.stream->is_error()) {
 			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
 		}*/
+
 
 		return 0;
 	}

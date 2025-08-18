@@ -23,6 +23,7 @@
 #include <Swap.h>
 #include <mutex>
 #include "Core/HLE/np_types.h"
+#include "Core/HLE/fb_helpers.h"
 
 extern std::recursive_mutex npMatching2EvtMtx;
 

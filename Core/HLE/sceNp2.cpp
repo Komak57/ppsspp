@@ -766,10 +766,10 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		INFO_LOG(Log::sceNet, " - teamId:           %d", req->teamId);
 
 		// FIXME: Populate all relevant data from req into memory as required
-		const RoomDataInternal* roomData;
+		const RoomDataInternal* resp;
 
 		// FIXME: Get roomData from PSN
-		int ret = servers[tServer]->CreateJoinRoom(req, roomData);
+		int ret = servers[tServer]->CreateJoinRoom(req, resp);
 		if (ret != 0) {
 			ERROR_LOG(Log::sceNet, "Unable to Create Room: %08X", ret);
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
@@ -782,120 +782,14 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataExternal");
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
 		}
+		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
+		SceNpId npId;
+		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp, room_info, npId, false, false);
 
-		// FIXME: Pull these parameters from context?
-		bool include_onlinename = false;
-		bool include_avatarurl = false;
-		SceNpMatching2RoomDataInternal room{};
-
-		// Scalars
-		room.serverId = roomData->serverId();
-		room.worldId = roomData->worldId();
-		room.lobbyId = roomData->lobbyId();
-		room.roomId = roomData->roomId();
-		room.passwordSlotMask = roomData->passwordSlotMask();
-		room.maxSlot = roomData->maxSlot();
-
-		// Room groups (optional)
-		if (roomData->roomGroup() && roomData->roomGroup()->size() > 0) {
-			const u32 n = roomData->roomGroup()->size();
-			room.roomGroupNum = n;
-			auto groups = new SceNpMatching2RoomGroup[n];
-			infoSize = sizeof(SceNpMatching2RoomGroup) * n;
-			u32 roomGroupPtr = np_memory.Alloc(infoSize);
-			room.roomGroup = roomGroupPtr;
-
-			for (u32 i = 0; i < n; ++i) {
-				auto* gfb = roomData->roomGroup()->Get(i);
-				groups[i].slotNum = gfb->slotNum();
-				groups[i].withLabel = (gfb->label()->size() > 0? 1 : 0);
-				if (gfb->label() && gfb->label()->size() > 0) {
-					// PSP label is fixed 8 bytes in your structs; copy/minimize safely.
-					const u32 copy_len = std::min<u32>(8, gfb->label()->size());
-					memcpy(groups[i].label.data, gfb->label()->data(), copy_len);
-					if (copy_len < 8) memset(groups[i].label.data + copy_len, 0, 8 - copy_len);
-				}
-				groups[i].withPassword = gfb->withPassword();
-			}
-			Write_Struct(groups, roomGroupPtr, "SceNpMatching2RoomGroups", 25);
-		}
-
-		// Member list
-		if (roomData->memberList() && roomData->memberList()->size() > 0) {
-			const u32 n = roomData->memberList()->size();
-			room.memberList.membersNum = n;
-
-			auto members = new SceNpMatching2RoomMemberDataInternal[n];
-			infoSize = sizeof(SceNpMatching2RoomMemberDataInternal) * n;
-			u32 roomMembersPtr = np_memory.Alloc(infoSize);
-			//auto [mem_addr, members] = psp_alloc_array<SceNpMatching2RoomMemberDataInternal>(n);
-			//psp_set_ptr(room->memberList.members, mem_addr);
-
-			// Link the singly-linked list via 'next'
-			for (u32 i = 0; i + 1 < n; ++i) {
-				members[i].next = roomMembersPtr;
-				//psp_set_ptr(members[i].next, mem_addr + (i + 1) * sizeof(SceNpMatching2RoomMemberDataInternal));
-			}
-
-			// Fill each member (copy only the fields you actually use on PSP)
-			for (u32 i = 0; i < n; ++i) {
-				auto* mfb = roomData->memberList()->Get(i);
-				auto& sm = members[i];
-
-				sm.memberId = mfb->memberId();
-				// userInfo / npId (handle) if available
-				if (mfb->userInfo() && mfb->userInfo()->npId()) {
-					const auto* h = mfb->userInfo()->npId();
-					if (h) {
-						const auto* cstr = h->c_str(); // FlatBuffers string is zero-terminated
-						const size_t len = std::min<size_t>(sizeof(sm.userInfo.npId.handle.data) - 1, strlen(cstr));
-						memcpy(sm.userInfo.npId.handle.data, cstr, len);
-						sm.userInfo.npId.handle.data[len] = '\0';
-					}
-				}
-
-				// Optional online name / avatar (only if your PSP structs expect and you asked to include)
-				if (include_onlinename && mfb->userInfo() && mfb->userInfo()->onlineName()) {
-					const auto* n = mfb->userInfo()->onlineName();
-					const auto* c = n->c_str();
-					const size_t len = std::min<size_t>(sizeof(sm.userInfo.onlineName->data) - 1, strlen(c));
-					memcpy(sm.userInfo.onlineName->data, c, len);
-					sm.userInfo.onlineName->data[len] = '\0';
-				}
-				if (include_avatarurl && mfb->userInfo() && mfb->userInfo()->avatarUrl()) {
-					const auto* a = mfb->userInfo()->avatarUrl();
-					const auto* c = a->c_str();
-					const size_t len = std::min<size_t>(sizeof(sm.userInfo.avatarUrl->data) - 1, strlen(c));
-					memcpy(sm.userInfo.avatarUrl->data, c, len);
-					sm.userInfo.avatarUrl->data[len] = '\0';
-				}
-			}
-
-			// Find "me"
-			for (u32 i = 0; i < n; ++i) {
-				if (strcmp(members[i].userInfo.npId.handle.data, "RPCS3_ZSgScc4D7x") == 0) {
-					room.memberList.me = roomMembersPtr + i * sizeof(SceNpMatching2RoomMemberDataInternal);
-					break;
-				}
-			}
-
-			// Find owner by memberId
-			for (u32 i = 0; i < n; ++i) {
-				if (members[i].memberId == roomData->ownerId()) {
-					room.memberList.me = roomMembersPtr + i * sizeof(SceNpMatching2RoomMemberDataInternal);
-					break;
-				}
-			}
-			Write_Struct(members, roomMembersPtr, "SceNpMatching2RoomMemberDataInternals", 38);
-		}
-
-
-		Write_Struct(room, roomDataPtr, "RoomDataInternal", 17);
-
-		//servers[tServer]->rooms.emplace(roomData->roomId, roomData);
-
+		// Cache Rooms
+		//rooms.push_back(roomData);
 		SceNpMatching2CreateJoinRoomResponse respData{};
-		respData.roomDataInternal = roomDataPtr;
+		respData.roomDataInternal = room_info;
 
 		u32 respSize = sizeof(respData);
 		u32 respPtr = np_memory.Alloc(respSize);
@@ -904,10 +798,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
 		}
-		Write_Struct(roomData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
-
-		// Cache Rooms
-		//rooms.push_back(roomData);
+		Write_Struct(respData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
 
 		return notifyNpMatching2Handlers(request_id, respPtr);
 	});

@@ -1369,6 +1369,9 @@
     <ClCompile Include="Util\RPCNAuthAgent.cpp">
       <Filter>Util</Filter>
     </ClCompile>
+    <ClCompile Include="HLE\fb_helpers.cpp">
+      <Filter>HLE</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ELF\ElfReader.h">
@@ -2212,6 +2215,9 @@
       <Filter>HLE\Libraries</Filter>
     </ClInclude>
     <ClInclude Include="np2_structs_generated.h">
+      <Filter>HLE</Filter>
+    </ClInclude>
+    <ClInclude Include="HLE\fb_helpers.h">
       <Filter>HLE</Filter>
     </ClInclude>
   </ItemGroup>

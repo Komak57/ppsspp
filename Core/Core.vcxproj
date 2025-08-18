@@ -570,6 +570,7 @@
     <ClCompile Include="FrameTiming.cpp" />
     <ClCompile Include="HLE\AtracCtx.cpp" />
     <ClCompile Include="HLE\AtracCtx2.cpp" />
+    <ClCompile Include="HLE\fb_helpers.cpp" />
     <ClCompile Include="HLE\KUBridge.cpp" />
     <ClCompile Include="HLE\NetInetConstants.cpp" />
     <ClCompile Include="HLE\Plugins.cpp" />
@@ -1198,6 +1199,7 @@
     <ClInclude Include="HLE\AtracCtx.h" />
     <ClInclude Include="HLE\AtracCtx2.h" />
     <ClInclude Include="HLE\ErrorCodes.h" />
+    <ClInclude Include="HLE\fb_helpers.h" />
     <ClInclude Include="HLE\KernelThreadDebugInterface.h" />
     <ClInclude Include="HLE\KUBridge.h" />
     <ClInclude Include="HLE\NetInetConstants.h" />

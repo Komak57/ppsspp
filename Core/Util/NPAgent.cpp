@@ -588,7 +588,7 @@ namespace net {
 			hexdata += hex_chars[(c & 0xF0) >> 4];
 			hexdata += hex_chars[(c & 0x0F) >> 0];
 		}
-		INFO_LOG(Log::sceNet, "NPAgent::Send('%s')", hexdata.c_str());
+		DEBUG_LOG(Log::sceNet, "NPAgent::Send('%s')", hexdata.c_str());
 		static constexpr float CANCEL_INTERVAL = 0.25f;
 
 		bool ready = false;
