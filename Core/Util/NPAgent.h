@@ -3,6 +3,8 @@
 #include "Common/Net/Resolve.h"
 #include <CommonTypes.h>
 #include <optional>
+#include <type_traits> // is_constant_evaluated
+#include <bit>         // bit_cast
 #include "Core/HLE/np_types.h"
 #include "mbedtls/ssl.h"
 #include "mbedtls/net_sockets.h"
@@ -26,7 +28,7 @@
 //	u32_le IPAddr = 910526074; // 910526074 || 0x3645867a || 54.69.134.122 || elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net
 //};
 constexpr int RPCN_HEADER_SIZE = 15;
-constexpr int COMMUNICATION_ID_SIZE = (9 + 3);
+//constexpr int COMMUNICATION_ID_SIZE = (9 + 3);
 
 enum class PacketType : u8
 {
@@ -301,11 +303,159 @@ inline static void FormatAddr(char* addrbuf, size_t bufsize, const addrinfo* inf
 	}
 }
 
+// COMID is sent as 9 chars - + '_' + 2 digits
+constexpr std::size_t COMMUNICATION_ID_COMID_COMPONENT_SIZE = 9;
+constexpr std::size_t COMMUNICATION_ID_SUBID_COMPONENT_SIZE = 2;
+constexpr std::size_t COMMUNICATION_ID_SIZE = COMMUNICATION_ID_COMID_COMPONENT_SIZE + COMMUNICATION_ID_SUBID_COMPONENT_SIZE + 1;
+
+class vec_stream
+{
+public:
+	vec_stream() = delete;
+	vec_stream(std::vector<u8>& _vec, std::size_t initial_index = 0)
+		: vec(_vec), i(initial_index) {
+	}
+	bool is_error() const
+	{
+		return error;
+	}
+
+	void dump() const;
+
+
+	// Getters
+
+	//template <typename T>
+	//T get()
+	//{
+	//	if (sizeof(T) + i > vec.size() || error)
+	//	{
+	//		error = true;
+	//		return static_cast<T>(0);
+	//	}
+	//	T res = read_from_ptr<T>(&vec[i]);
+	//	i += sizeof(T);
+	//	return res;
+	//}
+	std::string get_string(bool empty)
+	{
+		std::string res{};
+		while (i < vec.size() && vec[i] != 0)
+		{
+			res.push_back(vec[i]);
+			i++;
+		}
+		i++;
+
+		if (!empty && res.empty())
+		{
+			error = true;
+		}
+
+		return res;
+	}
+	std::vector<u8> get_rawdata()
+	{
+		u32 size;// = get<u32>();
+		memcpy(&size, &vec[i], sizeof(u32));
+		i += sizeof(u32);
+
+		if (i + size > vec.size())
+		{
+			error = true;
+			return {};
+		}
+
+		std::vector<u8> ret;
+		std::copy(vec.begin() + i, vec.begin() + i + size, std::back_inserter(ret));
+		i += size;
+		return ret;
+	}
+
+	SceNpCommunicationId get_com_id()
+	{
+		if (i + COMMUNICATION_ID_SIZE > vec.size() || error)
+		{
+			error = true;
+			return {};
+		}
+
+		SceNpCommunicationId com_id{};
+		std::memcpy(&com_id.data[0], &vec[i], COMMUNICATION_ID_COMID_COMPONENT_SIZE);
+		const std::string sub_id(reinterpret_cast<const char*>(&vec[i + COMMUNICATION_ID_COMID_COMPONENT_SIZE + 1]), COMMUNICATION_ID_SUBID_COMPONENT_SIZE);
+		const unsigned long result_num = std::strtoul(sub_id.c_str(), nullptr, 10);
+
+		if (result_num > 99)
+		{
+			error = true;
+			return {};
+		}
+
+		com_id.num = static_cast<u8>(result_num);
+		i += COMMUNICATION_ID_SIZE;
+		return com_id;
+	}
+
+	template <typename T>
+	const T* get_flatbuffer()
+	{
+		auto rawdata_vec = get_rawdata();
+
+		if (error)
+			return nullptr;
+
+		if (vec.empty())
+		{
+			error = true;
+			return nullptr;
+		}
+
+		const T* ret = flatbuffers::GetRoot<T>(rawdata_vec.data());
+		flatbuffers::Verifier verifier(rawdata_vec.data(), rawdata_vec.size());
+
+		if (!ret->Verify(verifier))
+		{
+			error = true;
+			return nullptr;
+		}
+
+		aligned_bufs.push_back(std::move(rawdata_vec));
+
+		return ret;
+	}
+
+	// Setters
+
+	template <typename T>
+	void insert(T value)
+	{
+		value = std::bit_cast<le_t<T>, T>(value);
+		// resize + memcpy instead?
+		for (usz index = 0; index < sizeof(T); index++)
+		{
+			vec.push_back(*(reinterpret_cast<u8*>(&value) + index));
+		}
+	}
+	void insert_string(const std::string& str) const
+	{
+		std::copy(str.begin(), str.end(), std::back_inserter(vec));
+		vec.push_back(0);
+	}
+
+protected:
+	std::vector<u8>& vec;
+	std::vector<std::vector<u8>> aligned_bufs;
+	std::size_t i = 0;
+	bool error = false;
+};
+
 namespace net {
 	struct RPCNResponse {
 		PacketHeader header;
 		u8 error;
 		std::vector<u8> data;
+		std::vector<u8> original;
+		vec_stream* stream;
 	};
 	class MBEDTLS_Connection {
 	public:
@@ -340,8 +490,8 @@ namespace net {
 
 		// NPAgent Functions
 		virtual int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) = 0;
-		virtual int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, SearchRoomResponse*& roomResp) = 0;
-		virtual int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut) = 0;
+		virtual int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp) = 0;
+		virtual int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) = 0;
 		virtual int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) = 0;
 		virtual int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req) = 0;
 
@@ -394,8 +544,8 @@ namespace net {
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
 		int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
-		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, SearchRoomResponse*& roomResp);
-		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut);
+		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp);
+		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
 		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
 		int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req);
 	};
@@ -411,8 +561,8 @@ namespace net {
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
 		int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
-		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, SearchRoomResponse*& roomResp);
-		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut);
+		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp);
+		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
 		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
 		int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req);
 

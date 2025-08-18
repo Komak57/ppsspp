@@ -521,8 +521,10 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 
 		// FIXME: Get worldInfo from PSN
 		ret = servers[tServer]->GetWorldInfo(tServer, npTitleId.data, &servers[tServer]->worlds);
-		if (ret != 0)
+		if (ret != 0) {
+			ERROR_LOG(Log::sceNet, "Error requesting WorldInfo: %08X", ret);
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+		}
 
 		NOTICE_LOG(Log::sceNet, "Received %d worlds", servers[tServer]->worlds.size());
 
@@ -585,7 +587,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 		if (tServer == 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
-		PSPPointer<SceNpMatching2SearchRoomRequest> req = PSPPointer<SceNpMatching2SearchRoomRequest>::Create(reqParamPtr);
+		const PSPPointer<SceNpMatching2SearchRoomRequest> req = PSPPointer<SceNpMatching2SearchRoomRequest>::Create(reqParamPtr);
 
 		INFO_LOG(Log::sceNet, "SceNpMatching2SearchRoomRequest(%08X)", req.ptr);
 		INFO_LOG(Log::sceNet, " - option:       %d", req->option);
@@ -604,7 +606,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 			
 		// FIXME: Populate all relevant data from req into memory as required
 		// WARNING! This is a constant, and thus read-only
-		SearchRoomResponse* roomResp;
+		const SearchRoomResponse* roomResp;
 
 		// FIXME: We want SearchRoomResponse so we can manipulate the PSP memory for it's handling. PPSSPP will crash here!
 		int ret = servers[tServer]->SearchRoom(req, roomResp);
@@ -637,6 +639,10 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 				{
 					auto* fb_room = roomResp->rooms()->Get(i);
 					SceNpMatching2RoomDataExternal roomDataOut{};
+					roomDataOut.next = 0;
+					// If we have another room to write, mark it as next
+					if (room_count >= i + 1)
+						roomDataOut.next = (i + 1) * sizeof(SceNpMatching2RoomDataExternal);
 
 					roomDataOut.serverId = fb_room->serverId();
 					roomDataOut.worldId = fb_room->worldId();
@@ -746,12 +752,12 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		INFO_LOG(Log::sceNet, " - worldId:          %d", req->worldId);
 		INFO_LOG(Log::sceNet, " - lobbyId:          %d", req->lobbyId);
 		INFO_LOG(Log::sceNet, " - maxSlot:          %d", req->maxSlot);
-		INFO_LOG(Log::sceNet, " - flagAttr:         %d", req->flagAttr);
+		INFO_LOG(Log::sceNet, " - flagAttr:         %08X", req->flagAttr);
 		INFO_LOG(Log::sceNet, " - roomBinAttrInternalNum: %d", req->roomBinAttrInternalNum);
 		INFO_LOG(Log::sceNet, " - roomSearchableIntAttrExternalNum: %d", req->roomSearchableIntAttrExternalNum);
 		INFO_LOG(Log::sceNet, " - roomSearchableBinAttrExternalNum: %d", req->roomSearchableBinAttrExternalNum);
 		INFO_LOG(Log::sceNet, " - roomBinAttrExternalNum: %d", req->roomBinAttrExternalNum);
-		INFO_LOG(Log::sceNet, " - roomPassword:     %s", req->roomPassword->data);
+		//INFO_LOG(Log::sceNet, " - roomPassword:     %s", req->roomPassword->data);
 		INFO_LOG(Log::sceNet, " - groupConfigNum:   %d", req->groupConfigNum);
 		INFO_LOG(Log::sceNet, " - passwordSlotMask: %d", req->passwordSlotMask);
 		INFO_LOG(Log::sceNet, " - allowedUserNum:   %d", req->allowedUserNum);
@@ -760,12 +766,14 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		INFO_LOG(Log::sceNet, " - teamId:           %d", req->teamId);
 
 		// FIXME: Populate all relevant data from req into memory as required
-		RoomDataInternal* roomData;
+		const RoomDataInternal* roomData;
 
 		// FIXME: Get roomData from PSN
 		int ret = servers[tServer]->CreateJoinRoom(req, roomData);
-		if (ret != 0)
+		if (ret != 0) {
+			ERROR_LOG(Log::sceNet, "Unable to Create Room: %08X", ret);
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
+		}
 
 		u32 infoSize = sizeof(SceNpMatching2RoomDataInternal);
 		u32 roomDataPtr = np_memory.Alloc(infoSize);
@@ -962,7 +970,11 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 
 
 		auto req = PSPPointer<SceNpMatching2GetRoomDataInternalRequest>::Create(reqParamPtr);
-		Memory::Memcpy(&req, reqParamPtr, sizeof(req));
+		//Memory::Memcpy(&req, reqParamPtr, sizeof(req));
+
+		INFO_LOG(Log::sceNet, "SceNpMatching2GetRoomDataInternalRequest(%08X)", req.ptr);
+		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
+		INFO_LOG(Log::sceNet, " - attrIdNum:  %d", req->attrIdNum);
 
 		auto roomData = &servers[tServer]->rooms[req->roomId];
 
@@ -1048,6 +1060,9 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
 
 		auto req = PSPPointer<SceNpMatching2SetRoomDataInternalRequest>::Create(reqParamPtr);
+
+		INFO_LOG(Log::sceNet, "SceNpMatching2SetRoomDataInternalRequest(%08X)", req.ptr);
+		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 
 		int ret;
 		if ((ret = servers[tServer]->SetRoomDataInternal(req)) != 0)

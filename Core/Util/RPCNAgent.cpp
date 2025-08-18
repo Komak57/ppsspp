@@ -37,6 +37,21 @@ namespace net {
 		}
 	}
 
+	std::vector<u8> get_rawdata(std::vector<u8> data)
+	{
+		u32 size;
+		memcpy(&size, data.data(), sizeof(u32));
+
+		if (size > data.size())
+		{
+			return {};
+		}
+
+		std::vector<u8> ret;
+		std::copy(data.begin(), data.begin() + size, std::back_inserter(ret));
+
+		return ret;
+	}
 	// Blocking wait for a specific request_id
 	RPCNResponse RPCNAgent::take_pending_request(u64 request_id) {
 		std::unique_lock<std::mutex> lock(buffer_mutex);
@@ -67,9 +82,12 @@ namespace net {
 			}
 			// Get data and assign it to the request id related buffer
 			RPCNResponse buf;
+			buf.original.insert(buf.original.end(), packet.Data(), packet.Data() + packet.Length());
 			buf.header = header;
 			buf.error = error;
 			buf.data.insert(buf.data.end(), packet.Data() + RPCN_HEADER_SIZE + 1, packet.Data() + packet.Length());
+
+			//buf.stream.insert(buf.data);
 
 			int i;
 			std::string hexdata = "";
@@ -369,7 +387,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &canceled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return false;
+			return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
 		}
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
@@ -395,7 +413,7 @@ namespace net {
 		return 0;
 	}
 
-	int RPCNAgent::SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, SearchRoomResponse*& roomResp) {
+	int RPCNAgent::SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const SearchRoomResponse*& roomResp) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntSearchFilter>>> final_intfilter_vec;
@@ -482,19 +500,29 @@ namespace net {
 		//                                                     20       12       0        8        6        1    
 		// NPAgent::Recv('01 1000 28000000 0100000000000000 00 14000000 0C000000 00000600 08000400 06000000 01000000')
 
-		roomResp = flatbuffers::GetMutableRoot<SearchRoomResponse>(resp.data.data());
-		flatbuffers::Verifier verifier(resp.data.data(), resp.data.size());
+		//std::vector<u8> _data;
+		//_data.insert(_data.end(), resp.data.data(), resp.data.data() + resp.data.size());
+		resp.stream = new vec_stream(resp.data);
 
-		if (!roomResp->Verify(verifier))
-		{
-			roomResp = nullptr;
+		const auto* _resp = resp.stream->get_flatbuffer<SearchRoomResponse>();
+		if (resp.stream->is_error()) {
 			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
 		}
+		//std::vector rawdata = get_rawdata(resp.data);
+		//auto srr = flatbuffers::GetMutableRoot<SearchRoomResponse>(rawdata.data());
+		
+		//flatbuffers::Verifier verifier(resp.data.data(), resp.data.size());
+
+		//if (!_resp->Verify(verifier)) {
+		//	roomResp = nullptr;
+		//	return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
+		//}
+		roomResp = _resp;
 
 		return 0;
 	}
-
-	int RPCNAgent::CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, RoomDataInternal*& roomDataOut) {
+	
+	int RPCNAgent::CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) {
 
 		flatbuffers::FlatBufferBuilder builder(4096);
 
@@ -680,15 +708,22 @@ namespace net {
 
 		// 01 0D00 84010000 0100000000000000 00 700100002000000000001A00280026002000000018000000140010000E000000080004001A000000240000000000008400001000780000000C00000008000000000000000100000000000001020000003800000004000000DAFFFFFF000010000C000000E9118EA058FCE20068FFFFFF00005800040000000000000000000A0014000C00060008000A000000000010000C000000E9118EA058FCE20098FFFFFF000057000400000000000000010000001800000014001C000800140006000000000005000C001000140000000002100058000000000000800C000000FC118EA058FCE200010000000C00000008001000080004000800000014000000FC118EA058FCE20008000C00060008000800000000005900040000000000000000000A001000040008000C000A00000030000000240000000400000015000000687474703A2F2F44756D6D7941766174617255726C00000003000000666F78001000000052504353335F5A53675363633444377800000000
 
-		roomDataOut = const_cast<RoomDataInternal*>(flatbuffers::GetRoot<RoomDataInternal>(resp.data.data()));
-		roomDataOut = flatbuffers::GetMutableRoot<RoomDataInternal>(resp.data.data());
-		flatbuffers::Verifier verifier(resp.data.data(), resp.data.size());
+		resp.stream = new vec_stream(resp.data);
+
+		roomDataOut = resp.stream->get_flatbuffer<RoomDataInternal>();
+		if (resp.stream->is_error()) {
+			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
+		}
+
+		/*std::vector rawdata = get_rawdata(resp.data);
+		roomDataOut = flatbuffers::GetMutableRoot<RoomDataInternal>(rawdata.data());
+		flatbuffers::Verifier verifier(rawdata.data(), rawdata.size());
 
 		if (!roomDataOut->Verify(verifier))
 		{
 			roomDataOut = nullptr;
 			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
-		}
+		}*/
 
 		return 0;
 	}
@@ -721,7 +756,7 @@ namespace net {
 		packet.Write(data);
 
 		auto reqId = generate_request_id();
-		packet.Pack(CommandType::CreateRoom, reqId);
+		packet.Pack(CommandType::GetRoomDataInternal, reqId);
 
 		INFO_LOG(Log::sceNet, "Requesting Room Data Internal for Room #%d", req->roomId);
 
@@ -793,7 +828,7 @@ namespace net {
 		packet.Write(data);
 
 		auto reqId = generate_request_id();
-		packet.Pack(CommandType::CreateRoom, reqId);
+		packet.Pack(CommandType::SetRoomDataInternal, reqId);
 
 		INFO_LOG(Log::sceNet, "Setting Room Data Internal for Room #%d", req->roomId);
 

@@ -1337,7 +1337,7 @@ struct SceNpMatching2RoomDataExternal
 	PSPPointer<SceNpUserInfo2> owner;
 	PSPPointer<SceNpMatching2RoomGroup> roomGroup;
 	u32 roomGroupNum;
-	u32 flagAttr;
+	u32 flagAttr; // PSPo2i indicates +0x24 == owner (%s)
 	PSPPointer<SceNpMatching2IntAttr> roomSearchableIntAttrExternal;
 	u32 roomSearchableIntAttrExternalNum;
 	PSPPointer<SceNpMatching2BinAttr> roomSearchableBinAttrExternal;
