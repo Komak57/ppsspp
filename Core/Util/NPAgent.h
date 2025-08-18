@@ -125,6 +125,27 @@ enum class NotificationType : u16
 	UserKickedGUI,
 	QuickMatchCompleteGUI,
 };
+constexpr const char* NotificationTypeNames[] = {
+	"UserJoinedRoom",
+	"UserLeftRoom",
+	"RoomDestroyed",
+	"UpdatedRoomDataInternal",
+	"UpdatedRoomMemberDataInternal",
+	"FriendQuery",
+	"FriendNew",
+	"FriendLost",
+	"FriendStatus",
+	"RoomMessageReceived",
+	"MessageReceived",
+	"FriendPresenceChanged",
+	"SignalingHelper",
+	"MemberJoinedRoomGUI",
+	"MemberLeftRoomGUI",
+	"RoomDisappearedGUI",
+	"RoomOwnerChangedGUI",
+	"UserKickedGUI",
+	"QuickMatchCompleteGUI",
+};
 
 enum class rpcn_state
 {
@@ -531,6 +552,7 @@ namespace net {
 		bool SSLEnabled = false;
 
 		std::unordered_map<u64, RPCNResponse> responses;
+		std::unordered_map<u64, RPCNResponse> notifications;
 		char npTitleId[9];
 	};
 

@@ -85,14 +85,6 @@ namespace net {
 			PacketHeader header;
 			memcpy(&header, packet.Data(), sizeof(PacketHeader));
 			u8 error = packet.Data()[RPCN_HEADER_SIZE];
-			if ((ErrorType)error != ErrorType::NoError) {
-				if ((PacketType)header.request != PacketType::ServerInfo) {
-					if (error > 34)
-						ERROR_LOG(Log::sceNet, "RPCN Read Error %d: %s", error, hexdata.c_str());
-					else
-						ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", error, PacketTypeNames[error]);
-				}
-			}
 			// Get data and assign it to the request id related buffer
 			RPCNResponse buf;
 			buf.header = header;
@@ -102,7 +94,24 @@ namespace net {
 			//buf.stream.insert(buf.data);
 
 			std::lock_guard<std::mutex> lock(buffer_mutex);
-			responses[header.reqId] = buf;
+			switch ((PacketType)header.request) {
+			case PacketType::Reply:
+				if ((ErrorType)error != ErrorType::NoError) {
+					if (error > sizeof(PacketTypeNames))
+						ERROR_LOG(Log::sceNet, "RPCN Read Error %d: %s", error, hexdata.c_str());
+					else
+						ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", error, PacketTypeNames[error]);
+				}
+				responses[header.reqId] = buf;
+				break;
+			case PacketType::Notification:
+				NOTICE_LOG(Log::sceNet, "RPCN Sent Notification: %s", NotificationTypeNames[header.command]);
+				notifications[header.reqId] = buf;
+				break;
+			default:
+				WARN_LOG(Log::sceNet, "RPCN Responded with UNHANDLED PacketType (%d)", header.request);
+				break;
+			}
 
 			buffer_cv.notify_all();
 		}
