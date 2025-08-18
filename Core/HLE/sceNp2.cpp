@@ -819,6 +819,58 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	return 0;
 }
 
+/* Incomplete - Joins an existing Lobby/Party
+ * @param reqParamPtr ?
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqId Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ * @note Performs the operations in an async lambda function
+ */
+static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+
+	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom);
+
+	// ThreadStart
+	std::future<int> task = std::async(std::launch::async, [=]() -> int {
+		if (!npMatching2Inited)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+
+		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+
+		if (tServer == 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		auto req = PSPPointer<SceNpMatching2JoinRoomRequest>::Create(reqParamPtr);
+		const JoinRoomResponse* resp;
+
+		// FIXME: Get roomData from PSN
+		int ret = servers[tServer]->JoinRoom(req, resp);
+
+		u32 sizeof_room_resp = sizeof(SceNpMatching2JoinRoomResponse);
+		u32 roomRespPtr = np_memory.Alloc(sizeof_room_resp);
+		auto room_resp = PSPPointer<SceNpMatching2JoinRoomResponse>::Create(roomRespPtr);
+
+		u32 sizeof_room_info = sizeof(SceNpMatching2RoomDataInternal);
+		u32 roomInfoPtr = np_memory.Alloc(sizeof_room_info);
+		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
+
+		room_resp->roomDataInternal = room_info;
+
+		SceNpId npId = string_to_npid("RPCS3_ZSgScc4D7x");
+		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp->room_data(), room_info, npId, true, false);
+		// TODO: cache room_info
+		// TODO: execute signaling callback to update ip/port
+
+		return notifyNpMatching2Handlers(request_id, roomRespPtr);
+	});
+	tasks.emplace(request_id, std::move(task));
+
+	return 0;
+}
+
 /* Incomplete - Leaves the current Lobby/Party
  * @param reqParamPtr ?
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information

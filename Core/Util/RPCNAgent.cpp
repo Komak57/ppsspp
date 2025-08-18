@@ -755,6 +755,65 @@ namespace net {
 		return 0;
 	}
 
+	int RPCNAgent::JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& resp) {
+		flatbuffers::FlatBufferBuilder builder(1024);
+
+		flatbuffers::Offset<flatbuffers::Vector<u8>> final_roompassword;
+		if (req->roomPassword.IsValid())
+			final_roompassword = builder.CreateVector(req->roomPassword->data, 8);
+		flatbuffers::Offset<flatbuffers::Vector<u8>> final_grouplabel;
+		if (req->joinRoomGroupLabel.IsValid())
+			final_grouplabel = builder.CreateVector(req->joinRoomGroupLabel->data, 8);
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_memberbinattrinternal_vec;
+		if (req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal)
+		{
+			std::vector<flatbuffers::Offset<BinAttr>> davec;
+			for (u32 i = 0; i < req->roomMemberBinAttrInternalNum; i++)
+			{
+				auto bin = CreateBinAttr(builder, req->roomMemberBinAttrInternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomMemberBinAttrInternal[i].ptr.ptr), req->roomMemberBinAttrInternal[i].size));
+				davec.push_back(bin);
+			}
+			final_memberbinattrinternal_vec = builder.CreateVector(davec);
+		}
+		flatbuffers::Offset<PresenceOptionData> final_optdata = CreatePresenceOptionData(builder, builder.CreateVector(req->optData.data, 16), req->optData.length);
+
+		auto req_finished = CreateJoinRoomRequest(builder, req->roomId, final_roompassword, final_grouplabel, final_memberbinattrinternal_vec, final_optdata, req->teamId);
+		builder.Finish(req_finished);
+
+		auto bufsize = builder.GetSize();
+		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
+		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
+		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
+		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
+
+		// Wrap and send the packet
+		Packet packet;
+		packet.Write(data);
+
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::JoinRoom, reqId);
+
+		INFO_LOG(Log::sceNet, "Join Room #%d", req->roomId);
+
+		bool flushed = Send(&packet, 5.0, &canceled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+		}
+
+		auto _resp = take_pending_request(reqId);
+		if (_resp.error != (u8)ErrorType::NoError)
+			return ErrorToPSPError[_resp.error];
+
+		auto stream = new vec_stream(_resp.data);
+		resp = stream->get_flatbuffer<JoinRoomResponse>();
+		if (stream->is_error()) {
+			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
+	}
+
+		return 0;
+		//return forge_request_with_com_id(builder, communication_id, CommandType::CreateRoomGUI, req_id);
+	}
 	int RPCNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 

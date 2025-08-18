@@ -379,6 +379,9 @@ namespace net {
 		return 0;
 	}
 
+	int PSNAgent::JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut) {
+		return 0;
+	}
 	int PSNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
 		return 0;
 	}
