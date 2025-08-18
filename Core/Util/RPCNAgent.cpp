@@ -90,8 +90,8 @@ namespace net {
 					if (error > 34)
 						ERROR_LOG(Log::sceNet, "RPCN Read Error %d: %s", error, hexdata.c_str());
 					else
-					ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", error, PacketTypeNames[error]);
-			}
+						ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", error, PacketTypeNames[error]);
+				}
 			}
 			// Get data and assign it to the request id related buffer
 			RPCNResponse buf;
@@ -809,11 +809,48 @@ namespace net {
 		resp = stream->get_flatbuffer<JoinRoomResponse>();
 		if (stream->is_error()) {
 			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
-	}
+		}
 
 		return 0;
 		//return forge_request_with_com_id(builder, communication_id, CommandType::CreateRoomGUI, req_id);
 	}
+
+	int RPCNAgent::LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) {
+		flatbuffers::FlatBufferBuilder builder(1024);
+		flatbuffers::Offset<PresenceOptionData> final_optdata = CreatePresenceOptionData(builder, builder.CreateVector(req->optData.data, 16), req->optData.length);
+		auto req_finished = CreateLeaveRoomRequest(builder, req->roomId, final_optdata);
+		builder.Finish(req_finished);
+
+		auto bufsize = builder.GetSize();
+		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
+		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
+		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
+		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
+
+		// Wrap and send the packet
+		Packet packet;
+		packet.Write(data);
+
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::JoinRoom, reqId);
+
+		INFO_LOG(Log::sceNet, "Join Room #%d", req->roomId);
+
+		bool flushed = Send(&packet, 5.0, &canceled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+		}
+
+		auto _resp = take_pending_request(reqId);
+		if (_resp.error != (u8)ErrorType::NoError)
+			return ErrorToPSPError[_resp.error];
+
+		memcpy(resp, &_resp.data, sizeof(u64));
+
+		return 0;
+	}
+
 	int RPCNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 

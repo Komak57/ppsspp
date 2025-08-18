@@ -382,6 +382,11 @@ namespace net {
 	int PSNAgent::JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut) {
 		return 0;
 	}
+
+	int PSNAgent::LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) {
+		return 0;
+	}
+
 	int PSNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
 		return 0;
 	}

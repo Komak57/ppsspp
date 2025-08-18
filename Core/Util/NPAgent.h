@@ -491,6 +491,7 @@ namespace net {
 		virtual int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp) = 0;
 		virtual int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) = 0;
 		virtual int JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut) = 0;
+		virtual int LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) = 0;
 		virtual int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) = 0;
 		virtual int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req) = 0;
 
@@ -546,6 +547,7 @@ namespace net {
 		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp);
 		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
 		int JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut);
+		int LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp);
 		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
 		int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req);
 	};
@@ -564,6 +566,7 @@ namespace net {
 		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp);
 		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
 		int JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut);
+		int LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp);
 		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
 		int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req);
 
