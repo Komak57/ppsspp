@@ -717,6 +717,14 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 	return 0;
 }
 
+SceNpId string_to_npid(std::string_view str)
+{
+	SceNpId npid;
+	memset(&npid, 0, sizeof(npid));
+	memcpy(npid.handle.data, std::data(str), str.length());
+	return npid;
+}
+
 /* Incomplete - Hosts a Lobby/Party
  * @param reqParamPtr SceNpMatching2CreateJoinRoomRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
@@ -783,8 +791,8 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
-		SceNpId npId;
-		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp, room_info, npId, false, false);
+		SceNpId npId = string_to_npid("RPCS3_ZSgScc4D7x");
+		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp, room_info, npId, true, false);
 
 		// Cache Rooms
 		//rooms.push_back(roomData);
