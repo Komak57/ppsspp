@@ -73,21 +73,6 @@ namespace net {
 				break;
 			}
 
-			PacketHeader header;
-			memcpy(&header, packet.Data(), sizeof(PacketHeader));
-			u8 error = packet.Data()[RPCN_HEADER_SIZE];
-			if ((ErrorType)error != ErrorType::NoError) {
-				if ((PacketType)header.request != PacketType::ServerInfo)
-					ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", error, PacketTypeNames[error]);
-			}
-			// Get data and assign it to the request id related buffer
-			RPCNResponse buf;
-			buf.header = header;
-			buf.error = error;
-			buf.data.insert(buf.data.end(), packet.Data() + RPCN_HEADER_SIZE + 1, packet.Data() + packet.Length());
-
-			//buf.stream.insert(buf.data);
-
 			int i;
 			std::string hexdata = "";
 			for (i = 0; i < packet.Length(); i++) {
@@ -96,6 +81,25 @@ namespace net {
 				hexdata += hex_chars[(c & 0x0F) >> 0];
 			}
 			DEBUG_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+
+			PacketHeader header;
+			memcpy(&header, packet.Data(), sizeof(PacketHeader));
+			u8 error = packet.Data()[RPCN_HEADER_SIZE];
+			if ((ErrorType)error != ErrorType::NoError) {
+				if ((PacketType)header.request != PacketType::ServerInfo) {
+					if (error > 34)
+						ERROR_LOG(Log::sceNet, "RPCN Read Error %d: %s", error, hexdata.c_str());
+					else
+					ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", error, PacketTypeNames[error]);
+			}
+			}
+			// Get data and assign it to the request id related buffer
+			RPCNResponse buf;
+			buf.header = header;
+			buf.error = error;
+			buf.data.insert(buf.data.end(), packet.Data() + RPCN_HEADER_SIZE + 1, packet.Data() + packet.Length());
+
+			//buf.stream.insert(buf.data);
 
 			std::lock_guard<std::mutex> lock(buffer_mutex);
 			responses[header.reqId] = buf;
