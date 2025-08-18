@@ -323,7 +323,7 @@ namespace net {
 		PacketHeader header;
 		memcpy(&header, packet.Data(), sizeof(PacketHeader));
 
-		return true;
+		return 0;
 	}
 
 	int RPCNAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
