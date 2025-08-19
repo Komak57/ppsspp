@@ -636,41 +636,6 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 		*statusLine = line;
 
 	return code;
-
-	// Grab the first header line that contains the http code.
-	/*std::string line;
-	readbuf->TakeLineCRLF(&line);
-
-	int code;
-	size_t code_pos = line.find(' ');
-	if (code_pos != line.npos) {
-		code_pos = line.find_first_not_of(' ', code_pos);
-	}
-
-	if (code_pos != line.npos) {
-		code = atoi(&line[code_pos]);
-	} else {
-		ERROR_LOG(Log::HTTP, "Could not parse HTTP status code: '%s'", line.c_str());
-		return -1;
-	}
-
-	if (statusLine)
-		*statusLine = line;
-
-	while (true) {
-		int sz = readbuf->TakeLineCRLF(&line);
-		if (!sz || sz < 0)
-			break;
-		VERBOSE_LOG(Log::HTTP, "Header line: %s", line.c_str());
-		responseHeaders.push_back(line);
-	}
-
-	if (responseHeaders.size() == 0) {
-		ERROR_LOG(Log::HTTP, "No HTTP response headers");
-		return -1;
-	}
-
-	return code;*/
 }
 
 int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::string> &responseHeaders, Buffer *output, net::RequestProgress *progress) {
