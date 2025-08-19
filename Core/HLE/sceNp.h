@@ -24,7 +24,7 @@
 #include "Common/Net/HTTPClient.h"
 #include "Common/Net/Resolve.h"
 #include "Common/Net/URL.h"
-#include "Core/HLE/np_types.h"
+#include "Core/HLE/NpTypes.h"
 
 #define	PARENTAL_CONTROL_DISABLED	0
 #define	PARENTAL_CONTROL_ENABLED	1

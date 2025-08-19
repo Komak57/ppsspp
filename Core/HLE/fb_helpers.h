@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core/HLE/np_types.h"
+#include "Core/HLE/Np2Types.h"
 #include "Core/np2_structs_generated.h"
 #include "Core/Util/BlockAllocator.h"
 

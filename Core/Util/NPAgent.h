@@ -5,7 +5,8 @@
 #include <optional>
 #include <type_traits> // is_constant_evaluated
 #include <bit>         // bit_cast
-#include "Core/HLE/np_types.h"
+#include "Core/HLE/Np2Types.h"
+#include "Core/HLE/fb_helpers.h"
 #include "mbedtls/ssl.h"
 #include "mbedtls/net_sockets.h"
 #include "mbedtls/platform.h"
