@@ -140,6 +140,8 @@ int Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress
 				case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
 					WARN_LOG(Log::HTTP, "ReadAllWithProgress - Client closed connection gracefully");
 					return total;
+				case MBEDTLS_ERR_SSL_WANT_READ:
+					break;
 				default:
 					char errbuf[128];
 					mbedtls_strerror(retval, errbuf, sizeof(errbuf));
