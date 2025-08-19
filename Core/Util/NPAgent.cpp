@@ -655,7 +655,8 @@ namespace net {
 		return true;
 	}
 
-	int NPAgent::Recv(Packet* packet) {
+	int NPAgent::Recv(Packet* packet, bool* cancelled) {
+		NOTICE_LOG(Log::HTTP, "NPAgent::Recv() START");
 		static constexpr float CANCEL_INTERVAL = 0.25f;
 		char buf[4096];
 		// Adjustable read size
@@ -667,6 +668,10 @@ namespace net {
 		int content_length = 0;
 
 		while (state != ReadState::Complete) {
+			if (*cancelled) {
+				WARN_LOG(Log::HTTP, "NPAgent::Recv() Cancelled");
+				return 0;
+			}
 			if (SSLEnabled) {
 				DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read reading %i bytes", toRead);
 				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);

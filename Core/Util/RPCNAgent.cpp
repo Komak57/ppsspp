@@ -20,8 +20,35 @@ namespace net {
 	}
 
 	RPCNAgent::~RPCNAgent() {
+		NOTICE_LOG(Log::sceNet, "~NPAgent");
 		stop_read_thread();
 		Disconnect();
+	}
+
+	void RPCNAgent::Disconnect() {
+		NOTICE_LOG(Log::sceNet, "NPAgent::Disconnect()");
+		if (SSLEnabled) {
+			// First shut down network I/O so ssl_read unblocks
+			mbedtls_net_free(&tls.netCtx);  // closes socket
+		}
+		else {
+			if ((intptr_t)sock_ != -1) {
+				canceled = true;
+				closesocket(sock_);
+				sock_ = -1;
+			}
+		}
+
+		stop_read_thread();
+
+		if (SSLEnabled) {
+			mbedtls_ssl_close_notify(&tls.sslCtx);
+			mbedtls_ssl_free(&tls.sslCtx);
+			mbedtls_ssl_config_free(&tls.sslConfig);
+			mbedtls_net_free(&tls.netCtx);
+			SSLEnabled = false;
+			tls.connected = false;
+		}
 	}
 
 	void RPCNAgent::start_read_thread() {
@@ -65,9 +92,11 @@ namespace net {
 	}
 
 	void RPCNAgent::read_loop() {
+		bool canceled = false;
 		while (running) {
 			Packet packet;
-			int ret = Recv(&packet); // Uses NPAuthAgent::Recv
+			canceled = !running;
+			int ret = Recv(&packet, &canceled); // Uses NPAuthAgent::Recv
 			if (ret <= 0) {
 				running = false;
 				break;

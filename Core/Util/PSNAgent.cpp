@@ -54,6 +54,22 @@ namespace net {
 		Disconnect();
 	}
 
+	void PSNAgent::Disconnect() {
+		if (SSLEnabled) {
+			mbedtls_ssl_close_notify(&tls.sslCtx);
+			mbedtls_ssl_free(&tls.sslCtx);
+			mbedtls_ssl_config_free(&tls.sslConfig);
+			mbedtls_net_free(&tls.netCtx);
+			SSLEnabled = false;
+		}
+		else {
+			if ((intptr_t)sock_ != -1) {
+				canceled = true;
+				closesocket(sock_);
+				sock_ = -1;
+			}
+		}
+	}
 	bool PSNAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
 		WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 		if (port_ <= 0) {

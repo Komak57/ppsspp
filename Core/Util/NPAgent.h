@@ -499,9 +499,9 @@ namespace net {
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
 		int InitializeSSL(int transport, std::string certPEM);
-		void Disconnect();
+		virtual void Disconnect() = 0;
 		bool Send(Packet* packet, double timeout, bool* cancelled);
-		int Recv(Packet* packet);
+		int Recv(Packet* packet, bool* cancelled);
 		
 		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) = 0;
 		// NPAuthAgent Functions
@@ -563,6 +563,7 @@ namespace net {
 		PSNAgent(int serverId, std::string host, int port, u8 status = 2);
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
+		void Disconnect();
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
@@ -582,6 +583,7 @@ namespace net {
 		RPCNAgent(int serverId, std::string host, int port, u8 status = 2);
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
+		void Disconnect();
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
