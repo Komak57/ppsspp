@@ -64,6 +64,20 @@ namespace net {
 		}
 	}
 
+	namespace np {
+		bool is_valid_npid(const SceNpId& npid)
+		{
+			if (!std::all_of(npid.handle.data, npid.handle.data + 16, [](char c) { return std::isalnum(c) || c == '-' || c == '_' || c == 0; })
+				|| npid.handle.data[16] != 0
+				|| !std::all_of(npid.handle.dummy, npid.handle.dummy + 3, [](char val) { return val == 0; }))
+			{
+				return false;
+			}
+
+			return true;
+		}
+	}
+
 	std::vector<u8> get_rawdata(std::vector<u8> data)
 	{
 		u32 size;
@@ -144,18 +158,6 @@ namespace net {
 
 			buffer_cv.notify_all();
 		}
-	}
-
-	bool is_valid_npid(const SceNpId& npid)
-	{
-		if (!std::all_of(npid.handle.data, npid.handle.data + 16, [](char c) { return std::isalnum(c) || c == '-' || c == '_' || c == 0; })
-			|| npid.handle.data[16] != 0
-			|| !std::all_of(npid.handle.dummy, npid.handle.dummy + 3, [](char val) { return val == 0; }))
-		{
-			return false;
-		}
-
-		return true;
 	}
 
 	bool RPCNAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
@@ -678,7 +680,7 @@ namespace net {
 			{
 				// Some games just give us garbage, make sure npid is valid before passing
 				// Ex: Aquapazza (gives uninitialized buffer on the stack and allowedUserNum is hardcoded to 100)
-				if (!is_valid_npid(req->allowedUser[i]))
+				if (!np::is_valid_npid(req->allowedUser[i]))
 				{
 					continue;
 				}
@@ -694,7 +696,7 @@ namespace net {
 			std::vector<flatbuffers::Offset<flatbuffers::String>> davec;
 			for (u32 i = 0; i < req->blockedUserNum; i++)
 			{
-				if (!is_valid_npid(req->blockedUser[i]))
+				if (!np::is_valid_npid(req->blockedUser[i]))
 				{
 					continue;
 				}

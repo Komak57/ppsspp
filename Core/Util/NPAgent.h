@@ -471,6 +471,10 @@ protected:
 	bool error = false;
 };
 
+namespace np {
+	bool is_valid_npid(const SceNpId& npid);
+}
+
 namespace net {
 	struct RPCNResponse {
 		PacketHeader header;
