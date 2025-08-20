@@ -151,6 +151,8 @@ namespace net {
 				NOTICE_LOG(Log::sceNet, "RPCN Sent Notification: %s", NotificationTypeNames[header.command]);
 				notifications[header.reqId] = buf;
 				break;
+			case PacketType::ServerInfo:
+				break;
 			default:
 				WARN_LOG(Log::sceNet, "RPCN Responded with UNHANDLED PacketType (%d)", header.request);
 				break;
