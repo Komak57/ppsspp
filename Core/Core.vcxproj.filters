@@ -1372,6 +1372,9 @@
     <ClCompile Include="HLE\fb_helpers.cpp">
       <Filter>HLE</Filter>
     </ClCompile>
+    <ClCompile Include="HLE\SignalingHandler.cpp">
+      <Filter>HLE</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ELF\ElfReader.h">
@@ -2218,6 +2221,9 @@
       <Filter>HLE</Filter>
     </ClInclude>
     <ClInclude Include="HLE\fb_helpers.h">
+      <Filter>HLE</Filter>
+    </ClInclude>
+    <ClInclude Include="HLE\SignalingHandler.h">
       <Filter>HLE</Filter>
     </ClInclude>
   </ItemGroup>

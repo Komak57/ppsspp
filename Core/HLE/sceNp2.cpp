@@ -26,6 +26,7 @@
 #include <Core\Util\NPAgent.h>
 #include "sceNetResolver.cpp"
 #include <future>
+#include "SignalingHandler.h"
 
 bool npMatching2Inited = false;
 SceNpAuthMemoryStat npMatching2MemStat = {};
@@ -40,6 +41,7 @@ NpMatching2Handler npSignalingCallback;
 u16 tServer;
 std::map<u16, std::unique_ptr<net::NPAgent>> servers;
 std::map<u16, std::future<int>> tasks;
+signaling_handler g_signaling;
 
 template <typename T>
 void Write_Struct(const T& object, const u32 address, const char* tag, size_t taglen) {
@@ -299,6 +301,8 @@ static int sceNpMatching2ContextStop(int ctxId)
 
 	//TODO: Stop any in-progress HTTPClient communication used on sceNpMatching2ContextStart
 	//npMatching2Ctx.started = false;
+	g_signaling.stop();
+
 	if (tServer != 0)
 		servers[tServer]->Disconnect();
 
@@ -358,17 +362,40 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 	if (callbackFunctionAddr == 0 || !Memory::IsValidAddress(callbackFunctionAddr)) {
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "%s - Invalid Callback %08x", __FUNCTION__, callbackFunctionAddr);
 	}
+
+	/*auto ctx = get_match2_context(ctxId);
+
+	if (!ctx)
+	{
+		return SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND;
+	}
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
-	//struct NpMatching2Handler handler;
-	npSignalingCallback = {};
+	std::lock_guard lock(ctx->mutex);
+	ctx->signaling_cb = callbackFunctionAddr;
+	ctx->signaling_cb_arg = callbackArgument;*/
 
-	npSignalingCallback.ctx_id = ctxId; // double handle
-	npSignalingCallback.cb = callbackFunctionAddr;
-	npSignalingCallback.cb_arg = callbackArgument;
+	//auto& sigh = g_fxo->get<named_thread<signaling_handler>>();
+	//sigh.add_match2_ctx(ctxId);
+
+
+	ContextState ctx = {
+		(u32)ctxId,
+		callbackFunctionAddr,
+		callbackArgument,
+		0
+	};
+	g_signaling.add_match2_ctx(ctx);
+
+	//struct NpMatching2Handler handler;
+	//npSignalingCallback = {};
+
+	//npSignalingCallback.ctx_id = ctxId; // double handle
+	//npSignalingCallback.cb = callbackFunctionAddr;
+	//npSignalingCallback.cb_arg = callbackArgument;
 
 	//npMatching2Handlers[0] = handler;
-	NOTICE_LOG(Log::sceNet, "%s - Added SignalingCallback FUN_%08x(%08x)", __FUNCTION__, npSignalingCallback.cb, npSignalingCallback.cb_arg);
+	NOTICE_LOG(Log::sceNet, "%s - Added SignalingCallback FUN_%08x(%08x)", __FUNCTION__, callbackFunctionAddr, callbackArgument);
 	/*if (npMatching2Handlers.find(ctxId) == npMatching2Handlers.end()) {
 		npMatching2Handlers[ctxId] = handler;
 		WARN_LOG(Log::sceNet, "%s - Added handler(%08x, %08x) : %d", __FUNCTION__, handler.cb, handler.cb_arg, ctxId);
@@ -416,6 +443,7 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
 	if (tServer > 0) {
+		g_signaling.stop();
 		servers[tServer]->Disconnect();
 		tServer = 0;
 	}
@@ -511,6 +539,14 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		if (!connected) {
 			ERROR_LOG(Log::sceNet, "Could not connect.");
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+		}
+
+		if (g_signaling.start("rpcn.revurb.us", 3657)) {
+			NOTICE_LOG(Log::sceNet, "Connected to Signaling Server!");
+		}
+		else {
+			ERROR_LOG(Log::sceNet, "Failed to connect to Signaling Server!");
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_CONN_NOT_FOUND));
 		}
 
 		int ret;
