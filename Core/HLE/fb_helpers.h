@@ -12,7 +12,7 @@ namespace np
 	void RoomBinAttrInternal_to_SceNpMatching2RoomBinAttrInternal(BlockAllocator& edata, const BinAttrInternal* fb_attr, PSPPointer<SceNpMatching2RoomBinAttrInternal> binattr_info);
 	void RoomGroup_to_SceNpMatching2RoomGroup(const RoomGroup* fb_group, PSPPointer<SceNpMatching2RoomGroup> sce_group);
 	void RoomGroups_to_SceNpMatching2RoomGroups(const flatbuffers::Vector<flatbuffers::Offset<RoomGroup>>* fb_groups, PSPPointer<SceNpMatching2RoomGroup> sce_groups);
-	void UserInfo_to_SceNpUserInfo(const UserInfo* user, SceNpUserInfo* user_info);
+	void UserInfo_to_SceNpUserInfo(const UserInfo* user, PSPPointer<SceNpUserInfo> user_info);
 	void UserInfo_to_SceNpUserInfo2(BlockAllocator& edata, const UserInfo* user, SceNpUserInfo2* user_info, bool include_onlinename, bool include_avatarurl);
 	void RoomDataExternal_to_SceNpMatching2RoomDataExternal(BlockAllocator& edata, const RoomDataExternal* room, PSPPointer<SceNpMatching2RoomDataExternal> room_info, bool include_onlinename, bool include_avatarurl);
 	void SearchRoomResponse_to_SceNpMatching2SearchRoomResponse(BlockAllocator& edata, const SearchRoomResponse* resp, PSPPointer<SceNpMatching2SearchRoomResponse> search_resp);
