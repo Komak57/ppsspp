@@ -14,8 +14,7 @@
 
 #include "Common/Math/lin/matrix4x4.h"
 
-#include "Common/Input/InputState.h"
-#include "Common/Input/KeyCodes.h"
+// The deps below need to be inverted, or we need to move this file (probably better)
 
 #include "Core/HLE/sceDisplay.h"
 #include "Core/HLE/sceCtrl.h"
@@ -153,6 +152,7 @@ void InitVROnAndroid(void* vm, void* activity, const char* system, int version, 
 	if (strcmp(vendor, "PICO") == 0) {
 		VR_SetPlatformFLag(VR_PLATFORM_CONTROLLER_PICO, true);
 		VR_SetPlatformFLag(VR_PLATFORM_EXTENSION_INSTANCE, true);
+		VR_SetPlatformFLag(VR_PLATFORM_EXTENSION_PASSTHROUGH, true);
 		VR_SetConfigFloat(VR_CONFIG_VIEWPORT_SUPERSAMPLING, 1.0f);
 	} else {
 		VR_SetPlatformFLag(VR_PLATFORM_CONTROLLER_QUEST, true);

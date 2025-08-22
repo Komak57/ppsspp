@@ -124,7 +124,6 @@ static std::wstring g_windowTitle;
 namespace MainWindow
 {
 	HWND hwndMain;
-	HWND hwndDisplay;
 	HWND hwndGameList;
 	TouchInputHandler touchHandler;
 	static HMENU menu;
@@ -151,20 +150,12 @@ namespace MainWindow
 	bool noFocusPause = false;	// TOGGLE_PAUSE state to override pause on lost focus
 	bool trapMouse = true; // Handles some special cases(alt+tab, win menu) when game is running and mouse is confined
 
-#define MAX_LOADSTRING 100
-	const TCHAR *szWindowClass = TEXT("PPSSPPWnd");
-	const TCHAR *szDisplayClass = TEXT("PPSSPPDisplay");
+	static const TCHAR szWindowClass[] = L"PPSSPPWnd";
 
-	// Forward declarations of functions included in this code module:
-	LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
-	LRESULT CALLBACK DisplayProc(HWND, UINT, WPARAM, LPARAM);
+	static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
 	HWND GetHWND() {
 		return hwndMain;
-	}
-
-	HWND GetDisplayHWND() {
-		return hwndDisplay;
 	}
 
 	void SetKeepScreenBright(bool keepBright) {
@@ -180,27 +171,12 @@ namespace MainWindow
 		wcex.lpfnWndProc = (WNDPROC)WndProc;
 		wcex.hInstance = hInstance;
 		wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-		wcex.hbrBackground = NULL;  // Always covered by display window
+		wcex.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
 		wcex.lpszMenuName	= (LPCWSTR)IDR_MENU1;
 		wcex.lpszClassName = szWindowClass;
 		wcex.hIcon = LoadIcon(hInstance, (LPCTSTR)IDI_PPSSPP);
 		wcex.hIconSm = (HICON)LoadImage(hInstance, (LPCTSTR)IDI_PPSSPP, IMAGE_ICON, 16, 16, LR_SHARED);
 		RegisterClassEx(&wcex);
-
-		WNDCLASSEX wcdisp;
-		memset(&wcdisp, 0, sizeof(wcdisp));
-		// Display Window (contained in main window)
-		wcdisp.cbSize = sizeof(WNDCLASSEX);
-		wcdisp.style = CS_HREDRAW | CS_VREDRAW;
-		wcdisp.lpfnWndProc = (WNDPROC)DisplayProc;
-		wcdisp.hInstance = hInstance;
-		wcdisp.hCursor = LoadCursor(NULL, IDC_ARROW);
-		wcdisp.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-		wcdisp.lpszMenuName = 0;
-		wcdisp.lpszClassName = szDisplayClass;
-		wcdisp.hIcon = 0;
-		wcdisp.hIconSm = 0;
-		RegisterClassEx(&wcdisp);
 	}
 
 	void SavePosition() {
@@ -261,9 +237,9 @@ namespace MainWindow
 			}
 			if (g_Config.bMouseConfine) {
 				RECT rc;
-				GetClientRect(hwndDisplay, &rc);
-				ClientToScreen(hwndDisplay, reinterpret_cast<POINT*>(&rc.left));
-				ClientToScreen(hwndDisplay, reinterpret_cast<POINT*>(&rc.right));
+				GetClientRect(hwndMain, &rc);
+				ClientToScreen(hwndMain, reinterpret_cast<POINT*>(&rc.left));
+				ClientToScreen(hwndMain, reinterpret_cast<POINT*>(&rc.right));
 				ClipCursor(&rc);
 			}
 		} else {
@@ -285,9 +261,6 @@ namespace MainWindow
 
 		int width, height;
 		W32Util::GetWindowRes(hwndMain, &width, &height);
-
-		// Moves the internal display window to match the inner size of the main window.
-		MoveWindow(hwndDisplay, 0, 0, width, height, TRUE);
 
 		// Setting pixelWidth to be too small could have odd consequences.
 		if (width >= 4 && height >= 4) {
@@ -403,7 +376,7 @@ namespace MainWindow
 
 	void Minimize() {
 		ShowWindow(hwndMain, SW_MINIMIZE);
-		InputDevice::LoseFocus();
+		g_InputManager.LoseFocus();
 	}
 
 	RECT DetermineWindowRectangle() {
@@ -502,17 +475,8 @@ namespace MainWindow
 
 		SetWindowLong(hwndMain, GWL_EXSTYLE, WS_EX_APPWINDOW);
 
-
 		const DWM_WINDOW_CORNER_PREFERENCE pref = DWMWCP_DONOTROUND;
 		DwmSetWindowAttribute(hwndMain, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
-
-		RECT rcClient;
-		GetClientRect(hwndMain, &rcClient);
-
-		hwndDisplay = CreateWindowEx(0, szDisplayClass, L"", WS_CHILD | WS_VISIBLE,
-			0, 0, rcClient.right - rcClient.left, rcClient.bottom - rcClient.top, hwndMain, 0, hInstance, 0);
-		if (!hwndDisplay)
-			return FALSE;
 
 		menu = GetMenu(hwndMain);
 
@@ -540,12 +504,13 @@ namespace MainWindow
 
 		W32Util::MakeTopMost(hwndMain, g_Config.bTopMost);
 
-		touchHandler.registerTouchWindow(hwndDisplay);
+		touchHandler.registerTouchWindow(hwndMain);
 
 		WindowsRawInput::Init();
 
-		SetFocus(hwndMain);
+		UpdateWindow(hwndMain);
 
+		SetFocus(hwndMain);
 		return TRUE;
 	}
 
@@ -614,15 +579,462 @@ namespace MainWindow
 		vfpudlg = nullptr;
 	}
 
-	LRESULT CALLBACK DisplayProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+	RECT MapRectFromClientToWndCoords(HWND hwnd, const RECT & r)
+	{
+		RECT wnd_coords = r;
+
+		// map to screen
+		MapWindowPoints(hwnd, NULL, reinterpret_cast<POINT *>(&wnd_coords), 2);
+
+		RECT scr_coords;
+		GetWindowRect(hwnd, &scr_coords);
+
+		// map to window coords by substracting the window coord origin in
+		// screen coords.
+		OffsetRect(&wnd_coords, -scr_coords.left, -scr_coords.top);
+
+		return wnd_coords;
+	}
+
+	RECT GetNonclientMenuBorderRect(HWND hwnd)
+	{
+		RECT r;
+		GetClientRect(hwnd, &r);
+		r = MapRectFromClientToWndCoords(hwnd, r);
+		int y = r.top - 1;
+		return {
+			r.left,
+			y,
+			r.right,
+			y + 1
+		};
+	}
+
+	bool ConfirmAction(HWND hWnd, bool actionIsReset) {
+		const GlobalUIState state = GetUIState();
+		if (state == UISTATE_MENU || state == UISTATE_EXIT) {
+			return true;
+		}
+
+		std::string confirmExitMessage = GetConfirmExitMessage();
+		if (confirmExitMessage.empty()) {
+			return true;
+		}
+		auto di = GetI18NCategory(I18NCat::DIALOG);
+		auto mm = GetI18NCategory(I18NCat::MAINMENU);
+		if (!actionIsReset) {
+			confirmExitMessage += '\n';
+			confirmExitMessage += di->T("Are you sure you want to exit?");
+		} else {
+			// Reset is bit rarer, let's just omit the extra message for now.
+		}
+		return IDYES == MessageBox(hWnd, ConvertUTF8ToWString(confirmExitMessage).c_str(), ConvertUTF8ToWString(mm->T("Exit")).c_str(), MB_YESNO | MB_ICONQUESTION);
+	}
+
+	LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)	{
 		static bool firstErase = true;
+		LRESULT darkResult = 0;
+		if (UAHDarkModeWndProc(hWnd, message, wParam, lParam, &darkResult)) {
+			return darkResult;
+		}
+
+		static bool first = true;
+		static bool wasMinimized = false;
 
 		switch (message) {
-		case WM_SIZE:
+		case WM_CREATE:
+			first = true;
+			if (!IsVistaOrHigher()) {
+				// Remove the D3D11 choice on versions below XP
+				RemoveMenu(GetMenu(hWnd), ID_OPTIONS_DIRECT3D11, MF_BYCOMMAND);
+			}
+			if (g_darkModeSupported) {
+				SendMessageW(hWnd, WM_THEMECHANGED, 0, 0);
+			}
+			SetAssertDialogParent(hWnd);
+			break;
+
+		case WM_USER_RUN_CALLBACK:
+		{
+			auto callback = reinterpret_cast<void (*)(void *window, void *userdata)>(wParam);
+			void *userdata = reinterpret_cast<void *>(lParam);
+			callback(hWnd, userdata);
+			break;
+		}
+		case WM_USER_GET_BASE_POINTER:
+			Reporting::NotifyDebugger();
+			switch (lParam) {
+			case 0: return (u32)(u64)Memory::base;
+			case 1: return (u32)((u64)Memory::base >> 32);
+			case 2: return (u32)(u64)(&Memory::base);
+			case 3: return (u32)((u64)(&Memory::base) >> 32);
+			default:
+				return 0;
+			}
+			break;
+
+		case WM_USER_GET_EMULATION_STATE:
+			return (u32)(Core_IsActive() && GetUIState() == UISTATE_INGAME);
+
+		// Hack to kill the white line underneath the menubar.
+		// From https://stackoverflow.com/questions/57177310/how-to-paint-over-white-line-between-menu-bar-and-client-area-of-window
+		case WM_NCPAINT:
+		case WM_NCACTIVATE:
+		{
+			if (!IsDarkModeEnabled() || IsIconic(hWnd)) {
+				return DefWindowProc(hWnd, message, wParam, lParam);
+			}
+
+			auto result = DefWindowProc(hWnd, message, wParam, lParam);
+			// Paint over the line with pure black. Could also try to figure out the dark theme color.
+			HDC hdc = GetWindowDC(hWnd);
+			RECT r = GetNonclientMenuBorderRect(hWnd);
+			HBRUSH red = CreateSolidBrush(RGB(0, 0, 0));
+			FillRect(hdc, &r, red);
+			DeleteObject(red);
+			ReleaseDC(hWnd, hdc);
+			return result;
+		}
+
+		case WM_GETMINMAXINFO:
+			{
+				MINMAXINFO *minmax = reinterpret_cast<MINMAXINFO *>(lParam);
+				RECT rc = { 0 };
+				bool portrait = g_Config.IsPortrait();
+				rc.right = portrait ? 272 : 480;
+				rc.bottom = portrait ? 480 : 272;
+				AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, TRUE);
+				minmax->ptMinTrackSize.x = rc.right - rc.left;
+				minmax->ptMinTrackSize.y = rc.bottom - rc.top;
+			}
+			return 0;
+
+		case WM_ACTIVATE:
+			{
+				UpdateWindowTitle();
+				bool pause = true;
+				if (wParam == WA_ACTIVE || wParam == WA_CLICKACTIVE) {
+					WindowsRawInput::GainFocus();
+					if (!IsIconic(GetHWND())) {
+						g_InputManager.GainFocus();
+					}
+					g_activeWindow = WINDOW_MAINWINDOW;
+					pause = false;
+				} else {
+					g_activeWindow = WINDOW_OTHER;
+				}
+
+				if (!noFocusPause && g_Config.bPauseOnLostFocus && GetUIState() == UISTATE_INGAME) {
+					if (pause != Core_IsStepping()) {
+						if (disasmWindow) {
+							SendMessage(disasmWindow->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
+						} else {
+							if (pause) {
+								Core_Break(BreakReason::UIFocus, 0);
+							} else if (Core_BreakReason() == BreakReason::UIFocus) {
+								Core_Resume();
+							}
+						}
+					}
+				}
+
+				if (wParam == WA_ACTIVE || wParam == WA_CLICKACTIVE) {
+					System_PostUIMessage(UIMessage::GOT_FOCUS);
+					hasFocus = true;
+					trapMouse = true;
+				}
+				if (wParam == WA_INACTIVE) {
+					System_PostUIMessage(UIMessage::LOST_FOCUS);
+					WindowsRawInput::LoseFocus();
+					g_InputManager.LoseFocus();
+					hasFocus = false;
+					trapMouse = false;
+				}
+			}
 			break;
 
 		case WM_SETFOCUS:
+			UpdateWindowTitle();
 			break;
+
+		case WM_ERASEBKGND:
+			if (firstErase) {
+				firstErase = false;
+				// Paint black on first erase while OpenGL stuff is loading
+				return DefWindowProc(hWnd, message, wParam, lParam);
+			}
+			// Then never erase, let the OpenGL drawing take care of everything.
+			return 1;
+
+		case WM_MOVE:
+			SavePosition();
+			break;
+
+		case WM_ENTERSIZEMOVE:
+			inResizeMove = true;
+			break;
+
+		case WM_EXITSIZEMOVE:
+			inResizeMove = false;
+			HandleSizeChange(SIZE_RESTORED);
+			break;
+
+		case WM_SIZE:
+			switch (wParam) {
+			case SIZE_RESTORED:
+			case SIZE_MAXIMIZED:
+				if (g_IgnoreWM_SIZE) {
+					return DefWindowProc(hWnd, message, wParam, lParam);
+				} else if (!inResizeMove) {
+					HandleSizeChange(wParam);
+				}
+				if (hasFocus) {
+					g_InputManager.GainFocus();
+				}
+				if (wasMinimized) {
+					System_PostUIMessage(UIMessage::WINDOW_RESTORED, "true");
+					wasMinimized = false;
+				}
+				break;
+
+			case SIZE_MINIMIZED:
+				Native_NotifyWindowHidden(true);
+				if (!g_Config.bPauseWhenMinimized) {
+					System_PostUIMessage(UIMessage::WINDOW_MINIMIZED, "true");
+				}
+				g_InputManager.LoseFocus();
+				wasMinimized = true;
+				break;
+			default:
+				break;
+			}
+			break;
+
+		// Wheel events have to stay in WndProc for compatibility with older Windows(7). See #12156
+		case WM_MOUSEWHEEL:
+			{
+				int wheelDelta = (short)(wParam >> 16);
+				KeyInput key;
+				key.deviceId = DEVICE_ID_MOUSE;
+
+				if (wheelDelta < 0) {
+					key.keyCode = NKCODE_EXT_MOUSEWHEEL_DOWN;
+					wheelDelta = -wheelDelta;
+				} else {
+					key.keyCode = NKCODE_EXT_MOUSEWHEEL_UP;
+				}
+				// There's no release event, but we simulate it in NativeKey/NativeFrame.
+				key.flags = KEY_DOWN | KEY_HASWHEELDELTA | (wheelDelta << 16);
+				NativeKey(key);
+			}
+			break;
+
+		case WM_TIMER:
+			// Hack: Take the opportunity to also show/hide the mouse cursor in fullscreen mode.
+			switch (wParam) {
+			case TIMER_CURSORUPDATE:
+				CorrectCursor();
+				return 0;
+
+			case TIMER_CURSORMOVEUPDATE:
+				hideCursor = true;
+				KillTimer(hWnd, TIMER_CURSORMOVEUPDATE);
+				return 0;
+			}
+			break;
+
+		case WM_COMMAND:
+			{
+				if (!MainThread_Ready())
+					return DefWindowProc(hWnd, message, wParam, lParam);
+
+				MainWindowMenu_Process(hWnd, wParam);
+			}
+			break;
+
+		case WM_USER_TOGGLE_FULLSCREEN:
+			ToggleFullscreen(hwndMain, wParam ? true : false);
+			break;
+
+		case WM_INPUT:
+			return WindowsRawInput::Process(hWnd, wParam, lParam);
+
+		// TODO: Could do something useful with WM_INPUT_DEVICE_CHANGE?
+
+		// Not sure why we are actually getting WM_CHAR even though we use RawInput, but alright..
+		case WM_CHAR:
+			return WindowsRawInput::ProcessChar(hWnd, wParam, lParam);
+
+		case WM_DEVICECHANGE:
+#ifndef _M_ARM
+			DinputDevice::CheckDevices();
+#endif
+			if (winCamera)
+				winCamera->CheckDevices();
+			if (winMic)
+				winMic->CheckDevices();
+			return DefWindowProc(hWnd, message, wParam, lParam);
+
+		case WM_VERYSLEEPY_MSG:
+			switch (wParam) {
+			case VERYSLEEPY_WPARAM_SUPPORTED:
+				return TRUE;
+
+			case VERYSLEEPY_WPARAM_GETADDRINFO:
+				{
+					VerySleepy_AddrInfo *info = (VerySleepy_AddrInfo *)lParam;
+					const u8 *ptr = (const u8 *)info->addr;
+					std::string name;
+
+					std::lock_guard<std::recursive_mutex> guard(MIPSComp::jitLock);
+					if (MIPSComp::jit && MIPSComp::jit->DescribeCodePtr(ptr, name)) {
+						swprintf_s(info->name, L"Jit::%S", name.c_str());
+						return TRUE;
+					}
+					if (gpu && gpu->DescribeCodePtr(ptr, name)) {
+						swprintf_s(info->name, L"GPU::%S", name.c_str());
+						return TRUE;
+					}
+				}
+				return FALSE;
+
+			default:
+				return FALSE;
+			}
+			break;
+
+		case WM_DROPFILES:
+			{
+				if (!MainThread_Ready())
+					return DefWindowProc(hWnd, message, wParam, lParam);
+
+				HDROP hdrop = (HDROP)wParam;
+				int count = DragQueryFile(hdrop, 0xFFFFFFFF, 0, 0);
+				if (count != 1) {
+					// TODO: Translate? Or just not bother?
+					MessageBox(hwndMain, L"You can only load one file at a time", L"Error", MB_ICONINFORMATION);
+				} else {
+					wchar_t filename[1024];
+					if (DragQueryFile(hdrop, 0, filename, ARRAY_SIZE(filename)) != 0) {
+						const std::string utf8_filename = ReplaceAll(ConvertWStringToUTF8(filename), "\\", "/");
+						System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, utf8_filename);
+					}
+				}
+				DragFinish(hdrop);
+			}
+			break;
+
+		case WM_CLOSE:
+		{
+			if (ConfirmAction(hWnd, false)) {
+				DestroyWindow(hWnd);
+			}
+			return 0;
+		}
+
+		case WM_DESTROY:
+			g_InputManager.StopPolling();
+			g_InputManager.Shutdown();
+			WindowsRawInput::Shutdown();
+
+			MainThread_Stop();
+			KillTimer(hWnd, TIMER_CURSORUPDATE);
+			KillTimer(hWnd, TIMER_CURSORMOVEUPDATE);
+			// Main window is gone, this tells the message loop to exit.
+			PostQuitMessage(0);
+			return 0;
+
+		case WM_USER + 1:
+			NotifyDebuggerMapLoaded();
+			if (disasmWindow)
+				disasmWindow->UpdateDialog();
+			break;
+
+		case WM_USER_SAVESTATE_FINISH:
+			SetCursor(LoadCursor(0, IDC_ARROW));
+			break;
+
+		case WM_USER_UPDATE_UI:
+			TranslateMenus(hwndMain, menu);
+			// Update checked status immediately for accelerators.
+			UpdateMenus();
+			break;
+
+		case WM_USER_WINDOW_TITLE_CHANGED:
+			UpdateWindowTitle();
+			break;
+
+		case WM_USER_RESTART_EMUTHREAD:
+			NativeSetRestarting();
+			g_InputManager.StopPolling();
+			MainThread_Stop();
+			UpdateUIState(UISTATE_MENU);
+			MainThread_Start(g_Config.iGPUBackend == (int)GPUBackend::OPENGL);
+			g_InputManager.BeginPolling();
+			break;
+
+		case WM_USER_SWITCHUMD_UPDATED:
+			UpdateSwitchUMD();
+			break;
+
+		case WM_USER_DESTROY:
+			DestroyWindow(hWnd);
+			break;
+
+		case WM_MENUSELECT:
+			// Called when a menu is opened. Also when an item is selected, but meh.
+			UpdateMenus(true);
+			WindowsRawInput::NotifyMenu();
+			trapMouse = false;
+			break;
+
+		case WM_EXITMENULOOP:
+			// Called when menu is closed.
+			trapMouse = true;
+			break;
+
+		// Turn off the screensaver if in-game.
+		// Note that if there's a screensaver password, this simple method
+		// doesn't work on Vista or higher.
+		case WM_SYSCOMMAND:
+			// Disable Alt key for menu if it's been mapped.
+			if (wParam == SC_KEYMENU && (lParam >> 16) <= 0) {
+				if (KeyMap::IsKeyMapped(DEVICE_ID_KEYBOARD, NKCODE_ALT_LEFT) || KeyMap::IsKeyMapped(DEVICE_ID_KEYBOARD, NKCODE_ALT_RIGHT)) {
+					return 0;
+				}
+			}
+			if (g_keepScreenBright) {
+				switch (wParam) {
+				case SC_SCREENSAVE:
+					return 0;
+				case SC_MONITORPOWER:
+					if (lParam == 1 || lParam == 2) {
+						return 0;
+					} else {
+						break;
+					}
+				default:
+					// fall down to DefWindowProc
+					break;
+				}
+			}
+			return DefWindowProc(hWnd, message, wParam, lParam);
+		case WM_SETTINGCHANGE:
+			{
+				if (g_darkModeSupported && IsColorSchemeChangeMessage(lParam))
+					SendMessageW(hWnd, WM_THEMECHANGED, 0, 0);
+			}
+			return DefWindowProc(hWnd, message, wParam, lParam);
+
+		case WM_THEMECHANGED:
+		{
+			if (g_darkModeSupported)
+			{
+				_AllowDarkModeForWindow(hWnd, g_darkModeEnabled);
+				RefreshTitleBarThemeColor(hWnd);
+			}
+			return DefWindowProc(hWnd, message, wParam, lParam);
+		}
 
 		case WM_SETCURSOR:
 			if ((lParam & 0xFFFF) == HTCLIENT && g_Config.bShowImDebugger) {
@@ -650,15 +1062,6 @@ namespace MainWindow
 				return DefWindowProc(hWnd, message, wParam, lParam);
 			}
 			break;
-
-		case WM_ERASEBKGND:
-			if (firstErase) {
-				firstErase = false;
-				// Paint black on first erase while OpenGL stuff is loading
-				return DefWindowProc(hWnd, message, wParam, lParam);
-			}
-			// Then never erase, let the OpenGL drawing take care of everything.
-			return 1;
 
 		// Mouse input. We send asynchronous touch events for minimal latency.
 		case WM_LBUTTONDOWN:
@@ -792,456 +1195,6 @@ namespace MainWindow
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
 		return 0;
-	}
-
-	RECT MapRectFromClientToWndCoords(HWND hwnd, const RECT & r)
-	{
-		RECT wnd_coords = r;
-
-		// map to screen
-		MapWindowPoints(hwnd, NULL, reinterpret_cast<POINT *>(&wnd_coords), 2);
-
-		RECT scr_coords;
-		GetWindowRect(hwnd, &scr_coords);
-
-		// map to window coords by substracting the window coord origin in
-		// screen coords.
-		OffsetRect(&wnd_coords, -scr_coords.left, -scr_coords.top);
-
-		return wnd_coords;
-	}
-
-	RECT GetNonclientMenuBorderRect(HWND hwnd)
-	{
-		RECT r;
-		GetClientRect(hwnd, &r);
-		r = MapRectFromClientToWndCoords(hwnd, r);
-		int y = r.top - 1;
-		return {
-			r.left,
-			y,
-			r.right,
-			y + 1
-		};
-	}
-
-	bool ConfirmAction(HWND hWnd, bool actionIsReset) {
-		const GlobalUIState state = GetUIState();
-		if (state == UISTATE_MENU || state == UISTATE_EXIT) {
-			return true;
-		}
-
-		std::string confirmExitMessage = GetConfirmExitMessage();
-		if (confirmExitMessage.empty()) {
-			return true;
-		}
-		auto di = GetI18NCategory(I18NCat::DIALOG);
-		auto mm = GetI18NCategory(I18NCat::MAINMENU);
-		if (!actionIsReset) {
-			confirmExitMessage += '\n';
-			confirmExitMessage += di->T("Are you sure you want to exit?");
-		} else {
-			// Reset is bit rarer, let's just omit the extra message for now.
-		}
-		return IDYES == MessageBox(hWnd, ConvertUTF8ToWString(confirmExitMessage).c_str(), ConvertUTF8ToWString(mm->T("Exit")).c_str(), MB_YESNO | MB_ICONQUESTION);
-	}
-
-	LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)	{
-		LRESULT darkResult = 0;
-		if (UAHDarkModeWndProc(hWnd, message, wParam, lParam, &darkResult)) {
-			return darkResult;
-		}
-
-		switch (message) {
-		case WM_CREATE:
-			if (!IsVistaOrHigher()) {
-				// Remove the D3D11 choice on versions below XP
-				RemoveMenu(GetMenu(hWnd), ID_OPTIONS_DIRECT3D11, MF_BYCOMMAND);
-			}
-			if (g_darkModeSupported) {
-				SendMessageW(hWnd, WM_THEMECHANGED, 0, 0);
-			}
-			SetAssertDialogParent(hWnd);
-			break;
-
-		case WM_USER_RUN_CALLBACK:
-		{
-			auto callback = reinterpret_cast<void (*)(void *window, void *userdata)>(wParam);
-			void *userdata = reinterpret_cast<void *>(lParam);
-			callback(hWnd, userdata);
-			break;
-		}
-		case WM_USER_GET_BASE_POINTER:
-			Reporting::NotifyDebugger();
-			switch (lParam) {
-			case 0: return (u32)(u64)Memory::base;
-			case 1: return (u32)((u64)Memory::base >> 32);
-			case 2: return (u32)(u64)(&Memory::base);
-			case 3: return (u32)((u64)(&Memory::base) >> 32);
-			default:
-				return 0;
-			}
-			break;
-
-		case WM_USER_GET_EMULATION_STATE:
-			return (u32)(Core_IsActive() && GetUIState() == UISTATE_INGAME);
-
-		// Hack to kill the white line underneath the menubar.
-		// From https://stackoverflow.com/questions/57177310/how-to-paint-over-white-line-between-menu-bar-and-client-area-of-window
-		case WM_NCPAINT:
-		case WM_NCACTIVATE:
-		{
-			if (!IsDarkModeEnabled() || IsIconic(hWnd)) {
-				return DefWindowProc(hWnd, message, wParam, lParam);
-			}
-
-			auto result = DefWindowProc(hWnd, message, wParam, lParam);
-			// Paint over the line with pure black. Could also try to figure out the dark theme color.
-			HDC hdc = GetWindowDC(hWnd);
-			RECT r = GetNonclientMenuBorderRect(hWnd);
-			HBRUSH red = CreateSolidBrush(RGB(0, 0, 0));
-			FillRect(hdc, &r, red);
-			DeleteObject(red);
-			ReleaseDC(hWnd, hdc);
-			return result;
-		}
-
-		case WM_GETMINMAXINFO:
-			{
-				MINMAXINFO *minmax = reinterpret_cast<MINMAXINFO *>(lParam);
-				RECT rc = { 0 };
-				bool portrait = g_Config.IsPortrait();
-				rc.right = portrait ? 272 : 480;
-				rc.bottom = portrait ? 480 : 272;
-				AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, TRUE);
-				minmax->ptMinTrackSize.x = rc.right - rc.left;
-				minmax->ptMinTrackSize.y = rc.bottom - rc.top;
-			}
-			return 0;
-
-		case WM_ACTIVATE:
-			{
-				UpdateWindowTitle();
-				bool pause = true;
-				if (wParam == WA_ACTIVE || wParam == WA_CLICKACTIVE) {
-					WindowsRawInput::GainFocus();
-					if (!IsIconic(GetHWND())) {
-						InputDevice::GainFocus();
-					}
-					g_activeWindow = WINDOW_MAINWINDOW;
-					pause = false;
-				} else {
-					g_activeWindow = WINDOW_OTHER;
-				}
-
-				if (!noFocusPause && g_Config.bPauseOnLostFocus && GetUIState() == UISTATE_INGAME) {
-					if (pause != Core_IsStepping()) {
-						if (disasmWindow) {
-							SendMessage(disasmWindow->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
-						} else {
-							if (pause) {
-								Core_Break(BreakReason::UIFocus, 0);
-							} else if (Core_BreakReason() == BreakReason::UIFocus) {
-								Core_Resume();
-							}
-						}
-					}
-				}
-
-				if (wParam == WA_ACTIVE || wParam == WA_CLICKACTIVE) {
-					System_PostUIMessage(UIMessage::GOT_FOCUS);
-					hasFocus = true;
-					trapMouse = true;
-				}
-				if (wParam == WA_INACTIVE) {
-					System_PostUIMessage(UIMessage::LOST_FOCUS);
-					WindowsRawInput::LoseFocus();
-					InputDevice::LoseFocus();
-					hasFocus = false;
-					trapMouse = false;
-				}
-			}
-			break;
-
-		case WM_SETFOCUS:
-			UpdateWindowTitle();
-			break;
-
-		case WM_ERASEBKGND:
-			// This window is always covered by DisplayWindow. No reason to erase.
-			return 0;
-
-		case WM_MOVE:
-			SavePosition();
-			break;
-
-		case WM_ENTERSIZEMOVE:
-			inResizeMove = true;
-			break;
-
-		case WM_EXITSIZEMOVE:
-			inResizeMove = false;
-			HandleSizeChange(SIZE_RESTORED);
-			break;
-
-		case WM_SIZE:
-			switch (wParam) {
-			case SIZE_RESTORED:
-			case SIZE_MAXIMIZED:
-				if (g_IgnoreWM_SIZE) {
-					return DefWindowProc(hWnd, message, wParam, lParam);
-				} else if (!inResizeMove) {
-					HandleSizeChange(wParam);
-				}
-				if (hasFocus) {
-					InputDevice::GainFocus();
-				}
-				break;
-
-			case SIZE_MINIMIZED:
-				Native_NotifyWindowHidden(true);
-				if (!g_Config.bPauseWhenMinimized) {
-					System_PostUIMessage(UIMessage::WINDOW_MINIMIZED, "true");
-				}
-				InputDevice::LoseFocus();
-				break;
-			default:
-				break;
-			}
-			break;
-
-		// Wheel events have to stay in WndProc for compatibility with older Windows(7). See #12156
-		case WM_MOUSEWHEEL:
-			{
-				int wheelDelta = (short)(wParam >> 16);
-				KeyInput key;
-				key.deviceId = DEVICE_ID_MOUSE;
-
-				if (wheelDelta < 0) {
-					key.keyCode = NKCODE_EXT_MOUSEWHEEL_DOWN;
-					wheelDelta = -wheelDelta;
-				} else {
-					key.keyCode = NKCODE_EXT_MOUSEWHEEL_UP;
-				}
-				// There's no release event, but we simulate it in NativeKey/NativeFrame.
-				key.flags = KEY_DOWN | KEY_HASWHEELDELTA | (wheelDelta << 16);
-				NativeKey(key);
-			}
-			break;
-
-		case WM_TIMER:
-			// Hack: Take the opportunity to also show/hide the mouse cursor in fullscreen mode.
-			switch (wParam) {
-			case TIMER_CURSORUPDATE:
-				CorrectCursor();
-				return 0;
-
-			case TIMER_CURSORMOVEUPDATE:
-				hideCursor = true;
-				KillTimer(hWnd, TIMER_CURSORMOVEUPDATE);
-				return 0;
-			}
-			break;
-
-		case WM_COMMAND:
-			{
-				if (!MainThread_Ready())
-					return DefWindowProc(hWnd, message, wParam, lParam);
-
-				MainWindowMenu_Process(hWnd, wParam);
-			}
-			break;
-
-		case WM_USER_TOGGLE_FULLSCREEN:
-			ToggleFullscreen(hwndMain, wParam ? true : false);
-			break;
-
-		case WM_INPUT:
-			return WindowsRawInput::Process(hWnd, wParam, lParam);
-
-		// TODO: Could do something useful with WM_INPUT_DEVICE_CHANGE?
-
-		// Not sure why we are actually getting WM_CHAR even though we use RawInput, but alright..
-		case WM_CHAR:
-			return WindowsRawInput::ProcessChar(hWnd, wParam, lParam);
-
-		case WM_DEVICECHANGE:
-#ifndef _M_ARM
-			DinputDevice::CheckDevices();
-#endif
-			if (winCamera)
-				winCamera->CheckDevices();
-			if (winMic)
-				winMic->CheckDevices();
-			return DefWindowProc(hWnd, message, wParam, lParam);
-
-		case WM_VERYSLEEPY_MSG:
-			switch (wParam) {
-			case VERYSLEEPY_WPARAM_SUPPORTED:
-				return TRUE;
-
-			case VERYSLEEPY_WPARAM_GETADDRINFO:
-				{
-					VerySleepy_AddrInfo *info = (VerySleepy_AddrInfo *)lParam;
-					const u8 *ptr = (const u8 *)info->addr;
-					std::string name;
-
-					std::lock_guard<std::recursive_mutex> guard(MIPSComp::jitLock);
-					if (MIPSComp::jit && MIPSComp::jit->DescribeCodePtr(ptr, name)) {
-						swprintf_s(info->name, L"Jit::%S", name.c_str());
-						return TRUE;
-					}
-					if (gpu && gpu->DescribeCodePtr(ptr, name)) {
-						swprintf_s(info->name, L"GPU::%S", name.c_str());
-						return TRUE;
-					}
-				}
-				return FALSE;
-
-			default:
-				return FALSE;
-			}
-			break;
-
-		case WM_DROPFILES:
-			{
-				if (!MainThread_Ready())
-					return DefWindowProc(hWnd, message, wParam, lParam);
-
-				HDROP hdrop = (HDROP)wParam;
-				int count = DragQueryFile(hdrop, 0xFFFFFFFF, 0, 0);
-				if (count != 1) {
-					// TODO: Translate? Or just not bother?
-					MessageBox(hwndMain, L"You can only load one file at a time", L"Error", MB_ICONINFORMATION);
-				} else {
-					TCHAR filename[1024];
-					if (DragQueryFile(hdrop, 0, filename, ARRAY_SIZE(filename)) != 0) {
-						const std::string utf8_filename = ReplaceAll(ConvertWStringToUTF8(filename), "\\", "/");
-						System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, utf8_filename);
-					}
-				}
-				DragFinish(hdrop);
-			}
-			break;
-
-		case WM_CLOSE:
-		{
-			if (ConfirmAction(hWnd, false)) {
-				DestroyWindow(hWnd);
-			}
-			return 0;
-		}
-
-		case WM_DESTROY:
-			InputDevice::StopPolling();
-			MainThread_Stop();
-			WindowsRawInput::Shutdown();
-			KillTimer(hWnd, TIMER_CURSORUPDATE);
-			KillTimer(hWnd, TIMER_CURSORMOVEUPDATE);
-			// Main window is gone, this tells the message loop to exit.
-			PostQuitMessage(0);
-			return 0;
-
-		case WM_USER + 1:
-			NotifyDebuggerMapLoaded();
-			if (disasmWindow)
-				disasmWindow->UpdateDialog();
-			break;
-
-		case WM_USER_SAVESTATE_FINISH:
-			SetCursor(LoadCursor(0, IDC_ARROW));
-			break;
-
-		case WM_USER_UPDATE_UI:
-			TranslateMenus(hwndMain, menu);
-			// Update checked status immediately for accelerators.
-			UpdateMenus();
-			break;
-
-		case WM_USER_WINDOW_TITLE_CHANGED:
-			UpdateWindowTitle();
-			break;
-
-		case WM_USER_RESTART_EMUTHREAD:
-			NativeSetRestarting();
-			InputDevice::StopPolling();
-			MainThread_Stop();
-			UpdateUIState(UISTATE_MENU);
-			MainThread_Start(g_Config.iGPUBackend == (int)GPUBackend::OPENGL);
-			InputDevice::BeginPolling();
-			break;
-
-		case WM_USER_SWITCHUMD_UPDATED:
-			UpdateSwitchUMD();
-			break;
-
-		case WM_USER_DESTROY:
-			DestroyWindow(hWnd);
-			break;
-
-		case WM_MENUSELECT:
-			// Called when a menu is opened. Also when an item is selected, but meh.
-			UpdateMenus(true);
-			WindowsRawInput::NotifyMenu();
-			trapMouse = false;
-			break;
-
-		case WM_EXITMENULOOP:
-			// Called when menu is closed.
-			trapMouse = true;
-			break;
-
-		// Turn off the screensaver if in-game.
-		// Note that if there's a screensaver password, this simple method
-		// doesn't work on Vista or higher.
-		case WM_SYSCOMMAND:
-			// Disable Alt key for menu if it's been mapped.
-			if (wParam == SC_KEYMENU && (lParam >> 16) <= 0) {
-				if (KeyMap::IsKeyMapped(DEVICE_ID_KEYBOARD, NKCODE_ALT_LEFT) || KeyMap::IsKeyMapped(DEVICE_ID_KEYBOARD, NKCODE_ALT_RIGHT)) {
-					return 0;
-				}
-			}
-			if (g_keepScreenBright) {
-				switch (wParam) {
-				case SC_SCREENSAVE:
-					return 0;
-				case SC_MONITORPOWER:
-					if (lParam == 1 || lParam == 2) {
-						return 0;
-					} else {
-						break;
-					}
-				default:
-					// fall down to DefWindowProc
-					break;
-				}
-			}
-			return DefWindowProc(hWnd, message, wParam, lParam);
-		case WM_SETTINGCHANGE:
-			{
-				if (g_darkModeSupported && IsColorSchemeChangeMessage(lParam))
-					SendMessageW(hWnd, WM_THEMECHANGED, 0, 0);
-			}
-			return DefWindowProc(hWnd, message, wParam, lParam);
-
-		case WM_THEMECHANGED:
-		{
-			if (g_darkModeSupported)
-			{
-				_AllowDarkModeForWindow(hWnd, g_darkModeEnabled);
-				RefreshTitleBarThemeColor(hWnd);
-			}
-			return DefWindowProc(hWnd, message, wParam, lParam);
-		}
-
-		default:
-			return DefWindowProc(hWnd, message, wParam, lParam);
-		}
-		return 0;
-	}
-
-	void Redraw() {
-		InvalidateRect(hwndDisplay,0,0);
 	}
 
 	HINSTANCE GetHInstance() {

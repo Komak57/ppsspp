@@ -15,6 +15,7 @@
 
 #include "Core/Debugger/DisassemblyManager.h"
 #include "Core/Debugger/DebugInterface.h"
+#include "Core/Debugger/Watch.h"
 
 #include "UI/ImDebugger/ImDisasmView.h"
 #include "UI/ImDebugger/ImMemView.h"
@@ -86,6 +87,7 @@ struct ImConfig {
 	bool atracToolOpen;
 	bool memViewOpen[4];
 	bool luaConsoleOpen;
+	bool audioOutOpen;
 
 	// HLE explorer settings
 	// bool filterByUsed = true;
@@ -101,6 +103,7 @@ struct ImConfig {
 	int selectedMemCheck = -1;
 	int selectedAtracCtx = 0;
 	int selectedMp3Ctx = 0;
+	int selectedAacCtx = 0;
 	int selectedMemoryBlock = 0;
 	u32 selectedMpegCtx = 0;
 
@@ -132,6 +135,19 @@ public:
 	std::unique_ptr<Track> track_;
 	std::string error_;
 	std::string data_;
+};
+
+class ImWatchWindow {
+public:
+	ImWatchWindow();
+	void Draw(ImConfig &cfg, ImControl &control, MIPSDebugInterface *mipsDebug);
+private:
+	std::vector<WatchInfo> watches_;
+
+	char editBuffer_[256];
+	int editingWatchIndex_ = -1;
+	int editingColumn_ = 0;
+	bool setEditFocus_ = false;
 };
 
 enum class ImCmd {
@@ -185,6 +201,7 @@ private:
 	ImStructViewer structViewer_;
 	ImGePixelViewerWindow pixelViewer_;
 	ImMemDumpWindow memDumpWindow_;
+	ImWatchWindow watchWindow_;
 	ImAtracToolWindow atracToolWindow_;
 	ImConsole luaConsole_;
 

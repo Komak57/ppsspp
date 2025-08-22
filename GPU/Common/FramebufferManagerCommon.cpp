@@ -1528,7 +1528,7 @@ bool FramebufferManagerCommon::DrawFramebufferToOutput(const u8 *srcPixels, int 
 		flags |= OutputFlags::BACKBUFFER_FLIPPED;
 	}
 	// CopyToOutput reverses these, probably to match "up".
-	if (GetGPUBackend() == GPUBackend::DIRECT3D9 || GetGPUBackend() == GPUBackend::DIRECT3D11) {
+	if (GetGPUBackend() == GPUBackend::DIRECT3D11) {
 		flags |= OutputFlags::POSITION_FLIPPED;
 	}
 
@@ -1695,7 +1695,7 @@ void FramebufferManagerCommon::CopyDisplayToOutput(bool reallyDirty) {
 			flags |= OutputFlags::BACKBUFFER_FLIPPED;
 		}
 		// DrawActiveTexture reverses these, probably to match "up".
-		if (GetGPUBackend() == GPUBackend::DIRECT3D9 || GetGPUBackend() == GPUBackend::DIRECT3D11) {
+		if (GetGPUBackend() == GPUBackend::DIRECT3D11) {
 			flags |= OutputFlags::POSITION_FLIPPED;
 		}
 
@@ -1707,6 +1707,8 @@ void FramebufferManagerCommon::CopyDisplayToOutput(bool reallyDirty) {
 	} else if (useBufferedRendering_) {
 		WARN_LOG(Log::FrameBuf, "Using buffered rendering, and current VFB lacks an FBO: %08x", vfb->fb_address);
 	} else {
+		// This is OK because here we're in "skip buffered" mode, so even if we haven't presented
+		// we will have a render target.
 		presentation_->NotifyPresent();
 	}
 
@@ -2070,9 +2072,9 @@ bool FramebufferManagerCommon::NotifyFramebufferCopy(u32 src, u32 dst, int size,
 		if (!ignoreDstBuffer && dst >= vfb_address && (dst + size <= vfb_address + vfb_size || dst == vfb_address)) {
 			const u32 offset = dst - vfb_address;
 			const u32 yOffset = offset / vfb_byteStride;
-			if ((offset % vfb_byteStride) == 0 && (size == vfb_byteWidth || (size % vfb_byteStride) == 0)) {
+			if ((offset % vfb_byteStride) == 0 && (size <= vfb_byteWidth || (size % vfb_byteStride) == 0)) {
 				dstCandidate.y = yOffset;
-				dstCandidate.h = (size == vfb_byteWidth) ? 1 : std::min((u32)size / vfb_byteStride, (u32)vfb->height);
+				dstCandidate.h = (size <= vfb_byteWidth) ? 1 : std::min((u32)size / vfb_byteStride, (u32)vfb->height);
 				dstCandidates.push_back(dstCandidate);
 			}
 		}

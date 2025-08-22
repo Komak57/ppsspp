@@ -115,7 +115,6 @@ public:
 	bool bFuncReplacements;
 	bool bHideSlowWarnings;
 	bool bHideStateWarnings;
-	bool bPreloadFunctions;
 	uint32_t uJitDisableFlags;
 
 	bool bDisableHTTPS;
@@ -169,6 +168,8 @@ public:
 	bool bCameraMirrorHorizontal;
 	int iDisplayFramerateMode;  // enum DisplayFramerateMode. Android-only.
 	int iDisplayRefreshRate = 60;
+	int iVulkanPresentationMode;
+	bool bVSync;
 
 	bool bSoftwareRendering;
 	bool bSoftwareRenderingJit;
@@ -197,7 +198,6 @@ public:
 	bool bImmersiveMode;  // Mode on Android Kitkat 4.4 and later that hides the back button etc.
 	bool bSustainedPerformanceMode;  // Android: Slows clocks down to avoid overheating/speed fluctuations.
 	bool bIgnoreScreenInsets;  // Android: Center screen disregarding insets if this is enabled.
-	bool bVSync;
 
 	bool bShowImDebugger;
 
@@ -288,8 +288,10 @@ public:
 
 	// Sound
 	bool bEnableSound;
-	int iAudioBackend;
 	int iSDLAudioBufferSize;
+	int iAudioBufferSize;
+	bool bFillAudioGaps;
+	int iAudioSyncMode;
 
 	// Legacy volume settings, 0-10. These get auto-upgraded and should not be used.
 	int iLegacyGameVolume;
@@ -300,6 +302,7 @@ public:
 	int iGameVolume;
 	int iReverbVolume;
 	int iUIVolume;
+	int iGamePreviewVolume;  // Volume for the game preview sound in the game grid.
 	int iAchievementVolume;
 	int iAltSpeedVolume;
 
@@ -452,7 +455,6 @@ public:
 	bool bStrictComboOrder;
 
 	bool bMouseControl;
-	bool bMapMouse; // Workaround for mapping screen:|
 	bool bMouseConfine; // Trap inside the window.
 	float fMouseSensitivity;
 	float fMouseSmoothing;
@@ -483,10 +485,12 @@ public:
 	// Networking
 	bool bEnableAdhocServer;
 	std::string proAdhocServer;
+	std::vector<std::string> proAdhocServerList;
 	std::string sInfrastructureDNSServer;
 	std::string sInfrastructureUsername;  // Username used for Infrastructure play. Different restrictions.
 	bool bInfrastructureAutoDNS;
 	bool bAllowSavestateWhileConnected;  // Developer option, ini-only. No normal users need this, it's always wrong to save/load state when online.
+	bool bAllowSpeedControlWhileConnected;  // Useful in some games but not recommended.
 
 	bool bEnableWlan;
 	std::map<std::string, std::string> mHostToAlias;  // Local DNS database stored in ini file
@@ -590,7 +594,7 @@ public:
 	std::string sAchievementsUnlockAudioFile;
 	std::string sAchievementsLeaderboardSubmitAudioFile;
 
-	// Achivements login info. Note that password is NOT stored, only a login token.
+	// Achievements login info. Note that password is NOT stored, only a login token.
 	// Still, we may wanna store it more securely than in PPSSPP.ini, especially on Android.
 	std::string sAchievementsUserName;
 	std::string sAchievementsToken;  // Not saved, to be used if you want to manually make your RA login persistent. See Native_SaveSecret for the normal case.
@@ -603,11 +607,6 @@ public:
 	Path flash0Directory;
 	Path internalDataDirectory;
 	Path appCacheDirectory;
-
-	// Data for upgrade prompt
-	std::string upgradeMessage;  // The actual message from the server is currently not used, need a translation mechanism. So this just acts as a flag.
-	std::string upgradeVersion;
-	std::string dismissedVersion;
 
 	void Load(const char *iniFileName = nullptr, const char *controllerIniFilename = nullptr);
 	bool Save(const char *saveReason);
@@ -628,9 +627,6 @@ public:
 	const Path FindConfigFile(const std::string &baseFilename, bool *exists);
 
 	void UpdateIniLocation(const char *iniFileName = nullptr, const char *controllerIniFilename = nullptr);
-
-	static void DownloadCompletedCallback(http::Request &download);
-	void DismissUpgrade();
 
 	void ResetControlLayout();
 

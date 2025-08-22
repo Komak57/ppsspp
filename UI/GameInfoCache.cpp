@@ -198,7 +198,8 @@ u64 GameInfo::GetSizeUncompressedInBytes() {
 		return File::ComputeRecursiveDirectorySize(GetFileLoader()->GetPath());
 	default:
 	{
-		BlockDevice *blockDevice = constructBlockDevice(GetFileLoader().get());
+		std::string errorString;
+		BlockDevice *blockDevice = ConstructBlockDevice(GetFileLoader().get(), &errorString);
 		if (blockDevice) {
 			u64 size = blockDevice->GetUncompressedSize();
 			delete blockDevice;
@@ -603,7 +604,7 @@ public:
 					info_->icon.dataLoaded = true;
 				}
 
-				if (flags_ & GameInfoFlags::BG) {
+				if (flags_ & GameInfoFlags::PIC0) {
 					if (pbp.GetSubFileSize(PBP_PIC0_PNG) > 0) {
 						std::string data;
 						pbp.GetSubFileAsString(PBP_PIC0_PNG, &data);
@@ -611,6 +612,8 @@ public:
 						info_->pic0.data = std::move(data);
 						info_->pic0.dataLoaded = true;
 					}
+				}
+				if (flags_ & GameInfoFlags::PIC1) {
 					if (pbp.GetSubFileSize(PBP_PIC1_PNG) > 0) {
 						std::string data;
 						pbp.GetSubFileAsString(PBP_PIC1_PNG, &data);
@@ -678,7 +681,7 @@ handleELF:
 				ReadFileToString(&umd, "/ICON0.PNG", &info_->icon.data, &info_->lock);
 				info_->icon.dataLoaded = true;
 			}
-			if (flags_ & GameInfoFlags::BG) {
+			if (flags_ & GameInfoFlags::PIC1) {
 				ReadFileToString(&umd, "/PIC1.PNG", &info_->pic1.data, &info_->lock);
 				info_->pic1.dataLoaded = true;
 			}
@@ -734,9 +737,11 @@ handleELF:
 					ReadFileToString(&umd, "/PSP_GAME/ICON0.PNG", &info_->icon.data, &info_->lock);
 					info_->icon.dataLoaded = true;
 				}
-				if (flags_ & GameInfoFlags::BG) {
+				if (flags_ & GameInfoFlags::PIC0) {
 					ReadFileToString(&umd, "/PSP_GAME/PIC0.PNG", &info_->pic0.data, &info_->lock);
 					info_->pic0.dataLoaded = true;
+				}
+				if (flags_ & GameInfoFlags::PIC1) {
 					ReadFileToString(&umd, "/PSP_GAME/PIC1.PNG", &info_->pic1.data, &info_->lock);
 					info_->pic1.dataLoaded = true;
 				}
@@ -762,9 +767,9 @@ handleELF:
 					info_->MarkReadyNoLock(flags_);
 					return;
 				}
-				BlockDevice *bd = constructBlockDevice(info_->GetFileLoader().get());
+				BlockDevice *bd = ConstructBlockDevice(info_->GetFileLoader().get(), &errorString);
 				if (!bd) {
-					ERROR_LOG(Log::Loader, "Failed constructing block device for ISO %s", info_->GetFilePath().ToVisualString().c_str());
+					ERROR_LOG(Log::Loader, "Failed constructing block device for ISO %s: %s", info_->GetFilePath().ToVisualString().c_str(), errorString.c_str());
 					std::unique_lock<std::mutex> lock(info_->lock);
 					info_->MarkReadyNoLock(flags_);
 					return;
@@ -786,8 +791,11 @@ handleELF:
 					}
 				}
 
-				if (flags_ & GameInfoFlags::BG) {
+				if (flags_ & GameInfoFlags::PIC0) {
 					info_->pic0.dataLoaded = ReadFileToString(&umd, "/PSP_GAME/PIC0.PNG", &info_->pic0.data, &info_->lock);
+				}
+
+				if (flags_ & GameInfoFlags::PIC1) {
 					info_->pic1.dataLoaded = ReadFileToString(&umd, "/PSP_GAME/PIC1.PNG", &info_->pic1.data, &info_->lock);
 				}
 
@@ -932,7 +940,7 @@ void GameInfoCache::FlushBGs() {
 			iter->second->sndFileData.clear();
 			iter->second->sndDataLoaded = false;
 		}
-		iter->second->hasFlags &= ~(GameInfoFlags::BG | GameInfoFlags::SND);
+		iter->second->hasFlags &= ~(GameInfoFlags::PIC0 | GameInfoFlags::PIC1 | GameInfoFlags::SND);
 	}
 }
 

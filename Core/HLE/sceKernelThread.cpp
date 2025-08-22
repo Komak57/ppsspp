@@ -84,6 +84,7 @@ const WaitTypeNames waitTypeNames[] = {
 	{ WAITTYPE_MICINPUT,        "Microphone input"},
 	{ WAITTYPE_NET,             "Network"},
 	{ WAITTYPE_USB,             "USB" },
+	{ WAITTYPE_PLUGIN,          "Initial plugin load" },
 };
 
 const char *WaitTypeToString(WaitType type) {
@@ -747,7 +748,6 @@ static void __KernelWriteFakeSysCall(u32 nid, u32 *ptr, u32 &pos)
 	*ptr = pos;
 	pos += 8;
 	WriteHLESyscall("FakeSysCalls", nid, *ptr);
-	MIPSAnalyst::PrecompileFunction(*ptr, 8);
 }
 
 u32 HLEMipsCallReturnAddress() {

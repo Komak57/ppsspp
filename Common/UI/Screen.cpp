@@ -7,11 +7,10 @@
 #include "Common/UI/UI.h"
 #include "Common/UI/View.h"
 #include "Common/UI/ViewGroup.h"
+#include "Common/Data/Collections/TinySet.h"
 
 #include "Common/Log.h"
 #include "Common/TimeUtil.h"
-
-#include "Core/KeyMap.h"
 
 void Screen::focusChanged(ScreenFocusChange focusChange) {
 	const char *eventName = "";
@@ -313,8 +312,10 @@ void ScreenManager::sendMessage(UIMessage message, const char *value) {
 
 	// NOTE: Changed this to send the message to all screens, instead of just the top one,
 	// to allow EmuScreen to receive messages from popup menus. Hope this didn't break anything..
-	for (auto &iter : stack_) {
-		iter.screen->sendMessage(message, value);
+	for (const auto &iter : stack_) {
+		if (iter.screen) {
+			iter.screen->sendMessage(message, value);
+		}
 	}
 }
 

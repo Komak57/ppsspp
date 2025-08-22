@@ -34,6 +34,7 @@ SDLJoystick *joystick = NULL;
 #include "Common/System/System.h"
 #include "Common/System/Request.h"
 #include "Common/System/NativeApp.h"
+#include "Common/Audio/AudioBackend.h"
 #include "ext/glslang/glslang/Public/ShaderLang.h"
 #include "Common/Data/Format/PNGLoad.h"
 #include "Common/Net/Resolve.h"
@@ -105,7 +106,7 @@ static SDL_AudioSpec g_retFmt;
 
 static bool g_textFocusChanged;
 static bool g_textFocus;
-
+double g_audioStartTime = 0.0;
 
 // Window state to be transferred to the main SDL thread.
 static std::mutex g_mutexWindow;
@@ -134,7 +135,7 @@ int getDisplayNumber(void) {
 }
 
 void sdl_mixaudio_callback(void *userdata, Uint8 *stream, int len) {
-	NativeMix((short *)stream, len / (2 * 2), g_sampleRate);
+	NativeMix((short *)stream, len / (2 * 2), g_sampleRate, userdata);
 }
 
 static SDL_AudioDeviceID audioDev = 0;
@@ -155,21 +156,36 @@ static void InitSDLAudioDevice(const std::string &name = "") {
 		startDevice = g_Config.sAudioDevice;
 	}
 
+	// List available audio devices before trying to open, for debugging purposes.
+	const int deviceCount = SDL_GetNumAudioDevices(0);
+	if (deviceCount > 0) {
+		INFO_LOG(Log::Audio, "Available audio devices:");
+		for (int i = 0; i < deviceCount; i++) {
+			const char *deviceName = SDL_GetAudioDeviceName(i, 0);
+			INFO_LOG(Log::Audio, " * '%s'", deviceName);
+		}
+	} else {
+		INFO_LOG(Log::Audio, "Failed to list audio devices: retval=%d", deviceCount);
+	}
+
 	audioDev = 0;
 	if (!startDevice.empty()) {
+		INFO_LOG(Log::Audio, "Opening audio device: '%s'", startDevice.c_str());
 		audioDev = SDL_OpenAudioDevice(startDevice.c_str(), 0, &fmt, &g_retFmt, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
 		if (audioDev <= 0) {
-			WARN_LOG(Log::Audio, "Failed to open audio device: %s", startDevice.c_str());
+			WARN_LOG(Log::Audio, "Failed to open audio device '%s'", startDevice.c_str());
 		}
 	}
 	if (audioDev <= 0) {
 		if (audioDev < 0) {
-			INFO_LOG(Log::Audio, "SDL: Error: %s. Trying a different audio device", SDL_GetError());
+			WARN_LOG(Log::Audio, "SDL: Error: '%s'. Trying the default audio device", SDL_GetError());
+		} else {
+			INFO_LOG(Log::Audio, "Opening default audio device");
 		}
 		audioDev = SDL_OpenAudioDevice(nullptr, 0, &fmt, &g_retFmt, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
 	}
 	if (audioDev <= 0) {
-		ERROR_LOG(Log::Audio, "Failed to open audio device: %s", SDL_GetError());
+		ERROR_LOG(Log::Audio, "Failed to open audio device '%s', second try. Giving up.", SDL_GetError());
 	} else {
 		if (g_retFmt.samples != fmt.samples) // Notify, but still use it
 			ERROR_LOG(Log::Audio, "Output audio samples: %d (requested: %d)", g_retFmt.samples, fmt.samples);
@@ -227,6 +243,11 @@ void System_ShowKeyboard() {
 
 void System_Vibrate(int length_ms) {
 	// Ignore on PC
+}
+
+AudioBackend *System_CreateAudioBackend() {
+	// Use legacy mechanisms.
+	return nullptr;
 }
 
 static void InitializeFilters(std::vector<std::string> &filters, BrowseFileType type) {
@@ -750,12 +771,11 @@ case SYSPROP_HAS_FILE_BROWSER:
 	case SYSPROP_CAN_READ_BATTERY_PERCENTAGE:
 		return true;
 	case SYSPROP_ENOUGH_RAM_FOR_FULL_ISO:
-#if defined(MOBILE_DEVICE)
-		return false;
-#else
+#if PPSSPP_ARCH(64BIT) && !defined(MOBILE_DEVICE)
 		return true;
+#else
+		return false;
 #endif
-
 	// hack for testing - do not commit
 	case SYSPROP_USE_IAP:
 		return false;
@@ -867,7 +887,7 @@ static void EmuThreadJoin() {
 
 struct InputStateTracker {
 	void MouseCaptureControl() {
-		bool captureMouseCondition = g_Config.bMouseControl && ((GetUIState() == UISTATE_INGAME && g_Config.bMouseConfine) || g_Config.bMapMouse);
+		bool captureMouseCondition = g_Config.bMouseControl && ((GetUIState() == UISTATE_INGAME && g_Config.bMouseConfine) || g_IsMappingMouseInput);
 		if (mouseCaptured != captureMouseCondition) {
 			mouseCaptured = captureMouseCondition;
 			if (captureMouseCondition)
@@ -1016,7 +1036,7 @@ static void ProcessSDLEvent(SDL_Window *window, const SDL_Event &event, InputSta
 			// Convenience subset of what
 			// "Enable standard shortcut keys"
 			// does on Windows.
-			if(g_Config.bSystemControls) {
+			if (g_Config.bSystemControls) {
 				bool ctrl = bool(event.key.keysym.mod & KMOD_CTRL);
 				if (ctrl && (k == SDLK_w))
 				{
@@ -1029,11 +1049,7 @@ static void ProcessSDLEvent(SDL_Window *window, const SDL_Event &event, InputSta
 					// since SDL does not have a separate
 					// UI thread.
 				}
-				if (ctrl && (k == SDLK_b))
-				{
-					System_PostUIMessage(UIMessage::REQUEST_GAME_RESET);
-					Core_Resume();
-				}
+
 				/*
 				// TODO: Enable this?
 				if (k == SDLK_F11) {
@@ -1276,12 +1292,20 @@ static void ProcessSDLEvent(SDL_Window *window, const SDL_Event &event, InputSta
 		if (event.adevice.iscapture == 0) {
 			const char *name = SDL_GetAudioDeviceName(event.adevice.which, 0);
 			if (!name) {
+				INFO_LOG(Log::Audio, "Got bogus new audio device notification");
 				break;
 			}
-			// Don't start auto switching for a second, because some devices init on start.
-			bool doAutoSwitch = g_Config.bAutoAudioDevice && time_now_d() > 1.0f;
+			// Don't start auto switching for a couple of seconds, because some devices init on start.
+			bool doAutoSwitch = g_Config.bAutoAudioDevice;
+			if ((time_now_d() - g_audioStartTime) < 3.0) {
+				INFO_LOG(Log::Audio, "Ignoring new audio device: %s (current: %s)", name, g_Config.sAudioDevice.c_str());
+				doAutoSwitch = false;
+			}
 			if (doAutoSwitch || g_Config.sAudioDevice == name) {
 				StopSDLAudioDevice();
+
+				INFO_LOG(Log::Audio, "!!! Auto-switching to new audio device: '%s'", name);
+
 				InitSDLAudioDevice(name ? name : "");
 			}
 		}
@@ -1289,6 +1313,7 @@ static void ProcessSDLEvent(SDL_Window *window, const SDL_Event &event, InputSta
 	case SDL_AUDIODEVICEREMOVED:
 		if (event.adevice.iscapture == 0 && event.adevice.which == audioDev) {
 			StopSDLAudioDevice();
+			INFO_LOG(Log::Audio, "Audio device removed, reselecting");
 			InitSDLAudioDevice();
 		}
 		break;
@@ -1385,6 +1410,14 @@ int main(int argc, char *argv[]) {
 	int remain_argc = 1;
 	const char *remain_argv[256] = { argv[0] };
 
+	// Option to force a specific OpenGL version (42="4.2",
+	// etc.; -1 means "try them all").
+	// Implemented as a workaround for https://github.com/hrydgard/ppsspp/issues/20687
+	// NOTE: this is currently not persistent (doesn't
+	// go to config), even though --graphics=openglX.Y
+	// also sets the GPU backend which does persist.
+	int force_gl_version = -1;
+
 	Uint32 mode = 0;
 	for (int i = 1; i < argc; i++) {
 		if (!strcmp(argv[i],"--fullscreen")) {
@@ -1410,7 +1443,27 @@ int main(int argc, char *argv[]) {
 			set_ipad = true;
 		else if (!strcmp(argv[i],"--portrait"))
 			portrait = true;
-		else {
+		else if (!strncmp(argv[i],"--graphics=", strlen("--graphics="))) {
+			const char *restOfOption = argv[i] + strlen("--graphics=");
+			double val=-1.0; // Yes, floating point.
+			if (!strcmp(restOfOption, "vulkan")) {
+				g_Config.iGPUBackend = (int)GPUBackend::VULKAN;
+				g_Config.bSoftwareRendering = false;
+			} else if (!strcmp(restOfOption, "software")) {
+				// Same as on Windows, software presently implies OpenGL.
+				g_Config.iGPUBackend = (int)GPUBackend::OPENGL;
+				g_Config.bSoftwareRendering = true;
+			} else if (!strcmp(restOfOption, "gles") || !strcmp(restOfOption, "opengl")) {
+				// NOTE: OpenGL and GLES are treated the same for
+				// the purposes of option parsing.
+				g_Config.iGPUBackend = (int)GPUBackend::OPENGL;
+				g_Config.bSoftwareRendering = false;
+			} else if (sscanf(restOfOption, "gles%lg", &val) == 1 || sscanf(restOfOption, "opengl%lg", &val) == 1) {
+				g_Config.iGPUBackend = (int)GPUBackend::OPENGL;
+				g_Config.bSoftwareRendering = false;
+				force_gl_version = int(10.0 * val + 0.5);
+			}
+		} else {
 			remain_argv[remain_argc++] = argv[i];
 		}
 	}
@@ -1567,7 +1620,7 @@ int main(int argc, char *argv[]) {
 	std::string error_message;
 	if (g_Config.iGPUBackend == (int)GPUBackend::OPENGL) {
 		SDLGLGraphicsContext *glctx = new SDLGLGraphicsContext();
-		if (glctx->Init(window, x, y, w, h, mode, &error_message) != 0) {
+		if (glctx->Init(window, x, y, w, h, mode, &error_message, force_gl_version) != 0) {
 			// Let's try the fallback once per process run.
 			printf("GL init error '%s' - falling back to Vulkan\n", error_message.c_str());
 			g_Config.iGPUBackend = (int)GPUBackend::VULKAN;
@@ -1597,7 +1650,7 @@ int main(int argc, char *argv[]) {
 
 			// NOTE : This should match the three lines above in the OpenGL case.
 			SDLGLGraphicsContext *glctx = new SDLGLGraphicsContext();
-			if (glctx->Init(window, x, y, w, h, mode, &error_message) != 0) {
+			if (glctx->Init(window, x, y, w, h, mode, &error_message, force_gl_version) != 0) {
 				printf("GL fallback failed: %s\n", error_message.c_str());
 				return 1;
 			}
@@ -1657,6 +1710,7 @@ int main(int argc, char *argv[]) {
 	SDL_StopTextInput();
 
 	InitSDLAudioDevice();
+	g_audioStartTime = time_now_d();
 
 	if (joystick_enabled) {
 		joystick = new SDLJoystick();
@@ -1760,7 +1814,7 @@ int main(int argc, char *argv[]) {
 
 			if (g_Config.iGPUBackend == (int)GPUBackend::OPENGL) {
 				SDLGLGraphicsContext *ctx  = (SDLGLGraphicsContext *)graphicsContext;
-				if (!ctx->Init(window, x, y, w, h, mode, &error_message)) {
+				if (!ctx->Init(window, x, y, w, h, mode, &error_message, force_gl_version)) {
 					printf("Failed to reinit graphics.\n");
 				}
 			}

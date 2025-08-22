@@ -40,6 +40,8 @@ enum class Log {
 	HLE,
 	JIT,
 	Loader,
+	Mpeg,
+	Atrac,
 	ME,
 	MemMap,
 	SasMix,
@@ -149,8 +151,9 @@ __attribute__((format(printf, 5, 6)))
 // They can have a value between 0 and 15.
 enum class DebugCounter {
 	APP_BOOT = 0,
-	GAME_BOOT = 0,
-	GAME_SHUTDOWN = 0,
+	GAME_BOOT = 1,
+	GAME_SHUTDOWN = 2,
+	CPUCORE_SWITCHES = 3,
 };
 
 bool HitAnyAsserts();

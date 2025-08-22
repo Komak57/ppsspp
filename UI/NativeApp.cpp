@@ -86,6 +86,7 @@
 #include "Common/GPU/ShaderTranslation.h"
 #include "Common/VR/PPSSPPVR.h"
 #include "Common/Thread/ThreadManager.h"
+#include "Common/Audio/AudioBackend.h"
 
 #include "Core/ControlMapper.h"
 #include "Core/Config.h"
@@ -193,9 +194,7 @@ static int g_restartGraphics;
 static bool g_windowHidden = false;
 std::vector<std::function<void()>> g_pendingClosures;
 
-#ifdef _WIN32
-WindowsAudioBackend *winAudioBackend;
-#endif
+AudioBackend *g_audioBackend = nullptr;
 
 std::thread *graphicsLoadThread;
 
@@ -804,6 +803,22 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 void CallbackPostRender(UIContext *dc, void *userdata);
 bool CreateGlobalPipelines();
 
+// TODO: Add faster special case for channels == 2.
+static void NativeMixWrapper(float *dest, int framesToWrite, int sampleRateHz, void *userdata) {
+	static int16_t *buffer;
+	static int bufSize;
+	if (bufSize < framesToWrite * 2) {
+		buffer = new int16_t[framesToWrite * 2];
+		bufSize = framesToWrite * 2;
+	}
+
+	NativeMix(buffer, framesToWrite, sampleRateHz, userdata);
+
+	for (int i = 0; i < framesToWrite * 2; i++) {
+		dest[i] = (float)buffer[i] * (float)(1.0f / 32767.0f);
+	}
+}
+
 bool NativeInitGraphics(GraphicsContext *graphicsContext) {
 	INFO_LOG(Log::System, "NativeInitGraphics");
 
@@ -839,14 +854,15 @@ bool NativeInitGraphics(GraphicsContext *graphicsContext) {
 	g_screenManager->setPostRenderCallback(&CallbackPostRender, nullptr);
 	g_screenManager->deviceRestored(g_draw);
 
-#ifdef _WIN32
-	winAudioBackend = CreateAudioBackend((AudioBackendType)g_Config.iAudioBackend);
-#if PPSSPP_PLATFORM(UWP)
-	winAudioBackend->Init(0, &NativeMix, 44100);
-#else
-	winAudioBackend->Init(MainWindow::GetHWND(), &NativeMix, 44100);
-#endif
-#endif
+	g_audioBackend = System_CreateAudioBackend();
+	if (g_audioBackend) {
+		g_audioBackend->SetRenderCallback(&NativeMixWrapper, nullptr);
+		bool reverted = false;
+		g_audioBackend->InitOutputDevice(g_Config.sAudioDevice, LatencyMode::Aggressive, &reverted);
+		if (reverted) {
+			g_Config.sAudioDevice.clear();
+		}
+	}
 
 #if defined(_WIN32) && !PPSSPP_PLATFORM(UWP)
 	if (IsWin7OrHigher()) {
@@ -854,6 +870,22 @@ bool NativeInitGraphics(GraphicsContext *graphicsContext) {
 		winCamera->sendMessage({ CAPTUREDEVIDE_COMMAND::INITIALIZE, nullptr });
 		winMic = new WindowsCaptureDevice(CAPTUREDEVIDE_TYPE::Audio);
 		winMic->sendMessage({ CAPTUREDEVIDE_COMMAND::INITIALIZE, nullptr });
+	}
+#endif
+
+	// Warn about low refresh rates on desktop. Might add other platforms later.
+#if PPSSPP_PLATFORM(WINDOWS) || PPSSPP_PLATFORM(MAC)
+	const double displayHz = System_GetPropertyFloat(SYSPROP_DISPLAY_REFRESH_RATE);
+	if (displayHz < 55.0f) {
+		// This is a warning, not an error.
+		auto g = GetI18NCategory(I18NCat::GRAPHICS);
+		g_OSD.Show(OSDType::MESSAGE_WARNING, ApplySafeSubstitutions(g->T("Your display is set to a low refresh rate: %1 Hz. 60 Hz or higher is recommended."), (int)displayHz), 8.0f, "low_refresh");
+		g_OSD.SetClickCallback("low_refresh", [](bool clicked, void *) {
+			if (clicked) {
+				// Open the display settings.
+				System_OpenDisplaySettings();
+			}
+		}, nullptr);
 	}
 #endif
 
@@ -932,11 +964,6 @@ void NativeShutdownGraphics() {
 	if (gpu)
 		gpu->DeviceLost();
 
-#if PPSSPP_PLATFORM(WINDOWS)
-	delete winAudioBackend;
-	winAudioBackend = nullptr;
-#endif
-
 #if PPSSPP_PLATFORM(WINDOWS) && !PPSSPP_PLATFORM(UWP)
 	if (winCamera) {
 		winCamera->waitShutDown();
@@ -949,6 +976,11 @@ void NativeShutdownGraphics() {
 		winMic = nullptr;
 	}
 #endif
+
+	if (g_audioBackend) {
+		delete g_audioBackend;
+		g_audioBackend = nullptr;
+	}
 
 	UIBackgroundShutdown();
 
@@ -1097,6 +1129,10 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 
 	g_screenManager->update();
 
+	if (g_audioBackend) {
+		g_audioBackend->FrameUpdate(g_Config.bAutoAudioDevice);
+	}
+
 	// Do this after g_screenManager.update() so we can receive setting changes before rendering.
 	{
 		std::vector<PendingMessage> toProcess;
@@ -1114,6 +1150,11 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 		}
 
 		for (const auto &item : toProcess) {
+			// Hack.
+			if (item.message == UIMessage::WINDOW_RESTORED && graphicsContext) {
+				graphicsContext->NotifyWindowRestored();
+			}
+
 			if (HandleGlobalMessage(item.message, item.value)) {
 				// TODO: Add a to-string thingy.
 				VERBOSE_LOG(Log::System, "Handled global message: %d / %s", (int)item.message, item.value.c_str());
@@ -1206,7 +1247,7 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 
 		float refreshRate = System_GetPropertyFloat(SYSPROP_DISPLAY_REFRESH_RATE);
 		// Simple throttling to not burn the GPU in the menu.
-		// TODO: This should move into NativeFrame. Also, it's only necessary in MAILBOX or IMMEDIATE presentation modes.
+		// TODO: This is only necessary in MAILBOX or IMMEDIATE presentation modes.
 		double diffTime = time_now_d() - startTime;
 		int sleepTime = (int)(1000.0 / refreshRate) - (int)(diffTime * 1000.0);
 		if (sleepTime > 0)
@@ -1420,7 +1461,7 @@ static void SendMouseDeltaAxis() {
 	//NOTICE_LOG(Log::System, "delta: %0.2f %0.2f    mx/my: %0.2f %0.2f   dpi: %f  sens: %f ",
 	//	g_mouseDeltaX, g_mouseDeltaY, mx, my, g_display.dpi_scale_x, g_Config.fMouseSensitivity);
 
-	if (GetUIState() == UISTATE_INGAME || g_Config.bMapMouse) {
+	if (GetUIState() == UISTATE_INGAME || g_IsMappingMouseInput) {
 		NativeAxis(axis, 2);
 	}
 }
@@ -1534,8 +1575,9 @@ void NativeShutdown() {
 	ShaderTranslationShutdown();
 
 	// Avoid shutting this down when restarting core.
-	if (!restarting)
+	if (!restarting) {
 		g_logManager.Shutdown();
+	}
 
 	g_threadManager.Teardown();
 

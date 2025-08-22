@@ -10,16 +10,20 @@ pub struct Section {
     pub lines: Vec<String>,
 }
 
-pub fn line_value<'a>(line: &'a str) -> Option<&'a str> {
+pub fn split_line(line: &str) -> Option<(&str, &str)> {
     let line = line.trim();
     if let Some(pos) = line.find(" =") {
         let value = &line[pos + 2..];
         if value.is_empty() {
             return None;
         }
-        return Some(value.trim());
+        return Some((&line[0..pos].trim(), value.trim()));
     }
     None
+}
+
+pub fn line_value(line: &str) -> Option<&str> {
+    split_line(line).map(|tuple| tuple.1)
 }
 
 impl Section {
@@ -90,7 +94,7 @@ impl Section {
         // Then, find a suitable insertion spot
         for (i, iter_line) in self.lines.iter().enumerate() {
             if iter_line.to_ascii_lowercase() > prefix {
-                println!("Inserting line {} into {}", line, self.name);
+                println!("{}: Inserting line {line}", self.name);
                 self.lines.insert(i, line.to_owned());
                 return true;
             }
@@ -100,12 +104,12 @@ impl Section {
             if self.lines[i].is_empty() {
                 continue;
             }
-            println!("Inserting line {} into {}", line, self.name);
+            println!("{}: Inserting line {line}", self.name);
             self.lines.insert(i + 1, line.to_owned());
             return true;
         }
 
-        println!("failed to insert {}", line);
+        println!("{}: failed to insert {line}", self.name);
         true
     }
 
@@ -122,7 +126,7 @@ impl Section {
             let mut right_part = line.strip_prefix(&prefix).unwrap().to_string();
             if right_part.trim() == old.trim() {
                 // Was still untranslated - replace the translation too.
-                right_part = format!(" {}", new);
+                right_part = format!(" {new}");
             }
             let line = new.to_owned() + " =" + &right_part;
             self.insert_line_if_missing(&line);
@@ -145,7 +149,7 @@ impl Section {
             let mut right_part = line.strip_prefix(&prefix).unwrap().to_string();
             if right_part.trim() == old.trim() {
                 // Was still untranslated - replace the translation too.
-                right_part = format!(" {}", new);
+                right_part = format!(" {new}");
             }
             let line = new.to_owned() + " =" + &right_part;
             self.insert_line_if_missing(&line);
@@ -238,10 +242,21 @@ impl Section {
         }
 
         if let Some(found_index) = found_index {
-            self.lines[found_index] = format!("{} = {}", key, value);
+            self.lines[found_index] = format!("{key} = {value}");
             true
         } else {
             false
         }
+    }
+
+    pub fn get_value(&self, key: &str) -> Option<String> {
+        for line in &self.lines {
+            if let Some((ref_key, value)) = split_line(line) {
+                if key.eq_ignore_ascii_case(ref_key) {
+                    return Some(value.to_string());
+                }
+            }
+        }
+        None
     }
 }

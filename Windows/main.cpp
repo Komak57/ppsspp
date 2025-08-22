@@ -23,23 +23,22 @@
 #include <cmath>
 #include <functional>
 
-#include "Common/CommonWindows.h"
-#include "Common/File/FileUtil.h"
-#include "Common/OSVersion.h"
-#include "Common/GPU/Vulkan/VulkanLoader.h"
-#include "ppsspp_config.h"
-
 #include <mmsystem.h>
 #include <shellapi.h>
 #include <Wbemidl.h>
 #include <ShlObj.h>
 #include <wrl/client.h>
 
+#include "Common/CommonWindows.h"
+#include "Common/File/FileUtil.h"
+#include "Common/OSVersion.h"
+#include "Common/GPU/Vulkan/VulkanLoader.h"
+#include "ppsspp_config.h"
+
 #include "Common/System/Display.h"
 #include "Common/System/NativeApp.h"
 #include "Common/System/System.h"
 #include "Common/System/Request.h"
-#include "Common/File/FileUtil.h"
 #include "Common/File/VFS/VFS.h"
 #include "Common/File/VFS/DirectoryReader.h"
 #include "Common/Data/Text/I18n.h"
@@ -48,13 +47,13 @@
 #include "Common/Data/Encoding/Utf8.h"
 #include "Common/Net/Resolve.h"
 #include "Common/TimeUtil.h"
-#include "W32Util/DarkMode.h"
-#include "W32Util/ShellUtil.h"
 
 #include "Core/Config.h"
 #include "Core/ConfigValues.h"
 #include "Core/SaveState.h"
 #include "Core/Instance.h"
+#include "Core/HLE/Plugins.h"
+#include "Core/RetroAchievements.h"
 #include "Windows/EmuThread.h"
 #include "Windows/WindowsAudio.h"
 #include "ext/disarm.h"
@@ -67,7 +66,9 @@
 
 #include "UI/GameInfoCache.h"
 #include "Windows/resource.h"
-
+#include "Windows/DinputDevice.h"
+#include "Windows/XinputDevice.h"
+#include "Windows/HidInputDevice.h"
 #include "Windows/MainWindow.h"
 #include "Windows/Debugger/Debugger_Disasm.h"
 #include "Windows/Debugger/Debugger_MemoryDlg.h"
@@ -77,6 +78,7 @@
 #endif
 #include "Windows/W32Util/ContextMenu.h"
 #include "Windows/W32Util/DialogManager.h"
+#include "Windows/W32Util/DarkMode.h"
 #include "Windows/W32Util/ShellUtil.h"
 
 #include "Windows/Debugger/CtrlDisAsmView.h"
@@ -84,8 +86,6 @@
 #include "Windows/Debugger/CtrlRegisterList.h"
 #include "Windows/Debugger/DebuggerShared.h"
 #include "Windows/InputBox.h"
-
-#include "Windows/WindowsHost.h"
 #include "Windows/main.h"
 
 #ifdef _MSC_VER
@@ -121,10 +121,10 @@ static std::string gpuDriverVersion;
 static std::string restartArgs;
 
 int g_activeWindow = 0;
-
-WindowsInputManager g_inputManager;
-
 int g_lastNumInstances = 0;
+
+float mouseDeltaX_ = 0;
+float mouseDeltaY_ = 0;
 
 static double g_lastActivity = 0.0;
 static double g_lastKeepAwake = 0.0;
@@ -148,6 +148,19 @@ void System_Vibrate(int length_ms) {
 static void AddDebugRestartArgs() {
 	if (g_logManager.GetConsoleListener()->IsOpen())
 		restartArgs += " -l";
+}
+
+static void PollControllers() {
+	// Disabled by default, needs a workaround to map to psp keys.
+	if (g_Config.bMouseControl) {
+		NativeMouseDelta(mouseDeltaX_, mouseDeltaY_);
+	}
+
+	mouseDeltaX_ *= g_Config.fMouseSmoothing;
+	mouseDeltaY_ *= g_Config.fMouseSmoothing;
+
+	HLEPlugins::PluginDataAxis[JOYSTICK_AXIS_MOUSE_REL_X] = mouseDeltaX_;
+	HLEPlugins::PluginDataAxis[JOYSTICK_AXIS_MOUSE_REL_Y] = mouseDeltaY_;
 }
 
 // Adapted mostly as-is from http://www.gamedev.net/topic/495075-how-to-retrieve-info-about-videocard/?view=findpost&p=4229170
@@ -220,7 +233,7 @@ std::string System_GetProperty(SystemProperty prop) {
 	case SYSPROP_CLIPBOARD_TEXT:
 		{
 			std::string retval;
-			if (OpenClipboard(MainWindow::GetDisplayHWND())) {
+			if (OpenClipboard(MainWindow::GetHWND())) {
 				HANDLE handle = GetClipboardData(CF_UNICODETEXT);
 				const wchar_t *wstr = (const wchar_t*)GlobalLock(handle);
 				if (wstr)
@@ -277,7 +290,7 @@ std::vector<std::string> System_GetPropertyStringVec(SystemProperty prop) {
 }
 
 // Ugly!
-extern WindowsAudioBackend *winAudioBackend;
+extern AudioBackend *winAudioBackend;
 
 #ifdef _WIN32
 #if PPSSPP_PLATFORM(UWP)
@@ -319,12 +332,16 @@ static float ScreenRefreshRateHz() {
 	return rate;
 }
 
+extern AudioBackend *g_audioBackend;
+
 int64_t System_GetPropertyInt(SystemProperty prop) {
 	switch (prop) {
 	case SYSPROP_MAIN_WINDOW_HANDLE:
 		return (int64_t)MainWindow::GetHWND();
 	case SYSPROP_AUDIO_SAMPLE_RATE:
-		return winAudioBackend ? winAudioBackend->GetSampleRate() : -1;
+		return g_audioBackend ? g_audioBackend->SampleRate() : -1;
+	case SYSPROP_AUDIO_FRAMES_PER_BUFFER:
+		return g_audioBackend ? g_audioBackend->PeriodFrames() : -1;
 	case SYSPROP_DEVICE_TYPE:
 		return DEVICE_TYPE_DESKTOP;
 	case SYSPROP_DISPLAY_COUNT:
@@ -413,7 +430,11 @@ bool System_GetPropertyBool(SystemProperty prop) {
 	case SYSPROP_CAN_READ_BATTERY_PERCENTAGE:
 		return true;
 	case SYSPROP_ENOUGH_RAM_FOR_FULL_ISO:
+#if PPSSPP_ARCH(64BIT)
 		return true;
+#else
+		return false;
+#endif
 	default:
 		return false;
 	}
@@ -432,8 +453,11 @@ void System_Notify(SystemNotification notification) {
 			g_symbolMap->SortSymbols();  // internal locking is performed here
 		PostMessage(MainWindow::GetHWND(), WM_USER + 1, 0, 0);
 
-		if (disasmWindow)
+		if (Achievements::HardcoreModeActive()) {
+			MainWindow::HideDebugWindows();
+		} else if (disasmWindow) {
 			PostDialogMessage(disasmWindow, WM_DEB_SETDEBUGLPARAM, 0, (LPARAM)Core_IsStepping());
+		}
 		break;
 	}
 
@@ -441,7 +465,7 @@ void System_Notify(SystemNotification notification) {
 	{
 		PostMessage(MainWindow::GetHWND(), MainWindow::WM_USER_UPDATE_UI, 0, 0);
 
-		int peers = GetInstancePeerCount();
+		const int peers = GetInstancePeerCount();
 		if (PPSSPP_ID >= 1 && peers != g_lastNumInstances) {
 			g_lastNumInstances = peers;
 			PostMessage(MainWindow::GetHWND(), MainWindow::WM_USER_WINDOW_TITLE_CHANGED, 0, 0);
@@ -480,7 +504,8 @@ void System_Notify(SystemNotification notification) {
 		break;
 
 	case SystemNotification::POLL_CONTROLLERS:
-		g_inputManager.PollControllers();
+		PollControllers();
+		// Also poll the audio backend for changes.
 		break;
 
 	case SystemNotification::TOGGLE_DEBUG_CONSOLE:
@@ -516,7 +541,6 @@ void System_Notify(SystemNotification notification) {
 	case SystemNotification::ROTATE_UPDATED:
 	case SystemNotification::TEST_JAVA_EXCEPTION:
 		break;
-	case SystemNotification::UI_STATE_CHANGED:
 	case SystemNotification::AUDIO_MODE_CHANGED:
 	case SystemNotification::APP_SWITCH_MODE_CHANGED:
 		break;
@@ -579,7 +603,7 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 	case SystemRequestType::COPY_TO_CLIPBOARD:
 	{
 		std::wstring data = ConvertUTF8ToWString(param1);
-		W32Util::CopyTextToClipboard(MainWindow::GetDisplayHWND(), data);
+		W32Util::CopyTextToClipboard(MainWindow::GetHWND(), data);
 		return true;
 	}
 	case SystemRequestType::SET_WINDOW_TITLE:
@@ -619,7 +643,7 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		return true;
 	case SystemRequestType::ASK_USERNAME_PASSWORD:
 		std::thread([=] {
-			std::string username;
+			std::string username = param2;
 			std::string password;
 			if (UserPasswordBox_GetStrings(MainWindow::GetHInstance(), MainWindow::GetHWND(), ConvertUTF8ToWString(param1).c_str(), &username, &password)) {
 				g_requestManager.PostSystemSuccess(requestId, (username + '\n' + password).c_str());
@@ -630,6 +654,7 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		return true;
 	case SystemRequestType::BROWSE_FOR_IMAGE:
 		std::thread([=] {
+			SetCurrentThreadName("BrowseForImage");
 			std::string out;
 			if (W32Util::BrowseForFileName(true, MainWindow::GetHWND(), ConvertUTF8ToWString(param1).c_str(), nullptr,
 				FinalizeFilter(L"All supported images (*.jpg *.jpeg *.png)|*.jpg;*.jpeg;*.png|All files (*.*)|*.*||").c_str(), L"jpg", out)) {
@@ -651,6 +676,7 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		}
 		const bool load = type == SystemRequestType::BROWSE_FOR_FILE;
 		std::thread([=] {
+			SetCurrentThreadName("BrowseForFile");
 			std::string out;
 			if (W32Util::BrowseForFileName(load, MainWindow::GetHWND(), ConvertUTF8ToWString(param1).c_str(), nullptr, filter.c_str(), L"", out)) {
 				g_requestManager.PostSystemSuccess(requestId, out.c_str());
@@ -663,6 +689,7 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 	case SystemRequestType::BROWSE_FOR_FOLDER:
 	{
 		std::thread([=] {
+			SetCurrentThreadName("BrowseForFolder");
 			std::string folder = W32Util::BrowseForFolder2(MainWindow::GetHWND(), param1, param2);
 			if (folder.size()) {
 				g_requestManager.PostSystemSuccess(requestId, folder.c_str());
@@ -692,7 +719,7 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 	{
 		auto err = GetI18NCategory(I18NCat::ERRORS);
 		std::string_view backendSwitchError = err->T("GenericBackendSwitchCrash", "PPSSPP crashed while starting. This usually means a graphics driver problem. Try upgrading your graphics drivers.\n\nGraphics backend has been switched:");
-		std::wstring full_error = ConvertUTF8ToWString(StringFromFormat("%s %s", backendSwitchError, param1.c_str()));
+		std::wstring full_error = ConvertUTF8ToWString(StringFromFormat("%.*s %s", (int)backendSwitchError.size(), backendSwitchError.data(), param1.c_str()));
 		std::wstring title = ConvertUTF8ToWString(err->T("GenericGraphicsError", "Graphics Error"));
 		MessageBox(MainWindow::GetHWND(), full_error.c_str(), title.c_str(), MB_OK);
 		return true;
@@ -728,6 +755,11 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 	case SystemRequestType::MOVE_TO_TRASH:
 	{
 		W32Util::MoveToTrash(Path(param1));
+		return true;
+	}
+	case SystemRequestType::OPEN_DISPLAY_SETTINGS:
+	{
+		W32Util::OpenDisplaySettings();
 		return true;
 	}
 	default:
@@ -1034,14 +1066,11 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 			if (wideArgs[i].find(gpuBackend) != std::wstring::npos && wideArgs[i].size() > gpuBackend.size()) {
 				const std::wstring restOfOption = wideArgs[i].substr(gpuBackend.size());
 
-				// Force software rendering off, as picking directx9 or gles implies HW acceleration.
-				// Once software rendering supports Direct3D9/11, we can add more options for software,
-				// such as "software-gles", "software-d3d9", and "software-d3d11", or something similar.
+				// Force software rendering off, as picking gles implies HW acceleration.
+				// We could add more options for software such as "software-gles",
+				// "software-vulkan" and "software-d3d11", or something similar.
 				// For now, software rendering force-activates OpenGL.
-				if (restOfOption == L"directx9") {
-					g_Config.iGPUBackend = (int)GPUBackend::DIRECT3D9;
-					g_Config.bSoftwareRendering = false;
-				} else if (restOfOption == L"directx11") {
+				if (restOfOption == L"directx11") {
 					g_Config.iGPUBackend = (int)GPUBackend::DIRECT3D11;
 					g_Config.bSoftwareRendering = false;
 				} else if (restOfOption == L"gles") {
@@ -1108,22 +1137,23 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 		MainWindow::Minimize();
 	}
 
-	g_inputManager.Init();
-
+	//add first XInput device to respond
+	g_InputManager.AddDevice(new XinputDevice());
+	g_InputManager.AddDevice(new DInputMetaDevice());
+	g_InputManager.AddDevice(new HidInputDevice());
 	// Emu thread (and render thread, if any) is always running!
 	// Only OpenGL uses an externally managed render thread (due to GL's single-threaded context design). Vulkan
 	// manages its own render thread.
 	MainThread_Start(g_Config.iGPUBackend == (int)GPUBackend::OPENGL);
-	InputDevice::BeginPolling();
+
+	g_InputManager.BeginPolling();
 
 	HACCEL hAccelTable = LoadAccelerators(_hInstance, (LPCTSTR)IDR_ACCELS);
 	HACCEL hDebugAccelTable = LoadAccelerators(_hInstance, (LPCTSTR)IDR_DEBUGACCELS);
 
 	//so.. we're at the message pump of the GUI thread
-	for (MSG msg; GetMessage(&msg, NULL, 0, 0); )	// for no quit
-	{
-		if (msg.message == WM_KEYDOWN)
-		{
+	for (MSG msg; GetMessage(&msg, NULL, 0, 0); ) { // for no quit
+		if (msg.message == WM_KEYDOWN) {
 			//hack to enable/disable menu command accelerate keys
 			MainWindow::UpdateCommands();
 
@@ -1132,11 +1162,10 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 				BringWindowToTop(hwndMain);
 		}
 
-		//Translate accelerators and dialog messages...
+		// Translate accelerators and dialog messages...
 		HWND wnd;
 		HACCEL accel;
-		switch (g_activeWindow)
-		{
+		switch (g_activeWindow) {
 		case WINDOW_MAINWINDOW:
 			wnd = hwndMain;
 			accel = g_Config.bSystemControls ? hAccelTable : NULL;
@@ -1162,6 +1191,8 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	}
 
 	g_VFS.Clear();
+
+	// g_InputManager.StopPolling() is called in WM_DESTROY
 
 	MainWindow::DestroyDebugWindows();
 	DialogManager::DestroyAll();

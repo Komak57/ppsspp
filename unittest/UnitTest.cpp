@@ -55,6 +55,7 @@
 #include "Common/Data/Encoding/Utf8.h"
 #include "Common/Buffer.h"
 #include "Common/File/Path.h"
+#include "Common/Log/LogManager.h"
 #include "Common/Math/SIMDHeaders.h"
 #include "Common/Math/CrossSIMD.h"
 // Get some more instructions for testing
@@ -1243,6 +1244,7 @@ bool TestArmEmitter();
 bool TestArm64Emitter();
 bool TestX64Emitter();
 bool TestRiscVEmitter();
+bool TestLoongArch64Emitter();
 bool TestShaderGenerators();
 bool TestSoftwareGPUJit();
 bool TestIRPassSimplify();
@@ -1261,6 +1263,9 @@ TestItem availableTests[] = {
 #endif
 #if PPSSPP_ARCH(AMD64) || PPSSPP_ARCH(X86) || PPSSPP_ARCH(RISCV64)
 	TEST_ITEM(RiscVEmitter),
+#endif
+#if PPSSPP_ARCH(AMD64) || PPSSPP_ARCH(X86) || PPSSPP_ARCH(LOONGARCH64)
+	TEST_ITEM(LoongArch64Emitter),
 #endif
 	TEST_ITEM(VertexJit),
 	TEST_ITEM(Asin),
@@ -1311,6 +1316,7 @@ int main(int argc, const char *argv[]) {
 	cpu_info.bVFPv3 = true;
 	cpu_info.bVFPv4 = true;
 	g_Config.bEnableLogging = true;
+	g_logManager.DisableOutput(LogOutput::DebugString);  // not really needed
 
 	bool allTests = false;
 	TestFunc testFunc = nullptr;
@@ -1329,7 +1335,8 @@ int main(int argc, const char *argv[]) {
 	if (allTests) {
 		int passes = 0;
 		int fails = 0;
-		for (auto f : availableTests) {
+		for (const auto &f : availableTests) {
+			printf("\n**** Running test %s ****\n", f.name);
 			if (f.func()) {
 				++passes;
 			} else {
@@ -1344,7 +1351,7 @@ int main(int argc, const char *argv[]) {
 			printf("%d tests failed!\n", fails);
 			return 2;
 		}
-	} else if (testFunc == nullptr) {
+	} else if (!testFunc) {
 		fprintf(stderr, "You may select a test to run by passing an argument, either \"all\" or one or more of the below.\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Available tests:\n");

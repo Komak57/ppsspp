@@ -76,11 +76,14 @@
 
 bool MainScreen::showHomebrewTab = false;
 
-static void LaunchFile(ScreenManager *screenManager, const Path &path) {
+static void LaunchFile(ScreenManager *screenManager, Screen *currentScreen, const Path &path) {
 	if (path.GetFileExtension() == ".zip") {
 		// If it's a zip file, we have a screen for that.
 		screenManager->push(new InstallZipScreen(path));
 	} else {
+		if (currentScreen) {
+			screenManager->cancelScreensAbove(currentScreen);
+		}
 		// Otherwise let the EmuScreen take care of it, including error handling.
 		screenManager->switchScreen(new EmuScreen(path));
 	}
@@ -372,16 +375,18 @@ void GameButton::Draw(UIContext &dc) {
 	} else {
 		dc.Draw()->Flush();
 	}
+
 	if (ginfo->hasConfig && !ginfo->id.empty()) {
 		const AtlasImage *gearImage = dc.Draw()->GetAtlas()->getImage(ImageID("I_GEAR"));
 		if (gearImage) {
 			if (gridStyle_) {
-				dc.Draw()->DrawImage(ImageID("I_GEAR"), x, y + h - gearImage->h*g_Config.fGameGridScale, g_Config.fGameGridScale);
+				dc.Draw()->DrawImage(ImageID("I_GEAR"), bounds_.x, y + h - gearImage->h*g_Config.fGameGridScale, g_Config.fGameGridScale);
 			} else {
-				dc.Draw()->DrawImage(ImageID("I_GEAR"), x - gearImage->w, y, 1.0f);
+				dc.Draw()->DrawImage(ImageID("I_GEAR"), bounds_.x - 1, y, 1.0f);
 			}
 		}
 	}
+
 	const int regionIndex = (int)ginfo->region;
 	if (g_Config.bShowRegionOnGameIcon && regionIndex >= 0 && regionIndex < (int)GameRegion::COUNT) {
 		const ImageID regionIcons[(int)GameRegion::COUNT] = {
@@ -395,22 +400,25 @@ void GameButton::Draw(UIContext &dc) {
 		const AtlasImage *image = dc.Draw()->GetAtlas()->getImage(regionIcons[regionIndex]);
 		if (image) {
 			if (gridStyle_) {
-				dc.Draw()->DrawImage(regionIcons[regionIndex], x + w - (image->w + 5)*g_Config.fGameGridScale,
+				dc.Draw()->DrawImage(regionIcons[regionIndex], bounds_.x + bounds_.w - (image->w + 5)*g_Config.fGameGridScale,
 							y + h - (image->h + 5)*g_Config.fGameGridScale, g_Config.fGameGridScale);
 			} else {
-				dc.Draw()->DrawImage(regionIcons[regionIndex], x - 2 - image->w - 3, y + h - image->h - 5, 1.0f);
+				dc.Draw()->DrawImage(regionIcons[regionIndex], bounds_.x + 4, y + h - image->h - 5, 1.0f);
 			}
 		}
 	}
+
 	if (gridStyle_ && g_Config.bShowIDOnGameIcon) {
 		dc.SetFontScale(0.5f*g_Config.fGameGridScale, 0.5f*g_Config.fGameGridScale);
-		dc.DrawText(ginfo->id_version, x+5, y+1, 0xFF000000, ALIGN_TOPLEFT);
-		dc.DrawText(ginfo->id_version, x+4, y, dc.theme->infoStyle.fgColor, ALIGN_TOPLEFT);
+		dc.DrawText(ginfo->id_version, bounds_.x+5, y+1, 0xFF000000, ALIGN_TOPLEFT);
+		dc.DrawText(ginfo->id_version, bounds_.x+4, y, dc.theme->infoStyle.fgColor, ALIGN_TOPLEFT);
 		dc.SetFontScale(1.0f, 1.0f);
 	}
+
 	if (overlayColor) {
 		dc.FillRect(Drawable(overlayColor), overlayBounds);
 	}
+
 	dc.RebindTexture();
 }
 
@@ -1349,31 +1357,6 @@ void MainScreen::CreateViews() {
 	}
 
 	root_->SetTag("mainroot");
-
-	upgradeBar_ = nullptr;
-	if (!g_Config.upgradeMessage.empty()) {
-		auto u = GetI18NCategory(I18NCat::UPGRADE);
-		upgradeBar_ = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
-
-		UI::Margins textMargins(10, 5);
-		UI::Margins buttonMargins(0, 0);
-		UI::Drawable solid(0xFFbd9939);
-		upgradeBar_->SetBG(solid);
-		upgradeBar_->Add(new TextView(std::string(u->T("New version of PPSSPP available")) + std::string(": ") + g_Config.upgradeVersion, new LinearLayoutParams(1.0f, textMargins)));
-#if PPSSPP_PLATFORM(ANDROID) || PPSSPP_PLATFORM(WINDOWS)
-		upgradeBar_->Add(new Button(u->T("Download"), new LinearLayoutParams(buttonMargins)))->OnClick.Handle(this, &MainScreen::OnDownloadUpgrade);
-#else
-		upgradeBar_->Add(new Button(u->T("Details"), new LinearLayoutParams(buttonMargins)))->OnClick.Handle(this, &MainScreen::OnDownloadUpgrade);
-#endif
-		upgradeBar_->Add(new Button(u->T("Dismiss"), new LinearLayoutParams(buttonMargins)))->OnClick.Handle(this, &MainScreen::OnDismissUpgrade);
-
-		// Slip in under root_
-		LinearLayout *newRoot = new LinearLayout(ORIENT_VERTICAL);
-		newRoot->Add(root_);
-		newRoot->Add(upgradeBar_);
-		root_->ReplaceLayoutParams(new LinearLayoutParams(1.0));
-		root_ = newRoot;
-	}
 }
 
 bool MainScreen::key(const KeyInput &touch) {
@@ -1400,37 +1383,12 @@ UI::EventReturn MainScreen::OnAllowStorage(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
-UI::EventReturn MainScreen::OnDownloadUpgrade(UI::EventParams &e) {
-#if PPSSPP_PLATFORM(ANDROID)
-	// Go to app store
-	if (System_GetPropertyBool(SYSPROP_APP_GOLD)) {
-		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "market://details?id=org.ppsspp.ppssppgold");
-	} else {
-		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "market://details?id=org.ppsspp.ppsspp");
-	}
-#elif PPSSPP_PLATFORM(WINDOWS)
-	System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://www.ppsspp.org/download");
-#else
-	// Go directly to ppsspp.org and let the user sort it out
-	// (for details and in case downloads doesn't have their platform.)
-	System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://www.ppsspp.org/");
-#endif
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn MainScreen::OnDismissUpgrade(UI::EventParams &e) {
-	g_Config.DismissUpgrade();
-	upgradeBar_->SetVisibility(UI::V_GONE);
-	return UI::EVENT_DONE;
-}
-
 void MainScreen::sendMessage(UIMessage message, const char *value) {
 	// Always call the base class method first to handle the most common messages.
 	UIScreenWithBackground::sendMessage(message, value);
 
 	if (message == UIMessage::REQUEST_GAME_BOOT) {
-		screenManager()->cancelScreensAbove(this);
-		LaunchFile(screenManager(), Path(std::string(value)));
+		LaunchFile(screenManager(), this, Path(std::string(value)));
 	} else if (message == UIMessage::PERMISSION_GRANTED && !strcmp(value, "storage")) {
 		RecreateViews();
 	} else if (message == UIMessage::RECENT_FILES_CHANGED) {
@@ -1496,19 +1454,19 @@ bool MainScreen::DrawBackgroundFor(UIContext &dc, const Path &gamePath, float pr
 
 	std::shared_ptr<GameInfo> ginfo;
 	if (!gamePath.empty()) {
-		ginfo = g_gameInfoCache->GetInfo(dc.GetDrawContext(), gamePath, GameInfoFlags::BG);
+		ginfo = g_gameInfoCache->GetInfo(dc.GetDrawContext(), gamePath, GameInfoFlags::PIC1);
 		// Loading texture data may bind a texture.
 		dc.RebindTexture();
 
 		// Let's not bother if there's no picture.
-		if (!ginfo->Ready(GameInfoFlags::BG) || (!ginfo->pic1.texture && !ginfo->pic0.texture)) {
+		if (!ginfo->Ready(GameInfoFlags::PIC1) || !ginfo->pic1.texture) {
 			return false;
 		}
 	} else {
 		return false;
 	}
 
-	auto pic = ginfo->GetBGPic();
+	auto pic = ginfo->GetPIC1();
 	Draw::Texture *texture = pic ? pic->texture : nullptr;
 
 	uint32_t color = whiteAlpha(ease(progress)) & 0xFFc0c0c0;
@@ -1568,7 +1526,7 @@ UI::EventReturn MainScreen::OnGameHighlight(UI::EventParams &e) {
 
 UI::EventReturn MainScreen::OnGameSelectedInstant(UI::EventParams &e) {
 	ScreenManager *screen = screenManager();
-	LaunchFile(screen, Path(e.s));
+	LaunchFile(screen, nullptr, Path(e.s));
 	return UI::EVENT_DONE;
 }
 

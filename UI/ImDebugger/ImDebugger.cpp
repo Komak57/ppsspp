@@ -9,8 +9,10 @@
 #include "Common/Data/Format/IniFile.h"
 #include "Common/Data/Text/Parsers.h"
 #include "Common/Log/LogManager.h"
+#include "Common/TimeUtil.h"
 #include "Core/Config.h"
 #include "Core/System.h"
+#include "Core/SaveState.h"
 #include "Core/Debugger/MemBlockInfo.h"
 #include "Core/RetroAchievements.h"
 #include "Core/Core.h"
@@ -27,6 +29,7 @@
 #include "Core/HLE/SocketManager.h"
 #include "Core/HLE/NetInetConstants.h"
 #include "Core/HLE/sceKernelModule.h"
+#include "Core/HLE/sceAac.h"
 #include "Core/HLE/sceMpeg.h"
 #include "Core/HLE/sceNp.h"
 #include "Core/HLE/sceNet.h"
@@ -34,6 +37,7 @@
 #include "Core/HLE/sceNetAdhoc.h"
 #include "Core/HLE/proAdhoc.h"
 #include "Core/HLE/sceNetAdhocMatching.h"
+#include "Core/HLE/NetAdhocCommon.h"
 #include "Common/System/Request.h"
 
 #include "Core/Util/AtracTrack.h"
@@ -45,6 +49,7 @@
 #include "Core/HLE/sceSas.h"
 #include "Core/HW/SasAudio.h"
 #include "Core/HW/Display.h"
+#include "Core/Dialog/PSPSaveDialog.h"
 
 #include "Core/CoreTiming.h"
 // Threads window
@@ -59,6 +64,7 @@
 
 #include "UI/ImDebugger/ImDebugger.h"
 #include "UI/ImDebugger/ImGe.h"
+#include "UI/AudioCommon.h"
 
 extern bool g_TakeScreenshot;
 static ImVec4 g_normalTextColor;
@@ -376,6 +382,9 @@ void WaitIDToString(WaitType waitType, SceUID waitID, char *buffer, size_t bufSi
 	case WAITTYPE_VBLANK:
 	case WAITTYPE_MICINPUT:
 		truncate_cpy(buffer, bufSize, "-");
+		return;
+	case WAITTYPE_CTRL:
+		snprintf(buffer, bufSize, "ctrl: %d", waitID);
 		return;
 	default:
 		truncate_cpy(buffer, bufSize, "(unimpl)");
@@ -701,6 +710,11 @@ static void DrawInternals(ImConfig &cfg) {
 		ImGui::Text("WantCaptureKeyboard: %s", BoolStr(io.WantCaptureKeyboard));
 		ImGui::Text("WantCaptureMouseUnlessPopupClose: %s", BoolStr(io.WantCaptureMouseUnlessPopupClose));
 		ImGui::Text("WantTextInput: %s", BoolStr(io.WantTextInput));
+	}
+
+	if (ImGui::CollapsingHeader("Save detection")) {
+		ImGui::Text("Last in-game save/load: %0.1f seconds ago", SecondsSinceLastGameSave());
+		ImGui::Text("Last save/load state: %0.1f seconds ago", SaveState::SecondsSinceLastSavestate());
 	}
 
 	ImGui::End();
@@ -1088,6 +1102,14 @@ void DrawMediaDecodersView(ImConfig &cfg, ImControl &control) {
 					ImGui::Checkbox("", mutePtr);
 				}
 				ImGui::TableNextColumn();
+
+				const AtracBase *ctx = __AtracGetCtx(i, &codecType);
+				if (!ctx) {
+					// Nothing more we can display about uninitialized contexts.
+					ImGui::PopID();
+					continue;
+				}
+
 				switch (codecType) {
 				case 0:
 					ImGui::TextUnformatted("-");  // Uninitialized
@@ -1103,12 +1125,6 @@ void DrawMediaDecodersView(ImConfig &cfg, ImControl &control) {
 					break;
 				}
 
-				const AtracBase *ctx = __AtracGetCtx(i, &codecType);
-				if (!ctx) {
-					// Nothing more we can display about uninitialized contexts.
-					ImGui::PopID();
-					continue;
-				}
 				ImGui::TableNextColumn();
 				ImGui::TextUnformatted(AtracStatusToString(ctx->BufferState()));
 				ImGui::TableNextColumn();
@@ -1217,13 +1233,13 @@ void DrawMediaDecodersView(ImConfig &cfg, ImControl &control) {
 		}
 	}
 
-	if (ImGui::CollapsingHeaderWithCount("sceMp3", (int)mp3Map.size(), ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::CollapsingHeaderWithCount("sceMp3", (int)g_mp3Map.size(), ImGuiTreeNodeFlags_DefaultOpen)) {
 		if (ImGui::BeginTable("mp3", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH)) {
 			ImGui::TableSetupColumn("Handle", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableSetupColumn("Channels", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableSetupColumn("ReadPos", ImGuiTableColumnFlags_WidthFixed);
 
-			for (auto &iter : mp3Map) {
+			for (auto &iter : g_mp3Map) {
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
 				ImGui::PushID(iter.first);
@@ -1245,9 +1261,50 @@ void DrawMediaDecodersView(ImConfig &cfg, ImControl &control) {
 			ImGui::EndTable();
 		}
 
-		auto iter = mp3Map.find(cfg.selectedMp3Ctx);
-		if (iter != mp3Map.end() && ImGui::CollapsingHeader("MP3 %d", iter->first)) {
+		auto iter = g_mp3Map.find(cfg.selectedMp3Ctx);
+		if (iter != g_mp3Map.end() && ImGui::CollapsingHeader("MP3 %d", iter->first)) {
 			ImGui::Text("MP3 Context %d", iter->first);
+			if (iter->second) {
+				AuCtx *ctx = iter->second;
+				ImGui::Text("%d Hz, %d channels", ctx->SamplingRate, ctx->Channels);
+				ImGui::Text("AUBuf: %08x AUSize: %08x", ctx->AuBuf, ctx->AuBufSize);
+				ImGui::Text("PCMBuf: %08x PCMSize: %08x", ctx->PCMBuf, ctx->PCMBufSize);
+				ImGui::Text("Pos: %d (%d -> %d)", ctx->ReadPos(), (int)ctx->startPos, (int)ctx->endPos);
+			}
+		}
+	}
+
+	if (ImGui::CollapsingHeaderWithCount("sceAac", (int)g_aacMap.size(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (ImGui::BeginTable("aac", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH)) {
+			ImGui::TableSetupColumn("Handle", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableSetupColumn("Channels", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableSetupColumn("ReadPos", ImGuiTableColumnFlags_WidthFixed);
+
+			for (auto &iter : g_aacMap) {
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::PushID(iter.first);
+				ImGui::SetNextItemAllowOverlap();
+				char temp[16];
+				snprintf(temp, sizeof(temp), "%d", iter.first);
+				if (ImGui::Selectable(temp, iter.first == cfg.selectedAacCtx, ImGuiSelectableFlags_SpanAllColumns)) {
+					cfg.selectedAacCtx = iter.first;
+				}
+				if (!iter.second) {
+					continue;
+				}
+				ImGui::TableNextColumn();
+				ImGui::Text("%d", iter.second->Channels);
+				ImGui::TableNextColumn();
+				ImGui::Text("%d", (int)iter.second->ReadPos());
+				ImGui::PopID();
+			}
+			ImGui::EndTable();
+		}
+
+		auto iter = g_mp3Map.find(cfg.selectedAacCtx);
+		if (iter != g_mp3Map.end() && ImGui::CollapsingHeader("AAC %d", iter->first)) {
+			ImGui::Text("AAC Context %d", iter->first);
 			if (iter->second) {
 				AuCtx *ctx = iter->second;
 				ImGui::Text("%d Hz, %d channels", ctx->SamplingRate, ctx->Channels);
@@ -1278,6 +1335,39 @@ void DrawMediaDecodersView(ImConfig &cfg, ImControl &control) {
 			}
 			ImGui::EndTable();
 		}
+	}
+
+	ImGui::End();
+}
+
+
+void DrawAudioOut(ImConfig &cfg, ImControl &control) {
+	if (!ImGui::Begin("Audio output", &cfg.audioOutOpen)) {
+		ImGui::End();
+		return;
+	}
+
+	if (g_Config.iAudioSyncMode == (int)AudioSyncMode::GRANULAR) {
+		// Show granular stats
+		GranularStats stats;
+		g_granular.GetStats(&stats);
+		ImGui::Text("Granules");
+		ImGui::Text("Read size: %0.2f", stats.smoothedReadSize);
+		ImGui::Text("Frame time estimate: %0.1f ms", stats.frameTimeEstimate * 1000.0f);
+		ImGui::Text("Queued samples target: %d", stats.queuedSamplesTarget);
+		ImGui::Text("Queued min/max: %d / %d", stats.queuedGranulesMin, stats.queuedGranulesMax);
+		ImGui::Text("Queued (smooth): %0.3f", stats.smoothedQueuedGranules);
+		ImGui::Text("Target: %d", stats.targetQueueSize);
+		ImGui::Text("Max: %d", stats.maxQueuedGranules);
+		ImGui::Text("Computed queue latency: %d ms", (int)(stats.smoothedQueuedGranules * (GranularMixer::GRANULE_SIZE * 1000.0 / 44100.0)));
+		ImGui::Text("Fade volume: %0.2f", stats.fadeVolume);
+		ImGui::Text("Looping: %s", BoolStr(stats.looping));
+		ImGui::Text("Under/Over: %d / %d", stats.underruns, stats.overruns);
+	} else {
+		ImGui::Text("StereoResampler classic");
+		char buf[1024];
+		g_resampler.GetAudioDebugStats(buf, sizeof(buf));
+		ImGui::Text("%s", buf);
 	}
 
 	ImGui::End();
@@ -1761,6 +1851,131 @@ static void DrawSymbols(const MIPSDebugInterface *debug, ImConfig &cfg, ImContro
 	ImGui::End();
 }
 
+ImWatchWindow::ImWatchWindow() {}
+
+void ImWatchWindow::Draw(ImConfig &cfg, ImControl &control, MIPSDebugInterface *mipsDebug) {
+	if (!ImGui::Begin("Watch", &cfg.atracToolOpen) || !g_symbolMap) {
+		ImGui::End();
+		return;
+	}
+
+	// Refresh watches
+	int steppingCounter = Core_GetSteppingCounter();
+	int changes = false;
+	for (auto &watch : watches_) {
+		if (watch.steppingCounter != steppingCounter) {
+			watch.lastValue = watch.currentValue;
+			watch.steppingCounter = steppingCounter;
+		}
+
+		uint32_t prevValue = watch.currentValue;
+		watch.evaluateFailed = !parseExpression(mipsDebug, watch.expression, watch.currentValue);
+	}
+
+	if (ImGui::Button("Add Watch")) {
+		watches_.push_back(WatchInfo("untitled", "[0x88000000]", mipsDebug));
+	}
+
+	if (ImGui::BeginTable("watches", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH | ImGuiTableFlags_Resizable)) {
+		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+		ImGui::TableSetupColumn("Expression", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+		ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+
+		ImGui::TableHeadersRow();
+
+		for (int i = 0; i < (int)watches_.size(); i++) {
+			auto &watch = watches_[i];
+			ImGui::PushID(i);
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(watch.name.c_str());
+			ImGui::TableNextColumn();
+			if (editingWatchIndex_ == i && editingColumn_ == 1) {
+				ImGui::SetNextItemWidth(-1.0f);  // Full width
+				if (setEditFocus_) {
+					ImGui::FocusItem();
+					setEditFocus_ = false;
+				}
+				bool confirmed = ImGui::InputText("##edit", editBuffer_, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+				// Filter for only enter presses
+				confirmed = confirmed && ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter);
+				if (confirmed || ImGui::IsItemDeactivated()) {
+					watch.SetExpression(editBuffer_, mipsDebug);
+					editingWatchIndex_ = -1;
+				}
+			} else {
+				ImGui::SetNextItemWidth(-1.0f);  // Full width
+				ImGui::TextUnformatted(watch.originalExpression.c_str());
+				auto cellRect = ImGui::TableGetCellBgRect(ImGui::GetCurrentTable(), 1);
+				bool cellHovered = ImGui::IsMouseHoveringRect(cellRect.Min, cellRect.Max);
+				if (cellHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+					editingWatchIndex_ = i;
+					editingColumn_ = 1;
+					truncate_cpy(editBuffer_, watch.originalExpression.c_str());
+					setEditFocus_ = true;
+				}
+			}
+			ImGui::TableNextColumn();
+			if (watch.evaluateFailed) {
+				ImGui::TextUnformatted("(Error)");
+			} else {
+				bool changed = watch.currentValue != watch.lastValue;
+				if (changed) {
+					//ImGui::PushStyleColor(ImGuiCol_Text, ImDebuggerColor_Diff);
+				}
+				const uint32_t value = watch.currentValue;
+				float valuef = 0.0f;
+				switch (watch.format) {
+				case WatchFormat::HEX:
+					ImGui::Text("%08x", value);
+					break;
+				case WatchFormat::INT:
+					ImGui::Text("%d", value);
+					break;
+				case WatchFormat::FLOAT:
+					memcpy(&valuef, &value, sizeof(valuef));
+					ImGui::Text("%f", value);
+					break;
+				case WatchFormat::STR:
+					if (Memory::IsValidAddress(value)) {
+						uint32_t len = Memory::ValidSize(value, 255);
+						ImGui::Text("%.*s", len, Memory::GetCharPointer(value));
+					} else {
+						ImGui::Text("%08x", value);
+					}
+					break;
+				}
+				if (changed) {
+					//ImGui::PopStyleColor(ImGuiCol_Text);
+				}
+			}
+			ImGui::TableNextColumn();
+			if (ImGui::SmallButton("X")) {
+				watches_.erase(watches_.begin() + i);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Type")) {
+				ImGui::OpenPopup("watchType");
+			}
+			if (ImGui::BeginPopup("watchType")) {
+				ImGui::Text("Watch type");
+				if (ImGui::MenuItem("Hex", nullptr, watch.format == WatchFormat::HEX)) { watch.format = WatchFormat::HEX; }
+				if (ImGui::MenuItem("Int", nullptr, watch.format == WatchFormat::INT)) { watch.format = WatchFormat::INT; }
+				if (ImGui::MenuItem("Float", nullptr, watch.format == WatchFormat::FLOAT)) { watch.format = WatchFormat::FLOAT; }
+				if (ImGui::MenuItem("Str", nullptr, watch.format == WatchFormat::STR)) { watch.format = WatchFormat::STR; }
+				ImGui::EndPopup();
+			}
+
+			ImGui::PopID();
+		}
+
+		ImGui::EndTable();
+	}
+
+	ImGui::End();
+}
+
 void ImAtracToolWindow::Load() {
 	if (File::ReadBinaryFileToString(Path(atracPath_), &data_)) {
 		track_.reset(new Track());
@@ -1978,7 +2193,7 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUDebugInterface *gpuDebu
 					System_CopyStringToClipboard(StringFromFormat("%016llx", (uint64_t)(uintptr_t)Memory::base));
 				}
 			}
-			ImGui::Separator();
+			ImGui::Separator(); 
 			if (ImGui::MenuItem("Close")) {
 				g_Config.bShowImDebugger = false;
 			}
@@ -1994,8 +2209,10 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUDebugInterface *gpuDebu
 			ImGui::MenuItem("GPR regs", nullptr, &cfg_.gprOpen);
 			ImGui::MenuItem("FPR regs", nullptr, &cfg_.fprOpen);
 			ImGui::MenuItem("VFPU regs", nullptr, &cfg_.vfpuOpen);
+			ImGui::Separator();
 			ImGui::MenuItem("Callstacks", nullptr, &cfg_.callstackOpen);
 			ImGui::MenuItem("Breakpoints", nullptr, &cfg_.breakpointsOpen);
+			ImGui::MenuItem("Watch", nullptr, &cfg_.watchOpen);
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Symbols")) {
@@ -2078,6 +2295,8 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUDebugInterface *gpuDebu
 			ImGui::MenuItem("SasAudio mixer", nullptr, &cfg_.sasAudioOpen);
 			ImGui::MenuItem("Raw audio channels", nullptr, &cfg_.audioChannelsOpen);
 			ImGui::MenuItem("AV Decoder contexts", nullptr, &cfg_.mediaDecodersOpen);
+			ImGui::Separator();
+			ImGui::MenuItem("Audio output / buffer", nullptr, &cfg_.audioOutOpen);
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Network")) {
@@ -2155,6 +2374,10 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUDebugInterface *gpuDebu
 
 	if (cfg_.audioChannelsOpen) {
 		DrawAudioChannels(cfg_, control);
+	}
+
+	if (cfg_.audioOutOpen) {
+		DrawAudioOut(cfg_, control);
 	}
 
 	if (cfg_.sasAudioOpen) {
@@ -2247,6 +2470,10 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUDebugInterface *gpuDebu
 
 	if (cfg_.memDumpOpen) {
 		memDumpWindow_.Draw(cfg_, mipsDebug);
+	}
+
+	if (cfg_.watchOpen) {
+		watchWindow_.Draw(cfg_, control, mipsDebug);
 	}
 
 	for (int i = 0; i < 4; i++) {
@@ -2402,6 +2629,7 @@ void ImConfig::SyncConfig(IniFile *ini, bool save) {
 	sync.Sync("filesystemBrowserOpen", &filesystemBrowserOpen, false);
 	sync.Sync("kernelObjectsOpen", &kernelObjectsOpen, false);
 	sync.Sync("audioChannelsOpen", &audioChannelsOpen, false);
+	sync.Sync("audioOutOpen", &audioOutOpen, false);
 	sync.Sync("texturesOpen", &texturesOpen, false);
 	sync.Sync("debugStatsOpen", &debugStatsOpen, false);
 	sync.Sync("geDebuggerOpen", &geDebuggerOpen, false);
@@ -2419,6 +2647,8 @@ void ImConfig::SyncConfig(IniFile *ini, bool save) {
 	sync.Sync("logConfigOpen", &logConfigOpen, false);
 	sync.Sync("luaConsoleOpen", &luaConsoleOpen, false);
 	sync.Sync("utilityModulesOpen", &utilityModulesOpen, false);
+	sync.Sync("memDumpOpen", &memDumpOpen, false);
+	sync.Sync("watchOpen", &watchOpen, false);
 	sync.Sync("atracToolOpen", &atracToolOpen, false);
 	for (int i = 0; i < 4; i++) {
 		char name[64];

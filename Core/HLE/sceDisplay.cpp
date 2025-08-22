@@ -175,7 +175,7 @@ static void ScheduleLagSync(int over = 0) {
 
 void __DisplayInit() {
 	__DisplaySetFramerate();
-	DisplayHWInit();
+	DisplayHWReset();
 	hasSetMode = false;
 	mode = 0;
 	resumeMode = 0;
@@ -296,7 +296,6 @@ void __DisplayDoState(PointerWrap &p) {
 }
 
 void __DisplayShutdown() {
-	DisplayHWShutdown();
 	vblankWaitingThreads.clear();
 }
 
@@ -426,7 +425,7 @@ static void DoFrameTiming(bool throttle, bool *skipFrame, float scaledTimestep, 
 
 	// Auto-frameskip automatically if speed limit is set differently than the default.
 	int frameSkipNum = DisplayCalculateFrameSkip();
-	if (g_Config.bAutoFrameSkip) {
+	if (g_Config.bAutoFrameSkip && !g_Config.bSkipBufferEffects) {
 		// autoframeskip
 		// Argh, we are falling behind! Let's skip a frame and see if we catch up.
 		if (curFrameTime > nextFrameTime && doFrameSkip) {
@@ -695,6 +694,14 @@ void __DisplayFlip(int cyclesLate) {
 	} else {
 		gstate_c.skipDrawReason &= ~SKIPDRAW_SKIPFRAME;
 		numSkippedFrames = 0;
+
+		// NOTE!! It can happen that if we just toggled frameskip (especially auto), we are still in a state
+		// where we don't have a framebuffer bound, from the last frame. But framebuffermanager still might think
+		// that we're in non-buffered mode.
+		if (gpu->GetFramebufferManagerCommon() && !gpu->GetFramebufferManagerCommon()->UseBufferedRendering() && !g_Config.bSkipBufferEffects) {
+			gpu->GetFramebufferManagerCommon()->ForceUseBufferedRendering(!g_Config.bSkipBufferEffects);
+			gstate_c.skipDrawReason &= ~SKIPDRAW_NON_DISPLAYED_FB;
+		}
 	}
 
 	// Returning here with coreState == CORE_NEXTFRAME causes a buffer flip to happen (next frame).

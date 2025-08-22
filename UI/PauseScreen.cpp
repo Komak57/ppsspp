@@ -47,6 +47,7 @@
 #include "Core/HLE/sceNet.h"
 #include "Core/HLE/sceNetInet.h"
 #include "Core/HLE/sceNetAdhoc.h"
+#include "Core/HLE/NetAdhocCommon.h"
 
 #include "GPU/GPUCommon.h"
 #include "GPU/GPUState.h"
@@ -74,7 +75,7 @@ static void AfterSaveStateAction(SaveState::Status status, std::string_view mess
 class ScreenshotViewScreen : public PopupScreen {
 public:
 	ScreenshotViewScreen(const Path &filename, std::string title, int slot, Path gamePath)
-		: PopupScreen(title), filename_(filename), slot_(slot), gamePath_(gamePath) {}   // PopupScreen will translate Back on its own
+		: PopupScreen(title), filename_(filename), slot_(slot), gamePath_(gamePath), title_(title) {}   // PopupScreen will translate Back on its own
 
 	int GetSlot() const {
 		return slot_;
@@ -102,13 +103,26 @@ protected:
 		GridLayout *grid = content->Add(new GridLayoutList(gridsettings, new LayoutParams(FILL_PARENT, WRAP_CONTENT)));
 
 		Choice *back = new Choice(di->T("Back"));
-		Choice *undoButton = new Choice(pa->T("Undo last save"));
-		undoButton->SetEnabled(SaveState::HasUndoSaveInSlot(gamePath_, slot_));
+
+		const bool hasUndo = SaveState::HasUndoSaveInSlot(gamePath_, slot_);
+		const bool undoEnabled = g_Config.bEnableStateUndo;
+
+		Choice *undoButton = nullptr;
+		if (undoEnabled || hasUndo) {
+			// Show the undo button if state undo is enabled in settings, OR one is available. We can load it
+			// even if making new undo states is not enabled.
+			Choice *undoButton = new Choice(pa->T("Undo last save"));
+			undoButton->SetEnabled(hasUndo);
+		}
 
 		grid->Add(new Choice(pa->T("Save State")))->OnClick.Handle(this, &ScreenshotViewScreen::OnSaveState);
+		// We can unconditionally show the load state button, because you can only pop this dialog up if a state exists.
 		grid->Add(new Choice(pa->T("Load State")))->OnClick.Handle(this, &ScreenshotViewScreen::OnLoadState);
+		grid->Add(new Choice(pa->T("Delete State")))->OnClick.Handle(this, &ScreenshotViewScreen::OnDeleteState);
+		if (undoButton) {
+			grid->Add(undoButton)->OnClick.Handle(this, &ScreenshotViewScreen::OnUndoState);
+		}
 		grid->Add(back)->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
-		grid->Add(undoButton)->OnClick.Handle(this, &ScreenshotViewScreen::OnUndoState);
 
 		scroll->Add(content);
 		parent->Add(scroll);
@@ -118,9 +132,11 @@ private:
 	UI::EventReturn OnSaveState(UI::EventParams &e);
 	UI::EventReturn OnLoadState(UI::EventParams &e);
 	UI::EventReturn OnUndoState(UI::EventParams &e);
+	UI::EventReturn OnDeleteState(UI::EventParams &e);
 
 	Path filename_;
 	Path gamePath_;
+	std::string title_;
 	int slot_;
 };
 
@@ -147,6 +163,27 @@ UI::EventReturn ScreenshotViewScreen::OnUndoState(UI::EventParams &e) {
 		SaveState::UndoSaveSlot(gamePath_, slot_);
 		TriggerFinish(DR_CANCEL);
 	}
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn ScreenshotViewScreen::OnDeleteState(UI::EventParams &e) {
+	auto di = GetI18NCategory(I18NCat::DIALOG);
+
+	std::shared_ptr<GameInfo> info = g_gameInfoCache->GetInfo(NULL, gamePath_, GameInfoFlags::PARAM_SFO);
+
+	std::string message(di->T("DeleteConfirmSaveState"));
+	message += "\n\n" + info->GetTitle() + " (" + info->id + ")";
+	message += "\n\n" + title_;
+
+	// TODO: Also show the screenshot on the confirmation screen?
+
+	screenManager()->push(new PromptScreen(gamePath_, message, di->T("Delete"), di->T("Cancel"), [=](bool result) {
+		if (result) {
+			SaveState::DeleteSlot(gamePath_, slot_);
+			TriggerFinish(DR_CANCEL);
+		}
+	}));
+
 	return UI::EVENT_DONE;
 }
 
@@ -372,6 +409,7 @@ void GamePauseScreen::CreateViews() {
 	auto pa = GetI18NCategory(I18NCat::PAUSE);
 	auto ac = GetI18NCategory(I18NCat::ACHIEVEMENTS);
 	auto nw = GetI18NCategory(I18NCat::NETWORKING);
+	auto di = GetI18NCategory(I18NCat::DIALOG);
 
 	root_ = new LinearLayout(ORIENT_HORIZONTAL);
 
@@ -428,7 +466,7 @@ void GamePauseScreen::CreateViews() {
 
 		if (NetAdhocctl_GetState() >= ADHOCCTL_STATE_CONNECTED) {
 			// Awkwardly re-using a string here
-			leftColumnItems->Add(new TextView(std::string(nw->T("AdHoc Server")) + ": " + std::string(nw->T("Connected"))));
+			leftColumnItems->Add(new TextView(std::string(nw->T("AdHoc server")) + ": " + std::string(nw->T("Connected"))));
 		}
 	}
 
@@ -439,6 +477,15 @@ void GamePauseScreen::CreateViews() {
 	}
 
 	if (showSavestateControls) {
+		if (PSP_CoreParameter().compat.flags().SaveStatesNotRecommended) {
+			LinearLayout *horiz = new LinearLayout(UI::ORIENT_HORIZONTAL);
+			leftColumnItems->Add(horiz);
+			horiz->Add(new NoticeView(NoticeLevel::WARN, pa->T("Using save states is not recommended in this game"), "", new LinearLayoutParams(1.0f)));
+			horiz->Add(new Button(di->T("More info")))->OnClick.Add([](UI::EventParams &e) {
+				System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://www.ppsspp.org/docs/troubleshooting/save-state-time-warps");
+				return UI::EVENT_DONE;
+			});
+		}
 		CreateSavestateControls(leftColumnItems, vertical);
 	} else {
 		// Let's show the active challenges.
@@ -641,6 +688,11 @@ std::string GetConfirmExitMessage() {
 		auto ac = GetI18NCategory(I18NCat::ACHIEVEMENTS);
 		confirmMessage = ac->T("You have unsaved RAIntegration changes.");
 		confirmMessage += '\n';
+	}
+
+	if (coreState == CORE_RUNTIME_ERROR) {
+		// The game crashed, or similar. Don't bother checking for timeout or network.
+		return confirmMessage;
 	}
 
 	if (IsNetworkConnected()) {

@@ -74,8 +74,14 @@ bool Connection::Resolve(const char *host, int port, DNSType type) {
 	char port_str[16];
 	snprintf(port_str, sizeof(port_str), "%d", port);
 
+	std::string processedHostname(host);
+
+	if (customResolve_) {
+		processedHostname = customResolve_(host);
+	}
+	
 	std::string err;
-	if (!net::DNSResolve(host, port_str, &resolved_, err, type)) {
+	if (!net::DNSResolve(processedHostname.c_str(), port_str, &resolved_, err, type)) {
 		WARN_LOG(Log::IO, "Failed to resolve host '%s': '%s' (%s)", host, err.c_str(), DNSTypeAsString(type));
 		// Zero port so that future calls fail.
 		port_ = 0;
@@ -331,7 +337,7 @@ namespace http {
 constexpr const char *DEFAULT_USERAGENT = "PPSSPP";
 constexpr const char *HTTP_VERSION = "1.1";
 
-Client::Client() {
+Client::Client(net::ResolveFunc func) : Connection(func) {
 	userAgent_ = DEFAULT_USERAGENT;
 	httpVersion_ = HTTP_VERSION;
 	// TODO: Initialize SSH
@@ -593,6 +599,10 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 		ERROR_LOG(Log::HTTP, "Failed to read HTTP headers -0x%04x", -ret);
 		return -1;
 	}
+	if (readbuf->empty()) {
+		ERROR_LOG(Log::HTTP, "Empty HTTP header read buffer :(");
+		return -1;
+	}
 	// Check for header marker
 	int i = readbuf->Contains("\r\n\r\n");
 	// Still no header eof? Try again!
@@ -604,6 +614,8 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 	// Pull the raw header data
 	std::string header;
 	readbuf->Take(i+4, &header);
+
+	// Grab the first header line that contains the http code.
 
 	// Split lines into responseHeaders
 	size_t start = 0;
@@ -714,8 +726,8 @@ int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::stri
 	return 0;
 }
 
-HTTPRequest::HTTPRequest(RequestMethod method, std::string_view url, std::string_view postData, std::string_view postMime, const Path &outfile, RequestFlags flags, std::string_view name)
-	: Request(method, url, name, &cancelled_, flags), postData_(postData), postMime_(postMime) {
+HTTPRequest::HTTPRequest(RequestMethod method, std::string_view url, std::string_view postData, std::string_view postMime, const Path &outfile, RequestFlags flags, net::ResolveFunc customResolve, std::string_view name)
+	: Request(method, url, name, &cancelled_, flags), postData_(postData), postMime_(postMime), customResolve_(customResolve) {
 	outfile_ = outfile;
 }
 
@@ -751,7 +763,7 @@ int HTTPRequest::Perform(const std::string &url) {
 		return -1;
 	}
 
-	http::Client client;
+	http::Client client(customResolve_);
 	if (!userAgent_.empty()) {
 		client.SetUserAgent(userAgent_);
 	}

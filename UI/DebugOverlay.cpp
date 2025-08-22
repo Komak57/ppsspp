@@ -97,9 +97,9 @@ static void DrawControlDebug(UIContext *ctx, const ControlMapper &mapper, const 
 
 static void DrawFrameTimes(UIContext *ctx, const Bounds &bounds) {
 	FontID ubuntu24("UBUNTU24");
-	double *sleepHistory;
+	float *sleepHistory;
 	int valid, pos;
-	double *history = __DisplayGetFrameTimes(&valid, &pos, &sleepHistory);
+	float *history = __DisplayGetFrameTimes(&valid, &pos, &sleepHistory);
 	int scale = 7000;
 	int width = 600;
 
@@ -136,8 +136,9 @@ static void DrawFrameTiming(UIContext *ctx, const Bounds &bounds) {
 	ctx->BindFontTexture();
 	ctx->Draw()->SetFontScale(0.5f, 0.5f);
 
+	// NOTE: This is not necessarily the same as the actual present mode.
 	snprintf(statBuf, sizeof(statBuf),
-		"Mode (interval): %s (%d)",
+		"Timing mode (interval): %s (%d)",
 		Draw::PresentModeToString(g_frameTiming.presentMode),
 		g_frameTiming.presentInterval);
 

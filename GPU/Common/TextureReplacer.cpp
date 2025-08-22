@@ -102,28 +102,16 @@ void TextureReplacer::NotifyConfigChanged() {
 		// Even if just saving is enabled, it makes sense to reload the ini to get the correct
 		// settings for saving. See issue #19086. This can be expensive though.
 		std::string error;
-		bool result = LoadIni(&error);
+		bool result = LoadIni(&error, false);
 		if (!result) {
 			// Ignore errors here, just log if we successfully loaded an ini.
 		} else {
 			INFO_LOG(Log::G3D, "Loaded INI file for saving.");
 		}
 	}
-
-	if (saveEnabled_) {
-		// Somewhat crude message, re-using translation strings.
-		auto d = GetI18NCategory(I18NCat::DEVELOPER);
-		auto di = GetI18NCategory(I18NCat::DIALOG);
-		std::string str(d->T("Save new textures"));
-		if (!str.empty()) {
-			str.append(": ");
-			str.append(di->T("Enabled"));
-			g_OSD.Show(OSDType::MESSAGE_INFO, str, 2.0f);
-		}
-	}
 }
 
-bool TextureReplacer::LoadIni(std::string *error) {
+bool TextureReplacer::LoadIni(std::string *error, bool notify) {
 	hash_ = ReplacedTextureHash::QUICK;
 	aliases_.clear();
 	hashranges_.clear();
@@ -167,12 +155,14 @@ bool TextureReplacer::LoadIni(std::string *error) {
 		// Allow overriding settings per game id.
 		std::string overrideFilename;
 		if (ini.GetOrCreateSection("games")->Get(gameID_.c_str(), &overrideFilename, "")) {
-			if (!overrideFilename.empty() && overrideFilename != INI_FILENAME) {
+			if (overrideFilename == "true") {
+				// Ignore it
+			} else if (!overrideFilename.empty() && overrideFilename != INI_FILENAME) {
 				IniFile overrideIni;
 				iniLoaded = overrideIni.LoadFromVFS(*dir, overrideFilename);
 				if (!iniLoaded) {
-					*error = "Loading override ini failed: " + overrideFilename;
-					ERROR_LOG(Log::TexReplacement, "Failed to load extra texture ini: %s", overrideFilename.c_str());
+					*error = "Loading override ini failed: '" + overrideFilename + "'";
+					ERROR_LOG(Log::TexReplacement, "Failed to load extra texture ini: '%s'", overrideFilename.c_str());
 					// Since this error is most likely to occure for texture pack creators, let's just bail here
 					// so that the creator is more likely to look in the logs for what happened.
 					delete dir;
@@ -212,7 +202,7 @@ bool TextureReplacer::LoadIni(std::string *error) {
 	}
 
 	auto gr = GetI18NCategory(I18NCat::GRAPHICS);
-	if (replaceEnabled_) {
+	if (replaceEnabled_ && notify) {
 		g_OSD.Show(OSDType::MESSAGE_SUCCESS, gr->T("Texture replacement pack activated"), 3.0f);
 	}
 

@@ -54,6 +54,7 @@
 #include "Core/HLE/Plugins.h"
 #include "Core/HLE/ReplaceTables.h"
 #include "Core/HLE/sceKernel.h"
+#include "Core/HW/Display.h"
 #include "Core/Config.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
@@ -282,8 +283,8 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 	case IdentifiedFileType::PSP_ISO_NP:
 	case IdentifiedFileType::PSP_DISC_DIRECTORY:
 		// Doesn't seem to take ownership of fileLoader?
-		if (!MountGameISO(fileLoader)) {
-			*errorString = "Failed to mount ISO file - invalid format?";
+		if (!MountGameISO(fileLoader, errorString)) {
+			*errorString = "Failed to mount ISO file: " + *errorString;
 			return false;
 		}
 		if (LoadParamSFOFromDisc()) {
@@ -294,7 +295,7 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 			// TODO: Better would be to check that it was loaded successfully.
 			if (!File::Exists(g_CoreParameter.fileToStart / INDEX_FILENAME)) {
 				auto sc = GetI18NCategory(I18NCat::SCREEN);
-				g_OSD.Show(OSDType::MESSAGE_CENTERED_WARNING, sc->T("ExtractedIsoWarning", "Extracted ISOs often don't work.\nPlay the ISO file directly."), g_CoreParameter.fileToStart.ToVisualString(), 7.0f);
+				g_OSD.Show(OSDType::MESSAGE_WARNING, sc->T("ExtractedIsoWarning", "Extracted ISOs often don't work.\nPlay the ISO file directly."), g_CoreParameter.fileToStart.ToVisualString(), 7.0f);
 			} else {
 				INFO_LOG(Log::Loader, "Extracted ISO loaded without warning - %s is present.", INDEX_FILENAME.c_str());
 			}
@@ -409,6 +410,8 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 
 	CoreTiming::Init();
 
+	DisplayHWInit();
+
 	// Init all the HLE modules
 	HLEInit();
 
@@ -495,6 +498,8 @@ void CPU_Shutdown(bool success) {
 	CoreTiming::Shutdown();
 	__KernelShutdown();
 	HLEShutdown();
+
+	DisplayHWShutdown();
 
 	pspFileSystem.Shutdown();
 	mipsr4k.Shutdown();
@@ -945,7 +950,7 @@ void DumpFileIfEnabled(const u8 *dataPtr, const u32 length, std::string_view nam
 	fwrite(dataPtr, sizeof(u8), lengthToWrite, file);
 	fclose(file);
 
-	INFO_LOG(Log::sceModule, "Successfully wrote %s to %s", DumpFileTypeToString(type), fullPath.c_str());
+	INFO_LOG(Log::sceModule, "Successfully wrote %s to %s", DumpFileTypeToString(type), fullPath.ToVisualString().c_str());
 
 	char *path = new char[strlen(fullPath.c_str()) + 1];
 	strcpy(path, fullPath.c_str());

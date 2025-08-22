@@ -516,6 +516,12 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0xf93d3cd093595a6c, 856, "brian_lara_fps_hack", }, // Brian Lara 2007: Pressure Play
 	{ 0xc1d4af42a4c8860f, 964, "persona1_download_frame", },  // Persona 1 (issue #13079)
 	{ 0xde4286b2e7f6d3c1, 304, "persona2_download_frame", },  // Persona 2 (issue #13079)
+	{ 0x478c9c93d02011af, 1068, "steinsgate_download_frame", }, // Steins;Gate (issue #18262)
+	{ 0xb85dbe639f7acf13, 312, "infinity_download_frame", },  // Never7, Ever17, Remember11
+	{ 0x649d3305344f7afd, 464, "takuyo_1_download_frame", },
+	{ 0x505ad2073e4381d7, 428, "takuyo_2_download_frame", },
+	{ 0x0f4dbf28320798d7, 1160, "takuyo_3_download_frame", },
+	{ 0xf2bbff4807c5dab2, 556, "kingdomhearts_download_frame", },
 };
 
 namespace MIPSAnalyst {
@@ -906,33 +912,6 @@ skip:
 		}
 	}
 
-	void PrecompileFunction(u32 startAddr, u32 length) {
-		// Direct calls to this ignore the bPreloadFunctions flag, since it's just for stubs.
-		std::lock_guard<std::recursive_mutex> guard(MIPSComp::jitLock);
-		if (MIPSComp::jit) {
-			MIPSComp::jit->CompileFunction(startAddr, length);
-		}
-	}
-
-	void PrecompileFunctions() {
-		if (!g_Config.bPreloadFunctions) {
-			return;
-		}
-		std::lock_guard<std::recursive_mutex> guard(functions_lock);
-
-		// TODO: Load from cache file if available instead.
-
-		double st = time_now_d();
-		for (auto iter = functions.begin(), end = functions.end(); iter != end; iter++) {
-			const AnalyzedFunction &f = *iter;
-
-			PrecompileFunction(f.start, f.end - f.start + 4);
-		}
-		double et = time_now_d();
-
-		NOTICE_LOG(Log::JIT, "Precompiled %d MIPS functions in %0.2f milliseconds", (int)functions.size(), (et - st) * 1000.0);
-	}
-
 	static const char *DefaultFunctionName(char buffer[256], u32 startAddr) {
 		snprintf(buffer, 256, "z_un_%08x", startAddr);
 		return buffer;
@@ -1023,7 +1002,7 @@ skip:
 	}
 
 	bool ScanForFunctions(u32 startAddr, u32 endAddr, bool insertSymbols) {
-		_assert_(((startAddr | endAddr) & 3) == 0);
+		_assert_((startAddr & 3) == 0);
 
 		std::lock_guard<std::recursive_mutex> guard(functions_lock);
 

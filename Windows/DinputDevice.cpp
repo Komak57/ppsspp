@@ -33,6 +33,8 @@
 #include "Common/System/NativeApp.h"
 #include "Core/KeyMap.h"
 #include "Windows/DinputDevice.h"
+#include "Windows/HidInputDevice.h"
+
 #pragma comment(lib,"dinput8.lib")
 
 // static members of DinputDevice
@@ -105,6 +107,7 @@ void DinputDevice::getDevices(bool refresh) {
 	if (refresh) {
 		// We don't want duplicate reporting from XInput devices through DInput.
 		ignoreDevices_ = DetectXInputVIDPIDs();
+		HidInputDevice::AddSupportedDevices(&ignoreDevices_);
 		getPDI()->EnumDevices(DI8DEVCLASS_GAMECTRL, &DinputDevice::DevicesCallback, NULL, DIEDFL_ATTACHEDONLY);
 	}
 }
@@ -241,7 +244,7 @@ int DinputDevice::UpdateState() {
 		|| js.lVX != 0 || js.lVY != 0 || js.lVZ != 0 || js.lVRx != 0 || js.lVRy != 0 || js.lVRz != 0)
 	{
 		pPrevState = js;
-		return UPDATESTATE_SKIP_PAD;
+		return InputDevice::UPDATESTATE_SKIP_PAD;
 	}
 	return -1;
 }
@@ -312,12 +315,6 @@ size_t DinputDevice::getNumPads()
 static std::set<u32> DetectXInputVIDPIDs() {
 	std::set<u32> xinputVidPids;
 
-	/*
-	if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
-		return xinputVidPids;
-	}
-	*/
-
 	IWbemLocator* pIWbemLocator = nullptr;
 	if (FAILED(CoCreateInstance(__uuidof(WbemLocator), nullptr, CLSCTX_INPROC_SERVER,
 		__uuidof(IWbemLocator), (void**)&pIWbemLocator)))
@@ -340,10 +337,10 @@ static std::set<u32> DetectXInputVIDPIDs() {
 		return xinputVidPids;
 	}
 
-	IWbemClassObject* pDevices[20] = { 0 };
+	IWbemClassObject* pDevices[32] = { 0 };
 	ULONG uReturned = 0;
 
-	while (SUCCEEDED(pEnumDevices->Next(10000, 20, pDevices, &uReturned)) && uReturned > 0) {
+	while (SUCCEEDED(pEnumDevices->Next(10000, 32, pDevices, &uReturned)) && uReturned > 0) {
 		for (ULONG i = 0; i < uReturned; i++) {
 			VARIANT var;
 			if (SUCCEEDED(pDevices[i]->Get(L"DeviceID", 0, &var, nullptr, nullptr)))
@@ -369,7 +366,35 @@ static std::set<u32> DetectXInputVIDPIDs() {
 	pEnumDevices->Release();
 	pIWbemServices->Release();
 	pIWbemLocator->Release();
-	// CoUninitialize();
 
 	return xinputVidPids;
+}
+
+DInputMetaDevice::DInputMetaDevice() {
+	//find all connected DInput devices of class GamePad
+	numDinputDevices_ = DinputDevice::getNumPads();
+	for (size_t i = 0; i < numDinputDevices_; i++) {
+		devices_.push_back(std::make_unique<DinputDevice>(static_cast<int>(i)));
+	}
+}
+
+int DInputMetaDevice::UpdateState() {
+	static const int CHECK_FREQUENCY = 71;  // Just an arbitrary prime to try to not collide with other periodic checks.
+	if (checkCounter_++ > CHECK_FREQUENCY) {
+		const size_t newCount = DinputDevice::getNumPads();
+		if (newCount > numDinputDevices_) {
+			INFO_LOG(Log::System, "New controller device detected");
+			for (size_t i = numDinputDevices_; i < newCount; i++) {
+				devices_.push_back(std::make_unique<DinputDevice>(static_cast<int>(i)));
+			}
+			numDinputDevices_ = newCount;
+		}
+		checkCounter_ = 0;
+	}
+
+	for (const auto &device : devices_) {
+		if (device->UpdateState() == InputDevice::UPDATESTATE_SKIP_PAD)
+			return InputDevice::UPDATESTATE_SKIP_PAD;
+	}
+	return 0;
 }

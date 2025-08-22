@@ -106,7 +106,7 @@ std::string RemoteSubdir() {
 }
 
 bool RemoteISOConnectScreen::FindServer(std::string &resultHost, int &resultPort) {
-	http::Client http;
+	http::Client http(nullptr);
 	Buffer result;
 	int code = 500;
 	bool hadTimeouts = false;
@@ -636,6 +636,4 @@ void RemoteISOBrowseScreen::CreateViews() {
 	}
 
 	root_->SetDefaultFocusView(tabHolder_);
-
-	upgradeBar_ = 0;
 }

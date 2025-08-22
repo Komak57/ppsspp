@@ -94,6 +94,9 @@ static bool show_upnp_port_option = true;
 static bool show_detect_frame_rate_option = true;
 static std::string changeProAdhocServer;
 
+void* unserialize_data = NULL;
+size_t unserialize_size = 0;
+
 namespace Libretro
 {
    LibretroGraphicsContext *ctx;
@@ -473,14 +476,18 @@ static std::string map_psp_language_to_i18n_locale(int val)
    }
 }
 
-static void check_variables(CoreParameter &coreParam)
-{
+static void check_dynamic_variables(CoreParameter &coreParam) {
    if (g_Config.bForceLagSync)
    {
       bool isFastForwarding;
       if (environ_cb(RETRO_ENVIRONMENT_GET_FASTFORWARDING, &isFastForwarding))
-          coreParam.fastForward = isFastForwarding;
+         coreParam.fastForward = isFastForwarding;
    }
+}
+
+static void check_variables(CoreParameter &coreParam)
+{
+   check_dynamic_variables(coreParam);
 
    struct retro_variable var = {0};
    std::string sTextureShaderName_prev;
@@ -639,7 +646,7 @@ static void check_variables(CoreParameter &coreParam)
    var.key = "ppsspp_analog_sensitivity";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       g_Config.fAnalogSensitivity = atof(var.value);
-   
+
    var.key = "ppsspp_memstick_inserted";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -1240,6 +1247,42 @@ void retro_init(void)
 
    retro_base_dir /= "PPSSPP";
 
+   // Check if '<system_dir>/PPSSPP/compat.ini' exists, if not we can assume
+   // the user is missing the assets entirely, so let's warn them about it.
+   if (!File::Exists(Path(retro_base_dir / "compat.ini")))
+   {
+      const char* str = "Core system files missing, expect bugs.";
+      unsigned msg_interface_version = 0;
+      environ_cb(RETRO_ENVIRONMENT_GET_MESSAGE_INTERFACE_VERSION, &msg_interface_version);
+
+      if (msg_interface_version >= 1)
+      {
+         retro_message_ext msg = {
+            str,
+            3000,
+            3,
+            RETRO_LOG_WARN,
+            RETRO_MESSAGE_TARGET_ALL,
+            RETRO_MESSAGE_TYPE_NOTIFICATION,
+            -1
+         };
+         environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE_EXT, &msg);
+      }
+      else
+      {
+         retro_message msg = {
+            str,
+            180
+         };
+         environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
+      }
+
+      // OSD messages should be kept pretty short, but
+      // let's give the user a bit more info in logs.
+      WARN_LOG(Log::System, "Please check the docs for more informations on how to install "
+                            "the PPSSPP assets: https://docs.libretro.com/library/ppsspp/");
+   }
+
    g_Config.currentDirectory = retro_base_dir;
    g_Config.defaultCurrentDirectory = retro_base_dir;
    g_Config.memStickDirectory = retro_save_dir;
@@ -1665,6 +1708,13 @@ void retro_run(void)
       coreState = CORE_RUNNING_CPU;
       g_bootErrorString.clear();
       g_pendingBoot = false;
+
+      if (unserialize_data) {
+         retro_unserialize(unserialize_data, unserialize_size);
+
+         free(unserialize_data);
+         unserialize_data = NULL;
+      }
    }
 
    // TODO: This seems dubious.
@@ -1680,6 +1730,8 @@ void retro_run(void)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated)
       && updated)
       check_variables(PSP_CoreParameter());
+   else
+      check_dynamic_variables(PSP_CoreParameter());
 
    retro_input();
 
@@ -1761,8 +1813,13 @@ bool retro_serialize(void *data, size_t size)
 
 bool retro_unserialize(const void *data, size_t size)
 {
-   if (!gpu) // The HW renderer isn't ready on first pass.
-      return false;
+   // The HW renderer isn't ready on first pass.
+   // So we save the data until we are ready to use it.
+   if (!gpu) {
+      unserialize_data = malloc(size);
+      memcpy(unserialize_data, data, size);
+      return true;
+   }
 
    // TODO: Libretro API extension to use the savestate queue
    if (useEmuThread)
@@ -1877,10 +1934,8 @@ void retro_cheat_set(unsigned index, bool enabled, const char *code) {
    }
 }
 
-int64_t System_GetPropertyInt(SystemProperty prop)
-{
-   switch (prop)
-   {
+int64_t System_GetPropertyInt(SystemProperty prop) {
+   switch (prop) {
       case SYSPROP_AUDIO_SAMPLE_RATE:
          return SAMPLERATE;
 #if PPSSPP_PLATFORM(ANDROID)

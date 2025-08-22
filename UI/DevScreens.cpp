@@ -28,6 +28,7 @@
 #include "ppsspp_config.h"
 
 #include "Common/Common.h"
+#include "Common/Audio/AudioBackend.h"
 #include "Common/System/Display.h"
 #include "Common/System/NativeApp.h"
 #include "Common/System/System.h"
@@ -70,6 +71,7 @@
 #include "UI/DevScreens.h"
 #include "UI/MainScreen.h"
 #include "UI/EmuScreen.h"
+#include "UI/OnScreenDisplay.h"
 #include "UI/ControlMappingScreen.h"
 #include "UI/DeveloperToolsScreen.h"
 #include "UI/JitCompareScreen.h"
@@ -607,11 +609,6 @@ void SystemInfoScreen::CreateDeviceInfoTab(UI::LinearLayout *deviceSpecs) {
 	if (GetGPUBackend() != GPUBackend::VULKAN) {
 		gpuInfo->Add(new InfoItem(si->T("Driver Version"), System_GetProperty(SYSPROP_GPUDRIVER_VERSION)));
 	}
-#if !PPSSPP_PLATFORM(UWP)
-	if (GetGPUBackend() == GPUBackend::DIRECT3D9) {
-		gpuInfo->Add(new InfoItem(si->T("D3DCompiler Version"), StringFromFormat("%d", GetD3DCompilerVersion())));
-	}
-#endif
 #endif
 	if (GetGPUBackend() == GPUBackend::OPENGL) {
 		gpuInfo->Add(new InfoItem(si->T("Core Context"), gl_extensions.IsCoreContext ? di->T("Active") : di->T("Inactive")));
@@ -655,7 +652,14 @@ void SystemInfoScreen::CreateDeviceInfoTab(UI::LinearLayout *deviceSpecs) {
 	osInformation->Add(new InfoItem(si->T("PPSSPP build"), build));
 
 	CollapsibleSection *audioInformation = deviceSpecs->Add(new CollapsibleSection(si->T("Audio Information")));
-	audioInformation->Add(new InfoItem(si->T("Sample rate"), StringFromFormat(si->T_cstr("%d Hz"), System_GetPropertyInt(SYSPROP_AUDIO_SAMPLE_RATE))));
+	extern AudioBackend *g_audioBackend;
+	if (g_audioBackend) {
+		char fmtStr[256];
+		g_audioBackend->DescribeOutputFormat(fmtStr, sizeof(fmtStr));
+		audioInformation->Add(new InfoItem(si->T("Stream format"), fmtStr));
+	} else {
+		audioInformation->Add(new InfoItem(si->T("Sample rate"), StringFromFormat(si->T_cstr("%d Hz"), System_GetPropertyInt(SYSPROP_AUDIO_SAMPLE_RATE))));
+	}
 	int framesPerBuffer = System_GetPropertyInt(SYSPROP_AUDIO_FRAMES_PER_BUFFER);
 	if (framesPerBuffer > 0) {
 		audioInformation->Add(new InfoItem(si->T("Frames per buffer"), StringFromFormat("%d", framesPerBuffer)));
@@ -671,11 +675,21 @@ void SystemInfoScreen::CreateDeviceInfoTab(UI::LinearLayout *deviceSpecs) {
 		System_GetPropertyInt(SYSPROP_DISPLAY_XRES),
 		System_GetPropertyInt(SYSPROP_DISPLAY_YRES))));
 #endif
-	displayInfo->Add(new InfoItem(si->T("UI resolution"), StringFromFormat("%dx%d (%s: %d)",
-		g_display.dp_xres,
-		g_display.dp_yres,
-		si->T_cstr("DPI"),
-		System_GetPropertyInt(SYSPROP_DISPLAY_DPI))));
+
+	char uiResStr[64];
+	const int sysDPI = System_GetPropertyInt(SYSPROP_DISPLAY_DPI);
+	if (sysDPI > 0) {
+		snprintf(uiResStr, sizeof(uiResStr), "%dx%d (%s: %d)",
+			g_display.dp_xres,
+			g_display.dp_yres,
+			si->T_cstr("DPI"),
+			sysDPI);
+	} else {
+		snprintf(uiResStr, sizeof(uiResStr), "%dx%d",
+			g_display.dp_xres,
+			g_display.dp_yres);
+	}
+	displayInfo->Add(new InfoItem(si->T("UI resolution"), uiResStr));
 	displayInfo->Add(new InfoItem(si->T("Pixel resolution"), StringFromFormat("%dx%d",
 		g_display.pixel_xres,
 		g_display.pixel_yres)));
@@ -691,7 +705,14 @@ void SystemInfoScreen::CreateDeviceInfoTab(UI::LinearLayout *deviceSpecs) {
 	}
 
 	// Don't show on Windows, since it's always treated as 60 there.
-	displayInfo->Add(new InfoItem(si->T("Refresh rate"), StringFromFormat(si->T_cstr("%0.2f Hz"), (float)System_GetPropertyFloat(SYSPROP_DISPLAY_REFRESH_RATE))));
+	
+	const double displayHz = System_GetPropertyFloat(SYSPROP_DISPLAY_REFRESH_RATE);
+	displayInfo->Add(new InfoItem(si->T("Refresh rate"), StringFromFormat(si->T_cstr("%0.2f Hz"), displayHz)));
+
+	if (displayHz < 55.0f) {
+		displayInfo->Add(new NoticeView(NoticeLevel::WARN, ApplySafeSubstitutions(gr->T("Your display is set to a low refresh rate: %1 Hz. 60 Hz or higher is recommended."), (int)displayHz), ""));
+	}
+
 	std::string presentModes;
 	if (draw->GetDeviceCaps().presentModesSupported & Draw::PresentMode::FIFO) presentModes += "FIFO, ";
 	if (draw->GetDeviceCaps().presentModesSupported & Draw::PresentMode::IMMEDIATE) presentModes += "IMMEDIATE, ";
@@ -1282,14 +1303,13 @@ void TouchTestScreen::CreateViews() {
 	root_->Add(theTwo);
 
 #if !PPSSPP_PLATFORM(UWP)
-	static const char *renderingBackend[] = { "OpenGL", "Direct3D 9", "Direct3D 11", "Vulkan" };
+	static const char *renderingBackend[] = { "OpenGL", "(n/a)", "Direct3D 11", "Vulkan" };
 	PopupMultiChoice *renderingBackendChoice = root_->Add(new PopupMultiChoice(&g_Config.iGPUBackend, gr->T("Backend"), renderingBackend, (int)GPUBackend::OPENGL, ARRAY_SIZE(renderingBackend), I18NCat::GRAPHICS, screenManager()));
 	renderingBackendChoice->OnChoice.Handle(this, &TouchTestScreen::OnRenderingBackend);
 
 	if (!g_Config.IsBackendEnabled(GPUBackend::OPENGL))
 		renderingBackendChoice->HideChoice((int)GPUBackend::OPENGL);
-	if (!g_Config.IsBackendEnabled(GPUBackend::DIRECT3D9))
-		renderingBackendChoice->HideChoice((int)GPUBackend::DIRECT3D9);
+	renderingBackendChoice->HideChoice(1);   // previously D3D9
 	if (!g_Config.IsBackendEnabled(GPUBackend::DIRECT3D11))
 		renderingBackendChoice->HideChoice((int)GPUBackend::DIRECT3D11);
 	if (!g_Config.IsBackendEnabled(GPUBackend::VULKAN))
