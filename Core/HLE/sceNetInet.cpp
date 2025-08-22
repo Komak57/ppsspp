@@ -136,10 +136,20 @@ static u32 sceNetInetInetNtop(int af, u32 srcInAddrPtr, u32 dstBufPtr, u32 bufsi
 		return hleLogError(Log::sceNet, 0, "invalid arg");
 	}
 
-	if (inet_ntop(convertSocketDomainPSP2Host(af), Memory::GetCharPointer(srcInAddrPtr), (char*)Memory::GetCharPointer(dstBufPtr), bufsize) == NULL) {
-		//return hleLogDebug(Log::sceNet, 0, "invalid arg?"); // Temporarily commented out in case it's allowed to have partial output
+	// Full temporary buffer (large enough for IPv6)
+	char temp[64] = { 0 };
+	if (inet_ntop(convertSocketDomainPSP2Host(af), Memory::GetCharPointer(srcInAddrPtr), temp, sizeof(temp)) == NULL) {
+	//if (inet_ntop(convertSocketDomainPSP2Host(af), Memory::GetCharPointer(srcInAddrPtr), (char*)Memory::GetCharPointer(dstBufPtr), bufsize) == NULL) {
+		return hleLogDebug(Log::sceNet, 0, "invalid arg?"); // Temporarily commented out in case it's allowed to have partial output
 	}
-	return hleLogDebug(Log::sceNet, dstBufPtr, "%s", safe_string(Memory::GetCharPointer(dstBufPtr)));
+
+	size_t copyLen = std::min<size_t>(strlen(temp), bufsize - 1);
+	memcpy((char*)Memory::GetCharPointer(dstBufPtr), temp, copyLen);
+	memset((char*)Memory::GetCharPointer(dstBufPtr) + copyLen, '\0', 1);
+
+	INFO_LOG(Log::sceNet, "sceNetInetInetNtop -> '%s'", safe_string(Memory::GetCharPointer(dstBufPtr)));
+
+	return hleLogDebug(Log::sceNet, dstBufPtr, "-> '%s'", safe_string(Memory::GetCharPointer(dstBufPtr)));
 }
 
 static u32_le sceNetInetInetAddr(const char *hostname) {
