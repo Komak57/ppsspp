@@ -496,10 +496,9 @@ static int sceNetInetSetsockopt(int socket, int level, int optname, u32 optvalPt
 			return hleLogDebug(Log::sceNet, 0);
 		// FIXME: Should we ignore SO_BROADCAST flag since we are using fake broadcast (ie. only broadcast to friends),
 		//        But Infrastructure/Online play might need to use broadcast for SSDP and to support LAN MP with real PSP
-		/*else if (level == PSP_NET_INET_SOL_SOCKET && optname == PSP_NET_INET_SO_BROADCAST) {
+		case PSP_NET_INET_SO_BROADCAST:
 			//memcpy(&sock->so_broadcast, (int*)optval, std::min(sizeof(sock->so_broadcast), optlen));
-			return hleLogSuccessI(Log::sceNet, 0);
-		}*/
+			return hleLogWarning(Log::sceNet, 0, "PSP_NET_INET_SO_BROADCAST unsupported, ignoring");
 		// TODO: Ignoring SO_REUSEADDR flag to prevent disrupting multiple-instance feature
 		case PSP_NET_INET_SO_REUSEADDR:
 			//memcpy(&sock->reuseaddr, (int*)optval, std::min(sizeof(sock->reuseaddr), optlen));
