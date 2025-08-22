@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <flatbuffers/flatbuffers.h>
 #include <Core\np2_structs_generated.h>
+#include <unordered_set>
 
 // 0x88 bytes
 //struct RoomInfo {

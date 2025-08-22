@@ -356,13 +356,22 @@ namespace net {
 			}
 		}
 	}
-	void NPAgent::Disconnect() {
-		if ((intptr_t)sock_ != -1) {
-			canceled = true;
-			closesocket(sock_);
-			sock_ = -1;
-		}
-	}
+
+	//u64 NPAgent::get_signaling_context(u32 ctx_id)
+	//{
+	//	static u64 fallback_id = 1; // In case map is empty
+
+	//	if (!signaling_ctx.contains(ctx_id))
+	//		return fallback_id++;
+
+	//	u64 max_key = 0;
+	//	for (const auto& [key, _] : responses)
+	//	{
+	//		if (key > max_key)
+	//			max_key = key;
+	//	}
+	//	return max_key + 1;
+	//}
 
 	u64 NPAgent::generate_request_id()
 	{
@@ -656,7 +665,6 @@ namespace net {
 	}
 
 	int NPAgent::Recv(Packet* packet, bool* cancelled) {
-		NOTICE_LOG(Log::HTTP, "NPAgent::Recv() START");
 		static constexpr float CANCEL_INTERVAL = 0.25f;
 		char buf[4096];
 		// Adjustable read size

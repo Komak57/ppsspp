@@ -4,6 +4,7 @@
 #include <mbedtls\error.h>
 #include <TimeUtil.h>
 #include "Core/MemMapHelpers.h"
+#include <Core\HLE\SignalingHandler.h>
 
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN
@@ -148,8 +149,17 @@ namespace net {
 				responses[header.reqId] = buf;
 				break;
 			case PacketType::Notification:
-				NOTICE_LOG(Log::sceNet, "RPCN Sent Notification: %s", NotificationTypeNames[header.command]);
-				notifications[header.reqId] = buf;
+				switch ((NotificationType)header.command) {
+				case NotificationType::UserJoinedRoom:
+					g_signaling.UserJoinedRoom(buf);
+					break;
+				case NotificationType::UserLeftRoom:
+
+					break;
+				default:
+					NOTICE_LOG(Log::sceNet, "RPCN Sent Notification: %s", NotificationTypeNames[header.command]);
+					notifications[header.reqId] = buf;
+				}
 				break;
 			case PacketType::ServerInfo:
 				break;
@@ -874,7 +884,7 @@ namespace net {
 		packet.Write(data);
 
 		auto reqId = generate_request_id();
-		packet.Pack(CommandType::JoinRoom, reqId);
+		packet.Pack(CommandType::LeaveRoom, reqId);
 
 		INFO_LOG(Log::sceNet, "Join Room #%d", req->roomId);
 

@@ -27,6 +27,8 @@
 #include "sceNetResolver.cpp"
 #include <future>
 #include "SignalingHandler.h"
+//#include "NpMatchingContext.h"
+//#include "Np2SignalingHandler.h"
 
 bool npMatching2Inited = false;
 SceNpAuthMemoryStat npMatching2MemStat = {};
@@ -36,17 +38,20 @@ BlockAllocator np_memory;
 std::recursive_mutex npMatching2EvtMtx;
 std::deque<NpMatching2Args> npMatching2Events;
 std::map<u32, NpMatching2Handler> npMatching2Handlers;
-NpMatching2Handler npSignalingCallback;
+
+//std::recursive_mutex npMatching2SigMtx;
+//NpMatching2Handler npSignalingCallback;
+//std::unordered_map<u32, NpMatching2Handler> npSignalingHandlers;
 //std::map<int, NpMatching2Context> npMatching2Contexts;
 u16 tServer;
 std::map<u16, std::unique_ptr<net::NPAgent>> servers;
 std::map<u16, std::future<int>> tasks;
 signaling_handler g_signaling;
 
-template <typename T>
-void Write_Struct(const T& object, const u32 address, const char* tag, size_t taglen) {
-	Memory::Memcpy(address, &object, sizeof(T), tag, taglen);
-}
+//template <typename T>
+//void Write_Struct(const T& object, const u32 address, const char* tag, size_t taglen) {
+//	Memory::Memcpy(address, &object, sizeof(T), tag, taglen);
+//}
 
 /* Generate a callback handler for async processing returns
  * @param optParamPtr pointer to SceNpMatching2RequestOptParam
@@ -279,9 +284,18 @@ static int sceNpMatching2ContextStart(int ctxId)
 	//npMatching2Ctx.started = true;
 
 	servers.clear();
-	//net::PSNAgent::GetServers(npTitleId, &servers);
+	//net::PSNAuthAgent::GetServers(npTitleId, &servers);
 	net::RPCNAuthAgent::GetServers(npTitleId, &servers);
-		
+
+	//signaling_handler::print_interfaces();
+	//if (g_signaling.connect("fe80::be24:11ff:fed8:39c4", 3657, 21)) {
+	//	NOTICE_LOG(Log::sceNet, "Connected to Signaling Server!");
+	//}
+	//else {
+	//	ERROR_LOG(Log::sceNet, "Failed to connect to Signaling Server!");
+	//	//return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_CONN_NOT_FOUND));
+	//}
+
 	hleEatMicro(1000000);
 	// Returning 0x805508A6 (error code inherited from sceNpService_76867C01 which check server availability) if can't check server availability (ie. Fat Princess (US) through http://static-resource.np.community.playstation.net/np/resource/psp-title/NPWR00670_00/matching/NPWR00670_00-matching.xml using User-Agent: "PS3Community-agent/1.0.0 libhttp/1.0.0")
 	return 0;
@@ -541,14 +555,6 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
 		}
 
-		if (g_signaling.start("rpcn.revurb.us", 3657)) {
-			NOTICE_LOG(Log::sceNet, "Connected to Signaling Server!");
-		}
-		else {
-			ERROR_LOG(Log::sceNet, "Failed to connect to Signaling Server!");
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_CONN_NOT_FOUND));
-		}
-
 		int ret;
 		/*ret = servers[tServer]->CreateAccount(npid.c_str(), "lemmein", "bl00d", "http://DummyAvatarUrl", "bl00d@email.com");
 		if (ret != 0) {
@@ -668,94 +674,10 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 		INFO_LOG(Log::sceNet, " - Total:       %d", total_rooms);
 		INFO_LOG(Log::sceNet, " - Rooms:       %d", room_count);
 
-
-		//u32 roomInfoPtr = 0;
-		//if (room_count > 0) {
-		//	u32 infoSize = sizeof(SceNpMatching2RoomDataExternal) * room_count;
-		//	roomInfoPtr = np_memory.Alloc(infoSize);
-
-		//	if (!Memory::IsValidAddress(roomInfoPtr)) {
-		//		ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataExternal");
-		//		return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
-		//	}
-		//	if (room_count > 0)
-		//	{
-		//		for (flatbuffers::uoffset_t i = 0; i < room_count; i++)
-		//		{
-		//			auto* fb_room = roomResp->rooms()->Get(i);
-		//			SceNpMatching2RoomDataExternal roomDataOut{};
-		//			roomDataOut.next = 0;
-		//			// If we have another room to write, mark it as next
-		//			if (room_count >= i + 1)
-		//				roomDataOut.next = (i + 1) * sizeof(SceNpMatching2RoomDataExternal);
-
-		//			roomDataOut.serverId = fb_room->serverId();
-		//			roomDataOut.worldId = fb_room->worldId();
-		//			roomDataOut.publicSlotNum = fb_room->publicSlotNum();
-		//			roomDataOut.privateSlotNum = fb_room->privateSlotNum();
-		//			roomDataOut.lobbyId = fb_room->lobbyId();
-		//			roomDataOut.roomId = fb_room->roomId();
-		//			roomDataOut.openPublicSlotNum = fb_room->openPublicSlotNum();
-		//			roomDataOut.maxSlot = fb_room->maxSlot();
-		//			roomDataOut.openPrivateSlotNum = fb_room->openPrivateSlotNum();
-		//			roomDataOut.curMemberNum = fb_room->curMemberNum();
-		//			roomDataOut.passwordSlotMask = fb_room->passwordSlotMask();
-
-		//			// Incompatible types between PS3 Users vs PSP Users
-		//			u32 userSize = sizeof(SceNpUserInfo2);
-		//			u32 userInfoPtr = np_memory.Alloc(userSize);
-		//			Write_Struct(fb_room->owner(), userInfoPtr, "SceNpUserInfo2", 15);
-		//			roomDataOut.owner = roomInfoPtr;
-
-		//			roomDataOut.flagAttr = fb_room->flagAttr();
-		//			// Arrays
-		//			roomDataOut.roomGroupNum = fb_room->roomGroup()->size();
-
-		//			u32 groupSize = sizeof(SceNpMatching2RoomGroup);
-		//			u32 groupPtr = np_memory.Alloc(groupSize);
-		//			Write_Struct(fb_room->roomGroup(), groupPtr, "SceNpMatching2RoomGroup", 24);
-		//			roomDataOut.roomGroup = groupPtr;
-
-		//			roomDataOut.roomSearchableIntAttrExternalNum = fb_room->roomSearchableIntAttrExternal()->size();
-		//			u32 sintAttrSize = sizeof(SceNpMatching2IntAttr) * roomDataOut.roomSearchableIntAttrExternalNum;
-		//			u32 sintAttrPtr = np_memory.Alloc(sintAttrSize);
-		//			for(int a = 0; a < roomDataOut.roomSearchableIntAttrExternalNum; a++)
-		//				Write_Struct(fb_room->roomSearchableIntAttrExternal()[a], sintAttrPtr + (sizeof(SceNpMatching2IntAttr) * a), "roomSearchableIntAttrExternal", 22);
-		//			roomDataOut.roomSearchableIntAttrExternal = sintAttrPtr;
-
-		//			roomDataOut.roomSearchableBinAttrExternalNum = fb_room->roomSearchableBinAttrExternal()->size();
-		//			u32 sintBinSize = sizeof(SceNpMatching2BinAttr) * roomDataOut.roomSearchableBinAttrExternalNum;
-		//			u32 sintBinPtr = np_memory.Alloc(sintBinSize);
-		//			for (int a = 0; a < roomDataOut.roomSearchableBinAttrExternalNum; a++)
-		//				Write_Struct(fb_room->roomSearchableIntAttrExternal()[a], sintBinPtr + (sizeof(SceNpMatching2BinAttr) * a), "roomSearchableBinAttrExternal", 22);
-		//			roomDataOut.roomSearchableBinAttrExternal = sintBinPtr;
-
-		//			roomDataOut.roomBinAttrExternalNum = fb_room->roomBinAttrExternal()->size();
-		//			u32 intBinSize = sizeof(SceNpMatching2BinAttr) * roomDataOut.roomBinAttrExternalNum;
-		//			u32 intBinPtr = np_memory.Alloc(intBinSize);
-		//			for (int a = 0; a < roomDataOut.roomBinAttrExternalNum; a++)
-		//				Write_Struct(fb_room->roomSearchableIntAttrExternal()[a], intBinPtr + (sizeof(SceNpMatching2BinAttr) * a), "roomBinAttrExternal", 22);
-		//			roomDataOut.roomBinAttrExternal = intBinPtr;
-
-		//			Write_Struct(roomDataOut, roomInfoPtr+(sizeof(SceNpMatching2RoomDataExternal)*i), "SceNpMatching2RoomDataExternal", 31);
-		//		}
-		//	}
-		//}
-
 		u32 respSize = sizeof(SceNpMatching2SearchRoomResponse);
 		u32 respPtr = np_memory.Alloc(respSize);
 		auto respData = PSPPointer<SceNpMatching2SearchRoomResponse>::Create(respPtr);
 		np::SearchRoomResponse_to_SceNpMatching2SearchRoomResponse(np_memory, roomResp, respData);
-
-		//respData.range = { start_index, total_rooms, room_count};
-		//respData.roomDataExternal = roomInfoPtr;
-
-
-		/*if (!Memory::IsValidAddress(respPtr)) {
-			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
-		}
-		Write_Struct(respData, respPtr, "SceNpMatching2SearchRoomResponse", 33);*/
 
 		return notifyNpMatching2Handlers(request_id, respPtr);
 	});
@@ -768,7 +690,7 @@ SceNpId string_to_npid(std::string_view str)
 {
 	SceNpId npid;
 	memset(&npid, 0, sizeof(npid));
-	memcpy(npid.handle.data, std::data(str), str.length());
+	memcpy(npid.handle.data, std::data(str), 16);
 	return npid;
 }
 
@@ -839,6 +761,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
 		SceNpId npId = string_to_npid("RPCS3_ZSgScc4D7x");
+		//SceNpId npId; NpGetNpId(&npId);
 		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp, room_info, npId, true, false);
 
 		// Cache Rooms
@@ -1048,7 +971,7 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
  */
 static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal);
 
