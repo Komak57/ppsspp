@@ -677,6 +677,7 @@ static int sceNetInetBind(int socket, u32 namePtr, int namelen) {
 }
 
 static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen) {
+	INFO_LOG(Log::sceNet, "sceNetInetConnect(%i, %08x, %i) at %08x", socket, sockAddrPtr, sockAddrLen, currentMIPS->pc);
 	InetSocket *inetSock;
 	if (!g_socketManager.GetInetSocket(socket, &inetSock)) {
 		return hleLogError(Log::sceNet, ERROR_INET_EBADF, "Bad socket #%d", socket);
@@ -690,6 +691,17 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen) {
 	saddr.addr.sa_family = dst->sa_family;
 	memcpy(saddr.addr.sa_data, dst->sa_data, sizeof(dst->sa_data));
 
+	sockaddr_in* paddr = reinterpret_cast<sockaddr_in*>(&saddr);
+	// If PSP tried to connect to 0.0.0.0, replace with loopback
+	if (paddr->sin_addr.s_addr == htonl(INADDR_ANY)) {
+		WARN_LOG(Log::sceNet, "Socket attempting to connect to INADDR_ANY! (socket #%d)", socket);
+		sockaddr_in sockAddr{};
+		getLocalIp(&sockAddr);
+		//paddr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		//paddr->sin_addr.s_addr = htonl((ULONG)0xC0A802FE); // hard coded to dev machine
+		paddr->sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	}
+
 	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
 	if (!inetSock->nonblocking) {
 		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%d)", socket);
@@ -698,7 +710,8 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen) {
 		setSockTimeout(inetSock->sock, SO_SNDTIMEO, 5000000);
 		setSockTimeout(inetSock->sock, SO_RCVTIMEO, 5000000);
 	}
-	int retval = connect(inetSock->sock, (struct sockaddr*)&saddr.addr, dstlen);
+	INFO_LOG(Log::sceNet, "Connect(%s, %i)", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	int retval = connect(inetSock->sock, (struct sockaddr*)&saddr, dstlen);
 	int hostErrno = socket_errno;
 	if (!inetSock->nonblocking) {
 		// Change the blocking mode back to nonblocking
