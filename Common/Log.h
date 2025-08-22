@@ -134,7 +134,7 @@ static void ssl_debug(void* ctx, int level,
 	const char* str)
 {
 	((void)level);
-	DEBUG_LOG(Log::sceNet, "%s:%04d: %s", file, line, str);
+	VERBOSE_LOG(Log::sceNet, "%s:%04d: %s", file, line, str);
 	//mbedtls_fprintf((FILE*)ctx, "%s:%04d: %s", file, line, str);
 }
 
