@@ -494,8 +494,8 @@ static int sceNetInetSetsockopt(int socket, int level, int optname, u32 optvalPt
 		case PSP_NET_INET_SO_NBIO:
 			inetSock->nonblocking = optval;
 			return hleLogDebug(Log::sceNet, 0);
-		// FIXME: Should we ignore SO_BROADCAST flag since we are using fake broadcast (ie. only broadcast to friends),
-		//        But Infrastructure/Online play might need to use broadcast for SSDP and to support LAN MP with real PSP
+			// FIXME: Should we ignore SO_BROADCAST flag since we are using fake broadcast (ie. only broadcast to friends),
+			//        But Infrastructure/Online play might need to use broadcast for SSDP and to support LAN MP with real PSP
 		case PSP_NET_INET_SO_BROADCAST:
 			//memcpy(&sock->so_broadcast, (int*)optval, std::min(sizeof(sock->so_broadcast), optlen));
 			return hleLogWarning(Log::sceNet, 0, "PSP_NET_INET_SO_BROADCAST unsupported, ignoring");
@@ -527,7 +527,11 @@ static int sceNetInetSetsockopt(int socket, int level, int optname, u32 optvalPt
 		case PSP_NET_INET_SO_ONESBCAST:
 			// Seen in Outrun 2006 (account registration), assuming that the flag mapping is correct, we can't support this. So we warn-log and pretend success.
 			return hleLogWarning(Log::sceNet, 0, "PSP_NET_INET_SO_ONESBCAST unsupported, ignoring");
-
+		case PSP_NET_INET_SO_DCCP_BROADCAST:
+			return hleLogWarning(Log::sceNet, 0, "PSP_NET_INET_SO_DCCP_BROADCAST unsupported, ignoring");
+		case PSP_NET_INET_SO_DCCP_LINGER:
+			return hleLogWarning(Log::sceNet, 0, "PSP_NET_INET_SO_DCCP_LINGER unsupported, ignoring");
+		// TODO: Identify and fix. This acts much like a broadcast when in a lobby to update player position
 		default:
 			break;
 		}

@@ -71,7 +71,7 @@ enum {
 #define	PSP_NET_INET_SOCK_RDM			4			// reliably-delivered message 
 #define	PSP_NET_INET_SOCK_SEQPACKET		5			// sequenced packet stream 
 #define	PSP_NET_INET_SOCK_CONN_DGRAM	6			// connection-orientated datagram
-#define PSP_NET_INET_SOCK_DCCP			PSP_NET_INET_SOCK_CONN_DGRAM	// Datagram Congestion Control Protocol
+#define PSP_NET_INET_SOCK_DCCP			PSP_NET_INET_SOCK_CONN_DGRAM	// Special Datagram Congestion Control Protocol (must be explicitely connected)
 #define PSP_NET_INET_SOCK_PACKET		10			// Linux specific way of getting packets at the dev level. For writing rarp and other similar things on the user level // SOCK_PACKET is an obsolete socket type to receive raw packets directly from the device driver
 #define	PSP_NET_INET_SOCK_TYPE_MASK		0x000F		// mask that covers the above
 // Flags to be ORed into the type parameter of socket and socketpair and used for the flags parameter of paccept.
@@ -107,6 +107,8 @@ enum {
 #define PSP_NET_INET_SO_BIO			0x100a		// set to blocking I/O mode (not using the optval just like SO_NBIO?)
 //#define PSP_NET_INET_SO_NONBLOCK	0x100b		// set to blocking or non-blocking I/O mode (using the optval)
 #define PSP_NET_INET_SO_NOSIGPIPE   0x1022      // WARNING: SPECULATION
+#define PSP_NET_INET_SO_DCCP_BROADCAST	0x1000		// Used with SOCK_DCCP, associated with Broadcast or Group Mode. Made obsolete by SOCK_DGRAM
+#define PSP_NET_INET_SO_DCCP_LINGER		0x2000		// Used with SOCK_DCCP, similar to LINGER but applied automatically. Made obsolete by SOCK_DGRAM
 
 // User-settable options (used with setsockopt)
 #define	PSP_NET_INET_TCP_NODELAY	0x01		// don't delay send to coalesce packets 

@@ -565,6 +565,10 @@ int convertSockoptNamePSP2Host(int optname, int level) {
 		case PSP_NET_INET_SO_BIO:
 			return SO_BIO;
 #endif
+		case PSP_NET_INET_SO_DCCP_BROADCAST:
+			return SO_BROADCAST;
+		case PSP_NET_INET_SO_DCCP_LINGER:
+			return SO_LINGER;
 		}
 	}
 	return hleLogError(Log::sceNet, optname, "Unknown or unsupported PSP's SockOpt Name (Level = %08x)", level);
@@ -785,6 +789,10 @@ std::string inetSockoptName2str(int optname, int level) {
 			return "SO_NBIO"; // SO_NONBLOCK
 		case PSP_NET_INET_SO_BIO:
 			return "SO_BIO";
+		case PSP_NET_INET_SO_DCCP_BROADCAST:
+			return "SO_DCCP_BROADCAST";
+		case PSP_NET_INET_SO_DCCP_LINGER:
+			return "SO_DCCP_LINGER";
 		}
 	}
 	return StringFromFormat("SO_%08x (Level = %08x)", optname, level);
