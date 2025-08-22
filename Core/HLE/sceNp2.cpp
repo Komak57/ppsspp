@@ -322,6 +322,9 @@ static int sceNpMatching2ContextStop(int ctxId)
 
 	//TODO: Cancel all async tasks and return SCE_NP_MATCHING2_ERROR_ABORTED for each.
 	abortNpMatching2Handlers();
+	// Delete all tasks
+	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
+	npMatching2Handlers.clear();
 
 	return 0;
 }
