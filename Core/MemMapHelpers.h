@@ -105,6 +105,11 @@ inline void Memcpy(const u32 to_address, const u32 from_address, const u32 len) 
 	Memcpy(to_address, from_address, len, nullptr, 0);
 }
 
+template <typename T>
+inline void Write_Struct(const T& object, const u32 address, const char* tag, size_t taglen) {
+	Memcpy(address, &object, sizeof(T), tag, taglen);
+}
+
 void Memset(const u32 _Address, const u8 _Data, const u32 _iLength, const char *tag = "Memset");
 
 }

@@ -499,7 +499,7 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 
 		// Allocate space, and write value into the pool
 		u32 serverInfoPtr = np_memory.Alloc(infoSize);
-		Write_Struct(serverInfo, serverInfoPtr, "SceNpMatching2ServerInfo", 25);
+		Memory::Write_Struct(serverInfo, serverInfoPtr, "SceNpMatching2ServerInfo", 25);
 
 		return notifyNpMatching2Handlers(request_id, serverInfoPtr);
 	}); // ThreadEnd
@@ -596,10 +596,10 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		
 		int i = 0;
 		for (const auto& [worldId, world] : servers[tServer]->worlds) {
-			Write_Struct(world, worldInfoPtr + (i * sizeof(SceNpMatching2World)), "world%i", 8);
+			Memory::Write_Struct(world, worldInfoPtr + (i * sizeof(SceNpMatching2World)), "world%i", 8);
 			i++;
 		}
-		Write_Struct(resp, worldInfoResponsePtr, "SceNpMatching2World", 20);
+		Memory::Write_Struct(resp, worldInfoResponsePtr, "SceNpMatching2World", 20);
 
 		return notifyNpMatching2Handlers(request_id, worldInfoResponsePtr);
 	}); // ThreadEnd
@@ -853,7 +853,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
 		}
-		Write_Struct(respData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
+		Memory::Write_Struct(respData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
 
 		return notifyNpMatching2Handlers(request_id, respPtr);
 	});
@@ -992,7 +992,7 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
 		}
-		Write_Struct(roomData, servers[tServer]->roomDataPtr, "SceNpMatching2RoomDataInternal", 31);
+		Memory::Write_Struct(roomData, servers[tServer]->roomDataPtr, "SceNpMatching2RoomDataInternal", 31);
 
 		SceNpMatching2GetRoomDataInternalResponse resp{};
 		resp.roomDataInternal = servers[tServer]->roomDataPtr;
@@ -1003,7 +1003,7 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
 		}
-		Write_Struct(roomData, respPtr, "SceNpMatching2GetRoomDataInternalResponse", 42);
+		Memory::Write_Struct(roomData, respPtr, "SceNpMatching2GetRoomDataInternalResponse", 42);
 
 		return notifyNpMatching2Handlers(request_id, respPtr, 0);
 	});
