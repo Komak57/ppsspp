@@ -2,6 +2,7 @@
 //#include "Emu/Cell/lv2/sys_process.h"
 #include "fb_helpers.h"
 #include <Log.h>
+#include <Core\MemMapHelpers.h>
 
 namespace np
 {
@@ -292,19 +293,31 @@ namespace np
 
 			if (i < (resp->memberList()->size() - 1))
 			{
-				sce_member->next = room_info->memberList.members + i + 1;
+				//sce_member->next = room_info->memberList.members + i + 1;
+				// 
+				//u32 alloc = sizeof(SceNpMatching2RoomMemberDataInternal);
+				//sce_member->next = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(edata.Alloc(alloc));
+				Memory::Write_Struct(room_info->memberList.members[i+1], sce_member->next.ptr, "member%d", 9);
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(sce_member->next);
 			}
 
 			RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(edata, fb_member, room_info, sce_member, include_onlinename, include_avatarurl);
 		}
 
+		u32 self = 0;
 		for (u32 i = 0; i < room_info->memberList.membersNum; i++)
 		{
 			SceNpMatching2RoomMemberDataInternal* sce_member = &room_info->memberList.members[i];
 			if (strcmp(sce_member->userInfo.npId.handle.data, npid.handle.data) == 0)
 			{
-				room_info->memberList.me = room_info->memberList.members + i;
+				NOTICE_LOG(Log::sceNet, " - Member[%d] is Self", i);
+				//room_info->memberList.me = room_info->memberList.members + i;
+				//room_info->memberList.me = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(room_info->memberList.members.ptr + i * sizeof(SceNpMatching2RoomMemberDataInternal));
+				u32 alloc = sizeof(SceNpMatching2RoomMemberDataInternal);
+				room_info->memberList.me = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(edata.Alloc(alloc));
+				Memory::Write_Struct(room_info->memberList.members[i], room_info->memberList.me.ptr, "Member.Self", 12);
+				self = room_info->memberList.me.ptr;
+				NOTICE_LOG(Log::sceNet, " - Self at %08x", room_info->memberList.me.ptr);
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(room_info->memberList.me);
 				member_id = sce_member->memberId;
 				break;
@@ -316,7 +329,13 @@ namespace np
 			SceNpMatching2RoomMemberDataInternal* sce_member = &room_info->memberList.members[i];
 			if (sce_member->memberId == resp->ownerId())
 			{
-				room_info->memberList.owner = room_info->memberList.members + i;
+				NOTICE_LOG(Log::sceNet, " - Member[%d] is Owner", i);
+				//room_info->memberList.owner = room_info->memberList.members + i;
+				//room_info->memberList.owner = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(room_info->memberList.members.ptr + i * sizeof(SceNpMatching2RoomMemberDataInternal));
+				u32 alloc = sizeof(SceNpMatching2RoomMemberDataInternal);
+				room_info->memberList.owner = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(edata.Alloc(alloc));
+				Memory::Write_Struct(room_info->memberList.members[i], room_info->memberList.owner.ptr, "Member.Owner", 13);
+				NOTICE_LOG(Log::sceNet, " - Owner at %08x", room_info->memberList.owner.ptr);
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(room_info->memberList.owner);
 				break;
 			}
@@ -342,10 +361,12 @@ namespace np
 				ptr_bin_attr[b_index].data.id = fb_bin_attr->data()->id();
 				ptr_bin_attr[b_index].data.size = fb_bin_attr->data()->data()->size();
 				//auto* ptr_bin_attr_data = edata.allocate<u8>(ptr_bin_attr[b_index].data.size, ptr_bin_attr[b_index].data.ptr);
-				auto ptr_bin_attr_data = PSPPointer<u8>::Create(edata.Alloc(ptr_bin_attr[b_index].data.size));
-				for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < ptr_bin_attr[b_index].data.size; tmp_index++)
-				{
-					ptr_bin_attr_data[tmp_index] = fb_bin_attr->data()->data()->Get(tmp_index);
+				if (ptr_bin_attr[b_index].data.size > 0) {
+					auto ptr_bin_attr_data = PSPPointer<u8>::Create(edata.Alloc(ptr_bin_attr[b_index].data.size));
+					for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < ptr_bin_attr[b_index].data.size; tmp_index++)
+					{
+						ptr_bin_attr_data[tmp_index] = fb_bin_attr->data()->data()->Get(tmp_index);
+					}
 				}
 			}
 		}
@@ -398,10 +419,12 @@ namespace np
 				sce_binattrs[b_index].data.id = fb_battr->data()->id();
 				sce_binattrs[b_index].data.size = fb_battr->data()->data()->size();
 				//auto* sce_binattr_data = edata.allocate<u8>(sce_binattrs[b_index].data.size, sce_binattrs[b_index].data.ptr);
-				auto sce_binattr_data = PSPPointer<u8>::Create(edata.Alloc(sce_binattrs[b_index].data.size));
-				for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < sce_binattrs[b_index].data.size; tmp_index++)
-				{
-					sce_binattr_data[tmp_index] = fb_battr->data()->data()->Get(tmp_index);
+				if (sce_binattrs[b_index].data.size > 0) {
+					auto sce_binattr_data = PSPPointer<u8>::Create(edata.Alloc(sce_binattrs[b_index].data.size));
+					for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < sce_binattrs[b_index].data.size; tmp_index++)
+					{
+						sce_binattr_data[tmp_index] = fb_battr->data()->data()->Get(tmp_index);
+					}
 				}
 			}
 		}
