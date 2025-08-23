@@ -117,14 +117,14 @@ namespace net {
 				break;
 			}
 
-			int i;
+			//int i;
 			std::string hexdata = "";
-			for (i = 0; i < packet.Length(); i++) {
-				char const c = packet.Data()[i];
-				hexdata += hex_chars[(c & 0xF0) >> 4];
-				hexdata += hex_chars[(c & 0x0F) >> 0];
-			}
-			DEBUG_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+			//for (i = 0; i < packet.Length(); i++) {
+			//	char const c = packet.Data()[i];
+			//	hexdata += hex_chars[(c & 0xF0) >> 4];
+			//	hexdata += hex_chars[(c & 0x0F) >> 0];
+			//}
+			//DEBUG_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
 
 			PacketHeader header;
 			memcpy(&header, packet.Data(), sizeof(PacketHeader));
@@ -555,28 +555,6 @@ namespace net {
 		//                                                     20       12       0        8        6        1    
 		// NPAgent::Recv('01 1000 28000000 0100000000000000 00 14000000 0C000000 00000600 08000400 06000000 01000000')
 
-		//std::vector<u8> _data;
-		//_data.insert(_data.end(), resp.data.data(), resp.data.data() + resp.data.size());
-
-		//u32 size;// = get<u32>();
-		//memcpy(&size, &resp.data[0], sizeof(u32));
-		//if (sizeof(u32) + size > resp.data.size()) {
-		//	roomResp = nullptr;
-		//	return SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED;
-		//}
-
-		//std::vector<u8> buf;
-		//std::copy(resp.data.begin() + sizeof(u32), resp.data.begin() + sizeof(u32) + size, std::back_inserter(buf));
-
-		//roomResp = flatbuffers::GetRoot<SearchRoomResponse>(buf.data());
-		//flatbuffers::Verifier verifier(buf.data(), buf.size());
-
-		//if (!roomResp->Verify(verifier))
-		//{
-		//	roomResp = nullptr;
-		//	return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
-		//}
-
 		auto stream = new vec_stream(resp.data);
 		roomResp = stream->get_flatbuffer<SearchRoomResponse>();
 		if (stream->is_error()) {
@@ -694,6 +672,7 @@ namespace net {
 				// Ex: Aquapazza (gives uninitialized buffer on the stack and allowedUserNum is hardcoded to 100)
 				if (!np::is_valid_npid(req->allowedUser[i]))
 				{
+					ERROR_LOG(Log::sceNet, "AllowedUser is not valid NPID: %s", req->allowedUser[i].handle.data);
 					continue;
 				}
 
@@ -710,6 +689,7 @@ namespace net {
 			{
 				if (!np::is_valid_npid(req->blockedUser[i]))
 				{
+					ERROR_LOG(Log::sceNet, "BlockedUser is not valid NPID: %s", req->allowedUser[i].handle.data);
 					continue;
 				}
 
@@ -773,36 +753,11 @@ namespace net {
 
 		// 01 0D00 84010000 0100000000000000 00 700100002000000000001A00280026002000000018000000140010000E000000080004001A000000240000000000008400001000780000000C00000008000000000000000100000000000001020000003800000004000000DAFFFFFF000010000C000000E9118EA058FCE20068FFFFFF00005800040000000000000000000A0014000C00060008000A000000000010000C000000E9118EA058FCE20098FFFFFF000057000400000000000000010000001800000014001C000800140006000000000005000C001000140000000002100058000000000000800C000000FC118EA058FCE200010000000C00000008001000080004000800000014000000FC118EA058FCE20008000C00060008000800000000005900040000000000000000000A001000040008000C000A00000030000000240000000400000015000000687474703A2F2F44756D6D7941766174617255726C00000003000000666F78001000000052504353335F5A53675363633444377800000000
 
-		//u32 size;// = get<u32>();
-		//memcpy(&size, &resp.data[0], sizeof(u32));
-		//if (sizeof(u32) + size > resp.data.size()) {
-		//	roomDataOut = nullptr;
-		//	return SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED;
-		//}
-		//std::vector<u8> buf;
-		//std::copy(resp.data.begin() + sizeof(u32), resp.data.begin() + sizeof(u32) + size, std::back_inserter(buf));
-
-		//roomDataOut = flatbuffers::GetRoot<RoomDataInternal>(buf.data());
-		//flatbuffers::Verifier verifier(buf.data(), buf.size());
-
-		//if (!roomDataOut->Verify(verifier))
-		//{
-		//	roomDataOut = nullptr;
-		//	return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
-		//}
-
 		auto stream = new vec_stream(resp.data);
 		roomDataOut = stream->get_flatbuffer<RoomDataInternal>();
 		if (stream->is_error()) {
 			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
 		}
-		/*resp.stream = new vec_stream(resp.data);
-
-		roomDataOut = resp.stream->get_flatbuffer<RoomDataInternal>();
-		if (resp.stream->is_error()) {
-			return SCE_NP_MATCHING2_SERVER_ERROR_ROOM_INCONSISTENCY;
-		}*/
-
 
 		return 0;
 	}
