@@ -284,7 +284,7 @@ static int sceNpMatching2ContextStart(int ctxId)
 	//npMatching2Ctx.started = true;
 
 	servers.clear();
-	// net::PSNAuthAgent::GetServers(npTitleId, &servers);
+	//net::PSNAuthAgent::GetServers(&ProcessHostnameWithInfraDNS, npTitleId, &servers);
 	net::RPCNAuthAgent::GetServers(npTitleId, &servers);
 
 	//signaling_handler::print_interfaces();

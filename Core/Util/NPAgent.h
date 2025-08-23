@@ -7,6 +7,8 @@
 #include <bit>         // bit_cast
 #include "Core/HLE/Np2Types.h"
 #include "Core/HLE/fb_helpers.h"
+#include "Core/HLE/sceNet.h"
+#include "Common/Net/HTTPClient.h"	
 #include "mbedtls/ssl.h"
 #include "mbedtls/net_sockets.h"
 #include "mbedtls/platform.h"
@@ -660,7 +662,7 @@ namespace net {
 		~PSNAuthAgent();
 		PSNAuthAgent(std::string host, int port);
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
-		static int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
+		static int GetServers(net::ResolveFunc func, SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
 		bool Login(const char* npid, const char* token, const char* password);
 		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 	};

@@ -146,7 +146,7 @@ namespace net {
 		22:37:313 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:229 net::PSNAuthAgent::GetServers - Agent-FQDN#2 Status: alive
 		22:37:313 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:238 net::PSNAuthAgent::GetServers - Agent-FQDN#2 Host: agent-20901.ww.np.matching.playstation.net
 	*/
-	int PSNAuthAgent::GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
+	int PSNAuthAgent::GetServers(net::ResolveFunc func, SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
         /*
         Url url("http://static-resource.np.community.playstation.net/np/resource/psp-title/" + std::string(npTitleId.data) + "_00/matching/" + std::string(npTitleId.data) + "_00-matching.xml");
         http::Client client(&ProcessHostnameWithInfraDNS);
@@ -157,7 +157,7 @@ namespace net {
         }
         */
 		Url url("http://static-resource.np.community.playstation.net/np/resource/psp-title/" + std::string(npTitleId.data) + "_00/matching/" + std::string(npTitleId.data) + "_00-matching.xml");
-		http::Client client;
+		http::Client client(func);
 		bool cancelled = false;
 		net::RequestProgress progress(&cancelled);
 		if (!client.Resolve(url.Host().c_str(), url.Port())) {
