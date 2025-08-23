@@ -567,7 +567,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		
 		//ret = servers[tServer]->Login("RPCS3_ZSgScc4D7x", "4D571528FECEBD1A", "lemmein");
 		std::string* creds = NpGetLogin();
-		ret = servers[tServer]->Login(creds[0].c_str(), creds[1].c_str(), creds[2].c_str());
+		ret = servers[tServer]->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
 		if (ret != 0) {
 			ERROR_LOG(Log::sceNet, "Unable to Log In");
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));

@@ -217,6 +217,14 @@ int NpGetNpId(SceNpId* npid) {
 	return 0;
 }
 
+std::string* NpGetLogin() {
+	std::string* creds = new std::string[3];
+	creds[0] = g_Config.sPSNNPID;
+	creds[1] = g_Config.sPSNPassword;
+	creds[2] = g_Config.sPSNToken;
+	return creds;
+}
+
 static int sceNpGetNpId(u32 idPtr)
 {
 	auto id = PSPPointer<SceNpId>::Create(idPtr);
