@@ -1360,26 +1360,6 @@
     <ClCompile Include="FileLoaders\ZipFileLoader.cpp">
       <Filter>FileLoaders</Filter>
     </ClCompile>
-    <ClCompile Include="Util\NPAgent.cpp">
-      <Filter>Util</Filter>
-    </ClCompile>
-    <ClCompile Include="Util\PSNAgent.cpp">
-      <Filter>Util</Filter>
-    </ClCompile>
-    <ClCompile Include="Util\RPCNAgent.cpp">
-      <Filter>Util</Filter>
-    </ClCompile>
-    <ClCompile Include="Util\PSNAuthAgent.cpp">
-      <Filter>Util</Filter>
-    </ClCompile>
-    <ClCompile Include="Util\RPCNAuthAgent.cpp">
-      <Filter>Util</Filter>
-    </ClCompile>
-    <ClCompile Include="HLE\fb_helpers.cpp">
-      <Filter>HLE</Filter>
-    </ClCompile>
-    <ClCompile Include="HLE\SignalingHandler.cpp">
-      <Filter>HLE</Filter>
     <ClCompile Include="MIPS\LoongArch64\LoongArch64Asm.cpp">
       <Filter>MIPS\LoongArch64</Filter>
     </ClCompile>
@@ -1412,6 +1392,27 @@
     </ClCompile>
     <ClCompile Include="HW\GranularMixer.cpp">
       <Filter>HW</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\NPAgent.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\PSNAgent.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\PSNAuthAgent.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\RPCNAgent.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\RPCNAuthAgent.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="HLE\fb_helpers.cpp">
+      <Filter>HLE</Filter>
+    </ClCompile>
+    <ClCompile Include="HLE\SignalingHandler.cpp">
+      <Filter>HLE</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -2252,20 +2253,6 @@
     <ClInclude Include="FileLoaders\ZipFileLoader.h">
       <Filter>FileLoaders</Filter>
     </ClInclude>
-    <ClInclude Include="Util\NPAgent.h">
-      <Filter>Util</Filter>
-    </ClInclude>
-    <ClInclude Include="HLE\np_types.h">
-      <Filter>HLE\Libraries</Filter>
-    </ClInclude>
-    <ClInclude Include="np2_structs_generated.h">
-      <Filter>HLE</Filter>
-    </ClInclude>
-    <ClInclude Include="HLE\fb_helpers.h">
-      <Filter>HLE</Filter>
-    </ClInclude>
-    <ClInclude Include="HLE\SignalingHandler.h">
-      <Filter>HLE</Filter>
     <ClInclude Include="HLE\AtracBase.h">
       <Filter>HLE\Libraries</Filter>
     </ClInclude>
@@ -2284,6 +2271,22 @@
     <ClInclude Include="HW\GranularMixer.h">
       <Filter>HW</Filter>
     </ClInclude>
+    <ClInclude Include="np2_structs_generated.h" />
+    <ClInclude Include="Util\NPAgent.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="HLE\NpTypes.h">
+      <Filter>HLE</Filter>
+    </ClInclude>
+    <ClInclude Include="HLE\Np2Types.h">
+      <Filter>HLE</Filter>
+    </ClInclude>
+    <ClInclude Include="HLE\fb_helpers.h">
+      <Filter>HLE</Filter>
+    </ClInclude>
+    <ClInclude Include="HLE\SignalingHandler.h">
+      <Filter>HLE</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\LICENSE.TXT" />
@@ -2300,9 +2303,7 @@
       <Filter>Ext\libzip</Filter>
     </None>
     <None Include="..\assets\infra-dns.json" />
-    <None Include="np2_structs.fbs">
-      <Filter>HLE</Filter>
-    </None>
+    <None Include="np2_structs.fbs" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\ext\sha1\CMakeLists.txt">
