@@ -147,6 +147,9 @@ static int sceNpInit()
 	ERROR_LOG(Log::sceNet, "UNIMPL %s()", __FUNCTION__);
 
 	// We'll sanitize an extra time here, just to be safe from ini modifications.
+	// FIXME: RPCN has unfriendly usernames
+	/*if (g_Config.sInfrastructureUsername == SanitizeString(g_Config.sPSNNPID, StringRestriction::AlphaNumDashUnderscore, 3, 16)) {
+		npOnlineId = g_Config.sPSNNPID;*/
 	if (g_Config.sInfrastructureUsername == SanitizeString(g_Config.sInfrastructureUsername, StringRestriction::AlphaNumDashUnderscore, 3, 16)) {
 		npOnlineId = g_Config.sInfrastructureUsername;
 	} else {
