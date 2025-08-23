@@ -52,6 +52,7 @@ extern SceNpCommunicationId npTitleId;
 void __NpInit();
 
 int NpGetNpId(SceNpId* npid);
+std::string* NpGetLogin();
 bool NpAuthProcessEvents();
 
 int sceNpAuthGetMemoryStat(u32 memStatAddr);

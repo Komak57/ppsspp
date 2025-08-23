@@ -565,7 +565,9 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 		}*/
 
-		ret = servers[tServer]->Login("RPCS3_ZSgScc4D7x", "4D571528FECEBD1A", "lemmein");
+		//ret = servers[tServer]->Login("RPCS3_ZSgScc4D7x", "4D571528FECEBD1A", "lemmein");
+		std::string* creds = NpGetLogin();
+		ret = servers[tServer]->Login(creds[0].c_str(), creds[1].c_str(), creds[2].c_str());
 		if (ret != 0) {
 			ERROR_LOG(Log::sceNet, "Unable to Log In");
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
@@ -689,14 +691,6 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 	return 0;
 }
 
-SceNpId string_to_npid(std::string_view str)
-{
-	SceNpId npid;
-	memset(&npid, 0, sizeof(npid));
-	memcpy(npid.handle.data, std::data(str), 16);
-	return npid;
-}
-
 /* Incomplete - Hosts a Lobby/Party
  * @param reqParamPtr SceNpMatching2CreateJoinRoomRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
@@ -763,8 +757,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY));
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
-		SceNpId npId = string_to_npid("RPCS3_ZSgScc4D7x");
-		//SceNpId npId; NpGetNpId(&npId);
+		SceNpId npId; NpGetNpId(&npId);
 		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp, room_info, npId, true, false);
 
 		// Cache Rooms
@@ -828,7 +821,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 
 		room_resp->roomDataInternal = room_info;
 
-		SceNpId npId = string_to_npid("RPCS3_ZSgScc4D7x");
+		SceNpId npId; NpGetNpId(&npId);
 		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp->room_data(), room_info, npId, true, false);
 		// TODO: cache room_info
 		// TODO: execute signaling callback to update ip/port
