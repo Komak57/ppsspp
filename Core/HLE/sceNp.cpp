@@ -147,6 +147,9 @@ static int sceNpInit()
 	ERROR_LOG(Log::sceNet, "UNIMPL %s()", __FUNCTION__);
 
 	// We'll sanitize an extra time here, just to be safe from ini modifications.
+	// FIXME: RPCN doesn't have friendly usernames, so we'll use the PSN name for now
+	/*if (g_Config.sPSNNPID == SanitizeString(g_Config.sPSNNPID, StringRestriction::AlphaNumDashUnderscore, 3, 16)) {
+		npOnlineId = g_Config.sPSNNPID;*/
 	if (g_Config.sInfrastructureUsername == SanitizeString(g_Config.sInfrastructureUsername, StringRestriction::AlphaNumDashUnderscore, 3, 16)) {
 		npOnlineId = g_Config.sInfrastructureUsername;
 	} else {
@@ -205,8 +208,12 @@ static int sceNpGetOnlineId(u32 idPtr)
 }
 
 int NpGetNpId(SceNpId* npid) {
-	// Callers make sure that the rest of npid is zero filled, which takes care of the terminator.
-	strncpy(npid->handle.data, npOnlineId.c_str(), sizeof(npid->handle.data));
+	if (!npid) {
+		return -1; // invalid pointer
+	}
+	memset(npid, 0, sizeof(*npid));
+	memcpy(npid->handle.data, g_Config.sPSNNPID.c_str(),
+		std::min<size_t>(16, g_Config.sPSNNPID.size()));
 	return 0;
 }
 
