@@ -1212,37 +1212,36 @@ static int sceNpMatching2GetRoomPasswordLocal(int ctxId, u32 roomId, u32 withPas
 	return 0;
 }
 
+/* Incomplete - Sends a Room Message to relevant players?
+ * @param reqParamPtr PSPPointer<SceNpMatching2SendRoomMessageRequest> Request Information
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqId Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ * @note Sends the message to the NPAgent, and receives a reply via Notification
+ */
 static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 
-	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage);
+	if (!npMatching2Inited)
+		return SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED;
 
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
-		if (!npMatching2Inited)
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED));
+	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+		return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
 
-		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT));
+	if (tServer == 0)
+		return SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND;
 
-		if (tServer == 0)
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+	auto req = PSPPointer<SceNpMatching2SendRoomMessageRequest>::Create(reqParamPtr);
 
-		auto req = PSPPointer<SceNpMatching2SendRoomMessageRequest>::Create(reqParamPtr);
+	INFO_LOG(Log::sceNet, "SceNpMatching2SendRoomMessageRequest(%08X)", req.ptr);
+	INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 
-		INFO_LOG(Log::sceNet, "SceNpMatching2SendRoomMessageRequest(%08X)", req.ptr);
-		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
+	auto roomData = &servers[tServer]->rooms[req->roomId];
 
-		auto roomData = &servers[tServer]->rooms[req->roomId];
-
-		int ret;
-		if ((ret = servers[tServer]->SendRoomMessage(req)) != 0)
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
-
-		return notifyNpMatching2Handlers(request_id, 0);
-	});
-	tasks.emplace(request_id, std::move(task));
+	int ret;
+	if ((ret = servers[tServer]->SendRoomMessage(req)) != 0)
+		return hleLogError(Log::sceNet, ret);
 
 	return 0;
 }
