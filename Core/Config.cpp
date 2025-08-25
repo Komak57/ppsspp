@@ -973,14 +973,14 @@ static const ConfigSetting networkSettings[] = {
 	ConfigSetting("ForcedFirstConnect", &g_Config.bForcedFirstConnect, false, CfgFlag::PER_GAME),
 	ConfigSetting("EnableUPnP", &g_Config.bEnableUPnP, false, CfgFlag::PER_GAME),
 	ConfigSetting("UPnPUseOriginalPort", &g_Config.bUPnPUseOriginalPort, false, CfgFlag::PER_GAME),
-	ConfigSetting("InfrastructureUsername", &g_Config.sInfrastructureUsername, &DefaultInfrastructureUsername, CfgFlag::PER_GAME),
+	//ConfigSetting("InfrastructureUsername", &g_Config.sInfrastructureUsername, &DefaultInfrastructureUsername, CfgFlag::PER_GAME),
 	ConfigSetting("InfrastructureAutoDNS", &g_Config.bInfrastructureAutoDNS, true, CfgFlag::PER_GAME),
 	ConfigSetting("AllowSavestateWhileConnected", &g_Config.bAllowSavestateWhileConnected, false, CfgFlag::DONT_SAVE),
 	ConfigSetting("AllowSpeedControlWhileConnected", &g_Config.bAllowSpeedControlWhileConnected, false, CfgFlag::PER_GAME),
 	ConfigSetting("DontDownloadInfraJson", &g_Config.bDontDownloadInfraJson, false, CfgFlag::DONT_SAVE),
 
 	// See comment in header
-	ConfigSetting("PSNNPID", &g_Config.sPSNNPID, "", CfgFlag::PER_GAME),
+	ConfigSetting("PSNNPID", &g_Config.sPSNNPID, &DefaultInfrastructureUsername, CfgFlag::PER_GAME),
 	ConfigSetting("PSNPassword", &g_Config.sPSNPassword, "", CfgFlag::PER_GAME),
 	ConfigSetting("PSNToken", &g_Config.sPSNToken, "", CfgFlag::PER_GAME),
 

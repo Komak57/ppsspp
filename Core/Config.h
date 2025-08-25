@@ -487,7 +487,7 @@ public:
 	std::string proAdhocServer;
 	std::vector<std::string> proAdhocServerList;
 	std::string sInfrastructureDNSServer;
-	std::string sInfrastructureUsername;  // Username used for Infrastructure play. Different restrictions.
+	//std::string sInfrastructureUsername;  // Username used for Infrastructure play. Different restrictions.
 	bool bInfrastructureAutoDNS;
 	bool bAllowSavestateWhileConnected;  // Developer option, ini-only. No normal users need this, it's always wrong to save/load state when online.
 	bool bAllowSpeedControlWhileConnected;  // Useful in some games but not recommended.
