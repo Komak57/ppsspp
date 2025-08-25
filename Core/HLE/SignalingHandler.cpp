@@ -104,8 +104,9 @@ bool signaling_handler::connect() {
 	return true;
 }
 
-bool signaling_handler::connect(const std::string& host, u16 port, u64 scope) {
+bool signaling_handler::connect(const std::string& ipv4, u16 port, u64 scope) {
 	if (running_.load()) return true;
+	ERROR_LOG(Log::sceNet, "SIGSERV Connecting to '%s'", ipv4.c_str());
 
 	sock_ = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	if (sock_ == INVALID_SOCKET) return false;
@@ -118,21 +119,35 @@ bool signaling_handler::connect(const std::string& host, u16 port, u64 scope) {
 	if (::bind(sock_, reinterpret_cast<const sockaddr*>(&local), sizeof(local)) != 0) {
 		::closesocket(sock_);
 		sock_ = INVALID_SOCKET;
+		ERROR_LOG(Log::sceNet, "SIGSERV Connect - Could not Bind IPv6 Socket!");
 		return false;
 	}
 
-	// Remote address
-	//sockaddr_in6 remote{};
+	// Fill remote with IPv4-mapped IPv6
+	remote_addr = {};
 	remote_addr.sin6_family = AF_INET6;
 	remote_addr.sin6_port = htons(port);
-	inet_pton(AF_INET6, host.c_str(), &remote_addr.sin6_addr);
+	remote_addr.sin6_scope_id = 0; // only needed for link-local fe80::
 
-	// REQUIRED for fe80:: addresses
-	remote_addr.sin6_scope_id = scope;
+	// Convert IPv4 string to binary
+	in_addr ipv4_bin{};
+	if (::inet_pton(AF_INET, ipv4.c_str(), &ipv4_bin) != 1) {
+		::closesocket(sock_);
+		sock_ = INVALID_SOCKET;
+		ERROR_LOG(Log::sceNet, "SIGSERV Connect - Invalid IPv4 Address!");
+		return false;
+	}
+
+	// Place into IPv4-mapped IPv6: ::ffff:a.b.c.d
+	remote_addr.sin6_addr = IN6ADDR_ANY_INIT;
+	remote_addr.sin6_addr.u.Byte[10] = 0xff;
+	remote_addr.sin6_addr.u.Byte[11] = 0xff;
+	std::memcpy(&remote_addr.sin6_addr.u.Byte[12], &ipv4_bin, sizeof(ipv4_bin));
 
 	if (::connect(sock_, reinterpret_cast<sockaddr*>(&remote_addr), sizeof(remote_addr)) != 0) {
 		::closesocket(sock_);
 		sock_ = INVALID_SOCKET;
+		ERROR_LOG(Log::sceNet, "SIGSERV Connect - Failed to Connect!");
 		return false;
 	}
 
@@ -141,6 +156,7 @@ bool signaling_handler::connect(const std::string& host, u16 port, u64 scope) {
 	recv_thread_ = std::thread([this] { recv_loop(); });
 	return true;
 }
+
 void signaling_handler::start(u32 conn_id, u32 addr, u16 port) {
 
 	std::scoped_lock lk(mtx_);

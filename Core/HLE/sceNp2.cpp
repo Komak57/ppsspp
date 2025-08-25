@@ -287,14 +287,14 @@ static int sceNpMatching2ContextStart(int ctxId)
 	//net::PSNAuthAgent::GetServers(&ProcessHostnameWithInfraDNS, npTitleId, &servers);
 	net::RPCNAuthAgent::GetServers(npTitleId, &servers);
 
-	//signaling_handler::print_interfaces();
-	if (g_signaling.connect("fe80::be24:11ff:fed8:39c4", 3657, 21)) {
-		NOTICE_LOG(Log::sceNet, "Connected to Signaling Server!");
-	}
-	else {
-		ERROR_LOG(Log::sceNet, "Failed to connect to Signaling Server!");
-		//return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_CONN_NOT_FOUND));
-	}
+	////signaling_handler::print_interfaces();
+	//if (g_signaling.connect("fe80::be24:11ff:fed8:39c4", 3657, 21)) {
+	//	NOTICE_LOG(Log::sceNet, "Connected to Signaling Server!");
+	//}
+	//else {
+	//	ERROR_LOG(Log::sceNet, "Failed to connect to Signaling Server!");
+	//	//return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_CONN_NOT_FOUND));
+	//}
 
 	hleEatMicro(1000000);
 	// Returning 0x805508A6 (error code inherited from sceNpService_76867C01 which check server availability) if can't check server availability (ie. Fat Princess (US) through http://static-resource.np.community.playstation.net/np/resource/psp-title/NPWR00670_00/matching/NPWR00670_00-matching.xml using User-Agent: "PS3Community-agent/1.0.0 libhttp/1.0.0")
