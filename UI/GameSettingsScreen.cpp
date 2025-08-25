@@ -1442,9 +1442,9 @@ void GameSettingsScreen::CreateSystemSettings(UI::ViewGroup *systemSettings) {
 	systemSettings->Add(new PopupMultiChoice(&g_Config.iPSPModel, sy->T("PSP Model"), models, 0, ARRAY_SIZE(models), I18NCat::SYSTEM, screenManager()))->SetEnabled(!PSP_IsInited());
 	systemSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sNickName, sy->T("Change Nickname"), "", 32, screenManager()))->OnChange.Add([](UI::EventParams &e) {
 		// Copy to infrastructure name if valid and not already set.
-		if (g_Config.sInfrastructureUsername.empty()) {
+		if (g_Config.sPSNNPID.empty()) {
 			if (g_Config.sNickName == SanitizeString(g_Config.sNickName, StringRestriction::AlphaNumDashUnderscore, 3, 16)) {
-				g_Config.sInfrastructureUsername = g_Config.sNickName;
+				g_Config.sPSNNPID = g_Config.sNickName;
 			}
 		}
 		return UI::EVENT_DONE;
