@@ -146,6 +146,7 @@ public:
 
 	// Signal Triggers
 	void UserJoinedRoom(net::RPCNResponse resp);
+	void RoomMessageReceived(net::RPCNResponse resp);
 	
 private:
 	void recv_loop();

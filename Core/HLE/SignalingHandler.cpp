@@ -521,3 +521,49 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	args[6] = ctx->cb_arg.ptr;				// cb_args
 	hleEnqueueCall(ctx->cb.ptr, 7, args);
 }
+
+void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
+	auto noti = new vec_stream(resp.data);
+
+	u64 room_id = noti->get<u64>();
+	u16 member_id = noti->get<u16>();
+	NOTICE_LOG(Log::sceNet, "NOTI RoomMessageReceived(room: %d, member: %d", room_id, member_id);
+
+	const auto* message_info = noti->get_flatbuffer<RoomMessageInfo>();
+
+	if (noti->is_error())
+	{
+		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomMessageReceived notification");
+		return;
+	}
+
+	auto ctx = get_ctx(resp.header.reqId);
+	const u32 event_key = 0; //get_event_key();
+	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
+	bool include_onlinename = false, include_avatarurl = false;
+
+	u32 _size = sizeof(SceNpMatching2RoomMessageInfo);
+	u32 ptr = np_memory.Alloc(_size);
+	auto notif_data = PSPPointer<SceNpMatching2RoomMessageInfo>::Create(ptr);
+
+	np::RoomMessageInfo_to_SceNpMatching2RoomMessageInfo(np_memory, message_info, notif_data, include_onlinename, include_avatarurl);
+
+	/*if (room_msg_cb)
+	{
+		sysutil_register_cb([room_msg_cb = this->room_msg_cb, room_msg_cb_ctx = this->room_msg_cb_ctx, room_id, member_id, event_key, room_msg_cb_arg = this->room_msg_cb_arg, size = edata.size()](ppu_thread& cb_ppu) -> s32
+		{
+			room_msg_cb(cb_ppu, room_msg_cb_ctx, room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, event_key, 0, size, room_msg_cb_arg);
+			return 0;
+		});
+	}*/
+
+	u32_le args[NpMatching2Args::MAX_ARGS];
+	args[0] = resp.header.reqId;			// ContextID
+	args[1] = room_id;						// RoomId
+	args[2] = SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message;	// Event
+	args[3] = event_key;					// Event Key
+	args[4] = 0;							// ?
+	args[5] = _size;						// Size?
+	args[6] = ctx->cb_arg.ptr;				// cb_args
+	hleEnqueueCall(ctx->cb.ptr, 7, args);
+}

@@ -156,6 +156,9 @@ namespace net {
 				case NotificationType::UserLeftRoom:
 
 					break;
+				case NotificationType::RoomMessageReceived:
+					g_signaling.RoomMessageReceived(buf);
+					break;
 				default:
 					NOTICE_LOG(Log::sceNet, "RPCN Sent Notification: %s", NotificationTypeNames[header.command]);
 					notifications[header.reqId] = buf;
@@ -975,6 +978,7 @@ namespace net {
 
 		return 0;
 	}
+
 	int RPCNAgent::SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 
@@ -1026,8 +1030,10 @@ namespace net {
 		}
 
 		auto resp = take_pending_request(reqId);
-		if (resp.error != (u8)ErrorType::NoError)
+		if (resp.error != (u8)ErrorType::NoError) {
+			ERROR_LOG(Log::sceNet, "Response Error: %s", PacketTypeNames[resp.error]);
 			return ErrorToPSPError[resp.error];
-
+		}
+		return 0;
 	}
 }

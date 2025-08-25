@@ -333,6 +333,13 @@ constexpr std::size_t COMMUNICATION_ID_COMID_COMPONENT_SIZE = 9;
 constexpr std::size_t COMMUNICATION_ID_SUBID_COMPONENT_SIZE = 2;
 constexpr std::size_t COMMUNICATION_ID_SIZE = COMMUNICATION_ID_COMID_COMPONENT_SIZE + COMMUNICATION_ID_SUBID_COMPONENT_SIZE + 1;
 
+template <typename T>
+inline T read_from_ptr(const u8* ptr) {
+	T val;
+	std::memcpy(&val, ptr, sizeof(T));
+	return val;
+}
+
 class vec_stream
 {
 public:
@@ -350,18 +357,18 @@ public:
 
 	// Getters
 
-	//template <typename T>
-	//T get()
-	//{
-	//	if (sizeof(T) + i > vec.size() || error)
-	//	{
-	//		error = true;
-	//		return static_cast<T>(0);
-	//	}
-	//	T res = read_from_ptr<T>(&vec[i]);
-	//	i += sizeof(T);
-	//	return res;
-	//}
+	template <typename T>
+	T get()
+	{
+		if (sizeof(T) + i > vec.size() || error)
+		{
+			error = true;
+			return static_cast<T>(0);
+		}
+		T res = read_from_ptr<T>(&vec[i]);
+		i += sizeof(T);
+		return res;
+	}
 	std::string get_string(bool empty)
 	{
 		std::string res{};
