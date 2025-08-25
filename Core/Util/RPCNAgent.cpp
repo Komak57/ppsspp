@@ -912,7 +912,7 @@ namespace net {
 			std::vector<flatbuffers::Offset<BinAttr>> davec;
 			for (u32 i = 0; i < req->roomBinAttrInternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomBinAttrInternal[i].id, builder.CreateVector((u8*)req->roomBinAttrInternal[i].ptr, req->roomBinAttrInternal[i].size));
+				auto bin = CreateBinAttr(builder, req->roomBinAttrInternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomBinAttrInternal[i].ptr.ptr), req->roomBinAttrInternal[i].size));
 				davec.push_back(bin);
 			}
 			final_binattrinternal_vec = builder.CreateVector(davec);
@@ -974,5 +974,60 @@ namespace net {
 			return ErrorToPSPError[resp.error];
 
 		return 0;
+	}
+	int RPCNAgent::SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req) {
+		flatbuffers::FlatBufferBuilder builder(1024);
+
+		std::vector<u16> dst;
+		switch (req->castType)
+		{
+		case SCE_NP_MATCHING2_CASTTYPE_BROADCAST:
+			break;
+		case SCE_NP_MATCHING2_CASTTYPE_UNICAST:
+			dst.push_back(req->dst.unicastTarget);
+			break;
+		case SCE_NP_MATCHING2_CASTTYPE_MULTICAST:
+			for (u32 i = 0; i < req->dst.multicastTarget.memberIdNum && req->dst.multicastTarget.memberId; i++)
+			{
+				dst.push_back(req->dst.multicastTarget.memberId[i]);
+			}
+			break;
+		case SCE_NP_MATCHING2_CASTTYPE_MULTICAST_TEAM:
+			dst.push_back(req->dst.multicastTargetTeamId);
+			break;
+		default:
+			_assert_(false);
+			break;
+		}
+
+		auto req_finished = CreateSendRoomMessageRequest(builder, req->roomId, req->castType, builder.CreateVector(dst.data(), dst.size()), builder.CreateVector(Memory::GetPointer(req->msg.ptr), req->msgLen), req->option);
+		builder.Finish(req_finished);
+
+		auto bufsize = builder.GetSize();
+		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
+		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
+		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
+		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
+
+		// Wrap and send the packet
+		Packet packet;
+		packet.Write(data);
+
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::SendRoomMessage, reqId);
+
+		INFO_LOG(Log::sceNet, "Sending Room #%d a Message", req->roomId);
+
+		// NPAgent::Send()
+		bool flushed = Send(&packet, 5.0, &canceled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+		}
+
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return ErrorToPSPError[resp.error];
+
 	}
 }

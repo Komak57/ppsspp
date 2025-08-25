@@ -410,4 +410,7 @@ namespace net {
 	int PSNAgent::SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req) {
 		return 0;
 	}
+	int PSNAgent::SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req) {
+		return 0;
+	}
 }

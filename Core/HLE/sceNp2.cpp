@@ -1214,7 +1214,7 @@ static int sceNpMatching2GetRoomPasswordLocal(int ctxId, u32 roomId, u32 withPas
 
 static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage);
 
@@ -1228,6 +1228,17 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 
 		if (tServer == 0)
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND));
+
+		auto req = PSPPointer<SceNpMatching2SendRoomMessageRequest>::Create(reqParamPtr);
+
+		INFO_LOG(Log::sceNet, "SceNpMatching2SendRoomMessageRequest(%08X)", req.ptr);
+		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
+
+		auto roomData = &servers[tServer]->rooms[req->roomId];
+
+		int ret;
+		if ((ret = servers[tServer]->SendRoomMessage(req)) != 0)
+			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 
 		return notifyNpMatching2Handlers(request_id, 0);
 	});
