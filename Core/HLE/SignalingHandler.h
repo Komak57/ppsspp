@@ -146,7 +146,19 @@ public:
 
 	// Signal Triggers
 	void UserJoinedRoom(net::RPCNResponse resp);
+	void UserLeftRoom(net::RPCNResponse resp);
+	void RoomDestroyed(net::RPCNResponse resp);
+	void UpdatedRoomDataInternal(net::RPCNResponse resp);
+	void UpdatedRoomMemberDataInternal(net::RPCNResponse resp);
 	void RoomMessageReceived(net::RPCNResponse resp);
+	void SignalingHelper(net::RPCNResponse resp);
+	// GUI
+	void MemberJoinedRoomGUI(net::RPCNResponse resp);
+	void MemberLeftRoomGUI(net::RPCNResponse resp);
+	void RoomDisappearedGUI(net::RPCNResponse resp);
+	void RoomOwnerChangedGUI(net::RPCNResponse resp);
+	void UserKickedGUI(net::RPCNResponse resp);
+	void QuickMatchCompleteGUI(net::RPCNResponse resp);
 	
 private:
 	void recv_loop();

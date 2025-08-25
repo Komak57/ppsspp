@@ -150,17 +150,24 @@ namespace net {
 				break;
 			case PacketType::Notification:
 				switch ((NotificationType)header.command) {
-				case NotificationType::UserJoinedRoom:
-					g_signaling.UserJoinedRoom(buf);
-					break;
-				case NotificationType::UserLeftRoom:
-
-					break;
-				case NotificationType::RoomMessageReceived:
-					g_signaling.RoomMessageReceived(buf);
+				case NotificationType::UserJoinedRoom: g_signaling.UserJoinedRoom(buf); break;
+				case NotificationType::RoomMessageReceived: g_signaling.RoomMessageReceived(buf); break;
+				case NotificationType::UserLeftRoom: g_signaling.UserLeftRoom(buf); break;
+				case NotificationType::RoomDestroyed:g_signaling.RoomDestroyed(buf); break;
+				case NotificationType::UpdatedRoomDataInternal: g_signaling.UpdatedRoomDataInternal(buf); break;
+				case NotificationType::UpdatedRoomMemberDataInternal: g_signaling.UpdatedRoomMemberDataInternal(buf); break;
+				case NotificationType::SignalingHelper: g_signaling.SignalingHelper(buf); break;
+				// GUI
+				case NotificationType::MemberJoinedRoomGUI: g_signaling.MemberJoinedRoomGUI(buf); break;
+				case NotificationType::MemberLeftRoomGUI: g_signaling.MemberLeftRoomGUI(buf); break;
+				case NotificationType::RoomDisappearedGUI: g_signaling.RoomDisappearedGUI(buf); break;
+				case NotificationType::RoomOwnerChangedGUI: g_signaling.RoomOwnerChangedGUI(buf); break;
+				case NotificationType::UserKickedGUI: g_signaling.UserKickedGUI(buf); break;
+				case NotificationType::QuickMatchCompleteGUI: g_signaling.QuickMatchCompleteGUI(buf); break;
+					ERROR_LOG(Log::sceNet, "Unhandled GUI Notification: %s", NotificationTypeNames[header.command]);
 					break;
 				default:
-					NOTICE_LOG(Log::sceNet, "RPCN Sent Notification: %s", NotificationTypeNames[header.command]);
+					NOTICE_LOG(Log::sceNet, "RPCN Unknown Notification: %d", header.command);
 					notifications[header.reqId] = buf;
 				}
 				break;

@@ -551,6 +551,22 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	hleEnqueueCall(ctx->cb.ptr, 7, args);
 }
 
+void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
+	ERROR_LOG(Log::sceNet, "NOTI UserLeftRoom UNINPLEMENTED");
+}
+
+void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
+	ERROR_LOG(Log::sceNet, "NOTI RoomDestroyed UNINPLEMENTED");
+}
+
+void signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
+	ERROR_LOG(Log::sceNet, "NOTI UpdatedRoomDataInternal UNINPLEMENTED");
+}
+
+void signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
+	ERROR_LOG(Log::sceNet, "NOTI UpdatedRoomMemberDataInternal UNINPLEMENTED");
+}
+
 void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 	auto noti = new vec_stream(resp.data);
 
@@ -595,4 +611,33 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 	args[5] = _size;						// Size?
 	args[6] = ctx->cb_arg.ptr;				// cb_args
 	hleEnqueueCall(ctx->cb.ptr, 7, args);
+}
+
+void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
+	ERROR_LOG(Log::sceNet, "NOTI SignalingHelper UNINPLEMENTED");
+}
+
+// GUI
+void signaling_handler::MemberJoinedRoomGUI(net::RPCNResponse resp) {
+	ERROR_LOG(Log::sceNet, "NOTI MemberJoinedRoomGUI UNINPLEMENTED");
+}
+
+void signaling_handler::MemberLeftRoomGUI(net::RPCNResponse resp) {
+	ERROR_LOG(Log::sceNet, "NOTI MemberLeftRoomGUI UNINPLEMENTED");
+}
+
+void signaling_handler::RoomDisappearedGUI(net::RPCNResponse resp) {
+	ERROR_LOG(Log::sceNet, "NOTI RoomDisappearedGUI UNINPLEMENTED");
+}
+
+void signaling_handler::RoomOwnerChangedGUI(net::RPCNResponse resp) {
+	ERROR_LOG(Log::sceNet, "NOTI RoomOwnerChangedGUI UNINPLEMENTED");
+}
+
+void signaling_handler::UserKickedGUI(net::RPCNResponse resp) {
+	ERROR_LOG(Log::sceNet, "NOTI UserKickedGUI UNINPLEMENTED");
+}
+
+void signaling_handler::QuickMatchCompleteGUI(net::RPCNResponse resp) {
+	ERROR_LOG(Log::sceNet, "NOTI QuickMatchCompleteGUI UNINPLEMENTED");
 }
