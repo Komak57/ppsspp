@@ -352,8 +352,8 @@ void DeveloperToolsScreen::CreateNetworkTab(UI::LinearLayout *list) {
 	list->Add(new ItemHeader("RPCN Login"));
 	PopupTextInputChoice *usernameChoice = list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sPSNNPID, di->T("Username"), "", 64, screenManager()));
 	usernameChoice->SetRestriction(StringRestriction::AlphaNumDashUnderscore, 3);
-	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sPSNPassword, di->T("Password"), "", 64, screenManager()));
-	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sPSNToken, "Token", "", 64, screenManager()));
+	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sPSNPassword, di->T("Password"), "", 64, screenManager()))->SetPasswordDisplay();
+	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sPSNToken, "Token", "", 64, screenManager()))->SetPasswordDisplay();
 }
 
 void DeveloperToolsScreen::CreateGraphicsTab(UI::LinearLayout *list) {
