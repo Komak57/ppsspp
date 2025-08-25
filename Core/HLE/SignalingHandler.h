@@ -9,11 +9,22 @@
 #include <chrono>
 #include <optional>
 
-#include <winsock2.h>
-#include <ws2tcpip.h>
+#include "HLE.h"
 #include "Np2Types.h"
 #include <Core\Util\NPAgent.h>
-// if you’re cross-platform, swap the above for your existing PPSSPP socket wrappers.
+
+#include <iphlpapi.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <unistd.h>
+#endif
 
 using u8 = uint8_t;
 using u16 = uint16_t;

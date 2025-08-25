@@ -1,10 +1,6 @@
 #include "Core/HLE/SignalingHandler.h"
 #include <cassert>
 #include <cstring>
-#include "HLE.h"
-#include <netioapi.h>
-#include <iphlpapi.h>
-#include <ws2tcpip.h>
 
 static inline u16 be16(u16 x) { return htons(x); }
 static inline u32 be32(u32 x) { return htonl(x); }
