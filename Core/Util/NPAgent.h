@@ -543,6 +543,11 @@ namespace net {
 			std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
 			return ret;
 		}
+		std::string GetIP() {
+			char ip[INET_ADDRSTRLEN];
+			inet_ntop(resolved_->ai_family, &(resolved_->ai_addr), ip, INET_ADDRSTRLEN);
+			return ip;
+		}
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (SSLEnabled) return tls.netCtx.fd; else return sock_; }

@@ -457,28 +457,41 @@ void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u1
 	sp.sent_port = port;
 	std::memcpy(packet.data() + VPORT_0_HEADER_SIZE, &sp, sizeof(signaling_packet));
 
-	// --- IPv6 send path ---
-	sockaddr_in6 dest{};
-	dest.sin6_family = AF_INET6;
-	dest.sin6_port = port; // already big endian in your code
-	dest.sin6_scope_id = this->scope; // store your interface index from getifaddrs() earlier
+	sockaddr_in dest;
+	memset(&dest, 0, sizeof(sockaddr_in));
+	dest.sin_family = AF_INET;
+	dest.sin_addr.s_addr = addr;
+	dest.sin_port = port;
 
-	// Parse the fixed server address (replace with configurable later)
-	if (inet_pton(AF_INET6, "fe80::be24:11ff:fed8:39c4", &dest.sin6_addr) != 1) {
-		ERROR_LOG(Log::sceNet, "Failed to convert IPv6 signaling server address!");
+	char ip_str[16];
+	inet_ntop(AF_INET, &dest.sin_addr, ip_str, sizeof(ip_str));
+
+	DEBUG_LOG(Log::sceNet, "Sending %s packet to %s:%d", sp.command, ip_str, port);
+
+	if (::sendto(def_port.p2p_socket, reinterpret_cast<const char*>(packet.data()), ::size32(packet), 0, reinterpret_cast<const sockaddr*>(&addr), sizeof(sockaddr_in)) == -1)
+	{
+		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip_str, port);
 		return;
 	}
+	/*if (np::is_ipv6_supported() && np::ip_address_translator::is_ipv6(dest.sin_addr.s_addr))
+	{
+		auto& translator = g_fxo->get<np::ip_address_translator>();
+		const auto addr6 = translator.get_ipv6_sockaddr(dest.sin_addr.s_addr, dest.sin_port);
 
-	int ret = ::sendto(sock_, reinterpret_cast<const char*>(packet.data()),
-		(int)packet.size(), 0,
-		reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+		if (!send_packet_from_p2p_port_ipv6(packet, addr6))
+			sign_log.error("Failed to send signaling packet to %s:%d", ip_str, port);
+	}
+	else if (!send_packet_from_p2p_port_ipv4(packet, dest))
+	{
+		sign_log.error("Failed to send signaling packet to %s:%d", ip_str, port);
+	}*/
 }
 
 void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	auto stream = new vec_stream(resp.data);
 	auto notification = stream->get_flatbuffer<NotificationUserJoinedRoom>();
 	if (stream->is_error()) {
-		ERROR_LOG(Log::sceNet, "Malformed UserJoinedRoom notification");
+		ERROR_LOG(Log::sceNet, "NOTI Malformed UserJoinedRoom notification");
 		return;
 	}
 	const auto room_id = notification->room_id();
