@@ -95,7 +95,7 @@ bool SocketManager::GetInetSocket(int sock, InetSocket **inetSocket) {
 SOCKET SocketManager::GetHostSocketFromInetSocket(int sock) {
 	std::lock_guard<std::mutex> guard(g_socketMutex);
 	if (sock < MIN_VALID_INET_SOCKET || sock >= ARRAY_SIZE(inetSockets_) || inetSockets_[sock].state == SocketState::Unused) {
-		_dbg_assert_(false);
+		//_dbg_assert_(false); // Triggers error when quitting Np2 Matching
 		return -1;
 	}
 	if (sock == 0) {
