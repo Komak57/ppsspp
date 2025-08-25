@@ -288,13 +288,13 @@ static int sceNpMatching2ContextStart(int ctxId)
 	net::RPCNAuthAgent::GetServers(npTitleId, &servers);
 
 	//signaling_handler::print_interfaces();
-	//if (g_signaling.connect("fe80::be24:11ff:fed8:39c4", 3657, 21)) {
-	//	NOTICE_LOG(Log::sceNet, "Connected to Signaling Server!");
-	//}
-	//else {
-	//	ERROR_LOG(Log::sceNet, "Failed to connect to Signaling Server!");
-	//	//return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_CONN_NOT_FOUND));
-	//}
+	if (g_signaling.connect("fe80::be24:11ff:fed8:39c4", 3657, 21)) {
+		NOTICE_LOG(Log::sceNet, "Connected to Signaling Server!");
+	}
+	else {
+		ERROR_LOG(Log::sceNet, "Failed to connect to Signaling Server!");
+		//return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_CONN_NOT_FOUND));
+	}
 
 	hleEatMicro(1000000);
 	// Returning 0x805508A6 (error code inherited from sceNpService_76867C01 which check server availability) if can't check server availability (ie. Fat Princess (US) through http://static-resource.np.community.playstation.net/np/resource/psp-title/NPWR00670_00/matching/NPWR00670_00-matching.xml using User-Agent: "PS3Community-agent/1.0.0 libhttp/1.0.0")
@@ -859,7 +859,7 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32
 
 		// TODO: execute signaling callback to update users
 
-		return notifyNpMatching2Handlers(request_id, 0, SCE_NP_MATCHING2_ERROR_ABORTED);
+		return notifyNpMatching2Handlers(request_id, 0);
 	});
 	tasks.emplace(request_id, std::move(task));
 
@@ -967,7 +967,7 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
  */
 static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal);
 
