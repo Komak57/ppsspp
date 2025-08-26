@@ -291,12 +291,9 @@ namespace np
 
 			if (i < (resp->memberList()->size() - 1))
 			{
-				//sce_member->next = room_info->memberList.members + i + 1;
-				// 
-				//u32 alloc = sizeof(SceNpMatching2RoomMemberDataInternal);
-				//sce_member->next = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(edata.Alloc(alloc));
-				Memory::Write_Struct(room_info->memberList.members[i+1], sce_member->next.ptr, "member%d", 9);
+				sce_member->next = room_info->memberList.members + i + 1;
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(sce_member->next);
+				edata.add_relocation(sce_member->next.ptr);
 			}
 
 			RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(edata, fb_member, room_info, sce_member, include_onlinename, include_avatarurl);
