@@ -1,6 +1,7 @@
 #include "Core/HLE/SignalingHandler.h"
 #include <cassert>
 #include <cstring>
+#include "sceNp.h"
 
 static inline u16 be16(u16 x) { return htons(x); }
 static inline u32 be32(u32 x) { return htonl(x); }
@@ -468,11 +469,12 @@ void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u1
 
 	DEBUG_LOG(Log::sceNet, "Sending %s packet to %s:%d", sp.command, ip_str, port);
 
-	if (::sendto(def_port.p2p_socket, reinterpret_cast<const char*>(packet.data()), ::size32(packet), 0, reinterpret_cast<const sockaddr*>(&addr), sizeof(sockaddr_in)) == -1)
+	// FIXME: Get P2P Socket from PortManager
+	/*if (::sendto(def_port.p2p_socket, reinterpret_cast<const char*>(packet.data()), ::size32(packet), 0, reinterpret_cast<const sockaddr*>(&addr), sizeof(sockaddr_in)) == -1)
 	{
 		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip_str, port);
 		return;
-	}
+	}*/
 	/*if (np::is_ipv6_supported() && np::ip_address_translator::is_ipv6(dest.sin_addr.s_addr))
 	{
 		auto& translator = g_fxo->get<np::ip_address_translator>();
@@ -553,18 +555,201 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 
 void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI UserLeftRoom UNINPLEMENTED");
+	auto noti = new vec_stream(resp.data);
+	u64 room_id = noti->get<u64>();
+	const auto* update_info = noti->get_flatbuffer<RoomMemberUpdateInfo>();
+
+	if (noti->is_error())
+	{
+		ERROR_LOG(Log::sceNet, "NOTI UserLeftRoom Malformed UserLeftRoom notification");
+		return;
+	}
+
+	const u32 event_key = 0;// get_event_key();
+	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
+	bool include_onlinename = false, include_avatarurl = false;
+
+	u32 _size = sizeof(SceNpMatching2RoomMemberUpdateInfo);
+	u32 ptr = np_memory.Alloc(_size);
+	auto notif_data = PSPPointer<SceNpMatching2RoomMemberUpdateInfo>::Create(ptr);
+	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, update_info, notif_data, include_onlinename, include_avatarurl);
+
+	// FIXME: Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
+	/*if (!np_cache.del_member(room_id, notif_data->roomMemberDataInternal->memberId))
+	{
+		get_match2_event(event_key, 0, 0);
+		return;
+	}*/
+
+	NOTICE_LOG(Log::sceNet, "NOTI UserLeftRoom User %s(%d) left room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
+	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
+
+	/*if (room_event_cb)
+	{
+		sysutil_register_cb([room_event_cb = this->room_event_cb, room_event_cb_ctx = this->room_event_cb_ctx, room_id, event_key, room_event_cb_arg = this->room_event_cb_arg, size = edata.size()](ppu_thread& cb_ppu) -> s32
+		{
+			room_event_cb(cb_ppu, room_event_cb_ctx, room_id, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, event_key, 0, size, room_event_cb_arg);
+			return 0;
+		});
+	}*/
+
+	auto ctx = get_ctx(resp.header.reqId);
+	u32_le args[NpMatching2Args::MAX_ARGS];
+	args[0] = resp.header.reqId;			// ContextID
+	args[1] = room_id;						// RoomId
+	args[2] = SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft;	// Event
+	args[3] = event_key;					// Event Key
+	args[4] = 0;							// ?
+	args[5] = _size;						// Size?
+	args[6] = ctx->cb_arg.ptr;				// cb_args
+	hleEnqueueCall(ctx->cb.ptr, 7, args);
 }
 
 void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI RoomDestroyed UNINPLEMENTED");
+	auto noti = new vec_stream(resp.data);
+
+	u64 room_id = noti->get<u64>();
+	const auto* update_info = noti->get_flatbuffer<RoomUpdateInfo>();
+
+	if (noti->is_error())
+	{
+		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomDestroyed notification");
+		return;
+	}
+
+	const u32 event_key = 0;// get_event_key();
+
+	u32 _size = sizeof(SceNpMatching2RoomUpdateInfo);
+	u32 ptr = np_memory.Alloc(_size);
+	auto notif_data = PSPPointer<SceNpMatching2RoomUpdateInfo>::Create(ptr);
+	np::RoomUpdateInfo_to_SceNpMatching2RoomUpdateInfo(update_info, notif_data);
+
+	NOTICE_LOG(Log::sceNet, "NOTI RoomDestroyed Received notification that room(%d) was destroyed", room_id);
+
+	//disconnect_sig2_users(room_id);
+
+	/*if (room_event_cb)
+	{
+		sysutil_register_cb([room_event_cb = this->room_event_cb, room_event_cb_ctx = this->room_event_cb_ctx, room_id, event_key, room_event_cb_arg = this->room_event_cb_arg, size = edata.size()](ppu_thread& cb_ppu) -> s32
+		{
+			room_event_cb(cb_ppu, room_event_cb_ctx, room_id, SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, event_key, 0, size, room_event_cb_arg);
+			return 0;
+		});
+	}*/
+
+	auto ctx = get_ctx(resp.header.reqId);
+	u32_le args[NpMatching2Args::MAX_ARGS];
+	args[0] = resp.header.reqId;			// ContextID
+	args[1] = room_id;						// RoomId
+	args[2] = SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed;	// Event
+	args[3] = event_key;					// Event Key
+	args[4] = 0;							// ?
+	args[5] = _size;						// Size?
+	args[6] = ctx->cb_arg.ptr;				// cb_args
+	hleEnqueueCall(ctx->cb.ptr, 7, args);
 }
 
 void signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI UpdatedRoomDataInternal UNINPLEMENTED");
+	auto noti = new vec_stream(resp.data);
+
+	SceNpMatching2RoomId room_id = noti->get<u64>();
+	const auto* update_info = noti->get_flatbuffer<RoomDataInternalUpdateInfo>();
+
+	if (noti->is_error())
+	{
+		ERROR_LOG(Log::sceNet, "NOTI Malformed UpdatedRoomDataInternal notification");
+		return;
+	}
+
+	const u32 event_key = 0;// get_event_key();
+	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
+	bool include_onlinename = false, include_avatarurl = false;
+
+	u32 _size = sizeof(SceNpMatching2RoomDataInternalUpdateInfo);
+	u32 ptr = np_memory.Alloc(_size);
+	auto notif_data = PSPPointer<SceNpMatching2RoomDataInternalUpdateInfo>::Create(ptr);
+	SceNpId npId; NpGetNpId(&npId);
+	np::RoomDataInternalUpdateInfo_to_SceNpMatching2RoomDataInternalUpdateInfo(np_memory, update_info, notif_data, npId, include_onlinename, include_avatarurl);
+
+	//np_cache.insert_room(notif_data->newRoomDataInternal.get_ptr());
+
+	//extra_nps::print_SceNpMatching2RoomDataInternal(notif_data->newRoomDataInternal.get_ptr());
+
+	NOTICE_LOG(Log::sceNet, "NOTI RoomDestroyed Received notification that room(% d)'s data was updated", room_id);
+
+	/*if (room_event_cb)
+	{
+		sysutil_register_cb([room_event_cb = this->room_event_cb, room_event_cb_ctx = this->room_event_cb_ctx, room_id, event_key, room_event_cb_arg = this->room_event_cb_arg, size = edata.size()](ppu_thread& cb_ppu) -> s32
+		{
+			room_event_cb(cb_ppu, room_event_cb_ctx, room_id, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal, event_key, 0, size, room_event_cb_arg);
+			return 0;
+		});
+	}*/
+
+	auto ctx = get_ctx(resp.header.reqId);
+	u32_le args[NpMatching2Args::MAX_ARGS];
+	args[0] = resp.header.reqId;			// ContextID
+	args[1] = room_id;						// RoomId
+	args[2] = SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal;	// Event
+	args[3] = event_key;					// Event Key
+	args[4] = 0;							// ?
+	args[5] = _size;						// Size?
+	args[6] = ctx->cb_arg.ptr;				// cb_args
+	hleEnqueueCall(ctx->cb.ptr, 7, args);
 }
 
 void signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI UpdatedRoomMemberDataInternal UNINPLEMENTED");
+	auto noti = new vec_stream(resp.data);
+
+	SceNpMatching2RoomId room_id = noti->get<u64>();
+	const auto* update_info = noti->get_flatbuffer<RoomMemberDataInternalUpdateInfo>();
+
+	if (noti->is_error())
+	{
+		ERROR_LOG(Log::sceNet, "NOTI Malformed UpdatedRoomMemberDataInternal notification");
+		return;
+	}
+
+	const u32 event_key = 0;// get_event_key();
+	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
+	bool include_onlinename = false, include_avatarurl = false;
+
+	u32 _size = sizeof(SceNpMatching2RoomMemberDataInternalUpdateInfo);
+	u32 ptr = np_memory.Alloc(_size);
+	auto notif_data = PSPPointer<SceNpMatching2RoomMemberDataInternalUpdateInfo>::Create(ptr);
+	np::RoomMemberDataInternalUpdateInfo_to_SceNpMatching2RoomMemberDataInternalUpdateInfo(np_memory, update_info, notif_data, include_onlinename, include_avatarurl);
+
+	/*if (!np_cache.add_member(room_id, notif_data->newRoomMemberDataInternal.get_ptr()))
+	{
+		get_match2_event(event_key, 0, 0);
+		return;
+	}*/
+
+	NOTICE_LOG(Log::sceNet, "NOTI RoomDestroyed User's %s(%d) room (%d) data was updated", notif_data->newRoomMemberDataInternal->userInfo.npId.handle.data, notif_data->newRoomMemberDataInternal->memberId, room_id);
+	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());
+
+	/*if (room_event_cb)
+	{
+		sysutil_register_cb([room_event_cb = this->room_event_cb, room_event_cb_ctx = this->room_event_cb_ctx, room_id, event_key, room_event_cb_arg = this->room_event_cb_arg, size = edata.size()](ppu_thread& cb_ppu) -> s32
+		{
+			room_event_cb(cb_ppu, room_event_cb_ctx, room_id, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, event_key, 0, size, room_event_cb_arg);
+			return 0;
+		});
+	}*/
+
+	auto ctx = get_ctx(resp.header.reqId);
+	u32_le args[NpMatching2Args::MAX_ARGS];
+	args[0] = resp.header.reqId;			// ContextID
+	args[1] = room_id;						// RoomId
+	args[2] = SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal;	// Event
+	args[3] = event_key;					// Event Key
+	args[4] = 0;							// ?
+	args[5] = _size;						// Size?
+	args[6] = ctx->cb_arg.ptr;				// cb_args
+	hleEnqueueCall(ctx->cb.ptr, 7, args);
 }
 
 void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
@@ -582,7 +767,6 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 		return;
 	}
 
-	auto ctx = get_ctx(resp.header.reqId);
 	const u32 event_key = 0; //get_event_key();
 	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
 	bool include_onlinename = false, include_avatarurl = false;
@@ -602,6 +786,7 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 		});
 	}*/
 
+	auto ctx = get_ctx(resp.header.reqId);
 	u32_le args[NpMatching2Args::MAX_ARGS];
 	args[0] = resp.header.reqId;			// ContextID
 	args[1] = room_id;						// RoomId
@@ -615,6 +800,49 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 
 void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI SignalingHelper UNINPLEMENTED");
+	auto noti = new vec_stream(resp.data);
+
+	u64 room_id = noti->get<u64>();
+	u16 member_id = noti->get<u16>();
+	NOTICE_LOG(Log::sceNet, "NOTI Member %d sent message in room(%d)", member_id, room_id);
+
+	const auto* message_info = noti->get_flatbuffer<RoomMessageInfo>();
+
+	if (noti->is_error())
+	{
+		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomMessageReceived notification");
+		return;
+	}
+
+	const u32 event_key = 0;// get_event_key();
+	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
+	bool include_onlinename = false, include_avatarurl = false;
+
+	u32 _size = sizeof(SceNpMatching2RoomMessageInfo);
+	u32 ptr = np_memory.Alloc(_size);
+	auto notif_data = PSPPointer<SceNpMatching2RoomMessageInfo>::Create(ptr);
+	np::RoomMessageInfo_to_SceNpMatching2RoomMessageInfo(np_memory, message_info, notif_data, include_onlinename, include_avatarurl);
+
+
+	/*if (room_msg_cb)
+	{
+		sysutil_register_cb([room_msg_cb = this->room_msg_cb, room_msg_cb_ctx = this->room_msg_cb_ctx, room_id, member_id, event_key, room_msg_cb_arg = this->room_msg_cb_arg, size = edata.size()](ppu_thread& cb_ppu) -> s32
+		{
+			room_msg_cb(cb_ppu, room_msg_cb_ctx, room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, event_key, 0, size, room_msg_cb_arg);
+			return 0;
+		});
+	}*/
+
+	auto ctx = get_ctx(resp.header.reqId);
+	u32_le args[NpMatching2Args::MAX_ARGS];
+	args[0] = resp.header.reqId;			// ContextID
+	args[1] = room_id;						// RoomId
+	args[2] = SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message;	// Event
+	args[3] = event_key;					// Event Key
+	args[4] = 0;							// ?
+	args[5] = _size;						// Size?
+	args[6] = ctx->cb_arg.ptr;				// cb_args
+	hleEnqueueCall(ctx->cb.ptr, 7, args);
 }
 
 // GUI
@@ -624,20 +852,25 @@ void signaling_handler::MemberJoinedRoomGUI(net::RPCNResponse resp) {
 
 void signaling_handler::MemberLeftRoomGUI(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI MemberLeftRoomGUI UNINPLEMENTED");
+	auto noti = new vec_stream(resp.data);
 }
 
 void signaling_handler::RoomDisappearedGUI(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI RoomDisappearedGUI UNINPLEMENTED");
+	auto noti = new vec_stream(resp.data);
 }
 
 void signaling_handler::RoomOwnerChangedGUI(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI RoomOwnerChangedGUI UNINPLEMENTED");
+	auto noti = new vec_stream(resp.data);
 }
 
 void signaling_handler::UserKickedGUI(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI UserKickedGUI UNINPLEMENTED");
+	auto noti = new vec_stream(resp.data);
 }
 
 void signaling_handler::QuickMatchCompleteGUI(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI QuickMatchCompleteGUI UNINPLEMENTED");
+	auto noti = new vec_stream(resp.data);
 }
