@@ -359,7 +359,7 @@ struct SceNpUserInfo
 struct SceNpUserInfo2
 {
 	SceNpId npId;
-	PSPPointer<SceNpOnlineId> onlineName;
+	PSPPointer<SceNpOnlineName> onlineName;
 	PSPPointer<SceNpAvatarUrl> avatarUrl;
 };
 

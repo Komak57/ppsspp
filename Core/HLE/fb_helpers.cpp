@@ -102,15 +102,13 @@ namespace np
 
 		if (include_onlinename && user->onlineName())
 		{
-			//auto* ptr = edata.allocate<SceNpOnlineName>(sizeof(SceNpOnlineName), user_info->onlineName);
-			u32 alloc = sizeof(SceNpOnlineId);
-			auto ptr = PSPPointer<SceNpOnlineId>::Create(edata.Alloc(alloc));
+			u32 alloc = sizeof(SceNpOnlineName);
+			auto ptr = PSPPointer<SceNpOnlineName>::Create(edata.Alloc(alloc));
 			user_info->onlineName = ptr;
 			std::memcpy(ptr->data, user->onlineName()->c_str(), std::min<std::size_t>(48, user->onlineName()->size()));
 		}
 		if (include_avatarurl && user->avatarUrl())
 		{
-			//auto* ptr = edata.allocate<SceNpAvatarUrl>(sizeof(SceNpAvatarUrl), user_info->avatarUrl);
 			u32 alloc = sizeof(SceNpAvatarUrl);
 			auto ptr = PSPPointer<SceNpAvatarUrl>::Create(edata.Alloc(alloc));
 			user_info->avatarUrl = ptr;
