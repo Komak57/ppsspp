@@ -308,9 +308,7 @@ namespace np
 				NOTICE_LOG(Log::sceNet, " - Member[%d] is Self", i);
 				//room_info->memberList.me = room_info->memberList.members + i;
 				//room_info->memberList.me = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(room_info->memberList.members.ptr + i * sizeof(SceNpMatching2RoomMemberDataInternal));
-				u32 alloc = sizeof(SceNpMatching2RoomMemberDataInternal);
-				room_info->memberList.me = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(edata.Alloc(alloc));
-				Memory::Write_Struct(room_info->memberList.members[i], room_info->memberList.me.ptr, "Member.Self", 12);
+				room_info->memberList.me = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create((room_info->memberList.members + i).ptr);
 				self = room_info->memberList.me.ptr;
 				NOTICE_LOG(Log::sceNet, " - Self at %08x", room_info->memberList.me.ptr);
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(room_info->memberList.me);
@@ -327,9 +325,7 @@ namespace np
 				NOTICE_LOG(Log::sceNet, " - Member[%d] is Owner", i);
 				//room_info->memberList.owner = room_info->memberList.members + i;
 				//room_info->memberList.owner = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(room_info->memberList.members.ptr + i * sizeof(SceNpMatching2RoomMemberDataInternal));
-				u32 alloc = sizeof(SceNpMatching2RoomMemberDataInternal);
-				room_info->memberList.owner = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(edata.Alloc(alloc));
-				Memory::Write_Struct(room_info->memberList.members[i], room_info->memberList.owner.ptr, "Member.Owner", 13);
+				room_info->memberList.owner = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create((room_info->memberList.members + i).ptr);
 				NOTICE_LOG(Log::sceNet, " - Owner at %08x", room_info->memberList.owner.ptr);
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(room_info->memberList.owner);
 				break;
@@ -382,7 +378,8 @@ namespace np
 			if (room_info)
 			{
 				// If we have SceNpMatching2RoomDataInternal available we point the pointers to the group there
-				sce_member_data->roomGroup = room_info->roomGroup + (fb_roomgroup->groupId() - 1);
+				sce_member_data->roomGroup = PSPPointer<SceNpMatching2RoomGroup>::Create((room_info->roomGroup + (fb_roomgroup->groupId() - 1)).ptr);
+				//sce_member_data->roomGroup = room_info->roomGroup + (fb_roomgroup->groupId() - 1);
 				//edata.add_relocation<SceNpMatching2RoomGroup>(sce_member_data->roomGroup);
 			}
 			else
@@ -477,10 +474,13 @@ namespace np
 
 		if (sce_room_data->flagAttr != update_info->prevFlagAttr())
 		{
-			//sce_update_info->newFlagAttr = sce_update_info->newRoomDataInternal.ptr(&SceNpMatching2RoomDataInternal::flagAttr);
-			sce_update_info->newFlagAttr = sce_update_info->newRoomDataInternal->flagAttr;
-			//edata.add_relocation<u32>(sce_update_info->newFlagAttr);
-			//auto* ptr_sce_prevflag = edata.allocate<SceNpMatching2FlagAttr>(sizeof(SceNpMatching2FlagAttr), sce_update_info->prevFlagAttr);
+			/*sce_update_info->newFlagAttr = sce_update_info->newRoomDataInternal.ptr(&SceNpMatching2RoomDataInternal::flagAttr);
+			edata.add_relocation<u32>(sce_update_info->newFlagAttr);
+			auto* ptr_sce_prevflag = edata.allocate<SceNpMatching2FlagAttr>(sizeof(SceNpMatching2FlagAttr), sce_update_info->prevFlagAttr);
+			*ptr_sce_prevflag = update_info->prevFlagAttr();*/
+
+			//sce_update_info->newFlagAttr.ptr = sce_update_info->newRoomDataInternal.ptr(&SceNpMatching2RoomDataInternal::flagAttr);
+			sce_update_info->newFlagAttr.ptr = sce_update_info->newRoomDataInternal.ptr + offsetof(SceNpMatching2RoomDataInternal, flagAttr);
 			u32 alloc = sizeof(SceNpMatching2FlagAttr);
 			auto ptr_sce_prevflag = PSPPointer<SceNpMatching2FlagAttr>::Create(edata.Alloc(alloc));
 			sce_update_info->prevFlagAttr = ptr_sce_prevflag;
@@ -490,7 +490,7 @@ namespace np
 		if (sce_room_data->passwordSlotMask != update_info->prevRoomPasswordSlotMask())
 		{
 			//sce_update_info->newRoomPasswordSlotMask = sce_update_info->newRoomDataInternal.ptr(&SceNpMatching2RoomDataInternal::passwordSlotMask);
-			sce_update_info->newRoomPasswordSlotMask = sce_update_info->newRoomDataInternal->passwordSlotMask;
+			sce_update_info->newRoomPasswordSlotMask.ptr = sce_update_info->newRoomDataInternal.ptr + offsetof(SceNpMatching2RoomDataInternal, passwordSlotMask);
 			//edata.add_relocation<u64>(sce_update_info->newRoomPasswordSlotMask);
 			//auto* ptr_sce_prevpass = edata.allocate<SceNpMatching2RoomPasswordSlotMask>(sizeof(SceNpMatching2RoomPasswordSlotMask), sce_update_info->prevRoomPasswordSlotMask);
 			u32 alloc = sizeof(SceNpMatching2RoomPasswordSlotMask);
@@ -547,7 +547,8 @@ namespace np
 		if (sce_update_info->newRoomMemberDataInternal->flagAttr != update_info->prevFlagAttr())
 		{
 			//sce_update_info->newFlagAttr = sce_update_info->newRoomMemberDataInternal.ptr(&SceNpMatching2RoomMemberDataInternal::flagAttr);
-			sce_update_info->newFlagAttr = sce_update_info->newRoomMemberDataInternal->flagAttr;
+			edata.add_relocation(sce_update_info->newFlagAttr.ptr);
+			//sce_update_info->newFlagAttr = sce_update_info->newRoomMemberDataInternal->flagAttr;
 			//edata.add_relocation<u32>(sce_update_info->newFlagAttr);
 			//auto* ptr_sce_prevflag = edata.allocate<SceNpMatching2FlagAttr>(sizeof(SceNpMatching2FlagAttr), sce_update_info->prevFlagAttr);
 			u32 alloc = sizeof(SceNpMatching2FlagAttr);
@@ -629,7 +630,7 @@ namespace np
 		case SCE_NP_MATCHING2_CASTTYPE_MULTICAST_TEAM: sce_mi->dst->multicastTargetTeamId = (SceNpMatching2TeamId)(mi->dst()->Get(0)); break;
 		default:
 			//ensure(false);
-			break;
+			assert(false);
 		}
 
 		if (auto src_member = mi->srcMember())
@@ -638,7 +639,7 @@ namespace np
 			u32 alloc = sizeof(SceNpUserInfo2);
 			auto ptr_sce_userinfo = PSPPointer<SceNpUserInfo2>::Create(edata.Alloc(alloc));
 			sce_mi->srcMember = ptr_sce_userinfo;
-			UserInfo_to_SceNpUserInfo2(edata, src_member, ptr_sce_userinfo, include_onlinename, include_avatarurl);
+			UserInfo_to_SceNpUserInfo2(edata, src_member, sce_mi->srcMember, include_onlinename, include_avatarurl);
 		}
 
 		if (auto msg = mi->msg())
