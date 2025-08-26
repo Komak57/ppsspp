@@ -388,9 +388,9 @@ public:
 	}
 	std::vector<u8> get_rawdata()
 	{
-		u32 size;// = get<u32>();
-		memcpy(&size, &vec[i], sizeof(u32));
-		i += sizeof(u32);
+		u32 size = get<u32>();
+		//memcpy(&size, &vec[i], sizeof(u32));
+		//i += sizeof(u32);
 
 		if (i + size > vec.size())
 		{
@@ -490,6 +490,7 @@ namespace net {
 		PacketHeader header;
 		u8 error;
 		std::vector<u8> data;
+		vec_stream* stream;
 	};
 	class MBEDTLS_Connection {
 	public:

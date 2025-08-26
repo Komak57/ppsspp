@@ -490,9 +490,8 @@ void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u1
 }
 
 void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
-	auto stream = new vec_stream(resp.data);
-	auto notification = stream->get_flatbuffer<NotificationUserJoinedRoom>();
-	if (stream->is_error()) {
+	auto notification = resp.stream->get_flatbuffer<NotificationUserJoinedRoom>();
+	if (resp.stream->is_error()) {
 		ERROR_LOG(Log::sceNet, "NOTI Malformed UserJoinedRoom notification");
 		return;
 	}
@@ -555,11 +554,10 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 
 void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI UserLeftRoom UNINPLEMENTED");
-	auto noti = new vec_stream(resp.data);
-	u64 room_id = noti->get<u64>();
-	const auto* update_info = noti->get_flatbuffer<RoomMemberUpdateInfo>();
+	u64 room_id = resp.stream->get<u64>();
+	const auto* update_info = resp.stream->get_flatbuffer<RoomMemberUpdateInfo>();
 
-	if (noti->is_error())
+	if (resp.stream->is_error())
 	{
 		ERROR_LOG(Log::sceNet, "NOTI UserLeftRoom Malformed UserLeftRoom notification");
 		return;
@@ -607,12 +605,11 @@ void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 
 void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI RoomDestroyed UNINPLEMENTED");
-	auto noti = new vec_stream(resp.data);
 
-	u64 room_id = noti->get<u64>();
-	const auto* update_info = noti->get_flatbuffer<RoomUpdateInfo>();
+	u64 room_id = resp.stream->get<u64>();
+	const auto* update_info = resp.stream->get_flatbuffer<RoomUpdateInfo>();
 
-	if (noti->is_error())
+	if (resp.stream->is_error())
 	{
 		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomDestroyed notification");
 		return;
@@ -652,12 +649,11 @@ void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 
 void signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI UpdatedRoomDataInternal UNINPLEMENTED");
-	auto noti = new vec_stream(resp.data);
 
-	SceNpMatching2RoomId room_id = noti->get<u64>();
-	const auto* update_info = noti->get_flatbuffer<RoomDataInternalUpdateInfo>();
+	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
+	const auto* update_info = resp.stream->get_flatbuffer<RoomDataInternalUpdateInfo>();
 
-	if (noti->is_error())
+	if (resp.stream->is_error())
 	{
 		ERROR_LOG(Log::sceNet, "NOTI Malformed UpdatedRoomDataInternal notification");
 		return;
@@ -702,12 +698,11 @@ void signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 
 void signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI UpdatedRoomMemberDataInternal UNINPLEMENTED");
-	auto noti = new vec_stream(resp.data);
 
-	SceNpMatching2RoomId room_id = noti->get<u64>();
-	const auto* update_info = noti->get_flatbuffer<RoomMemberDataInternalUpdateInfo>();
+	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
+	const auto* update_info = resp.stream->get_flatbuffer<RoomMemberDataInternalUpdateInfo>();
 
-	if (noti->is_error())
+	if (resp.stream->is_error())
 	{
 		ERROR_LOG(Log::sceNet, "NOTI Malformed UpdatedRoomMemberDataInternal notification");
 		return;
@@ -753,15 +748,18 @@ void signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 }
 
 void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
-	auto noti = new vec_stream(resp.data);
+	// 0000000000000010 0090 00000014 00000000000E0014000000070008000C0010000E00000000000001700000006800000004000000580000000500000000000000903D9B08A0F1FF090C79A6089078A6086889A30878A89B0860F4FF09D0F4FF09B01815090000000060F4FF0980F3FF0978567609EFBEADDED06DA60840547609B0181509B46CA308A51894038C6EA608040004000400000000000000
 
-	u64 room_id = noti->get<u64>();
-	u16 member_id = noti->get<u16>();
-	NOTICE_LOG(Log::sceNet, "NOTI RoomMessageReceived(room: %d, member: %d", room_id, member_id);
+	resp.stream = new vec_stream(resp.data);
+	//auto noti = new vec_stream(resp.data);
 
-	const auto* message_info = noti->get_flatbuffer<RoomMessageInfo>();
+	u64 room_id = resp.stream->get<u64>();
+	u16 member_id = resp.stream->get<u16>();
+	NOTICE_LOG(Log::sceNet, "NOTI RoomMessageReceived(room: %d, member: %d)", room_id, member_id);
 
-	if (noti->is_error())
+	const auto* message_info = resp.stream->get_flatbuffer<RoomMessageInfo>();
+
+	if (resp.stream->is_error())
 	{
 		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomMessageReceived notification");
 		return;
@@ -800,15 +798,14 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 
 void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI SignalingHelper UNINPLEMENTED");
-	auto noti = new vec_stream(resp.data);
 
-	u64 room_id = noti->get<u64>();
-	u16 member_id = noti->get<u16>();
+	u64 room_id = resp.stream->get<u64>();
+	u16 member_id = resp.stream->get<u16>();
 	NOTICE_LOG(Log::sceNet, "NOTI Member %d sent message in room(%d)", member_id, room_id);
 
-	const auto* message_info = noti->get_flatbuffer<RoomMessageInfo>();
+	const auto* message_info = resp.stream->get_flatbuffer<RoomMessageInfo>();
 
-	if (noti->is_error())
+	if (resp.stream->is_error())
 	{
 		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomMessageReceived notification");
 		return;
@@ -848,29 +845,30 @@ void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 // GUI
 void signaling_handler::MemberJoinedRoomGUI(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI MemberJoinedRoomGUI UNINPLEMENTED");
+	auto noti = resp.stream;
 }
 
 void signaling_handler::MemberLeftRoomGUI(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI MemberLeftRoomGUI UNINPLEMENTED");
-	auto noti = new vec_stream(resp.data);
+	auto noti = resp.stream;
 }
 
 void signaling_handler::RoomDisappearedGUI(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI RoomDisappearedGUI UNINPLEMENTED");
-	auto noti = new vec_stream(resp.data);
+	auto noti = resp.stream;
 }
 
 void signaling_handler::RoomOwnerChangedGUI(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI RoomOwnerChangedGUI UNINPLEMENTED");
-	auto noti = new vec_stream(resp.data);
+	auto noti = resp.stream;
 }
 
 void signaling_handler::UserKickedGUI(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI UserKickedGUI UNINPLEMENTED");
-	auto noti = new vec_stream(resp.data);
+	auto noti = resp.stream;
 }
 
 void signaling_handler::QuickMatchCompleteGUI(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI QuickMatchCompleteGUI UNINPLEMENTED");
-	auto noti = new vec_stream(resp.data);
+	auto noti = resp.stream;
 }

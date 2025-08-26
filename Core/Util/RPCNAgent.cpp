@@ -132,21 +132,20 @@ namespace net {
 			// Get data and assign it to the request id related buffer
 			RPCNResponse buf;
 			buf.header = header;
-			buf.error = error;
-			buf.data.insert(buf.data.end(), packet.Data() + RPCN_HEADER_SIZE + 1, packet.Data() + packet.Length());
-
-			//buf.stream.insert(buf.data);
+			buf.data.insert(buf.data.end(), packet.Data() + RPCN_HEADER_SIZE, packet.Data() + packet.Length());
+			buf.stream = new vec_stream(buf.data);
 
 			std::lock_guard<std::mutex> lock(buffer_mutex);
 			switch ((PacketType)header.request) {
 			case PacketType::Reply:
+				buf.error = buf.stream->get<u8>();
 				if ((ErrorType)error != ErrorType::NoError) {
 					if (error > sizeof(PacketTypeNames))
 						ERROR_LOG(Log::sceNet, "RPCN Read Error %d: %s", error, hexdata.c_str());
 					else
 						ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", error, PacketTypeNames[error]);
 				}
-				responses[header.reqId] = buf;
+				responses[header.reqId] = std::move(buf);
 				break;
 			case PacketType::Notification:
 				switch ((NotificationType)header.command) {
@@ -373,9 +372,10 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
 		}*/
-		auto response = take_pending_request(reqId);
-		if (response.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[response.error];
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return ErrorToPSPError[resp.error];
+		resp.stream = new vec_stream(resp.data, 1);
 
 		/*int i;
 		std::string hexdata = "";
@@ -457,21 +457,22 @@ namespace net {
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return ErrorToPSPError[resp.error];
+		resp.stream = new vec_stream(resp.data, 1);
 		worldInfoOut->clear();
 
 		// Currently under the assumption that the first byte is some error code
-		size_t offset = 0;
-
-		u32 num_worlds = 0;
-		memcpy(&num_worlds, resp.data.data() + offset, sizeof(num_worlds));
-		offset += 4;
+		size_t offset = 1;
+		u32 num_worlds = resp.stream->get<u32>();
+		//memcpy(&num_worlds, resp.data.data() + offset, sizeof(num_worlds));
+		//offset += 4;
 		for (u32 i = 0; i < num_worlds; ++i)
 		{
 			SceNpMatching2World world{};
-			memcpy(&world.worldId, resp.data.data() + offset, sizeof(world.worldId));
+			//memcpy(&world.worldId, resp.data.data() + offset, sizeof(world.worldId));
+			world.worldId = resp.stream->get<SceNpMatching2WorldId>();
 
 			worldInfoOut->emplace(world.worldId, world);
-			offset += 4;
+			//offset += 4;
 		}
 
 		//worldInfoOut->emplace(worldInfo.worldId, worldInfo);
@@ -561,13 +562,13 @@ namespace net {
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return ErrorToPSPError[resp.error];
-
+		resp.stream = new vec_stream(resp.data, 1);
 		//                                                     20       12       0        8        6        1    
 		// NPAgent::Recv('01 1000 28000000 0100000000000000 00 14000000 0C000000 00000600 08000400 06000000 01000000')
 
-		auto stream = new vec_stream(resp.data);
-		roomResp = stream->get_flatbuffer<SearchRoomResponse>();
-		if (stream->is_error()) {
+		//auto stream = new vec_stream(resp.data);
+		roomResp = resp.stream->get_flatbuffer<SearchRoomResponse>();
+		if (resp.stream->is_error()) {
 			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
 		}
 		//roomResp = _resp;
@@ -760,12 +761,13 @@ namespace net {
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return ErrorToPSPError[resp.error];
+		resp.stream = new vec_stream(resp.data, 1);
 
 		// 01 0D00 84010000 0100000000000000 00 700100002000000000001A00280026002000000018000000140010000E000000080004001A000000240000000000008400001000780000000C00000008000000000000000100000000000001020000003800000004000000DAFFFFFF000010000C000000E9118EA058FCE20068FFFFFF00005800040000000000000000000A0014000C00060008000A000000000010000C000000E9118EA058FCE20098FFFFFF000057000400000000000000010000001800000014001C000800140006000000000005000C001000140000000002100058000000000000800C000000FC118EA058FCE200010000000C00000008001000080004000800000014000000FC118EA058FCE20008000C00060008000800000000005900040000000000000000000A001000040008000C000A00000030000000240000000400000015000000687474703A2F2F44756D6D7941766174617255726C00000003000000666F78001000000052504353335F5A53675363633444377800000000
 
-		auto stream = new vec_stream(resp.data);
-		roomDataOut = stream->get_flatbuffer<RoomDataInternal>();
-		if (stream->is_error()) {
+		//auto stream = new vec_stream(resp.data);
+		roomDataOut = resp.stream->get_flatbuffer<RoomDataInternal>();
+		if (resp.stream->is_error()) {
 			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
 		}
 
@@ -821,10 +823,11 @@ namespace net {
 		auto _resp = take_pending_request(reqId);
 		if (_resp.error != (u8)ErrorType::NoError)
 			return ErrorToPSPError[_resp.error];
+		_resp.stream = new vec_stream(_resp.data, 1);
 
-		auto stream = new vec_stream(_resp.data);
-		resp = stream->get_flatbuffer<JoinRoomResponse>();
-		if (stream->is_error()) {
+		//auto stream = new vec_stream(_resp.data);
+		resp = _resp.stream->get_flatbuffer<JoinRoomResponse>();
+		if (_resp.stream->is_error()) {
 			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
 		}
 
@@ -862,8 +865,10 @@ namespace net {
 		auto _resp = take_pending_request(reqId);
 		if (_resp.error != (u8)ErrorType::NoError)
 			return ErrorToPSPError[_resp.error];
+		_resp.stream = new vec_stream(_resp.data, 1);
 
-		memcpy(resp, &_resp.data, sizeof(u64));
+		//memcpy(resp, &_resp.data, sizeof(u64));
+		resp = reinterpret_cast<u64*>(_resp.stream->get<u64>());
 
 		return 0;
 	}
@@ -910,6 +915,7 @@ namespace net {
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return ErrorToPSPError[resp.error];
+		resp.stream = new vec_stream(resp.data, 1);
 
 		return 0;
 	}
@@ -982,11 +988,13 @@ namespace net {
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return ErrorToPSPError[resp.error];
+		resp.stream = new vec_stream(resp.data, 1);
 
 		return 0;
 	}
 
 	int RPCNAgent::SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req) {
+
 		flatbuffers::FlatBufferBuilder builder(1024);
 
 		std::vector<u16> dst;
@@ -1041,6 +1049,7 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Response Error: %s", PacketTypeNames[resp.error]);
 			return ErrorToPSPError[resp.error];
 		}
+		resp.stream = new vec_stream(resp.data, 1);
 		return 0;
 	}
 }
