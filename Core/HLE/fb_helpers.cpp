@@ -96,9 +96,9 @@ namespace np
 
 	void UserInfo_to_SceNpUserInfo2(BlockAllocator& edata, const UserInfo* user, SceNpUserInfo2* user_info, bool include_onlinename, bool include_avatarurl)
 	{
-		NOTICE_LOG(Log::sceNet, "UserInfo_to_SceNpUserInfo2(member: %s)", user->npId()->c_str());
 		if (user->npId())
 			std::memcpy(user_info->npId.handle.data, user->npId()->c_str(), std::min<std::size_t>(16, user->npId()->size()));
+		NOTICE_LOG(Log::sceNet, "UserInfo_to_SceNpUserInfo2(member: %s)", user_info->npId.handle.data);
 
 		if (include_onlinename && user->onlineName())
 		{
