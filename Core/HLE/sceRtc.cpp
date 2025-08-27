@@ -967,7 +967,8 @@ static int sceRtcGetCurrentNetworkTick(u32 tick)
 {
 	// Should get time from network, but we'll return local time for now
 	tick = 1000000ULL * rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
-	return hleLogWarning(Log::sceNet, 0, "UNIMPL");
+	//return hleLogWarning(Log::sceNet, 0, "UNIMPL");
+	return 0; // Untested
 }
 
 const HLEFunction sceRtc[] =
