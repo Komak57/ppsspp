@@ -141,6 +141,9 @@
 // Room event
 enum
 {
+enum RPCNMatching2RequestEvent
+{
+	// Room event
 	SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined = 0x1101,
 	SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft = 0x1102,
 	SCE_NP_MATCHING2_ROOM_EVENT_Kickedout = 0x1103,
@@ -149,27 +152,18 @@ enum
 	SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal = 0x1106,
 	SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal = 0x1107,
 	SCE_NP_MATCHING2_ROOM_EVENT_UpdatedSignalingOptParam = 0x1108,
-};
 
 // Room message event
-enum
-{
 	SCE_NP_MATCHING2_ROOM_MSG_EVENT_ChatMessage = 0x2101,
 	SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message = 0x2102,
-};
 
 // Lobby event
-enum
-{
 	SCE_NP_MATCHING2_LOBBY_EVENT_MemberJoined = 0x3201,
 	SCE_NP_MATCHING2_LOBBY_EVENT_MemberLeft = 0x3202,
 	SCE_NP_MATCHING2_LOBBY_EVENT_LobbyDestroyed = 0x3203,
 	SCE_NP_MATCHING2_LOBBY_EVENT_UpdatedLobbyMemberDataInternal = 0x3204,
-};
 
 // Lobby message event
-enum
-{
 	SCE_NP_MATCHING2_LOBBY_MSG_EVENT_ChatMessage = 0x4201,
 	SCE_NP_MATCHING2_LOBBY_MSG_EVENT_Invitation = 0x4202,
 };
