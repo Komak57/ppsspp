@@ -760,14 +760,13 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param unknown1 ?
  * @param unkonwn2 ?
- * @param assignedReqId Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
-static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 unknown1, u32 unknown2, u32 assignedReqIdPtr)
+static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 roomEventCbPtr, u32 roomMessageCbPtr, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
-	int request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, roomEventCbPtr, roomMessageCbPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
@@ -851,13 +850,13 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 /* Incomplete - Joins an existing Lobby/Party
  * @param reqParamPtr ?
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqId Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
-static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
+static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 roomEventCbPtr, u32 roomMessageCbPtr, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, roomEventCbPtr, roomMessageCbPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
@@ -1511,7 +1510,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0xF739BE92, &WrapI_IUUU<sceNpMatching2GetRoomPasswordLocal>,			"sceNpMatching2GetRoomPasswordLocal",			'i', "ixxx"   },
 
 	{0xAAD0946A, &WrapI_IUUUUU<sceNpMatching2CreateJoinRoom>,				"sceNpMatching2CreateJoinRoom",					'i', "ixxxxx" },
-	{0x7BBFC427, &WrapI_IUUU<sceNpMatching2JoinRoom>,						"sceNpMatching2JoinRoom",						'i', "ixxx"   },
+	{0x7BBFC427, &WrapI_IUUUUU<sceNpMatching2JoinRoom>,						"sceNpMatching2JoinRoom",						'i', "ixxxxx" },
 	{0xC870535A, &WrapI_IUUU<sceNpMatching2LeaveRoom>,						"sceNpMatching2LeaveRoom",						'i', "ixxx"   },
 	{0x81C13E6D, &WrapI_IUUU<sceNpMatching2SearchRoom>,						"sceNpMatching2SearchRoom",						'i', "ixxx"   },
 	{0xF940D9AD, &WrapI_IUUU<sceNpMatching2SendRoomMessage>,				"sceNpMatching2SendRoomMessage",				'i', "ixxx"   },
