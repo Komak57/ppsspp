@@ -28,6 +28,21 @@
 extern std::recursive_mutex npMatching2EvtMtx;
 extern BlockAllocator np_memory;
 
+/*sceNpMatching2RequestCallback = (
+	SceNpMatching2ContextId ctxId,
+	SceNpMatching2RequestId reqId,
+	SceNpMatching2Event event,
+	SceNpMatching2EventKey eventKey,
+	s32 errorCode,
+	u32 dataPtr,
+	PSPPointer<u8> arg);
+*/
+
+u32 GenerateRequestId(u32 assignedReqIdPtr);
+bool RegisterNpMatching2Handler(int ctxId, u32 callbackPtr, u32 argPtr, SceNpMatching2EventType event_type);
+int notifyRequestHandler(SceNpMatching2RequestId reqId, SceNpMatching2Event event, s32 errorCode, u32 dataPtr);
+int notifyRoomMessageHandlers(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr);
+int abortNpMatching2Handlers();
 bool NpMatching2ProcessEvents();
 
 void Register_sceNpMatching2();

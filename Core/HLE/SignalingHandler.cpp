@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cstring>
 #include "sceNp.h"
+#include "sceNp2.h"
 
 static inline u16 be16(u16 x) { return htons(x); }
 static inline u32 be32(u32 x) { return htonl(x); }
@@ -540,16 +541,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 			return 0;
 		});
 	}*/
-
-	u32_le args[NpMatching2Args::MAX_ARGS];
-	args[0] = resp.header.reqId;			// ContextID
-	args[1] = room_id;						// RoomId
-	args[2] = SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined;	// Event
-	args[3] = event_key;					// Event Key
-	args[4] = 0;							// ?
-	args[5] = _size;						// Size?
-	args[6] = ctx->cb_arg.ptr;				// cb_args
-	hleEnqueueCall(ctx->cb.ptr, 7, args);
+	//notifySignalingHandlers(resp.header.reqId, room_id, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, event_key, 0, _size);
 }
 
 void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
@@ -784,16 +776,7 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 		});
 	}*/
 
-	auto ctx = get_ctx(resp.header.reqId);
-	u32_le args[NpMatching2Args::MAX_ARGS];
-	args[0] = resp.header.reqId;			// ContextID
-	args[1] = room_id;						// RoomId
-	args[2] = SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message;	// Event
-	args[3] = event_key;					// Event Key
-	args[4] = 0;							// ?
-	args[5] = _size;						// Size?
-	args[6] = ctx->cb_arg.ptr;				// cb_args
-	hleEnqueueCall(ctx->cb.ptr, 7, args);
+	notifyRoomMessageHandlers(room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
 }
 
 void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
