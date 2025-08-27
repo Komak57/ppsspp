@@ -103,7 +103,7 @@ bool RegisterNpMatching2Handler(int ctxId, u32 callbackPtr, u32 argPtr, SceNpMat
  * @return u32 System Error Code (SCE_NP_MATCHING2_ERROR_ABORTED)
  * @note The tasks aren't stopped, they still process in the background. But, without the handler, they'll simply fail.
  */
-static int abortNpMatching2Handlers() {
+int abortNpMatching2Handlers() {
 
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 	for (std::map<u32, NpMatching2Handler>::iterator it = npMatching2Handlers.begin(); it != npMatching2Handlers.end(); ++it) {
