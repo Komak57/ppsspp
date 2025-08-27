@@ -542,6 +542,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		});
 	}*/
 	//notifySignalingHandlers(resp.header.reqId, room_id, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, event_key, 0, _size);
+	notifyRoomEventHandlers(room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, notif_data.ptr);
 }
 
 void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
@@ -583,16 +584,7 @@ void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 		});
 	}*/
 
-	auto ctx = get_ctx(resp.header.reqId);
-	u32_le args[NpMatching2Args::MAX_ARGS];
-	args[0] = resp.header.reqId;			// ContextID
-	args[1] = room_id;						// RoomId
-	args[2] = SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft;	// Event
-	args[3] = event_key;					// Event Key
-	args[4] = 0;							// ?
-	args[5] = _size;						// Size?
-	args[6] = ctx->cb_arg.ptr;				// cb_args
-	hleEnqueueCall(ctx->cb.ptr, 7, args);
+	notifyRoomEventHandlers(room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, notif_data.ptr);
 }
 
 void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
@@ -627,16 +619,7 @@ void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 		});
 	}*/
 
-	auto ctx = get_ctx(resp.header.reqId);
-	u32_le args[NpMatching2Args::MAX_ARGS];
-	args[0] = resp.header.reqId;			// ContextID
-	args[1] = room_id;						// RoomId
-	args[2] = SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed;	// Event
-	args[3] = event_key;					// Event Key
-	args[4] = 0;							// ?
-	args[5] = _size;						// Size?
-	args[6] = ctx->cb_arg.ptr;				// cb_args
-	hleEnqueueCall(ctx->cb.ptr, 7, args);
+	notifyRoomEventHandlers(room_id, 0, SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, notif_data.ptr);
 }
 
 void signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
@@ -676,16 +659,7 @@ void signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 		});
 	}*/
 
-	auto ctx = get_ctx(resp.header.reqId);
-	u32_le args[NpMatching2Args::MAX_ARGS];
-	args[0] = resp.header.reqId;			// ContextID
-	args[1] = room_id;						// RoomId
-	args[2] = SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal;	// Event
-	args[3] = event_key;					// Event Key
-	args[4] = 0;							// ?
-	args[5] = _size;						// Size?
-	args[6] = ctx->cb_arg.ptr;				// cb_args
-	hleEnqueueCall(ctx->cb.ptr, 7, args);
+	notifyRoomEventHandlers(room_id, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal, notif_data.ptr);
 }
 
 void signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
@@ -727,16 +701,7 @@ void signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 		});
 	}*/
 
-	auto ctx = get_ctx(resp.header.reqId);
-	u32_le args[NpMatching2Args::MAX_ARGS];
-	args[0] = resp.header.reqId;			// ContextID
-	args[1] = room_id;						// RoomId
-	args[2] = SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal;	// Event
-	args[3] = event_key;					// Event Key
-	args[4] = 0;							// ?
-	args[5] = _size;						// Size?
-	args[6] = ctx->cb_arg.ptr;				// cb_args
-	hleEnqueueCall(ctx->cb.ptr, 7, args);
+	notifyRoomEventHandlers(room_id, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
 }
 
 void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
@@ -813,16 +778,7 @@ void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 		});
 	}*/
 
-	auto ctx = get_ctx(resp.header.reqId);
-	u32_le args[NpMatching2Args::MAX_ARGS];
-	args[0] = resp.header.reqId;			// ContextID
-	args[1] = room_id;						// RoomId
-	args[2] = SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message;	// Event
-	args[3] = event_key;					// Event Key
-	args[4] = 0;							// ?
-	args[5] = _size;						// Size?
-	args[6] = ctx->cb_arg.ptr;				// cb_args
-	hleEnqueueCall(ctx->cb.ptr, 7, args);
+	notifyRoomMessageHandlers(room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
 }
 
 // GUI

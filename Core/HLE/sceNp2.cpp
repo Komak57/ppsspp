@@ -168,6 +168,30 @@ int notifyRoomMessageHandlers(SceNpMatching2RoomId roomId, SceNpMatching2RoomMem
 
 	return 0;
 }
+
+/* Thread-safe Event Processor for related Callback. Relevant arguments will be replaced.
+ * @param event_code Related System Request Type, matches the Handler
+ * @param argc Count of the number of arguments
+ * @param args Variable length of arguments, MAX_ARGS = 11
+ * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
+ */
+int notifyRoomEventHandlers(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr) {
+	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
+
+	u32 args[8];
+	//args[0] = ctxId	// ContextID
+	args[1] = roomId;	// RoomID
+	args[2] = memberId;	// MemberID
+	args[3] = 0;		// param_4 - EventKey?
+	args[4] = 0;		// (u16)param_5 - LobbyNumber? LobbyMemberId?
+	args[5] = event;	// Event
+	args[6] = dataPtr;	// Message
+	//args[7] = argsPtr	// Request Arguments
+
+	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_ROOM_EVENT, 8, args));
+
+	return 0;
+}
 /* Event Processor
  * @note The arguments are suppose to be combined here?
  */
