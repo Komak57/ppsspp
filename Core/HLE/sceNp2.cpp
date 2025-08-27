@@ -541,13 +541,13 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 /* Produces information about a target server
  * @param serverIdPtr Pointer to the target Server ID
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqId Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  * @note PSP2i calls this once witha reqId 0, and then once for each server allocated in sceNpMatching2GetServerIdListLocal
  */
-static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam, u32 assignedReqId) {
-	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqId, Memory::Read_U32(assignedReqId), currentMIPS->pc);
+static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam, u32 assignedReqIdPtr) {
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 	u32 request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo);
 
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
@@ -585,13 +585,13 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 /* Produces information about the lobbies, parties, and existing player counts
  * @param serverIdPtr Pointer to the target Server ID
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqId Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  * @note This function occurs immediately after a server has been selected
  */
-static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optParam, u32 assignedReqId) {
-	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqId, Memory::Read_U32(assignedReqId), currentMIPS->pc);
+static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optParam, u32 assignedReqIdPtr) {
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 	u32 request_id = GenerateCallbackInfo(ctxId, optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList);
 
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
@@ -682,13 +682,13 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 /* Incomplete - Searches for all Lobbies/Parties
  * @param reqParamPtr SceNpMatching2SearchRoomRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqId Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
-static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
+static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 	int request_id = GenerateCallbackInfo(ctxId, optParamPtr, assignedReqIdPtr, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom);
 
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
@@ -903,7 +903,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 /* Incomplete - Leaves the current Lobby/Party
  * @param reqParamPtr ?
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqId Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
@@ -943,7 +943,7 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32
 /* Incomplete - Requests attributes of a specific Lobby/Party
  * @param reqParamPtr SceNpMatching2GetRoomDataInternalRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqId Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
@@ -1008,7 +1008,7 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 /* Incomplete - Unconfirmed. Similar to sceNpMatching2SetRoomDataInternal
  * @param reqParamPtr ?
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqId Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
@@ -1038,7 +1038,7 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 /* Incomplete - Sets attributes of a specific Lobby/Party
  * @param reqParamPtr SceNpMatching2GetRoomDataInternalRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqId Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
@@ -1079,7 +1079,7 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 /* Incomplete - Sends a Chat Message to relevant players?
  * @param reqParamPtr ? Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqId Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
@@ -1298,7 +1298,7 @@ static int sceNpMatching2GetRoomPasswordLocal(int ctxId, u32 roomId, u32 withPas
 /* Incomplete - Sends a Room Message to relevant players?
  * @param reqParamPtr PSPPointer<SceNpMatching2SendRoomMessageRequest> Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqId Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Sends the message to the NPAgent, and receives a reply via Notification
  */
