@@ -195,13 +195,14 @@ bool NpMatching2ProcessEvents() {
 				break;
 			case SCE_NP_MATCHING2_ROOM_EVENT:
 				event.args[0] = it->second.ctx_id;
-				event.args[5] = it->second.cb_arg.ptr;
+				event.args[6] = it->second.cb_arg.ptr;
 
 				NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomEventCallback - FUN_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %08x, param_5: %08x, event: %08x, argPtr: %08x)", it->second.cb.ptr,
 					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6]);
 				break;
 			case SCE_NP_MATCHING2_ROOM_MSG_EVENT:
 				event.args[0] = it->second.ctx_id;
+				event.args[7] = it->second.cb_arg.ptr;
 
 				NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomMessageCallback - FUN_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %08x, param_5: %08x, event: %08x, param_7: %08x, argPtr: %08x)", it->second.cb.ptr,
 					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
@@ -783,10 +784,10 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		if (Memory::IsValidAddress(roomEventCbPtr))
-			RegisterNpMatching2Handler(ctxId, Memory::Read_U32(roomEventCbPtr), 0, SCE_NP_MATCHING2_ROOM_EVENT);
+			RegisterNpMatching2Handler(ctxId, Memory::Read_U32(roomEventCbPtr), opt->cbFuncArg.ptr, SCE_NP_MATCHING2_ROOM_EVENT);
 
 		if (Memory::IsValidAddress(roomMessageCbPtr))
-			RegisterNpMatching2Handler(ctxId, Memory::Read_U32(roomMessageCbPtr), 0, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
+			RegisterNpMatching2Handler(ctxId, Memory::Read_U32(roomMessageCbPtr), opt->cbFuncArg.ptr, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
 
 		auto req = PSPPointer<SceNpMatching2CreateJoinRoomRequest>::Create(reqParamPtr);
 		//Memory::Memcpy(&req, reqParamPtr, sizeof(req));
@@ -876,10 +877,10 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		if (Memory::IsValidAddress(roomEventCbPtr))
-			RegisterNpMatching2Handler(ctxId, Memory::Read_U32(roomEventCbPtr), 0, SCE_NP_MATCHING2_ROOM_EVENT);
+			RegisterNpMatching2Handler(ctxId, Memory::Read_U32(roomEventCbPtr), opt->cbFuncArg.ptr, SCE_NP_MATCHING2_ROOM_EVENT);
 
 		if (Memory::IsValidAddress(roomMessageCbPtr))
-			RegisterNpMatching2Handler(ctxId, Memory::Read_U32(roomMessageCbPtr), 0, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
+			RegisterNpMatching2Handler(ctxId, Memory::Read_U32(roomMessageCbPtr), opt->cbFuncArg.ptr, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
 
 		auto req = PSPPointer<SceNpMatching2JoinRoomRequest>::Create(reqParamPtr);
 		const JoinRoomResponse* resp;
