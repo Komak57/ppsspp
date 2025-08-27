@@ -267,7 +267,7 @@ void signaling_handler::queue_signaling_packet(signaling_packet& sp, std::shared
 u32 signaling_handler::get_always_conn_id(const SceNpId& npid)
 {
 	std::string npid_str(reinterpret_cast<const char*>(npid.handle.data));
-	if (npid_to_conn_id.find(npid_str) == npid_to_conn_id.end())
+	if (npid_to_conn_id.find(npid_str) != npid_to_conn_id.end())
 		return npid_to_conn_id.at(npid_str);
 
 	const u32 conn_id = cur_conn_id++;
