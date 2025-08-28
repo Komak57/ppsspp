@@ -154,7 +154,7 @@ int notifyRequestHandler(SceNpMatching2RequestId reqId, SceNpMatching2Event even
 	args[4] = dataPtr;	// Response struct
 	//args[5] = argsPtr	// Request Arguments
 
-	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_REQUEST_EVENT, 6, args));
+	npMatching2Events.push_back(NpMatching2Args(reqId, SCE_NP_MATCHING2_REQUEST_EVENT, 6, args));
 
 	return 0;
 }
@@ -1275,7 +1275,20 @@ static int sceNpMatching2AbortRequest(int ctxId, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x) at %08x", __FUNCTION__, ctxId, assignedReqIdPtr, currentMIPS->pc);
 
+	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
+
+	auto request_id = Memory::Read_U32(assignedReqIdPtr);
+
+	// Process matching Event_Code
+	for (std::deque<NpMatching2Args>::iterator it = npMatching2Events.begin(); it != npMatching2Events.end(); ++it) {
+		if (it->event_code != SCE_NP_MATCHING2_REQUEST_EVENT)
+			continue; // Only REQUEST_EVENT tracks Request IDs
+		if (it->request_id == request_id) {
+			npMatching2Events.erase(it);
 	return 0;
+}
+	}
+	return SCE_NP_MATCHING2_ERROR_REQUEST_NOT_FOUND;
 }
 
 static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)

@@ -674,13 +674,22 @@ struct NpMatching2Handler {
 struct NpMatching2Args {
 	// Now allows for optional arguments to be omitted in the sending process.
 	static const size_t MAX_ARGS = 11;
-	u32 event_code;
+	u32 request_id; // Only REQUEST_EVENT tracks request id's
+	u32 event_code; // Everything has a matching Event code
 	//u32 cbFunc;
 	size_t argc = 0;
 	u32_le args[MAX_ARGS]; // 7 elements (excluding optional data)? or may be 11 elements (including optional data)?
 	// May be followed by optional data? since these Args usually created on the stack
 
 	NpMatching2Args(u32 event_code, size_t argc, u32_le args[]) {
+		this->request_id = 0;
+		this->event_code = event_code;
+		this->argc = (argc > MAX_ARGS) ? MAX_ARGS : argc;
+		for (size_t i = 0; i < this->argc; ++i)
+			this->args[i] = args[i];
+	}
+	NpMatching2Args(u32 request_id, u32 event_code, size_t argc, u32_le args[]) {
+		this->request_id = request_id;
 		this->event_code = event_code;
 		this->argc = (argc > MAX_ARGS) ? MAX_ARGS : argc;
 		for (size_t i = 0; i < this->argc; ++i)
