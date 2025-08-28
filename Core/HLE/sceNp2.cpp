@@ -165,7 +165,7 @@ int notifyRequestHandler(SceNpMatching2RequestId reqId, SceNpMatching2Event even
  * @param args Variable length of arguments, MAX_ARGS = 11
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
-int notifyRoomMessageHandlers(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr) {
+int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	u32 args[8];
@@ -189,7 +189,7 @@ int notifyRoomMessageHandlers(SceNpMatching2RoomId roomId, SceNpMatching2RoomMem
  * @param args Variable length of arguments, MAX_ARGS = 11
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
-int notifyRoomEventHandlers(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr) {
+int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	u32 args[8];
@@ -203,6 +203,31 @@ int notifyRoomEventHandlers(SceNpMatching2RoomId roomId, SceNpMatching2RoomMembe
 	//args[7] = argsPtr	// Request Arguments
 
 	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_ROOM_EVENT, 8, args));
+
+	return 0;
+}
+
+/* Thread-safe Event Processor for related Callback. Relevant arguments will be replaced.
+ * @param event_code Related System Request Type, matches the Handler
+ * @param argc Count of the number of arguments
+ * @param args Variable length of arguments, MAX_ARGS = 11
+ * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
+ */
+int notifySignalingHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId peerMemberId, SceNpMatching2RoomMemberId roomMemberId, u32 unknown, s32 errorCode, SceNpMatching2Event event, u32 dataPtr) {
+	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
+
+	u32 args[9];
+	//args[0] = ctxId	// ContextID
+	args[1] = roomId;	// RoomID
+	args[2] = peerMemberId;	// peerMemberID
+	args[3] = unknown;	// param_4 - ignored
+	args[4] = errorCode;// ErrorCode - ignored
+	args[5] = roomMemberId;	// roomMemberID
+	args[6] = event;	// Event
+	args[7] = dataPtr;	// dataPtr
+	//args[8] = argsPtr	// Request Arguments
+
+	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_SIGNALING_EVENT, 9, args));
 
 	return 0;
 }
@@ -229,7 +254,7 @@ bool NpMatching2ProcessEvents() {
 				event.args[5] = it->second.cb_arg.ptr;
 
 				NOTICE_LOG(Log::sceNet, "SceNpMatching2RequestCallback - FUN_%08x(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", it->second.cb.ptr,
-				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]);
+					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]);
 				break;
 			case SCE_NP_MATCHING2_ROOM_EVENT:
 				event.args[0] = it->second.ctx_id;
@@ -255,6 +280,13 @@ bool NpMatching2ProcessEvents() {
 
 				ERROR_LOG(Log::sceNet, "UNIMPLEMENTED SceNpMatching2LobbyMessageCallback - FUN_%08x(ctxId: %d)", it->second.cb.ptr, event.args[0]);
 				return false;
+			case SCE_NP_MATCHING2_SIGNALING_EVENT:
+				event.args[0] = it->second.ctx_id;
+				event.args[8] = it->second.cb_arg.ptr;
+
+				NOTICE_LOG(Log::sceNet, "SceNpMatching2SignalingCallback - FUN_%08x(ctxId: %d, roomId: %d, peerMemberId: %d, param_4: %08x, param_5: %08x, roomMemberId: %d, event: %08x, dataPtr: %08x, argPtr: %08x)", it->second.cb.ptr,
+					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7], event.args[8]);
+				break;
 			default:
 				NOTICE_LOG(Log::sceNet, "UNHANDLED Callback Type %d - FUN_%08x(ctxId: %d)", event.event_code, it->second.cb.ptr, event.args[0]);
 				return false;
@@ -534,8 +566,11 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 roomId, u32
 		return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
 
 	// Write Connection Status to connStatus
+	Memory::WriteUnchecked_U32(SCE_NP_SIGNALING_CONN_STATUS_ACTIVE, connStatus);
 	// Write IPAddress to peerAddr
+	Memory::WriteUnchecked_U32(0, peerAddr);
 	// Write Port to peerPort
+	Memory::WriteUnchecked_U32(0, peerPort);
 
 	return 0;
 }
@@ -964,7 +999,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
-
+	
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
@@ -1067,7 +1102,7 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
  */
 static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr) {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
-
+	
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
@@ -1120,7 +1155,6 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 
 		auto req = PSPPointer<SceNpMatching2SetRoomDataInternalRequest>::Create(reqParamPtr);
 
-		INFO_LOG(Log::sceNet, "SceNpMatching2SetRoomDataInternalRequest(%08X)", req.ptr);
 		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 
 		int ret;
@@ -1375,7 +1409,6 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 
 	auto req = PSPPointer<SceNpMatching2SendRoomMessageRequest>::Create(reqParamPtr);
 
-	INFO_LOG(Log::sceNet, "SceNpMatching2SendRoomMessageRequest(%08X)", req.ptr);
 	INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 
 	auto roomData = &servers[tServer]->rooms[req->roomId];

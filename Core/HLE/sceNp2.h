@@ -41,8 +41,9 @@ extern BlockAllocator np_memory;
 u32 GenerateRequestId(u32 assignedReqIdPtr);
 bool RegisterNpMatching2Handler(int ctxId, u32 callbackPtr, u32 argPtr, SceNpMatching2EventType event_type);
 int notifyRequestHandler(SceNpMatching2RequestId reqId, SceNpMatching2Event event, s32 errorCode, u32 dataPtr);
-int notifyRoomMessageHandlers(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr);
-int notifyRoomEventHandlers(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr);
+int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr);
+int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr);
+int notifySignalingHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId peerMemberId, SceNpMatching2RoomMemberId roomMemberId, u32 unknown, s32 errorCode, SceNpMatching2Event event, u32 dataPtr);
 int abortNpMatching2Handlers();
 bool NpMatching2ProcessEvents();
 
