@@ -1310,9 +1310,26 @@ static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 op
 
 static int sceNpMatching2GetSignalingOptParamLocal(int ctxId, u32 roomId, u32 signalingOptParam)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, signalingOptParam, currentMIPS->pc);
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, optParam, currentMIPS->pc);
 
+	// ThreadStart
+	if (!npMatching2Inited)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
+
+	if (!Memory::IsValidAddress(roomId) || !Memory::IsValidAddress(optParam))
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
+
+	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
+
+	for (std::map<u32, NpMatching2Handler>::iterator it = npMatching2Handlers.begin(); it != npMatching2Handlers.end(); ++it) {
+		if (it->first != SCE_NP_MATCHING2_SIGNALING_EVENT)
+			continue; // Only REQUEST_EVENT tracks Request IDs
+		opt->cbFunc = it->second.cb;
+		opt->cbFuncArg = it->second.cb_arg;
 	return 0;
+}
+
+	return SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND;
 }
 
 static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
