@@ -245,13 +245,14 @@ namespace net {
 				/*
 				 * 1. Start the connection
 				 */
-				
+				char* ip_address = new char[128];
+				inet_ntop(possible->ai_family, &((sockaddr_in*)possible->ai_addr)->sin_addr, ip_address, 128);
 				char portStr[8]{};
 				memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
-				if ((ret = mbedtls_net_connect(&tls.netCtx, possible->ai_addr->sa_data, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
+				if ((ret = mbedtls_net_connect(&tls.netCtx, ip_address, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
 					char errbuf[128];
 					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call failed with -0x%04x (%s))", possible->ai_addr->sa_data, portStr, ret, errbuf);
+					ERROR_LOG(Log::sceNet, "Connect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call failed with -0x%04x (%s))", ip_address, portStr, ret, errbuf);
 					goto sslretry;
 				}
 				// Set NonBlocking

@@ -96,10 +96,12 @@ namespace net {
 				/*
 				 * 1. Start the connection
 				 */
+				char* ip_address = new char[128];
+				inet_ntop(possible->ai_family, &((sockaddr_in*)possible->ai_addr)->sin_addr, ip_address, 128);
 				char portStr[8]{};
 				memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
-				if ((ret = mbedtls_net_connect(&tls.netCtx, possible->ai_addr->sa_data, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", possible->ai_addr->sa_data, portStr, (unsigned int)-ret);
+				if ((ret = mbedtls_net_connect(&tls.netCtx, ip_address, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
+					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", ip_address, portStr, (unsigned int)-ret);
 					goto retry;
 				}
 				// Set NonBlocking
