@@ -1295,23 +1295,15 @@ static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 op
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 
-	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
-	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
-	auto request_id = GenerateRequestId(assignedReqIdPtr);
 	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
 		if (!npMatching2Inited)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetSignalingOptParam, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
 		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetSignalingOptParam, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-		if (tServer == 0)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetSignalingOptParam, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
-
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetSignalingOptParam, SCE_NP_MATCHING2_OKAY, 0);
-	});
-	tasks.emplace(request_id, std::move(task));
+	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
+	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_SIGNALING_EVENT);
 
 	return 0;
 }
