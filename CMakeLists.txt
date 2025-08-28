@@ -2462,8 +2462,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/Util/MemStick.h
 	Core/Util/GameDB.cpp
 	Core/Util/GameDB.h
-	Core/Util/NpAgent.h
-	Core/Util/NpAgent.cpp
+	Core/Util/NPAgent.h
+	Core/Util/NPAgent.cpp
 	Core/Util/PortManager.cpp
 	Core/Util/PortManager.h
 	Core/Util/PSNAgent.cpp
