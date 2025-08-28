@@ -2,7 +2,7 @@
 //#include "Emu/Cell/lv2/sys_process.h"
 #include "fb_helpers.h"
 #include <Log.h>
-#include <Core\MemMapHelpers.h>
+#include <Core/MemMapHelpers.h>
 
 namespace np
 {

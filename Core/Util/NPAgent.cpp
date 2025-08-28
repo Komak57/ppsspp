@@ -3,13 +3,15 @@
 #include "Common/Net/Resolve.h"
 #include "Common/Net/URL.h"
 
+#include <Core/HLE/HLE.h>
+
 #include "Common/TimeUtil.h"
 #include "Common/File/FileDescriptor.h"
 #include "Common/SysError.h"
-#include <Net\NetBuffer.h>
-#include <Core\HLE\HLE.h>
-#include <mbedtls\debug.h>
-#include <mbedtls\error.h>
+#include "Common/Net/NetBuffer.h"
+
+#include <mbedtls/debug.h>
+#include <mbedtls/error.h>
 //#define AGENT_TESTING
 //#undef MBEDTLS_AES_ALT
 //#undef MBEDTLS_SHA256_ALT

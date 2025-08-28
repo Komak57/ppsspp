@@ -3,8 +3,8 @@
 #include <cstring>
 #include "sceNp.h"
 #include "sceNp2.h"
-
-static inline u16 be16(u16 x) { return htons(x); }
+#include "Core/HLE/sceNp.h"
+#include "Core/HLE/sceNp2.h"
 static inline u32 be32(u32 x) { return htonl(x); }
 static inline u16 le16(u16 x) { return _byteswap_ushort(x); } // or your le helpers
 

@@ -1,10 +1,10 @@
 #include "Core/Util/NPAgent.h"
-#include <Core\HLE\HLE.h>
-#include <File\FileDescriptor.h>
-#include <mbedtls\error.h>
+#include <Core/HLE/HLE.h>
+#include <File/FileDescriptor.h>
+#include <mbedtls/error.h>
 #include <TimeUtil.h>
 #include "Core/MemMapHelpers.h"
-#include <Core\HLE\SignalingHandler.h>
+#include <Core/HLE/SignalingHandler.h>
 
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN

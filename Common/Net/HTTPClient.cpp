@@ -18,8 +18,8 @@
 #include "Common/Data/Encoding/Compression.h"
 #include "Common/Net/NetBuffer.h"
 #include "Common/Log.h"
-#include <mbedtls\debug.h>
-#include <mbedtls\error.h>
+#include <mbedtls/debug.h>
+#include <mbedtls/error.h>
 
 namespace net {
 

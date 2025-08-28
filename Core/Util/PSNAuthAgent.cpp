@@ -1,9 +1,9 @@
 #include "Core/Util/NPAgent.h"
-#include <Core\HLE\HLE.h>
-#include <Net\URL.h>
+#include <Core/HLE/HLE.h>
+#include <Net/URL.h>
 #include "Common/Net/HTTPClient.h"
-#include <mbedtls\error.h>
-#include <File\FileDescriptor.h>
+#include <mbedtls/error.h>
+#include <File/FileDescriptor.h>
 #include <TimeUtil.h>
 namespace net {
 	// FIXME: Populate with actual connection credentials for PSN

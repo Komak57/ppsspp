@@ -30,6 +30,7 @@
 #include "Core/HLE/ErrorCodes.h"
 #include "Core/HLE/HLEHelperThread.h"
 #include "Core/HLE/FunctionWrappers.h"
+#include "Core/Util/NPAgent.h"
 #include "Core/MIPS/MIPS.h"
 #include "Core/MIPS/MIPSCodeUtils.h"
 #include "Core/Reporting.h"
@@ -54,7 +55,6 @@
 #include "Core/Dialog/PSPNetconfDialog.h"
 #include "Core/Dialog/PSPNpSigninDialog.h"
 #include "Core/Dialog/PSPScreenshotDialog.h"
-#include <Core\Util\NPAgent.h>
 
 #define PSP_AV_MODULE_AVCODEC     0
 #define PSP_AV_MODULE_SASCORE     1

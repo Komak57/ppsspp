@@ -33,7 +33,7 @@
 #include "Common/LogReporting.h"
 #include "Common/Net/URL.h"
 #include "Common/Net/HTTPClient.h"
-#include <mbedtls\debug.h>
+#include <mbedtls/debug.h>
  // HTTPS Requirements from OpenSSL 1.1.1
 //#include <openssl/ssl.h>
 //#include <openssl/err.h>

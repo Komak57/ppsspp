@@ -21,9 +21,10 @@
 #include "Core/MemMapHelpers.h"
 #include "Core/CoreTiming.h"
 #include "Core/HLE/HLE.h"
+#include "Core/HLE/ErrorCodes.h"
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/sceNp2.h"
-#include <Core\Util\NPAgent.h>
+#include <Core/Util/NPAgent.h>
 #include "sceNetResolver.cpp"
 #include <future>
 #include "SignalingHandler.h"

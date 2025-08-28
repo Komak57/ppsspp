@@ -23,7 +23,7 @@
 #include <Swap.h>
 #include <mutex>
 #include "Core/HLE/Np2Types.h"
-#include <Core\Util\BlockAllocator.h>
+#include <Core/Util/BlockAllocator.h>
 
 extern std::recursive_mutex npMatching2EvtMtx;
 extern BlockAllocator np_memory;

@@ -9,9 +9,9 @@
 #include <chrono>
 #include <optional>
 
-#include "HLE.h"
-#include "Np2Types.h"
-#include <Core\Util\NPAgent.h>
+#include "Core/HLE/HLE.h"
+#include "Core/HLE/Np2Types.h"
+#include <Core/Util/NPAgent.h>
 
 #include <iphlpapi.h>
 #ifdef _WIN32

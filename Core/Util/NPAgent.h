@@ -6,7 +6,7 @@
 #include <type_traits> // is_constant_evaluated
 #include <bit>         // bit_cast
 #include "Core/HLE/Np2Types.h"
-#include "Core/HLE/fb_helpers.h"
+#include <Core/np2_structs_generated.h>
 #include "Core/HLE/sceNet.h"
 #include "Common/Net/HTTPClient.h"	
 #include "mbedtls/ssl.h"

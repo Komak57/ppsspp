@@ -1,8 +1,8 @@
 #include "Core/Util/NPAgent.h"
-#include <Core\HLE\HLE.h>
-#include <Net\NetBuffer.h>
-#include <File\FileDescriptor.h>
-#include <mbedtls\error.h>
+#include <Core/HLE/HLE.h>
+#include <Common/Net/NetBuffer.h>
+#include <Common/File/FileDescriptor.h>
+#include <mbedtls/error.h>
 #include <TimeUtil.h>
 
 /*
