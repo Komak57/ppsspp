@@ -40,6 +40,7 @@ public:
 
 	bool GetInetSocket(int sock, InetSocket **inetSocket);
 	SOCKET GetHostSocketFromInetSocket(int sock);
+	InetSocket* FindSocketByPort(int target_port);
 	bool Close(InetSocket *inetSocket);
 	void CloseAll();
 

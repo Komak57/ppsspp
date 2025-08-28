@@ -105,6 +105,26 @@ SOCKET SocketManager::GetHostSocketFromInetSocket(int sock) {
 	return inetSockets_[sock].sock;
 }
 
+// A helper function to find an InetSocket by its port.
+// Returns a pointer to the InetSocket on success, or nullptr if not found.
+InetSocket* SocketManager::FindSocketByPort(int target_port) {
+	std::lock_guard<std::mutex> guard(g_socketMutex);
+
+	// Iterate through the valid range of socket indices.
+	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < SocketManager::VALID_INET_SOCKET_COUNT; ++i) {
+		const InetSocket& inetSocket = inetSockets_[i];
+
+		// Check if the socket is in a valid state and its port matches.
+		if (inetSocket.state != SocketState::Unused && inetSocket.port == target_port) {
+			return const_cast<InetSocket*>(&inetSocket);
+		}
+	}
+
+	ERROR_LOG(Log::sceNet, "FindSocketByPort(%d) No matching Socket", target_port);
+	// If no socket was found, return nullptr.
+	return nullptr;
+}
+
 void SocketManager::CloseAll() {
 	for (auto &sock : inetSockets_) {
 		if (sock.state != SocketState::Unused) {

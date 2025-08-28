@@ -327,12 +327,19 @@ void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u1
 
 	DEBUG_LOG(Log::sceNet, "Sending %s packet to %s:%d", sp.command, ip_str, port);
 
-	// FIXME: Get P2P Socket from PortManager
-	/*if (::sendto(def_port.p2p_socket, reinterpret_cast<const char*>(packet.data()), ::size32(packet), 0, reinterpret_cast<const sockaddr*>(&addr), sizeof(sockaddr_in)) == -1)
+	// Get the InetSocket object from the socket manager
+	int conn_id = 12;
+	InetSocket* inetSocket = g_socketManager.FindSocketByPort(3568);
+	if (inetSocket == nullptr) {
+		ERROR_LOG(Log::sceNet, "Failed to get InetSocket for socket ID %d", conn_id);
+		return;
+	}
+
+	if (::sendto(inetSocket->sock, reinterpret_cast<const char*>(packet.data()), packet.size(), 0, reinterpret_cast<const sockaddr*>(&addr), sizeof(sockaddr_in)) == -1)
 	{
 		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip_str, port);
 		return;
-	}*/
+	}
 	/*if (np::is_ipv6_supported() && np::ip_address_translator::is_ipv6(dest.sin_addr.s_addr))
 	{
 		auto& translator = g_fxo->get<np::ip_address_translator>();
@@ -385,6 +392,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		// Attempt Signaling
 		//auto& sigh = g_fxo->get<named_thread<signaling_handler>>();
 		const u32 conn_id = init_sig2(npid, room_id, member_id);
+		// TODO: Connect to Signaling Server
 		start(conn_id, addr_p2p, port_p2p);
 	}
 	auto ctx = get_ctx(resp.header.reqId);

@@ -99,7 +99,17 @@ bool RegisterNpMatching2Handler(int ctxId, u32 callbackPtr, u32 argPtr, SceNpMat
 
 	// 0 defines an Aborted Request
 	npMatching2Handlers[event_type] = handler;
-	NOTICE_LOG(Log::sceNet, "%s - Added Callback FUN_%08x(%08x) for %d", __FUNCTION__, handler.cb, handler.cb_arg, event_type);
+	std::string event_name = "UNKNOWN";
+	switch (event_type) {
+	case SCE_NP_MATCHING2_REQUEST_EVENT: event_name = "REQUEST_EVENT"; break;
+	case SCE_NP_MATCHING2_ROOM_EVENT: event_name = "ROOM_EVENT"; break;
+	case SCE_NP_MATCHING2_ROOM_MSG_EVENT: event_name = "ROOM_MSG_EVENT"; break;
+	case SCE_NP_MATCHING2_LOBBY_EVENT: event_name = "LOBBY_EVENT"; break;
+	case SCE_NP_MATCHING2_LOBBY_MSG_EVENT: event_name = "LOBBY_MSG_EVENT"; break;
+	case SCE_NP_MATCHING2_SIGNALING_EVENT: event_name = "SIGNALING_EVENT"; break;
+	default: event_name = "UNHANDLED"; break;
+	}
+	NOTICE_LOG(Log::sceNet, "%s - Added Callback FUN_%08x(%08x) for %s", __FUNCTION__, handler.cb, handler.cb_arg, event_name.c_str());
 	return true;
 }
 
@@ -480,13 +490,15 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 	//sigh.add_match2_ctx(ctxId);
 
 
-	ContextState ctx = {
+	RegisterNpMatching2Handler(ctxId, callbackFunctionAddr, callbackArgument, SCE_NP_MATCHING2_SIGNALING_EVENT);
+
+	/*ContextState ctx = {
 		(u32)ctxId,
 		callbackFunctionAddr,
 		callbackArgument,
 		0
 	};
-	g_signaling.add_match2_ctx(ctx);
+	g_signaling.add_match2_ctx(ctx);*/
 
 	//struct NpMatching2Handler handler;
 	//npSignalingCallback = {};
@@ -496,7 +508,7 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 	//npSignalingCallback.cb_arg = callbackArgument;
 
 	//npMatching2Handlers[0] = handler;
-	NOTICE_LOG(Log::sceNet, "%s - Added SignalingCallback FUN_%08x(%08x)", __FUNCTION__, callbackFunctionAddr, callbackArgument);
+	//NOTICE_LOG(Log::sceNet, "%s - Added SignalingCallback FUN_%08x(%08x)", __FUNCTION__, callbackFunctionAddr, callbackArgument);
 	/*if (npMatching2Handlers.find(ctxId) == npMatching2Handlers.end()) {
 		npMatching2Handlers[ctxId] = handler;
 		WARN_LOG(Log::sceNet, "%s - Added handler(%08x, %08x) : %d", __FUNCTION__, handler.cb, handler.cb_arg, ctxId);
@@ -927,6 +939,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp->room_data(), room_info, npId, true, false);
 		// TODO: cache room_info
 		// TODO: execute signaling callback to update ip/port
+		// TODO: Connect to Signaling Server
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, SCE_NP_MATCHING2_OKAY, roomRespPtr);
 	});
