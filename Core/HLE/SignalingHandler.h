@@ -167,9 +167,9 @@ private:
 	std::atomic<bool> running_{ false };
 	std::thread recv_thread_;
 
-	SOCKET sock_{ INVALID_SOCKET };
+	SOCKET sock_{ 0 };
 	sockaddr_in6 remote_addr;
-	ULONG scope;
+	u64 scope;
 
 	mutable std::mutex mtx_;
 	std::unordered_map<u32, ContextState> contexts_;

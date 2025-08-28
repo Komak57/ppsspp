@@ -633,9 +633,14 @@ set(CommonVR
 include_directories(ext/OpenXR-SDK/include)
 # For TLS/SSL support
 # TODO: Clean up, make optional
+set(ENABLE_TESTING OFF CACHE BOOL "Build Mbed TLS tests." FORCE)
+set(ENABLE_PROGRAMS OFF CACHE BOOL "Build Mbed TLS programs." FORCE)
 add_subdirectory(ext/mbedtls)
 include_directories(ext/mbedtls/include)
-target_link_libraries(mbedtls)
+
+add_subdirectory(ext/flatbuffers)
+include_directories(ext/flatbuffers/include)
+
 # For ext/sol includes, that are usually included as sol/*.hpp
 include_directories(ext)
 
@@ -948,6 +953,9 @@ if(ARM64)
 		target_link_libraries(Common adrenotools)
 	endif()
 endif()
+
+target_link_libraries(Common mbedtls mbedx509 mbedcrypto)
+target_link_libraries(Common flatbuffers)
 
 if(USING_GLES2 OR (USING_EGL AND NOT USING_FBDEV))
 	find_package(X11)
@@ -2186,6 +2194,12 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/Plugins.h
 	Core/HLE/Plugins.cpp
 	Core/HLE/ThreadQueueList.h
+	Core/HLE/fb_helpers.h
+	Core/HLE/fb_helpers.cpp
+	Core/HLE/NpTypes.h
+	Core/HLE/Np2Types.h
+	Core/HLE/SignalingHandler.h
+	Core/HLE/SignalingHandler.cpp
 	Core/HLE/__sceAudio.cpp
 	Core/HLE/__sceAudio.h
 	Core/HLE/sceAdler.cpp
@@ -2448,14 +2462,20 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/Util/MemStick.h
 	Core/Util/GameDB.cpp
 	Core/Util/GameDB.h
+	Core/Util/NpAgent.h
+	Core/Util/NpAgent.cpp
 	Core/Util/PortManager.cpp
 	Core/Util/PortManager.h
+	Core/Util/PSNAgent.cpp
+	Core/Util/PSNAuthAgent.cpp
 	Core/Util/BlockAllocator.cpp
 	Core/Util/BlockAllocator.h
 	Core/Util/PPGeDraw.cpp
 	Core/Util/PPGeDraw.h
 	Core/Util/RecentFiles.cpp
 	Core/Util/RecentFiles.h
+	Core/Util/RPCNAgent.cpp
+	Core/Util/RPCNAuthAgent.cpp
 	${GPU_SOURCES}
 	ext/disarm.cpp
 	ext/disarm.h

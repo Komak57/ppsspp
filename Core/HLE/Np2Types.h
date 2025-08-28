@@ -10,6 +10,7 @@
 #include <Swap.h>
 #include <algorithm>
 
+#include "CommonTypes.h"
 #include "Core/MemMap.h"
 #include "Core/HLE/NpTypes.h"
 

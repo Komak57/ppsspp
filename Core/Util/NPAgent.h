@@ -311,18 +311,6 @@ private:
 	u8* dataPtr;
 };
 
-inline static void FormatAddr(char* addrbuf, size_t bufsize, const addrinfo* info) {
-	switch (info->ai_family) {
-	case AF_INET:
-	case AF_INET6:
-		inet_ntop(info->ai_family, &((sockaddr_in*)info->ai_addr)->sin_addr, addrbuf, bufsize);
-		break;
-	default:
-		snprintf(addrbuf, bufsize, "(Unknown AF %d)", info->ai_family);
-		break;
-	}
-}
-
 // COMID is sent as 9 chars - + '_' + 2 digits
 constexpr std::size_t COMMUNICATION_ID_COMID_COMPONENT_SIZE = 9;
 constexpr std::size_t COMMUNICATION_ID_SUBID_COMPONENT_SIZE = 2;
@@ -453,16 +441,16 @@ public:
 
 	// Setters
 
-	template <typename T>
-	void insert(T value)
-	{
-		value = std::bit_cast<le_t<T>, T>(value);
-		// resize + memcpy instead?
-		for (usz index = 0; index < sizeof(T); index++)
-		{
-			vec.push_back(*(reinterpret_cast<u8*>(&value) + index));
-		}
-	}
+	//template <typename T>
+	//void insert(T value)
+	//{
+	//	value = std::bit_cast<le_t<T>, T>(value);
+	//	// resize + memcpy instead?
+	//	for (usz index = 0; index < sizeof(T); index++)
+	//	{
+	//		vec.push_back(*(reinterpret_cast<u8*>(&value) + index));
+	//	}
+	//}
 	void insert_string(const std::string& str) const
 	{
 		std::copy(str.begin(), str.end(), std::back_inserter(vec));
@@ -538,11 +526,6 @@ namespace net {
 			memcpy(data + 9, "_00", 3);		// _00
 			std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
 			return ret;
-		}
-		std::string GetIP() {
-			char ip[INET_ADDRSTRLEN];
-			inet_ntop(resolved_->ai_family, &(resolved_->ai_addr), ip, INET_ADDRSTRLEN);
-			return ip;
 		}
 
 		// Only to be used for bring-up and debugging.

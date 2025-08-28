@@ -11,151 +11,9 @@ signaling_handler::signaling_handler() {}
 signaling_handler::~signaling_handler() { stop(); }
 signaling_packet sig_packet{};
 
-void signaling_handler::print_interfaces() {
-	ULONG bufferSize = 15000;
-	IP_ADAPTER_ADDRESSES* addresses = (IP_ADAPTER_ADDRESSES*)malloc(bufferSize);
-
-	if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, nullptr, addresses, &bufferSize) == NO_ERROR) {
-		for (auto* addr = addresses; addr; addr = addr->Next) {
-			INFO_LOG(Log::sceNet, "Interface: %s", addr->FriendlyName);
-
-			for (auto* ua = addr->FirstUnicastAddress; ua; ua = ua->Next) {
-				char buf[INET6_ADDRSTRLEN];
-				if (ua->Address.lpSockaddr->sa_family == AF_INET6) {
-					auto* sa6 = (sockaddr_in6*)ua->Address.lpSockaddr;
-					inet_ntop(AF_INET6, &sa6->sin6_addr, buf, sizeof(buf));
-					INFO_LOG(Log::sceNet, "- IPv6: %s (scope: %d)", buf, sa6->sin6_scope_id);
-				}
-				else if (ua->Address.lpSockaddr->sa_family == AF_INET) {
-					auto* sa4 = (sockaddr_in*)ua->Address.lpSockaddr;
-					inet_ntop(AF_INET, &sa4->sin_addr, buf, sizeof(buf));
-					INFO_LOG(Log::sceNet, "- IPv4: %s", buf);
-				}
-			}
-		}
-	}
-	free(addresses);
-}
-
 u64 signaling_handler::get_micro_timestamp(const std::chrono::steady_clock::time_point& time_point)
 {
 	return std::chrono::duration_cast<std::chrono::microseconds>(time_point.time_since_epoch()).count();
-}
-
-bool signaling_handler::connect() {
-	if (running_.load()) return true;
-
-	// Create IPv6 UDP socket
-	sock_ = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-#ifdef _WIN32
-	if (sock_ == INVALID_SOCKET) return false;
-#else
-	if (sock_ < 0) return false;
-#endif
-
-	sockaddr_in6 sa{};
-	sa.sin6_family = AF_INET6;
-	sa.sin6_port = 3657;
-	sa.sin6_scope_id = 21;
-
-	// Parse link-local IPv6 address
-	if (::inet_pton(AF_INET6, "fe80::be24:11ff:fed8:39c4", &sa.sin6_addr) != 1) {
-		ERROR_LOG(Log::sceNet, "Unable to resolve SIGSERV[ipv6]!");
-#ifdef _WIN32
-		::closesocket(sock_);
-#else
-		::close(sock_);
-#endif
-		sock_ = -1;
-		return false;
-	}
-
-	// Set scope id (interface index)
-#ifdef _WIN32
-	// On Windows, use if_nametoindex replacement (requires Windows 8+)
-	DWORD ifindex = 0;
-	if (ifindex == if_nametoindex("E")) {
-		ERROR_LOG(Log::sceNet, "Invalid SIGSERV Interface!");
-		return false;
-	}
-	sa.sin6_scope_id = ifindex;
-#else
-	unsigned ifindex = if_nametoindex(iface.c_str());
-	if (ifindex == 0) {
-		perror("if_nametoindex");
-		return false;
-	}
-	sa.sin6_scope_id = ifindex;
-#endif
-
-	// Bind
-	if (::bind(sock_, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) != 0) {
-		ERROR_LOG(Log::sceNet, "Unable to bind SIGSERV Socket!");
-#ifdef _WIN32
-		::closesocket(sock_);
-#else
-		::close(sock_);
-#endif
-		sock_ = -1;
-		return false;
-	}
-
-	running_ = true;
-	recv_thread_ = std::thread([this] { recv_loop(); });
-	return true;
-}
-
-bool signaling_handler::connect(const std::string& ipv4, u16 port, u64 scope) {
-	if (running_.load()) return true;
-	ERROR_LOG(Log::sceNet, "SIGSERV Connecting to '%s'", ipv4.c_str());
-
-	sock_ = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-	if (sock_ == INVALID_SOCKET) return false;
-
-	// Bind to any local IPv6 port
-	sockaddr_in6 local{};
-	local.sin6_family = AF_INET6;
-	local.sin6_addr = in6addr_any;
-	local.sin6_port = 0;
-	if (::bind(sock_, reinterpret_cast<const sockaddr*>(&local), sizeof(local)) != 0) {
-		::closesocket(sock_);
-		sock_ = INVALID_SOCKET;
-		ERROR_LOG(Log::sceNet, "SIGSERV Connect - Could not Bind IPv6 Socket!");
-		return false;
-	}
-
-	// Fill remote with IPv4-mapped IPv6
-	remote_addr = {};
-	remote_addr.sin6_family = AF_INET6;
-	remote_addr.sin6_port = htons(port);
-	remote_addr.sin6_scope_id = 0; // only needed for link-local fe80::
-
-	// Convert IPv4 string to binary
-	in_addr ipv4_bin{};
-	if (::inet_pton(AF_INET, ipv4.c_str(), &ipv4_bin) != 1) {
-		::closesocket(sock_);
-		sock_ = INVALID_SOCKET;
-		ERROR_LOG(Log::sceNet, "SIGSERV Connect - Invalid IPv4 Address!");
-		return false;
-	}
-
-	// Place into IPv4-mapped IPv6: ::ffff:a.b.c.d
-	remote_addr.sin6_addr = IN6ADDR_ANY_INIT;
-	remote_addr.sin6_addr.u.Byte[10] = 0xff;
-	remote_addr.sin6_addr.u.Byte[11] = 0xff;
-	std::memcpy(&remote_addr.sin6_addr.u.Byte[12], &ipv4_bin, sizeof(ipv4_bin));
-
-	if (::connect(sock_, reinterpret_cast<sockaddr*>(&remote_addr), sizeof(remote_addr)) != 0) {
-		::closesocket(sock_);
-		sock_ = INVALID_SOCKET;
-		ERROR_LOG(Log::sceNet, "SIGSERV Connect - Failed to Connect!");
-		return false;
-	}
-
-	this->scope = scope;
-	running_ = true;
-	recv_thread_ = std::thread([this] { recv_loop(); });
-	return true;
 }
 
 void signaling_handler::start(u32 conn_id, u32 addr, u16 port) {
@@ -347,7 +205,7 @@ void signaling_handler::recv_loop() {
 	while (running_) {
 		u8 buf[1500];
 		sockaddr_in src{};
-		int slen = sizeof(src);
+		socklen_t slen = sizeof(src);
 		int n = ::recvfrom(sock_, reinterpret_cast<char*>(buf), sizeof(buf), 0,
 			reinterpret_cast<sockaddr*>(&src), &slen);
 		if (n <= 0) {
