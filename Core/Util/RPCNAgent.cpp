@@ -1179,6 +1179,38 @@ namespace net {
 
 		INFO_LOG(Log::sceNet, "Setting UserInfo for Server #%d", req->serverId);
 
+	int RPCNAgent::GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse* respData) {
+
+		flatbuffers::FlatBufferBuilder builder(1024);
+		std::vector<u64> roomIds;
+		for (u32 i = 0; i < req->roomIdNum && req->roomId; i++)
+		{
+			roomIds.push_back(req->roomId[i]);
+		}
+		std::vector<u16> attrIds;
+		for (u32 i = 0; i < req->attrIdNum && req->attrId; i++)
+		{
+			attrIds.push_back(req->attrId[i]);
+		}
+
+		auto req_finished = CreateGetRoomDataExternalListRequestDirect(builder, &roomIds, &attrIds);
+		builder.Finish(req_finished);
+
+		auto bufsize = builder.GetSize();
+		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
+		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
+		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
+		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
+
+		// Wrap and send the packet
+		Packet packet;
+		packet.Write(data);
+
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::GetRoomDataExternalList, reqId);
+
+		INFO_LOG(Log::sceNet, "Getting RoomDataExternalList for Room #%d", req->roomId);
+
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
 		bool flushed = Send(&packet, 5.0, &canceled);
 		if (!flushed) {
@@ -1190,6 +1222,11 @@ namespace net {
 		if (resp.error != (u8)ErrorType::NoError)
 			return ErrorToPSPError[resp.error];
 		resp.stream = new vec_stream(resp.data, 1);
+
+		respData = resp.stream->get_flatbuffer<GetRoomDataExternalListResponse>();
+		if (resp.stream->is_error()) {
+			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
+		}
 
 		return 0;
 	}

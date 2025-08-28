@@ -1422,6 +1422,16 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
 		if (tServer == 0)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
+		auto req = PSPPointer<SceNpMatching2GetRoomDataExternalListRequest>::Create(reqParamPtr);
+		const GetRoomDataExternalListResponse* resp;
+		servers[tServer]->GetRoomDataExternalList(req, resp);
+
+		bool include_onlinename = false, include_avatarurl = false;
+
+		u32 alloc = sizeof(SceNpMatching2GetRoomDataExternalListResponse);
+		auto sce_get_room_ext_resp = PSPPointer<SceNpMatching2GetRoomDataExternalListResponse>::Create(np_memory.Alloc(alloc));
+		np::GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(np_memory, resp, sce_get_room_ext_resp, include_onlinename, include_avatarurl);
+
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, SCE_NP_MATCHING2_OKAY, 0);
 	});
 	tasks.emplace(request_id, std::move(task));
