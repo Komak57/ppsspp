@@ -706,15 +706,6 @@ struct SceNpMatching2ServerInfo {
 	u8 padding;
 };
 
-// 0x88 bytes
-struct RoomInfo {
-	u16_le ID;
-	u16 Port;
-	u8 Status;
-	std::string Host;
-	//u32_le IPAddr = 910526074; // 910526074 || 0x3645867a || 54.69.134.122 || elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net
-};
-
 struct CellRtcTick
 {
 	u64 tick;
