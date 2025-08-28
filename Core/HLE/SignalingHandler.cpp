@@ -78,13 +78,42 @@ std::shared_ptr<signaling_info> signaling_handler::get_signaling_ptr(const signa
 
 	return sig_peers.at(conn_id);
 }
-
-void signaling_handler::add_match2_ctx(ContextState context) {
-	context.last_activity = std::chrono::steady_clock::now();
-	context.expected_next = std::nullopt;
-	std::lock_guard lock(mtx_);
-	contexts_[context.ctx_id] = context;
-}
+//
+//void signaling_handler::add_match2_ctx(ContextState context) {
+//	context.last_activity = std::chrono::steady_clock::now();
+//	context.expected_next = std::nullopt;
+//	std::lock_guard lock(mtx_);
+//	contexts_[context.ctx_id] = context;
+//}
+//
+//void signaling_handler::remove_match2_ctx(ContextState context) {
+//	std::lock_guard lock(mtx_);
+//	contexts_.erase(context.ctx_id);
+//}
+//
+//u32 signaling_handler::create_context(SignalingCallback cb) {
+//	const u32 id = next_ctx_.fetch_add(1, std::memory_order_relaxed);
+//	std::scoped_lock lk(mtx_);
+//	//contexts_[id] = ContextState{
+//	//	.cb = std::move(cb),
+//	//	.last_activity = std::chrono::steady_clock::now(),
+//	//	.expected_next = std::nullopt
+//	//};
+//	return id;
+//}
+//
+//std::optional<ContextState> signaling_handler::get_ctx(u32 ctx) {
+//	std::scoped_lock lk(mtx_);
+//	auto it = contexts_.find(ctx);
+//	if (it == contexts_.end()) return std::nullopt;
+//	return it->second;
+//}
+//
+//void signaling_handler::touch_ctx(u32 ctx) {
+//	std::scoped_lock lk(mtx_);
+//	auto it = contexts_.find(ctx);
+//	if (it != contexts_.end()) it->second.last_activity = std::chrono::steady_clock::now();
+//}
 
 void signaling_handler::remove_match2_ctx(ContextState context) {
 	std::lock_guard lock(mtx_);
@@ -395,7 +424,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		// TODO: Connect to Signaling Server
 		start(conn_id, addr_p2p, port_p2p);
 	}
-	auto ctx = get_ctx(resp.header.reqId);
+	//auto ctx = get_ctx(resp.header.reqId);
 	const u32 event_key = 0;// get_event_key();
 
 	/*if (room_event_cb)

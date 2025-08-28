@@ -116,11 +116,8 @@ public:
 	void start(u32 conn_id, u32 addr, u16 port);
 	void stop();
 
-	void add_match2_ctx(ContextState context);
-	void remove_match2_ctx(ContextState context);
 	std::shared_ptr<signaling_info> get_signaling_ptr(const signaling_packet* sp);
-	// create/register a new context id and callback
-	u32 create_context(SignalingCallback cb);
+
 	u32 get_always_conn_id(const SceNpId& npid);
 	u32 init_sig1(const SceNpId& npid);
 	u32 init_sig2(const SceNpId& npid, u64 room_id, u16 member_id);
@@ -159,8 +156,12 @@ private:
 	void handle_finished_ack(const signaling_packet* sp);
 
 	// context helpers
-	std::optional<ContextState> get_ctx(u32 ctx);
-	void touch_ctx(u32 ctx);
+	//std::optional<ContextState> get_ctx(u32 ctx);
+	//void touch_ctx(u32 ctx);
+	//create/register a new context id and callback
+	//u32 create_context(SignalingCallback cb);
+	//void add_match2_ctx(ContextState context);
+	//void remove_match2_ctx(ContextState context);
 	void queue_signaling_packet(signaling_packet& sp, std::shared_ptr<signaling_info> si, std::chrono::steady_clock::time_point wakeup_time);
 
 private:
