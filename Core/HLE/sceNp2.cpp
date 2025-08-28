@@ -1336,6 +1336,20 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%08x) at %08x", __FUNCTION__, netInfoPtr, currentMIPS->pc);
 
+	// ThreadStart
+	if (!npMatching2Inited)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
+
+	if (!Memory::IsValidAddress(netInfoPtr))
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
+
+	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
+
+	sockaddr_in sockAddr{};
+	netInfo->localAddr = getLocalIp(&sockAddr);	// LocalIP
+	// FIXME: Get PublicIP from RPCN's Signaling server or PSN's STUN server
+	netInfo->mappedAddr = 0;	// PublicIP
+	netInfo->natStatus = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
 	return 0;
 }
 
