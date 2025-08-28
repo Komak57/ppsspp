@@ -115,34 +115,6 @@ std::shared_ptr<signaling_info> signaling_handler::get_signaling_ptr(const signa
 //	if (it != contexts_.end()) it->second.last_activity = std::chrono::steady_clock::now();
 //}
 
-void signaling_handler::remove_match2_ctx(ContextState context) {
-	std::lock_guard lock(mtx_);
-	contexts_.erase(context.ctx_id);
-}
-
-u32 signaling_handler::create_context(SignalingCallback cb) {
-	const u32 id = next_ctx_.fetch_add(1, std::memory_order_relaxed);
-	std::scoped_lock lk(mtx_);
-	//contexts_[id] = ContextState{
-	//	.cb = std::move(cb),
-	//	.last_activity = std::chrono::steady_clock::now(),
-	//	.expected_next = std::nullopt
-	//};
-	return id;
-}
-
-std::optional<ContextState> signaling_handler::get_ctx(u32 ctx) {
-	std::scoped_lock lk(mtx_);
-	auto it = contexts_.find(ctx);
-	if (it == contexts_.end()) return std::nullopt;
-	return it->second;
-}
-
-void signaling_handler::touch_ctx(u32 ctx) {
-	std::scoped_lock lk(mtx_);
-	auto it = contexts_.find(ctx);
-	if (it != contexts_.end()) it->second.last_activity = std::chrono::steady_clock::now();
-}
 void signaling_handler::queue_signaling_packet(signaling_packet& sp, std::shared_ptr<signaling_info> si, std::chrono::steady_clock::time_point wakeup_time) {
 	queued_packet qp;
 	qp.sig_info = std::move(si);
