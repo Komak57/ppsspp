@@ -516,6 +516,7 @@ namespace net {
 		virtual int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req) = 0;
 		virtual int SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req) = 0;
 		virtual int SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req) = 0;
+		virtual int SetUserInfo(SceNpMatching2SetUserInfoRequest* req);
 
 		u8 GetStatus();
 		//int GetID() { return ID; }
@@ -575,6 +576,7 @@ namespace net {
 		int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req);
 		int SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req);
 		int SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req);
+		int SetUserInfo(SceNpMatching2SetUserInfoRequest* req);
 	};
 
 	class RPCNAgent : public NPAgent {
@@ -597,6 +599,7 @@ namespace net {
 		int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req);
 		int SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req);
 		int SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req);
+		int SetUserInfo(SceNpMatching2SetUserInfoRequest* req);
 
 		void start_read_thread();
 		void stop_read_thread();

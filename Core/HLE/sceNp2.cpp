@@ -1235,7 +1235,11 @@ static int sceNpMatching2SetUserInfo(int ctxId, u32 reqParamPtr, u32 optParam, u
 		if (tServer == 0)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, SCE_NP_MATCHING2_OKAY, 0);
+		auto req = PSPPointer<SceNpMatching2SetUserInfoRequest>::Create(reqParamPtr);
+
+		int ret = servers[tServer]->SetUserInfo(req);
+
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, ret, 0);
 	});
 	tasks.emplace(request_id, std::move(task));
 

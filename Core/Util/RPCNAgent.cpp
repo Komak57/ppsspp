@@ -1146,4 +1146,51 @@ namespace net {
 
 		return 0;
 	}
+
+	int RPCNAgent::SetUserInfo(SceNpMatching2SetUserInfoRequest* req) {
+		flatbuffers::FlatBufferBuilder builder(1024);
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_memberbinattr_vec;
+		if (req->userBinAttrNum && req->userBinAttr)
+		{
+			std::vector<flatbuffers::Offset<BinAttr>> davec;
+			for (u32 i = 0; i < req->userBinAttrNum; i++)
+			{
+				auto bin = CreateBinAttr(builder, req->userBinAttr[i].id, builder.CreateVector(Memory::GetPointer(req->userBinAttr[i].ptr.ptr), req->userBinAttr[i].size));
+				davec.push_back(bin);
+			}
+			final_memberbinattr_vec = builder.CreateVector(davec);
+		}
+
+		auto req_finished = CreateSetUserInfo(builder, req->serverId, final_memberbinattr_vec);
+		builder.Finish(req_finished);
+
+		auto bufsize = builder.GetSize();
+		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
+		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
+		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
+		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
+
+		// Wrap and send the packet
+		Packet packet;
+		packet.Write(data);
+
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::SetRoomDataInternal, reqId);
+
+		INFO_LOG(Log::sceNet, "Setting UserInfo for Server #%d", req->serverId);
+
+		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
+		bool flushed = Send(&packet, 5.0, &canceled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+		}
+
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return ErrorToPSPError[resp.error];
+		resp.stream = new vec_stream(resp.data, 1);
+
+		return 0;
+	}
 }

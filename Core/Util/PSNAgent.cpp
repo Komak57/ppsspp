@@ -418,4 +418,8 @@ namespace net {
 	int PSNAgent::SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req) {
 		return 0;
 	}
+
+	int PSNAgent::SetUserInfo(SceNpMatching2SetUserInfoRequest* req) {
+		return 0;
+	}
 }
