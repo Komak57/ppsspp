@@ -514,6 +514,7 @@ namespace net {
 		virtual int LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) = 0;
 		virtual int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) = 0;
 		virtual int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req) = 0;
+		virtual int SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req) = 0;
 		virtual int SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req) = 0;
 
 		u8 GetStatus();
@@ -572,6 +573,7 @@ namespace net {
 		int LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp);
 		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
 		int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req);
+		int SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req);
 		int SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req);
 	};
 
@@ -593,6 +595,7 @@ namespace net {
 		int LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp);
 		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut);
 		int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req);
+		int SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req);
 		int SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req);
 
 		void start_read_thread();

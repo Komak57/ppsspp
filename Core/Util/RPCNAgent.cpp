@@ -993,33 +993,68 @@ namespace net {
 		return 0;
 	}
 
-	int RPCNAgent::SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req) {
-
+	int RPCNAgent::SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
-
-		std::vector<u16> dst;
-		switch (req->castType)
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntAttr>>> final_searchintattrexternal_vec;
+		if (req->roomSearchableIntAttrExternalNum && req->roomSearchableIntAttrExternal)
 		{
-		case SCE_NP_MATCHING2_CASTTYPE_BROADCAST:
-			break;
-		case SCE_NP_MATCHING2_CASTTYPE_UNICAST:
-			dst.push_back(req->dst.unicastTarget);
-			break;
-		case SCE_NP_MATCHING2_CASTTYPE_MULTICAST:
-			for (u32 i = 0; i < req->dst.multicastTarget.memberIdNum && req->dst.multicastTarget.memberId; i++)
+			std::vector<flatbuffers::Offset<IntAttr>> davec;
+			for (u32 i = 0; i < req->roomSearchableIntAttrExternalNum; i++)
 			{
-				dst.push_back(req->dst.multicastTarget.memberId[i]);
+				auto bin = CreateIntAttr(builder, req->roomSearchableIntAttrExternal[i].id, req->roomSearchableIntAttrExternal[i].num);
+				davec.push_back(bin);
 			}
-			break;
-		case SCE_NP_MATCHING2_CASTTYPE_MULTICAST_TEAM:
-			dst.push_back(req->dst.multicastTargetTeamId);
-			break;
-		default:
-			_assert_(false);
-			break;
+			final_searchintattrexternal_vec = builder.CreateVector(davec);
 		}
 
-		auto req_finished = CreateSendRoomMessageRequest(builder, req->roomId, req->castType, builder.CreateVector(dst.data(), dst.size()), builder.CreateVector(Memory::GetPointer(req->msg.ptr), req->msgLen), req->option);
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_searchbinattrexternal_vec;
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_binattrexternal_vec;
+
+		std::vector<flatbuffers::Offset<BinAttr>> davec_searchable_binattrexternal;
+		std::vector<flatbuffers::Offset<BinAttr>> davec_binattrexternal;
+
+		auto put_binattr = [&](SceNpMatching2AttributeId id, flatbuffers::Offset<BinAttr> bin)
+		{
+			switch (id)
+			{
+			case SCE_NP_MATCHING2_ROOM_BIN_ATTR_EXTERNAL_1_ID:
+			case SCE_NP_MATCHING2_ROOM_BIN_ATTR_EXTERNAL_2_ID:
+				davec_binattrexternal.push_back(bin);
+			break;
+			case SCE_NP_MATCHING2_ROOM_SEARCHABLE_BIN_ATTR_EXTERNAL_1_ID:
+				davec_searchable_binattrexternal.push_back(bin);
+			break;
+		default:
+				ERROR_LOG(Log::sceNet, "Unexpected bin attribute id in set_roomdata_external request: 0x%x", id);
+			break;
+		}
+		};
+
+		if (req->roomSearchableBinAttrExternalNum && req->roomSearchableBinAttrExternal)
+		{
+			for (u32 i = 0; i < req->roomSearchableBinAttrExternalNum; i++)
+			{
+				auto bin = CreateBinAttr(builder, req->roomSearchableBinAttrExternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomSearchableBinAttrExternal[i].ptr.ptr), req->roomSearchableBinAttrExternal[i].size));
+				put_binattr(req->roomSearchableBinAttrExternal[i].id, bin);
+			}
+		}
+
+		if (req->roomBinAttrExternalNum && req->roomBinAttrExternal)
+		{
+			for (u32 i = 0; i < req->roomBinAttrExternalNum; i++)
+			{
+				auto bin = CreateBinAttr(builder, req->roomBinAttrExternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomBinAttrExternal[i].ptr.ptr), req->roomBinAttrExternal[i].size));
+				put_binattr(req->roomBinAttrExternal[i].id, bin);
+			}
+		}
+
+		if (!davec_searchable_binattrexternal.empty())
+			final_searchbinattrexternal_vec = builder.CreateVector(davec_searchable_binattrexternal);
+
+		if (!davec_binattrexternal.empty())
+			final_binattrexternal_vec = builder.CreateVector(davec_binattrexternal);
+
+		auto req_finished = CreateSetRoomDataExternalRequest(builder, req->roomId, final_searchintattrexternal_vec, final_searchbinattrexternal_vec, final_binattrexternal_vec);
 		builder.Finish(req_finished);
 
 		auto bufsize = builder.GetSize();
@@ -1033,11 +1068,11 @@ namespace net {
 		packet.Write(data);
 
 		auto reqId = generate_request_id();
-		packet.Pack(CommandType::SendRoomMessage, reqId);
+		packet.Pack(CommandType::SetRoomDataInternal, reqId);
 
-		INFO_LOG(Log::sceNet, "Sending Room #%d a Message", req->roomId);
+		INFO_LOG(Log::sceNet, "Setting Room Data External for Room #%d", req->roomId);
 
-		// NPAgent::Send()
+		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
 		bool flushed = Send(&packet, 5.0, &canceled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
@@ -1045,11 +1080,10 @@ namespace net {
 		}
 
 		auto resp = take_pending_request(reqId);
-		if (resp.error != (u8)ErrorType::NoError) {
-			ERROR_LOG(Log::sceNet, "Response Error: %s", PacketTypeNames[resp.error]);
+		if (resp.error != (u8)ErrorType::NoError)
 			return ErrorToPSPError[resp.error];
-		}
 		resp.stream = new vec_stream(resp.data, 1);
+
 		return 0;
 	}
 }
