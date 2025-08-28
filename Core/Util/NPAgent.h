@@ -1,28 +1,23 @@
 #pragma once
-#include "Common/Net/SocketCompat.h"
-#include "Common/Net/Resolve.h"
-#include <CommonTypes.h>
 #include <optional>
 #include <type_traits> // is_constant_evaluated
-#include <bit>         // bit_cast
+#include <unordered_set>
+#include <condition_variable>
+#include <unordered_map>
+
+#include <CommonTypes.h>
+#include "Common/Net/Resolve.h"
+#include "Common/Net/SocketCompat.h"
+#include "Common/Net/HTTPClient.h"
+
 #include "Core/HLE/Np2Types.h"
 #include <Core/np2_structs_generated.h>
-#include "Core/HLE/sceNet.h"
-#include "Common/Net/HTTPClient.h"	
+
 #include "mbedtls/ssl.h"
 #include "mbedtls/net_sockets.h"
-#include "mbedtls/platform.h"
-#include "mbedtls/ssl_cache.h"
-#include "mbedtls/ssl_ciphersuites.h"
-#include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
-#include "mbedtls/x509_crt.h"
-#include <mbedtls\timing.h>
-#include <unordered_map>
-#include <flatbuffers/flatbuffers.h>
-#include <Core\np2_structs_generated.h>
-#include <unordered_set>
-
+#include "mbedtls/entropy.h"
+#include "mbedtls/timing.h"
 // 0x88 bytes
 //struct RoomInfo {
 //	u16_le ID;

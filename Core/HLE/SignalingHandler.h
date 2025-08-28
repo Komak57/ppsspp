@@ -13,23 +13,8 @@
 #include "Core/HLE/Np2Types.h"
 #include <Core/Util/NPAgent.h>
 
-#include <iphlpapi.h>
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <unistd.h>
-#endif
-
-using u8 = uint8_t;
-using u16 = uint16_t;
-using u32 = uint32_t;
-using u64 = uint64_t;
+#include "Common/Net/SocketCompat.h"
+#include <Core/Util/BlockAllocator.h>
 
 constexpr size_t VPORT_0_HEADER_SIZE = 3; // u16 vport(LE) + u8 subset
 constexpr u8 SUBSET_SIGNALING = -1;     // set to your value

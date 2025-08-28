@@ -25,9 +25,12 @@
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/sceNp2.h"
 #include <Core/Util/NPAgent.h>
-#include "sceNetResolver.cpp"
+#include "sceNetResolver.h"
 #include <future>
 #include "SignalingHandler.h"
+#include "sceNp.h"
+#include "sceKernelMemory.h"
+#include "Core/HLE/fb_helpers.h"
 //#include "NpMatchingContext.h"
 //#include "Np2SignalingHandler.h"
 

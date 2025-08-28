@@ -1,12 +1,11 @@
 #include "Core/HLE/SignalingHandler.h"
 #include <cassert>
 #include <cstring>
-#include "sceNp.h"
-#include "sceNp2.h"
+#include "Core/HLE/fb_helpers.h"
+#include <Core/Util/PortManager.h>
 #include "Core/HLE/sceNp.h"
 #include "Core/HLE/sceNp2.h"
-static inline u32 be32(u32 x) { return htonl(x); }
-static inline u16 le16(u16 x) { return _byteswap_ushort(x); } // or your le helpers
+#include "Core/HLE/SocketManager.h"
 
 signaling_handler::signaling_handler() {}
 signaling_handler::~signaling_handler() { stop(); }

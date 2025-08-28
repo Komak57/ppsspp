@@ -1,6 +1,5 @@
 #include "Core/Util/NPAgent.h"
 #include "Common/Net/SocketCompat.h"
-#include "Common/Net/Resolve.h"
 #include "Common/Net/URL.h"
 
 #include <Core/HLE/HLE.h>
