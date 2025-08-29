@@ -18,6 +18,7 @@
 #pragma once
 
 #include <cstddef>
+#include <algorithm>
 
 #include "ppsspp_config.h"
 #include "CommonFuncs.h"
@@ -138,6 +139,46 @@ static void ssl_debug(void* ctx, int level,
 	((void)level);
 	VERBOSE_LOG(Log::sceNet, "%s:%04d: %s", file, line, str);
 	//mbedtls_fprintf((FILE*)ctx, "%s:%04d: %s", file, line, str);
+}
+
+static void HEX_LOG(Log level, const char* source, const char* data, size_t len, int limit = 386) {
+	if (!data) {
+		ERROR_LOG(level, "%s: Nothing to Print", source);
+		return;
+	}
+
+	INFO_LOG(level, "%s: ==Hex Data==", source);
+
+	for (size_t i = 0; i < len; i += 16) {
+		if ((int)i > limit)
+			break;
+
+		// Print offset
+		char line[256];
+		int offset = snprintf(line, sizeof(line), "%08zx:", i);
+
+		// Print hex bytes
+		int lineLen = std::min<size_t>(16, len - i);
+		for (int x = 0; x < lineLen; x++) {
+			offset += snprintf(line + offset, sizeof(line) - offset, " %02X", static_cast<unsigned char>(data[i + x]));
+		}
+
+		// Pad to 16 bytes
+		for (int x = lineLen; x < 16; x++) {
+			offset += snprintf(line + offset, sizeof(line) - offset, "   ");
+		}
+
+		// Add ASCII section
+		offset += snprintf(line + offset, sizeof(line) - offset, "  ");
+		for (int x = 0; x < lineLen; x++) {
+			char b = static_cast<unsigned char>(data[i + x]);
+			line[offset++] = (b >= 32 && b <= 126) ? b : '.';
+		}
+		line[offset] = '\0';
+
+		// Log the full line
+		INFO_LOG(level, "%s", line);
+	}
 }
 
 // Currently only actually shows a dialog box on Windows.
