@@ -266,9 +266,15 @@ namespace net {
 	}
 
 	bool NPAuthAgent::Resolve(DNSType type) {
-		if ((intptr_t)sock() != -1) {
+#ifdef PPSSPP_PLATFORM(WINDOWS)
+		if ((intptr_t)sock() == INVALID_SOCKET) {
 			return false;
 		}
+#else
+		if ((intptr_t)sock() <= 0) {
+			return false;
+		}
+#endif
 		if (status == SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE) {
 			ERROR_LOG(Log::IO, "Resolve: Server not available");
 			return false;
@@ -351,7 +357,7 @@ namespace net {
 		}
 		else {
 			if ((intptr_t)sock_ != -1) {
-				canceled = true;
+				cancelled = true;
 				closesocket(sock_);
 				sock_ = -1;
 			}
@@ -684,6 +690,11 @@ namespace net {
 			if (SSLEnabled) {
 				DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read reading %i bytes", toRead);
 				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
+
+				if (*cancelled) {
+					WARN_LOG(Log::HTTP, "NPAgent::Recv() Cancelled");
+					return 0;
+				}
 				//int ready = 0;
 				if (retval < 0) {
 					switch (retval) {
