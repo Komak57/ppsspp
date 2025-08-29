@@ -423,7 +423,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::GetRoomDataExternalList(PSPPointer< SceNpMatching2GetRoomDataExternalListRequest> req, PSPPointer<SceNpMatching2GetRoomDataExternalListResponse> resp) {
+	int PSNAgent::GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse* respData) {
 		return 0;
 	}
 }
