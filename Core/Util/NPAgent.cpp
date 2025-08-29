@@ -266,15 +266,6 @@ namespace net {
 	}
 
 	bool NPAuthAgent::Resolve(DNSType type) {
-#ifdef PPSSPP_PLATFORM(WINDOWS)
-		if ((intptr_t)sock() == INVALID_SOCKET) {
-			return false;
-		}
-#else
-		if ((intptr_t)sock() <= 0) {
-			return false;
-		}
-#endif
 		if (status == SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE) {
 			ERROR_LOG(Log::IO, "Resolve: Server not available");
 			return false;
@@ -311,9 +302,6 @@ namespace net {
 	}
 
 	bool NPAgent::Resolve(DNSType type) {
-		if ((intptr_t)sock_ != -1) {
-			return false;
-		}
 		if (status == SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE) {
 			ERROR_LOG(Log::IO, "Resolve: Server not available");
 			return false;
