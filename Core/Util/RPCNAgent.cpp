@@ -1197,7 +1197,7 @@ namespace net {
 	int RPCNAgent::GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse* respData) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
-		std::vector<u64> roomIds;
+		std::vector<uint64_t> roomIds;
 		for (u32 i = 0; i < req->roomIdNum && req->roomId; i++)
 		{
 			roomIds.push_back(req->roomId[i]);
