@@ -172,7 +172,7 @@ int HTTPConnection::InitializeSSL() {
 }
 
 
-HTTPRequest::HTTPRequest(int connectionID, int method, const char *url, u64 contentLength, net::ResolveFunc customResolver) : client(customResolver) {
+HTTPRequest::HTTPRequest(int connectionID, int method, const char *url, u64 contentLength, net::ResolveFunc customResolver) : client(customResolver), progress_(&cancelled_) {
 	// Copy base data as initial base value for this
 	// Since dynamic_cast/dynamic_pointer_cast/typeid requires RTTI to be enabled (ie. /GR instead of /GR- on msvc, enabled by default on most compilers), so we can only use static_cast here
 	HTTPConnection::operator=(static_cast<HTTPConnection&>(*httpObjects[connectionID - 1LL]));
@@ -180,17 +180,59 @@ HTTPRequest::HTTPRequest(int connectionID, int method, const char *url, u64 cont
 	// Initialize
 	this->connectionID = connectionID;
 	this->method = method;
-	this->url = url ? url : "";
 	this->contentLength = contentLength;
+	this->progress_ = net::RequestProgress(&cancelled_);
 
 	if (tlsEnabled) {
 		client.Initialize(this->sslCtx, this->netCtx, this->sslConfig, this->ctrDrbg, this->entropy, this->caCert);
 	}
 	//progress_.cancelled = &cancelled_;
 	responseContent_.clear();
+	// Connect
+
+	// Initialize Connection
+	client.SetDataTimeout(getRecvTimeout() / 1000000.0);
+	// Initialize Headers
+	if (getHttpVer() == SCE_HTTP_VERSION_1_0)
+		client.SetHttpVersion("1.0");
+	else
+		client.SetHttpVersion("1.1");
+	client.SetUserAgent(getUserAgent());
+
+	// TODO: Do this on a separate thread, since this may blocks "Emu" thread here
+	// Try to resolve first
+	// Note: LittleBigPlanet onlu passed the path (ie. /LITTLEBIGPLANETPSP_XML/login?) during sceHttpCreateRequest without the host domain, thus will need to be construced into a valid URI using the data from sceHttpCreateConnection upon validating/parsing the URL.
+	if (startsWithNoCase(url, "/")) {
+		this->fullURL = scheme + "://" + hostString + ":" + std::to_string(port) + url;
+	}
+
+	Url fileUrl(this->fullURL);
+	if (!fileUrl.Valid()) {
+		ErrorCode = SCE_HTTP_ERROR_INVALID_URL;
+		return;
+	}
+	if (!client.Resolve(fileUrl.Host().c_str(), fileUrl.Port())) {
+		ERROR_LOG(Log::sceNet, "Failed resolving %s", fileUrl.ToString().c_str());
+		ErrorCode = SCE_HTTP_ERROR_NOT_FOUND;
+		return;
+	}
+
+	// Establish Connection
+	if (!client.Connect(getResolveRetryCount(), getConnectTimeout() / 1000000.0, &cancelled_)) {
+		ERROR_LOG(Log::sceNet, "Failed connecting to server or cancelled.");
+		ErrorCode = SCE_HTTP_ERROR_NOT_FOUND;
+		return; // SCE_HTTP_ERROR_ABORTED
+	}
+	if (cancelled_) {
+		ErrorCode = SCE_HTTP_ERROR_ABORTED;
+		return;
+	}
+
+	ErrorCode = SCE_HTTP_OKAY;
 }
 
 HTTPRequest::~HTTPRequest() {
+	cancelled_ = true;
 	client.Disconnect();
 	if (Memory::IsValidAddress(headerAddr_))
 		userMemory.Free(headerAddr_);
@@ -201,17 +243,30 @@ int HTTPRequest::getResponseContentLength() {
 	//if (progress_.progress == 0.0f)
 	//	return SCE_HTTP_ERROR_BEFORE_SEND;
 
-	entityLength_ = -1; // FIXME: should we default to 0 instead?
+	contentLength = -1;
 	for (std::string& line : responseHeaders_) {
-		if (startsWithNoCase(line, "Content-Length")) {
-			size_t pos = line.find_first_of(':');
-			if (pos != line.npos) {
-				pos++;
-				entityLength_ = atoi(&line[pos]);
+		if (startsWithNoCase(line, "Content-Length:")) {
+			size_t size_pos = line.find_first_of(' ');
+			if (size_pos != line.npos) {
+				size_pos = line.find_first_not_of(' ', size_pos);
+			}
+			if (size_pos != line.npos) {
+				contentLength = atoi(&line[size_pos]);
 			}
 		}
 	}
-	return entityLength_;
+
+	//entityLength_ = -1; // FIXME: should we default to 0 instead?
+	//for (std::string& line : responseHeaders_) {
+	//	if (startsWithNoCase(line, "Content-Length")) {
+	//		size_t pos = line.find_first_of(':');
+	//		if (pos != line.npos) {
+	//			pos++;
+	//			entityLength_ = atoi(&line[pos]);
+	//		}
+	//	}
+	//}
+	return contentLength;
 }
 
 int HTTPRequest::abortRequest() {
@@ -226,6 +281,12 @@ int HTTPRequest::getStatusCode() {
 	// FIXME: Will sceHttpGetStatusCode returns an error if the request was not sent yet?
 	//if (progress_.progress == 0.0f)
 	//	return SCE_HTTP_ERROR_BEFORE_SEND;
+
+	// Retrieve Response's Status Code (and Headers too?)
+	if (cancelled_) {
+		return SCE_HTTP_ERROR_ABORTED;
+	}
+
 	return responseCode_;
 }
 
@@ -283,59 +344,48 @@ int HTTPRequest::getAllResponseHeaders(u32 headerAddrPtr, u32 headerSizePtr) {
 }
 
 int HTTPRequest::readData(u32 destDataPtr, u32 size) {
-	// FIXME: Will sceHttpReadData returns an error if the request was not sent yet?
-	//if (progress_.progress == 0.0f)
-	//	return SCE_HTTP_ERROR_BEFORE_SEND;
-	u32 sz = std::min(size, (u32)responseContent_.size());
+	// TODO: Read response entity within readData() in smaller chunk(based on size arg of sceHttpReadData) instead of the whole content at once here
+	//net::RequestProgress progress_(&cancelled_);
+	net::Buffer partial;
+	int res = client.ReadPartialResponseEntity(&this->buffer_, size, contentLength, &partial, &progress_);
+	if (res != 0) {
+		ERROR_LOG(Log::sceNet, "Unable to read HTTP response entity: %d", res);
+	}
+	//entity_.TakeAll(&responseContent_);
+	if (cancelled_) {
+		return SCE_HTTP_ERROR_ABORTED;
+	}
+
+	std::string entity;
+	partial.TakeAll(&entity);
+	//HEX_LOG(Log::Printf, "HTTPRequest::readData()", entity.c_str(), entity.length());
+
+	u32 sz = std::min(size, (u32)entity.length());
 	if (sz > 0) {
-		Memory::MemcpyUnchecked(destDataPtr, responseContent_.c_str(), sz);
+		INFO_LOG(Log::sceNet, "Read %d bytes, writing %d bytes", entity.length(), sz);
+		//entity_.Take(sz, &chunk);
+		Memory::MemcpyUnchecked(destDataPtr, entity.c_str(), sz);
 		NotifyMemInfo(MemBlockFlags::WRITE, destDataPtr, sz, "HttpReadData");
-		responseContent_.erase(0, sz);
+		entity.erase(0, sz);
 	}
 	return sz;
 }
 
 int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
-	// Initialize Connection
-	client.SetDataTimeout(getRecvTimeout() / 1000000.0);
-	// Initialize Headers
-	if (getHttpVer() == SCE_HTTP_VERSION_1_0)
-		client.SetHttpVersion("1.0");
-	else
-		client.SetHttpVersion("1.1");
-	client.SetUserAgent(getUserAgent());
+	readIndex = 0;
+
 	if (postDataSize > 0)
 		requestHeaders_["Content-Length"] = std::to_string(postDataSize);
 	const std::string delimiter = "\r\n";
 	const std::string extraHeaders = std::accumulate(requestHeaders_.begin(), requestHeaders_.end(), std::string(),
 		[delimiter](const std::string& s, const std::pair<const std::string, std::string>& p) {
-			return s + p.first + ": " + p.second + delimiter;
-		});
+		return s + p.first + ": " + p.second + delimiter;
+	});
 
-	// TODO: Do this on a separate thread, since this may blocks "Emu" thread here
-	// Try to resolve first
-	// Note: LittleBigPlanet onlu passed the path (ie. /LITTLEBIGPLANETPSP_XML/login?) during sceHttpCreateRequest without the host domain, thus will need to be construced into a valid URI using the data from sceHttpCreateConnection upon validating/parsing the URL.
-	std::string fullURL = url;
-	if (startsWithNoCase(url, "/")) {
-		fullURL = scheme + "://" + hostString + ":" + std::to_string(port) + fullURL;
-	}
-
-	Url fileUrl(fullURL);
+	Url fileUrl(this->fullURL);
 	if (!fileUrl.Valid()) {
-		return SCE_HTTP_ERROR_INVALID_URL;
-	}
-	if (!client.Resolve(fileUrl.Host().c_str(), fileUrl.Port())) {
-		ERROR_LOG(Log::sceNet, "Failed resolving %s", fileUrl.ToString().c_str());
-		return -1;
-	}
-
-	// Establish Connection
-	if (!client.Connect(getResolveRetryCount(), getConnectTimeout() / 1000000.0, &cancelled_)) {
-		ERROR_LOG(Log::sceNet, "Failed connecting to server or cancelled.");
-		return -1; // SCE_HTTP_ERROR_ABORTED
-	}
-	if (cancelled_) {
-		return SCE_HTTP_ERROR_ABORTED;
+		ErrorCode = SCE_HTTP_ERROR_INVALID_URL;
+		return ErrorCode;
 	}
 
 	// Send the Request
@@ -350,45 +400,24 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 	default:
 		break;
 	}
-	net::Buffer buffer_;
+
 	net::RequestProgress progress_(&cancelled_);
 	http::RequestParams req(fileUrl.Resource(), "*/*");
 	const char* postData = Memory::GetCharPointer(postDataPtr);
 	if (postDataSize > 0)
 		NotifyMemInfo(MemBlockFlags::READ, postDataPtr, postDataSize, "HttpSendRequest");
 	
-	/*if (isSSLEnabled()) {
-		int err = client.SendSSLRequestWithData(ssl, methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
-		if (err < 0)
-			return err;
-	}
-	else {*/
-		int err = client.SendRequestWithData(methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
-		if (err < 0)
-			return err;
-	//}
+	int err = client.SendRequestWithData(methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
+	if (err < 0)
+		return err;
+
 	if (cancelled_) {
-		return SCE_HTTP_ERROR_ABORTED;
+		ErrorCode = SCE_HTTP_ERROR_ABORTED;
+		return ErrorCode;
 	}
 
-	// Retrieve Response's Status Code (and Headers too?)
-	responseCode_ = client.ReadResponseHeaders(&buffer_, responseHeaders_, &progress_, &httpLine_);
-	if (cancelled_) {
-		return SCE_HTTP_ERROR_ABORTED;
-	}
-
-	// TODO: Read response entity within readData() in smaller chunk(based on size arg of sceHttpReadData) instead of the whole content at once here
-	net::Buffer entity_;
-	int res = client.ReadResponseEntity(&buffer_, responseHeaders_, &entity_, &progress_);
-	if (res != 0) {
-		ERROR_LOG(Log::sceNet, "Unable to read HTTP response entity: %d", res);
-	}
-	entity_.TakeAll(&responseContent_);
-	if (cancelled_) {
-		return SCE_HTTP_ERROR_ABORTED;
-	}
-
-	return 0;
+	responseCode_ = client.ReadResponseHeaders(&this->buffer_, responseHeaders_, &this->progress_, &httpLine_);
+	return ErrorCode;
 }
 
 void __HttpInit() {
@@ -766,8 +795,10 @@ static int sceHttpCreateRequest(int connectionID, int method, const char *path, 
 
 	if (method < PSPHttpMethod::PSP_HTTP_METHOD_GET || method > PSPHttpMethod::PSP_HTTP_METHOD_HEAD)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_UNKNOWN_METHOD, "unknown method");
-
-	httpObjects.emplace_back(std::make_shared<HTTPRequest>(connectionID, method, path ? path : "", contentLength, &ProcessHostnameWithInfraDNS));
+	auto req = std::make_shared<HTTPRequest>(connectionID, method, path ? path : "", contentLength, &ProcessHostnameWithInfraDNS);
+	if (req->getErrorCode() < 0)
+		return hleLogError(Log::sceNet, req->getErrorCode());
+	httpObjects.emplace_back(req);
 	int retid = (int)httpObjects.size();
 	return hleLogDebug(Log::sceNet, retid);
 }

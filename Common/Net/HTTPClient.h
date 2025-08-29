@@ -125,7 +125,8 @@ public:
 	int ReadResponse(net::Buffer* readbuf, net::RequestProgress* progress);
 	int ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &responseHeaders, net::RequestProgress *progress, std::string *statusLine = nullptr);
 	// If your response contains a response, you must read it.
-	int ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::string> &responseHeaders, Buffer *output, net::RequestProgress *progress);
+	int ReadPartialResponseEntity(net::Buffer* readbuf, int chunkSize, int contentLength, net::Buffer* output, net::RequestProgress* progress);
+	int ReadResponseEntity(net::Buffer* readbuf, const std::vector<std::string>& responseHeaders, Buffer* output, net::RequestProgress* progress);
 
 	int isSSLEnabled() {
 		return sslEnabled;

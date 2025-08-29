@@ -74,7 +74,7 @@ bool HTTPSRequest::Done() {
 	if (!naettComplete(res_)) {
 		int total = 0;
 		int size = naettGetTotalBytesRead(res_, &total);
-		progress_.Update(size, total, false);
+		progress_.Update(size - progress_.bytes_read, total, false);
 		return false;
 	}
 
@@ -107,13 +107,13 @@ bool HTTPSRequest::Done() {
 			break;
 		}
 		failed_ = true;
-		progress_.Update(bodyLength, bodyLength, true);
+		progress_.Update(bodyLength - progress_.bytes_read, bodyLength, true);
 	} else if (resultCode_ == 200) {
 		bool clear = !(flags_ & RequestFlags::KeepInMemory);
 		if (!outfile_.empty() && !buffer_.FlushToFile(outfile_, clear)) {
 			ERROR_LOG(Log::IO, "Failed writing download to '%s'", outfile_.c_str());
 		}
-		progress_.Update(bodyLength, bodyLength, true);
+		progress_.Update(bodyLength - progress_.bytes_read, bodyLength, true);
 	} else {
 		WARN_LOG(Log::IO, "Naett request failed: %d", resultCode_);
 		failed_ = true;

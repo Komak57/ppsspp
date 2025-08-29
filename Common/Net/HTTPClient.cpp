@@ -595,7 +595,7 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 	};
 	// Let's hope all the headers are available in a single packet...
 	int ret;
-	if ((ret = readbuf->Read(fd, 4096, sslEnabled, (sslEnabled? &sslCtx : nullptr))) < 0) {
+	if ((ret = readbuf->Read(fd, 64, sslEnabled, (sslEnabled? &sslCtx : nullptr))) < 0) {
 		ERROR_LOG(Log::HTTP, "Failed to read HTTP headers -0x%04x", -ret);
 		return -1;
 	}
@@ -650,6 +650,42 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 	return code;
 }
 
+int Client::ReadPartialResponseEntity(net::Buffer* readbuf, int chunkSize, int contentLength, net::Buffer* output, net::RequestProgress* progress) {
+	DEBUG_LOG(Log::HTTP, "ReadResponseEntity()");
+	_dbg_assert_(progress->cancelled);
+
+	if (contentLength < 0) {
+		WARN_LOG(Log::HTTP, "Negative Content Length %d", contentLength);
+		// Just sanity checking...
+		contentLength = 0;
+	}
+	
+	// Minimize calls to readbuf->size() for performance
+	int readbufLength = readbuf->size();
+	int remainingLength = contentLength - progress->bytes_read;
+	progress->Update(0, contentLength, (remainingLength == 0));
+	int pack = std::min(remainingLength, chunkSize);
+	// Only read if we're expecting more data
+	if (remainingLength > 0) {
+		INFO_LOG(Log::sceNet, "ReadResponseEntity - %i/%i bytes remaining", remainingLength, contentLength);
+		int ret;
+		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? netCtx.fd : sock(), pack, progress, sslEnabled, (sslEnabled ? &sslCtx : nullptr))) < 0)
+			return -1;
+	}
+
+	// Pull out the chunk requested, or everything available, including 0 if required
+	int available = readbuf->size();
+	int consume = std::min(chunkSize, available);
+	if (consume > 0) {
+		std::string data;
+		readbuf->Take(consume, &data);
+		output->Append(data);
+	}
+
+	progress->Update(consume, contentLength, (progress->bytes_read + consume == contentLength));
+	return 0;
+}
+
 int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::string> &responseHeaders, Buffer *output, net::RequestProgress *progress) {
 	DEBUG_LOG(Log::HTTP, "ReadResponseEntity()");
 	_dbg_assert_(progress->cancelled);
@@ -688,7 +724,7 @@ int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::stri
 	// Minimize calls to readbuf->size() for performance
 	int readbufLength = readbuf->size();
 	int remainingLength = contentLength - readbufLength;
-	progress->Update(readbufLength, contentLength, (remainingLength == 0));
+	progress->Update(readbufLength - progress->bytes_read, contentLength, (remainingLength == 0));
 	// Only read if we're expecting more data
 	if (remainingLength > 0) {
 		INFO_LOG(Log::sceNet, "ReadResponseEntity - %i/%i bytes remaining", remainingLength, contentLength);
@@ -722,7 +758,7 @@ int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::stri
 		}
 	}
 
-	progress->Update(contentLength, contentLength, true);
+	progress->Update(contentLength - progress->bytes_read, contentLength, true);
 	return 0;
 }
 

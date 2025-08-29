@@ -17,6 +17,7 @@ public:
 
 	float progress = 0.0f;
 	float kBps = 0.0f;
+	int64_t bytes_read = 0;
 	bool *cancelled = nullptr;
 	std::function<void(int64_t, int64_t, bool)> callback;
 };

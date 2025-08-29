@@ -17,14 +17,15 @@
 namespace net {
 
 void RequestProgress::Update(int64_t downloaded, int64_t totalBytes, bool done) {
+	bytes_read += downloaded;
 	if (totalBytes) {
-		progress = (double)downloaded / (double)totalBytes;
+		progress = (double)bytes_read / (double)totalBytes;
 	} else {
 		progress = 0.01f;
 	}
 
 	if (callback) {
-		callback(downloaded, totalBytes, done);
+		callback(bytes_read, totalBytes, done);
 	}
 }
 
@@ -163,7 +164,7 @@ int Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress
 		memcpy(p, &buf[0], retval);
 		total += retval;
 		if (progress) {
-			progress->Update(total, knownSize, false);
+			progress->Update(total - progress->bytes_read, knownSize, false);
 			progress->kBps = (float)(total / (time_now_d() - st)) / 1024.0f;
 		}
 	}

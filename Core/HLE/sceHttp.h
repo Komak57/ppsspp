@@ -40,6 +40,8 @@
 
 // lib_http specific error codes, based on https://uofw.github.io/uofw/lib__http_8h_source.html, combined with https://github.com/vitasdk/vita-headers/blob/master/include/psp2/net/http.h
 enum SceHttpErrorCode {
+	SCE_HTTP_OKAY = 0x00000000,
+
 	SCE_HTTP_ERROR_BEFORE_INIT = 0x80431001,
 	SCE_HTTP_ERROR_NOT_SUPPORTED = 0x80431004,
 	SCE_HTTP_ERROR_ALREADY_INITED = 0x80431020,
@@ -289,7 +291,8 @@ private:
 	int connectionID;
 	int method;
 	u64 contentLength;
-	std::string url;
+	std::string fullURL;
+	int ErrorCode = 0;
 
 	u32 headerAddr_ = 0;
 	u32 headerSize_ = 0;
@@ -298,9 +301,12 @@ private:
 	int entityLength_ = -1;
 
 	http::Client client;
+	net::Buffer buffer_;
+	net::RequestProgress progress_;
 	std::vector<std::string> responseHeaders_;
 	std::string httpLine_;
 	std::string responseContent_;
+	int readIndex = 0;
 
 public:
 	HTTPRequest(int connectionID, int method, const char* url, u64 contentLength, net::ResolveFunc customResolver);
@@ -318,6 +324,7 @@ public:
 	int getAllResponseHeaders(u32 headerAddrPtr, u32 headerSizePtr);
 	int readData(u32 destDataPtr, u32 size);
 	int sendRequest(u32 postDataPtr, u32 postDataSize);
+	int getErrorCode() { return ErrorCode; }
 };
 
 
