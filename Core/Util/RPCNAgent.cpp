@@ -1128,7 +1128,7 @@ namespace net {
 		packet.Write(data);
 
 		auto reqId = generate_request_id();
-		packet.Pack(CommandType::SetRoomDataInternal, reqId);
+		packet.Pack(CommandType::SetRoomDataExternal, reqId);
 
 		INFO_LOG(Log::sceNet, "Setting Room Data External for Room #%d", req->roomId);
 
@@ -1175,9 +1175,24 @@ namespace net {
 		packet.Write(data);
 
 		auto reqId = generate_request_id();
-		packet.Pack(CommandType::SetRoomDataInternal, reqId);
+		packet.Pack(CommandType::SetUserInfo, reqId);
 
 		INFO_LOG(Log::sceNet, "Setting UserInfo for Server #%d", req->serverId);
+
+		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
+		bool flushed = Send(&packet, 5.0, &canceled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+		}
+
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return ErrorToPSPError[resp.error];
+		resp.stream = new vec_stream(resp.data, 1);
+
+		return 0;
+	}
 
 	int RPCNAgent::GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse* respData) {
 
