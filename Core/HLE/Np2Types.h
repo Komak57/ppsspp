@@ -1758,4 +1758,30 @@ struct SceNpCommerce2GetCategoryContentsResult
 
 using SceNpCommerce2Handler = void(u32 ctx_id, u32 subject_id, s32 event, s32 error_code, void* arg);
 
+// Union for connection information
+union SceNpSignalingConnectionInfo
+{
+	u32 rtt;
+	u32 bandwidth;
+	SceNpId npId;
+	struct
+	{
+		np_in_addr addr; // in_addr
+		np_in_port_t port; // in_port_t
+	} address;
+	u32 packet_loss;
+};
+
+// Network information structure
+struct SceNpSignalingNetInfo
+{
+	u32 size;
+	u32 local_addr; // in_addr
+	u32 mapped_addr; // in_addr
+	s32 nat_status;
+	s32 upnp_status;
+	s32 npport_status;
+	u16 npport;
+};
+
 #pragma pack(pop)
