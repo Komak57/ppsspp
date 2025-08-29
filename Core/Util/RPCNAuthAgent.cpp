@@ -218,7 +218,7 @@ namespace net {
 		//memcpy(dst, packet.Data(), packet.Length());
 
 		//bool flushed = buffer.FlushSocket(sock_, 60.0, &canceled);
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return false;
@@ -270,7 +270,7 @@ namespace net {
 
 		INFO_LOG(Log::sceNet, "Sending Registration Request");
 
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return false;

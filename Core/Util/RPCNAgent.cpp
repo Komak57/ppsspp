@@ -34,7 +34,7 @@ namespace net {
 		}
 		else {
 			if ((intptr_t)sock_ != -1) {
-				canceled = true;
+				cancelled = true;
 				closesocket(sock_);
 				sock_ = -1;
 			}
@@ -107,11 +107,13 @@ namespace net {
 	}
 
 	void RPCNAgent::read_loop() {
-		bool canceled = false;
+		bool cancelled = false;
 		while (running) {
 			Packet packet;
-			canceled = !running;
-			int ret = Recv(&packet, &canceled); // Uses NPAuthAgent::Recv
+			cancelled = !running;
+			int ret = Recv(&packet, &cancelled); // Uses NPAuthAgent::Recv
+			if (cancelled)
+				return;
 			if (ret <= 0) {
 				running = false;
 				break;
@@ -125,6 +127,12 @@ namespace net {
 			//	hexdata += hex_chars[(c & 0x0F) >> 0];
 			//}
 			//DEBUG_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+
+			if (packet.Length() <= RPCN_HEADER_SIZE) {
+				ERROR_LOG(Log::sceNet, "RPCN Malformed Packet Length (%d)", packet.Length());
+				running = false;
+				return;
+			}
 
 			PacketHeader header;
 			memcpy(&header, packet.Data(), sizeof(PacketHeader));
@@ -360,7 +368,7 @@ namespace net {
 
 		INFO_LOG(Log::sceNet, "Sending Login Request");
 
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return false;
@@ -410,7 +418,7 @@ namespace net {
 
 		INFO_LOG(Log::sceNet, "Sending Registration Request");
 
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return false;
@@ -449,7 +457,7 @@ namespace net {
 
 		INFO_LOG(Log::sceNet, "Requesting World Info");
 
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
@@ -553,7 +561,7 @@ namespace net {
 		INFO_LOG(Log::sceNet, "Requesting Search Room for World #%d, Lobby #%d", req->worldId, req->lobbyId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
@@ -752,7 +760,7 @@ namespace net {
 		INFO_LOG(Log::sceNet, "Requesting Create Join for World #%d, Lobby #%d", req->worldId, req->lobbyId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
@@ -814,7 +822,7 @@ namespace net {
 
 		INFO_LOG(Log::sceNet, "Join Room #%d", req->roomId);
 
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
@@ -856,7 +864,7 @@ namespace net {
 
 		INFO_LOG(Log::sceNet, "Join Room #%d", req->roomId);
 
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
@@ -906,7 +914,7 @@ namespace net {
 		INFO_LOG(Log::sceNet, "Requesting Room Data Internal for Room #%d", req->roomId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
@@ -965,7 +973,7 @@ namespace net {
 		INFO_LOG(Log::sceNet, "Sending Room #%d a Message", req->roomId);
 
 		// NPAgent::Send()
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
@@ -1039,7 +1047,7 @@ namespace net {
 		INFO_LOG(Log::sceNet, "Setting Room Data Internal for Room #%d", req->roomId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
@@ -1133,7 +1141,7 @@ namespace net {
 		INFO_LOG(Log::sceNet, "Setting Room Data External for Room #%d", req->roomId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
@@ -1180,7 +1188,7 @@ namespace net {
 		INFO_LOG(Log::sceNet, "Setting UserInfo for Server #%d", req->serverId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
@@ -1227,7 +1235,7 @@ namespace net {
 		INFO_LOG(Log::sceNet, "Getting RoomDataExternalList for Room #%d", req->roomId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
-		bool flushed = Send(&packet, 5.0, &canceled);
+		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;

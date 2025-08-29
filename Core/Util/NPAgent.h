@@ -542,7 +542,7 @@ namespace net {
 	protected:
 		u16 ID;
 		uintptr_t sock_ = -1;
-		bool canceled = false;
+		bool cancelled = false;
 
 		std::string host_;
 		int port_ = -1;
@@ -649,7 +649,7 @@ namespace net {
 	protected:
 		u16 ID;
 		uintptr_t sock_ = -1;
-		bool canceled = false;
+		bool cancelled = false;
 
 		std::string host_;
 		int port_ = -1;

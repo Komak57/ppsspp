@@ -64,7 +64,7 @@ namespace net {
 		}
 		else {
 			if ((intptr_t)sock_ != -1) {
-				canceled = true;
+				cancelled = true;
 				closesocket(sock_);
 				sock_ = -1;
 			}
@@ -189,7 +189,7 @@ namespace net {
 			return -1;
 		}
 #endif
-		if (canceled) {
+		if (cancelled) {
 			ERROR_LOG(Log::sceNet, "GetWorldInfo: Cancelled");
 			return -1;
 		}
@@ -232,7 +232,7 @@ namespace net {
 		void* dst = buffer.Append(packet_size);
 		memcpy(dst, packet.Data(), packet.Length());
 
-		bool flushed = buffer.FlushSocket(sock(), 60.0, &canceled);
+		bool flushed = buffer.FlushSocket(sock(), 60.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return -1;
@@ -283,7 +283,7 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "SearchRoom: Socket not connected");
 			return -1;
 		}
-		if (canceled) {
+		if (cancelled) {
 			ERROR_LOG(Log::sceNet, "SearchRoom: Cancelled");
 			return -1;
 		}
@@ -306,7 +306,7 @@ namespace net {
 		void* dst = buffer.Append(packet_size);
 		memcpy(dst, packet.Data(), packet.Length());
 
-		bool flushed = buffer.FlushSocket(sock(), 60.0, &canceled);
+		bool flushed = buffer.FlushSocket(sock(), 60.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return -1;
@@ -342,7 +342,7 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Socket not connected");
 			return -1;
 		}
-		if (canceled) {
+		if (cancelled) {
 			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Cancelled");
 			return -1;
 		}
@@ -365,7 +365,7 @@ namespace net {
 		void* dst = buffer.Append(packet_size);
 		memcpy(dst, packet.Data(), packet.Length());
 
-		bool flushed = buffer.FlushSocket(sock(), 60.0, &canceled);
+		bool flushed = buffer.FlushSocket(sock(), 60.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return -1;
