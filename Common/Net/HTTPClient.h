@@ -58,6 +58,12 @@ public:
 	bool SSLConnect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 	void Disconnect();
 
+	bool GetOption(int id) {
+		auto it = this->httpsOptions.find(28);
+		if (it == this->httpsOptions.end())
+			return false;
+		return it->second;
+	}
 	// Only to be used for bring-up and debugging.
 	uintptr_t sock() const { return sock_; }
 
@@ -71,6 +77,7 @@ protected:
 
 	//std::shared_ptr<MBEDTLS_Connection> tls;
 	MBEDTLS_Connection tls;
+	std::unordered_map<int, bool> httpsOptions;
 	/*mbedtls_ssl_context sslCtx;
 	mbedtls_net_context netCtx;
 
@@ -120,6 +127,7 @@ public:
 	void Initialize(net::MBEDTLS_Connection tls, std::unordered_map<int, bool> options) {
 		this->tls = tls;
 		this->sslEnabled = true;
+		this->httpsOptions = options;
 		return;
 	}
 

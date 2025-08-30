@@ -291,6 +291,7 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 			 * 5. Verify the server certificate
 			 */
 			// HTTPS Option 28 may relate to disabling this check
+			if (GetOption(28)) {
 			NOTICE_LOG(Log::sceNet, "SSLConnect - Verifying peer X.509 certificate...");
 
 			/* In real life, we probably want to bail out when ret != 0 */
@@ -302,7 +303,7 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
 				goto retry;
 			}
-
+			}
 			INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
 			connected = true;
 			tls.connected = true;
