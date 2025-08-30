@@ -246,8 +246,14 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 			 * 1. Start the connection
 			 */
 			char addrStr[128]{};
+			memset(addrStr, 0, 128);
 			FormatAddr(addrStr, sizeof(addrStr), possible);
+			if (strncmp(addrStr, "0.0.0.0", 8) == 0) {
+				ERROR_LOG(Log::sceNet, "SSLConnect - Cannot connect to loopback.");
+				return false;
+			}
 			char portStr[8]{};
+			memset(portStr, 0, 8);
 			memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
 			if ((ret = mbedtls_net_connect(&tls.netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
 				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", addrStr, portStr, (unsigned int)-ret);
