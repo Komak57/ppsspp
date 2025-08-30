@@ -7,10 +7,10 @@
 #include <string>
 #include <iomanip>
 #include <cstdint>
-#include <Swap.h>
 #include <algorithm>
 
-#include "CommonTypes.h"
+#include "Common/CommonTypes.h"
+#include "Common/Swap.h"
 #include "Core/MemMap.h"
 #include "Core/HLE/NpTypes.h"
 
