@@ -210,7 +210,7 @@ protected:
 public:
 	HTTPTemplate() {}
 	HTTPTemplate(const char* userAgent, int httpVer, int autoProxyConf);
-	virtual ~HTTPTemplate() = default;
+	virtual ~HTTPTemplate();
 
 	virtual const char* className() { return name_HTTPTemplate; } // to be more consistent, unlike typeid(v).name() which may varies among different compilers and requires RTTI
 
@@ -272,7 +272,7 @@ protected:
 public:
 	HTTPConnection() {}
 	HTTPConnection(int templateID, const char* hostString, const char* scheme, u32 port, int enableKeepalive);
-	virtual ~HTTPConnection();
+	virtual ~HTTPConnection() override;
 
 	virtual const char* className() override { return name_HTTPConnection; }
 
@@ -311,7 +311,7 @@ private:
 
 public:
 	HTTPRequest(int connectionID, int method, const char* url, u64 contentLength, net::ResolveFunc customResolver);
-	~HTTPRequest();
+	virtual ~HTTPRequest() override;
 
 	virtual const char* className() override { return name_HTTPRequest; }
 
