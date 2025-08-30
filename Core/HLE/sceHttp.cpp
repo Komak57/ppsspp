@@ -34,19 +34,19 @@
 #include "Common/Net/URL.h"
 #include "Common/Net/HTTPClient.h"
 #include <mbedtls/debug.h>
- // HTTPS Requirements from OpenSSL 1.1.1
-//#include <openssl/ssl.h>
-//#include <openssl/err.h>
-//#include <openssl/x509.h>
-//#include <openssl/x509_vfy.h>
-//static std::unordered_map<int, bool> httpsOptions;
 
-static std::vector<std::shared_ptr<HTTPTemplate>> httpObjects;
+static std::map<u32, std::shared_ptr<HTTPTemplate>> httpObjects;
 static std::mutex httpLock;
 
 bool httpInited = false;
 bool httpsInited = false;
 bool httpCacheInited = false;
+
+u32 NextObjectID() {
+	if (httpObjects.empty())
+		return 0;
+	return httpObjects.rbegin()->first + 1;
+}
 
 HTTPTemplate bufferTemplate;
 //static SSL_CTX* pspSslCtx = nullptr;
@@ -55,6 +55,9 @@ HTTPTemplate::HTTPTemplate(const char* userAgent, int httpVer, int autoProxyConf
 	this->userAgent = userAgent ? userAgent : "";
 	this->httpVer = (SceHttpVersion)httpVer;
 	this->autoProxyConf = (SceHttpProxyMode)autoProxyConf;
+}
+HTTPTemplate::~HTTPTemplate() {
+	WARN_LOG(Log::sceNet, "HTTPTemplate::~HTTPTemplate()");
 }
 
 int HTTPTemplate::addRequestHeader(const char* name, const char* value, u32 mode) {
@@ -86,7 +89,7 @@ int HTTPTemplate::setCert(std::string certificate) {
 
 HTTPConnection::HTTPConnection(int templateID, const char* hostString, const char* scheme, u32 port, int enableKeepalive) {
 	// Copy base data as initial base value for this
-	HTTPTemplate::operator=(*httpObjects[templateID - 1LL]);
+	HTTPTemplate::operator=(*httpObjects.find(templateID)->second.get());
 
 	// Initialize
 	this->templateID = templateID;
@@ -94,24 +97,30 @@ HTTPConnection::HTTPConnection(int templateID, const char* hostString, const cha
 	this->scheme = scheme;
 	this->port = port;
 	this->enableKeepalive = enableKeepalive;
+	this->tls = net::MBEDTLS_Connection();
 }
+
 HTTPConnection::~HTTPConnection() {
-	WARN_LOG(Log::sceNet, "HTTPConnection::~HTTPConnection(%i)", this->templateID);
+	WARN_LOG(Log::sceNet, "HTTPConnection::~HTTPConnection(templateID: %i)", this->templateID);
 	// Clean up and free SSL resources
+	mbedtls_ssl_close_notify(&tls.sslCtx);  // Optional, sends close_notify
+	mbedtls_ssl_free(&tls.sslCtx);
+	mbedtls_ssl_config_free(&tls.sslConfig);
+	mbedtls_net_free(&tls.netCtx);
 }
 
 int HTTPConnection::InitializeSSL() {
 	WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::InitializeSSL()");
 	this->useAuth = useAuth;
 
-	mbedtls_net_init(&netCtx);
-	mbedtls_ssl_init(&sslCtx);
-	mbedtls_ssl_config_init(&sslConfig);
-	mbedtls_ctr_drbg_init(&ctrDrbg);
-	mbedtls_entropy_init(&entropy);
+	mbedtls_net_init(&tls.netCtx);
+	mbedtls_ssl_init(&tls.sslCtx);
+	mbedtls_ssl_config_init(&tls.sslConfig);
+	mbedtls_ctr_drbg_init(&tls.ctrDrbg);
+	mbedtls_entropy_init(&tls.entropy);
 	mbedtls_debug_set_threshold(4);
 
-	if (mbedtls_ctr_drbg_seed(&ctrDrbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
+	if (mbedtls_ctr_drbg_seed(&tls.ctrDrbg, mbedtls_entropy_func, &tls.entropy, NULL, 0) != 0) {
 		ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to seed RNG");
 		return -1;
 	}
@@ -123,8 +132,8 @@ int HTTPConnection::InitializeSSL() {
 	// Note: certPEM MUST be pointing to a valid certificate, or it will cause a strlen crash
 	// PSP2i has it at 0x08e73a04
 	if (certPEM.size() > 0) {
-		mbedtls_x509_crt_init(&caCert);
-		int ret = mbedtls_x509_crt_parse(&caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
+		mbedtls_x509_crt_init(&tls.caCert);
+		int ret = mbedtls_x509_crt_parse(&tls.caCert, (const unsigned char*)certPEM.c_str(), certPEM.size() + 1);
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "InitializeSSL: Failed to parse cert: -0x%04x", -ret);
 			return -1;
@@ -132,7 +141,7 @@ int HTTPConnection::InitializeSSL() {
 	}
 
 	// Setup SSL config
-	if (mbedtls_ssl_config_defaults(&sslConfig,
+	if (mbedtls_ssl_config_defaults(&tls.sslConfig,
 		MBEDTLS_SSL_IS_CLIENT,
 		MBEDTLS_SSL_TRANSPORT_STREAM,
 		MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
@@ -143,13 +152,13 @@ int HTTPConnection::InitializeSSL() {
 	/* OPTIONAL is not optimal for security,
 	 * but makes interop easier in this simplified example */
 	if (useAuth)
-		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_OPTIONAL);
+		mbedtls_ssl_conf_authmode(&tls.sslConfig, MBEDTLS_SSL_VERIFY_OPTIONAL);
 	else
-		mbedtls_ssl_conf_authmode(&sslConfig, MBEDTLS_SSL_VERIFY_NONE);
+		mbedtls_ssl_conf_authmode(&tls.sslConfig, MBEDTLS_SSL_VERIFY_NONE);
 	if (certPEM.size() > 0)
-		mbedtls_ssl_conf_ca_chain(&sslConfig, &caCert, NULL);
-	mbedtls_ssl_conf_rng(&sslConfig, mbedtls_ctr_drbg_random, &ctrDrbg);
-	mbedtls_ssl_conf_dbg(&sslConfig, ssl_debug, NULL);
+		mbedtls_ssl_conf_ca_chain(&tls.sslConfig, &tls.caCert, NULL);
+	mbedtls_ssl_conf_rng(&tls.sslConfig, mbedtls_ctr_drbg_random, &tls.ctrDrbg);
+	mbedtls_ssl_conf_dbg(&tls.sslConfig, ssl_debug, NULL);
 
 	// Check compiled Ciphers
 	/*const int* ciphers = mbedtls_ssl_list_ciphersuites();
@@ -164,8 +173,8 @@ int HTTPConnection::InitializeSSL() {
 	// Enable Legacy Cipher
 	//mbedtls_ssl_conf_ciphersuites(&sslConfig, net::legacy_ciphersuites_array); // optional if you’ve recompiled with weak cipher support
 	// Limit to TLS 1.0 - TLS 1.2 to match Hardware Limitations
-	mbedtls_ssl_conf_min_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
-	mbedtls_ssl_conf_max_version(&sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
+	mbedtls_ssl_conf_min_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
+	mbedtls_ssl_conf_max_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 
 	enableTLS();
 	return 0;
@@ -175,7 +184,7 @@ int HTTPConnection::InitializeSSL() {
 HTTPRequest::HTTPRequest(int connectionID, int method, const char *url, u64 contentLength, net::ResolveFunc customResolver) : client(customResolver), progress_(&cancelled_) {
 	// Copy base data as initial base value for this
 	// Since dynamic_cast/dynamic_pointer_cast/typeid requires RTTI to be enabled (ie. /GR instead of /GR- on msvc, enabled by default on most compilers), so we can only use static_cast here
-	HTTPConnection::operator=(static_cast<HTTPConnection&>(*httpObjects[connectionID - 1LL]));
+	HTTPConnection::operator=(static_cast<HTTPConnection&>(*httpObjects.find(connectionID)->second.get()));
 	
 	// Initialize
 	this->connectionID = connectionID;
@@ -184,7 +193,8 @@ HTTPRequest::HTTPRequest(int connectionID, int method, const char *url, u64 cont
 	this->progress_ = net::RequestProgress(&cancelled_);
 
 	if (tlsEnabled) {
-		client.Initialize(this->sslCtx, this->netCtx, this->sslConfig, this->ctrDrbg, this->entropy, this->caCert);
+		// FIXME: The first connection breaks the original TLS object, and doesn't re-initialize
+		client.Initialize(this->tls, this->httpsOptions);
 	}
 	//progress_.cancelled = &cancelled_;
 	responseContent_.clear();
@@ -232,6 +242,7 @@ HTTPRequest::HTTPRequest(int connectionID, int method, const char *url, u64 cont
 }
 
 HTTPRequest::~HTTPRequest() {
+	WARN_LOG(Log::sceNet, "HTTPRequest::~HTTPRequest(connectionID: %i)", this->connectionID);
 	cancelled_ = true;
 	client.Disconnect();
 	if (Memory::IsValidAddress(headerAddr_))
@@ -430,19 +441,19 @@ void __HttpShutdown() {
 	httpCacheInited = false;
 
 	for (const auto& it : httpObjects) {
-		if (it->className() == name_HTTPRequest)
-			(static_cast<HTTPRequest*>(it.get()))->abortRequest();
+		if (it.second->className() == name_HTTPRequest)
+			(static_cast<HTTPRequest*>(it.second.get()))->abortRequest();
 	}
 	httpObjects.clear();
 }
 
 // id: ID of the template or connection
-int sceHttpSetResolveRetry(int id, int retryCount) {
-	WARN_LOG(Log::sceNet, "UNTESTED sceHttpSetResolveRetry(%d, %d)", id, retryCount);
-	if (id <= 0 || id > (int)httpObjects.size())
+int sceHttpSetResolveRetry(int connectionID, int retryCount) {
+	WARN_LOG(Log::sceNet, "UNTESTED sceHttpSetResolveRetry(%d, %d)", connectionID, retryCount);
+	if (connectionID <= 0 || connectionID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	const auto& conn = httpObjects[id - 1LL];
+	const auto& conn = httpObjects.find(connectionID)->second.get();
 	if (!(conn->className() == name_HTTPTemplate || conn->className() == name_HTTPConnection))
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id (%s)", conn->className());
 
@@ -458,11 +469,12 @@ static int sceHttpInit(int poolSize) {
 	std::lock_guard<std::mutex> guard(httpLock);
 	httpObjects.clear();
 	// Reserve at least 1 element to prevent ::begin() from returning null when no element has been added yet
-	httpObjects.reserve(1);
+	//httpObjects.reserve(1);
 	// sceHttpsInit fails if we don't have something in httpObjects
-	httpObjects.emplace_back(std::make_shared<HTTPTemplate>());
+	u32 id = NextObjectID();
+	httpObjects[id] = std::make_shared<HTTPTemplate>();
 	httpInited = true;
-	return 0;
+	return id; // should we return the template id?
 }
 
 static int sceHttpEnd() {
@@ -503,13 +515,13 @@ static u32 sceHttpGetProxy(u32 id, u32 activateFlagPtr, u32 modePtr, u32 proxyHo
 
 static int sceHttpGetStatusCode(int requestID, u32 statusCodePtr) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpGetStatusCode(%d, %x)", requestID, statusCodePtr);
-	if (requestID <= 0 || requestID > (int)httpObjects.size())
+	if (requestID <= 0 || requestID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
 	if (!Memory::IsValidRange(statusCodePtr, 4))
 		return hleLogError(Log::sceNet, -1, "invalid arg"); //SCE_HTTP_ERROR_INVALID_VALUE;
 
-	const auto& req = (HTTPRequest*)httpObjects[requestID - 1LL].get();
+	const auto& req = (HTTPRequest*)httpObjects.find(requestID)->second.get();
 	// FIXME: According to JPCSP, try to connect the request first
 	//req->connect();
 	int status = req->getStatusCode();
@@ -524,13 +536,13 @@ static int sceHttpGetStatusCode(int requestID, u32 statusCodePtr) {
 // FIXME: sceHttpReadData seems to be blocking current thread, since hleDelayResult can make Download progressbar to moves progressively instead of instantly jump to 100%
 static int sceHttpReadData(int requestID, u32 dataPtr, u32 dataSize) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpReadData(%d, %x, %d)", requestID, dataPtr, dataSize);
-	if (requestID <= 0 || requestID > (int)httpObjects.size())
+	if (requestID <= 0 || requestID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
 	if (!Memory::IsValidRange(dataPtr, dataSize)) 
 		return hleLogError(Log::sceNet, -1, "invalid arg"); // SCE_HTTP_ERROR_INVALID_VALUE
 
-	const auto& req = (HTTPRequest*)httpObjects[requestID - 1LL].get();
+	const auto& req = (HTTPRequest*)httpObjects.find(requestID)->second.get();
 	// FIXME: According to JPCSP, try to connect the request first
 	//req->connect();
 
@@ -556,13 +568,14 @@ static int sceHttpSendRequest(int requestID, u32 dataPtr, u32 dataSize) {
 	if (!httpInited)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_BEFORE_INIT, "http not initialized yet");
 
-	if (requestID <= 0 || requestID > (int)httpObjects.size())
+	if (requestID <= 0 || requestID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
 	if (dataSize > 0 && !Memory::IsValidRange(dataPtr, dataSize))
 		return hleLogError(Log::sceNet, -1, "invalid arg"); // SCE_HTTP_ERROR_INVALID_VALUE
 
-	const auto& req = (HTTPRequest*)httpObjects[requestID - 1LL].get();
+	int objId = NextObjectID();
+	const auto& req = (HTTPRequest*)httpObjects.find(requestID)->second.get();
 	// Internally try to connect, and get response headers (at least the status code?)
 	int retval = -1;
 	/*if (req->isSSLEnabled())
@@ -575,45 +588,49 @@ static int sceHttpSendRequest(int requestID, u32 dataPtr, u32 dataSize) {
 static int sceHttpDeleteRequest(int requestID) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpDeleteRequest(%d)", requestID);
 	std::lock_guard<std::mutex> guard(httpLock);
-	if (requestID <= 0 || requestID > (int)httpObjects.size())
+	if (requestID <= 0 || requestID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects[requestID - 1LL]->className() != name_HTTPRequest)
+	auto it = httpObjects.find(requestID);
+	if (it->second->className() != name_HTTPRequest)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
-	httpObjects.erase(httpObjects.begin() + requestID - 1);
+	//httpObjects.erase(httpObjects.begin() + requestID - 1);
+	httpObjects.erase(it);
 	return 0;
 }
 
 // id: ID of the template, connection or request 
 static int sceHttpDeleteHeader(int id, const char *name) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpDeleteHeader(%d, %s)", id, safe_string(name));
-	if (id <= 0 || id > (int)httpObjects.size())
+	if (id <= 0 || id >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	const auto& req = (HTTPRequest*)httpObjects[id - 1LL].get();
+	const auto& req = (HTTPRequest*)httpObjects.find(id)->second.get();
 	return req->removeRequestHeader(name);
 }
 
 static int sceHttpDeleteConnection(int connectionID) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpDisableCache(%d)", connectionID);
 	std::lock_guard<std::mutex> guard(httpLock);
-	if (connectionID <= 0 || connectionID > (int)httpObjects.size())
+	if (connectionID <= 0 || connectionID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects[connectionID - 1LL]->className() != name_HTTPConnection)
+	auto it = httpObjects.find(connectionID);
+	if (it->second->className() != name_HTTPConnection)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	httpObjects.erase(httpObjects.begin() + connectionID - 1);
+	//httpObjects.erase(httpObjects.begin() + connectionID - 1);
+	httpObjects.erase(it);
 	return 0;
 }
 
 // id: ID of the template, connection or request
 static int sceHttpSetConnectTimeOut(int templateID, u32 timeout) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpSetConnectTimeout(%d, %d)", templateID, timeout);
-	if (templateID <= 0 || templateID > (int)httpObjects.size())
+	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	auto& conn = httpObjects[templateID - 1LL];
+	const auto& conn = httpObjects.find(templateID)->second.get();
 	conn->setConnectTimeout(timeout);
 	return 0;
 }
@@ -621,10 +638,10 @@ static int sceHttpSetConnectTimeOut(int templateID, u32 timeout) {
 // id: ID of the template, connection or request
 static int sceHttpSetSendTimeOut(int templateID, u32 timeout) {
 	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpSetSendTimeout(%d, %d)", templateID, timeout);
-	if (templateID <= 0 || templateID > (int)httpObjects.size())
+	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	auto& conn = httpObjects[templateID - 1LL];
+	const auto& conn = httpObjects.find(templateID)->second.get();
 	conn->setSendTimeout(timeout);
 	return 0;
 }
@@ -632,10 +649,10 @@ static int sceHttpSetSendTimeOut(int templateID, u32 timeout) {
 static u32 sceHttpSetProxy(u32 templateID, u32 activateFlagPtr, u32 mode, u32 newProxyHostPtr, u32 newProxyPort) {
 	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpSetProxy(%d, %x, %x, %x, %d)", templateID, activateFlagPtr, mode, newProxyHostPtr, newProxyPort);
 	std::lock_guard<std::mutex> guard(httpLock);
-	if (templateID <= 0 || templateID > (int)httpObjects.size())
+	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	auto& conn = httpObjects[templateID - 1LL];
+	const auto& conn = httpObjects.find(templateID)->second.get();
 	conn->setProxy();
 
 	return 0;
@@ -645,10 +662,10 @@ static u32 sceHttpSetProxy(u32 templateID, u32 activateFlagPtr, u32 mode, u32 ne
 static int sceHttpEnableCookie(int templateID) {
 	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpEnableCookie(%d)", templateID);
 	std::lock_guard<std::mutex> guard(httpLock);
-	if (templateID <= 0 || templateID > (int)httpObjects.size())
+	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	auto& conn = httpObjects[templateID - 1LL];
+	const auto& conn = httpObjects.find(templateID)->second.get();
 	conn->enableCookie();
 
 	return 0;
@@ -658,10 +675,10 @@ static int sceHttpEnableCookie(int templateID) {
 static int sceHttpEnableKeepAlive(int templateID) {
 	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpEnableKeepAlive(%d)", templateID);
 	std::lock_guard<std::mutex> guard(httpLock);
-	if (templateID <= 0 || templateID > (int)httpObjects.size())
+	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	auto& conn = httpObjects[templateID - 1LL];
+	const auto& conn = httpObjects.find(templateID)->second.get();
 	conn->enableKeepAlive();
 
 	return 0;
@@ -671,10 +688,10 @@ static int sceHttpEnableKeepAlive(int templateID) {
 static int sceHttpDisableCookie(int templateID) {
 	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpDisableCookie(%d)", templateID);
 	std::lock_guard<std::mutex> guard(httpLock);
-	if (templateID <= 0 || templateID > (int)httpObjects.size())
+	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	auto& conn = httpObjects[templateID - 1LL];
+	const auto& conn = httpObjects.find(templateID)->second.get();
 	conn->enableCookie();
 
 	return 0;
@@ -684,10 +701,10 @@ static int sceHttpDisableCookie(int templateID) {
 static int sceHttpDisableKeepAlive(int templateID) {
 	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpDisableKeepAlive(%d)", templateID);
 	std::lock_guard<std::mutex> guard(httpLock);
-	if (templateID <= 0 || templateID > (int)httpObjects.size())
+	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	auto& conn = httpObjects[templateID - 1LL];
+	const auto& conn = httpObjects.find(templateID)->second.get();
 	conn->enableKeepAlive();
 
 	return 0;
@@ -787,38 +804,39 @@ static int sceHttpsDisableOption(int optionId) {
 static int sceHttpCreateRequest(int connectionID, int method, const char *path, u64 contentLength) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpCreateRequest(%d, %d, %s, %d)", connectionID, method, safe_string(path), contentLength);
 	std::lock_guard<std::mutex> guard(httpLock);
-	if (connectionID <= 0 || connectionID > (int)httpObjects.size())
+	if (connectionID <= 0 || connectionID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects[connectionID - 1LL]->className() != name_HTTPConnection)
+	if (httpObjects.find(connectionID)->second->className() != name_HTTPConnection)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
 	if (method < PSPHttpMethod::PSP_HTTP_METHOD_GET || method > PSPHttpMethod::PSP_HTTP_METHOD_HEAD)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_UNKNOWN_METHOD, "unknown method");
+
+	int objId = NextObjectID();
 	auto req = std::make_shared<HTTPRequest>(connectionID, method, path ? path : "", contentLength, &ProcessHostnameWithInfraDNS);
 	if (req->getErrorCode() < 0)
 		return hleLogError(Log::sceNet, req->getErrorCode());
-	httpObjects.emplace_back(req);
-	int retid = (int)httpObjects.size();
-	return hleLogDebug(Log::sceNet, retid);
+	httpObjects[objId] = req;
+	return hleLogDebug(Log::sceNet, objId);
 }
 
 // FIXME: port type is probably u16 (but passed in a single register anyway, so type doesn't matter)
 static int sceHttpCreateConnection(int templateID, const char *hostString, const char *scheme, u32 port, int enableKeepalive) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpCreateConnection(%d, %s, %s, %d, %d)", templateID, safe_string(hostString), safe_string(scheme), port, enableKeepalive);
 	std::lock_guard<std::mutex> guard(httpLock);
-	if (templateID <= 0 || templateID > (int)httpObjects.size())
+	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects[templateID - 1LL]->className() != name_HTTPTemplate)
+	if (httpObjects.find(templateID)->second->className() != name_HTTPTemplate)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
 	// TODO: Look up hostString in DNS here.
+	int objId = NextObjectID();
 	auto conn = std::make_shared<HTTPConnection>(templateID, hostString ? hostString : "", scheme ? scheme : "", port, enableKeepalive);
 	conn->InitializeSSL();
-	httpObjects.emplace_back(conn);
-	int retid = (int)httpObjects.size();
-	return hleLogDebug(Log::sceNet, retid);
+	httpObjects[objId] = conn;
+	return hleLogDebug(Log::sceNet, objId);
 }
 
 static int sceHttpGetNetworkErrno(int request, u32 errNumPtr) {
@@ -834,32 +852,33 @@ static int sceHttpGetNetworkErrno(int request, u32 errNumPtr) {
 // id: ID of the template, connection or request
 static int sceHttpAddExtraHeader(int id, const char *name, const char *value, int unknown) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpAddExtraHeader(%d, %s, %s, %d)", id, safe_string(name), safe_string(value), unknown);
-	if (id <= 0 || id > (int)httpObjects.size())
+	if (id <= 0 || id >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	const auto& req = (HTTPRequest*)httpObjects[id - 1LL].get();
+	const auto& req = httpObjects.find(id)->second.get();
 	return req->addRequestHeader(name, value, unknown);
 }
 
 static int sceHttpAbortRequest(int requestID) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpAbortRequest(%d)", requestID);
-	if (requestID <= 0 || requestID > (int)httpObjects.size())
+	if (requestID <= 0 || requestID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	const auto& req = (HTTPRequest*)httpObjects[requestID - 1LL].get();
+	const auto& req = (HTTPRequest*)httpObjects.find(requestID)->second.get();
 	return req->abortRequest();
 }
 
 static int sceHttpDeleteTemplate(int templateID) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpDeleteTemplate(%d)", templateID);
 	std::lock_guard<std::mutex> guard(httpLock);
-	if (templateID <= 0 || templateID > (int)httpObjects.size())
+	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects[templateID - 1LL]->className() != name_HTTPTemplate)
+	auto& it = httpObjects.find(templateID);
+	if (it->second->className() != name_HTTPTemplate)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	httpObjects.erase(httpObjects.begin() + templateID - 1);
+	httpObjects.erase(it);
 	return 0;
 }
 
@@ -871,10 +890,10 @@ static int sceHttpSetMallocFunction(u32 mallocFuncPtr, u32 freeFuncPtr, u32 real
 // id: ID of the template or connection
 static int sceHttpSetResolveTimeOut(int id, u32 timeout) {
 	ERROR_LOG(Log::sceNet, "UNIMPL sceHttpSetResolveTimeOut(%d, %d)", id, timeout);
-	if (id <= 0 || id > (int)httpObjects.size())
+	if (id <= 0 || id >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
-	
-	const auto& conn = httpObjects[id - 1LL];
+
+	const auto& conn = httpObjects.find(id)->second.get();
 	if (!(conn->className() == name_HTTPTemplate || conn->className() == name_HTTPConnection))
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id (%s)", conn->className());
 
@@ -952,20 +971,20 @@ static int sceHttpCreateTemplate(const char *userAgent, int httpVer, int autoPro
 	// Copy buffer data to new template
 	// FIXME: Find a more appropriate way to buffer HTTPS Options
 	tmplate->CopyFrom(bufferTemplate);
-	httpObjects.push_back(tmplate);
+	u32 id = NextObjectID();
+	httpObjects[id] = tmplate;
 
-	int retid = (int)httpObjects.size();
-	return hleLogDebug(Log::sceNet, retid);
+	return hleLogDebug(Log::sceNet, id);
 }
 
 // Parameter "method" should be one of PSPHttpMethod's listed entries
 static int sceHttpCreateRequestWithURL(int connectionID, int method, const char *url, u64 contentLength) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpCreateRequestWithURL(%d, %d, %s, %llx)", connectionID, method, safe_string(url), contentLength);
 	std::lock_guard<std::mutex> guard(httpLock);
-	if (connectionID <= 0 || connectionID > (int)httpObjects.size())
+	if (connectionID <= 0 || connectionID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects[connectionID - 1LL]->className() != name_HTTPConnection)
+	if (httpObjects.find(connectionID)->second->className() != name_HTTPConnection)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
 	if (method < PSPHttpMethod::PSP_HTTP_METHOD_GET || method > PSPHttpMethod::PSP_HTTP_METHOD_HEAD)
@@ -975,36 +994,36 @@ static int sceHttpCreateRequestWithURL(int connectionID, int method, const char 
 	if (!baseURL.Valid())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_URL, "invalid url");
 
-	httpObjects.emplace_back(std::make_shared<HTTPRequest>(connectionID, method, url ? url : "", contentLength, &ProcessHostnameWithInfraDNS));
-	int retid = (int)httpObjects.size();
-	return hleLogDebug(Log::sceNet, retid);
+	u32 id = NextObjectID();
+	httpObjects[id] = std::make_shared<HTTPRequest>(connectionID, method, url ? url : "", contentLength, &ProcessHostnameWithInfraDNS);
+	return hleLogDebug(Log::sceNet, id);
 }
 
 static int sceHttpCreateConnectionWithURL(int templateID, const char *url, int enableKeepalive) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpCreateConnectionWithURL(%d, %s, %d)", templateID, safe_string(url), enableKeepalive);
 	std::lock_guard<std::mutex> guard(httpLock);
-	if (templateID <= 0 || templateID > (int)httpObjects.size())
+	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects[templateID - 1LL]->className() != name_HTTPTemplate)
+	if (httpObjects.find(templateID)->second->className() != name_HTTPTemplate)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
 	Url baseURL(url ? url: "");
 	if (!baseURL.Valid())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_URL, "invalid url");
 
-	httpObjects.emplace_back(std::make_shared<HTTPConnection>(templateID, baseURL.Host().c_str(), baseURL.Protocol().c_str(), baseURL.Port(), enableKeepalive));
-	int retid = (int)httpObjects.size();
-	return hleLogDebug(Log::sceNet, retid);
+	u32 id = NextObjectID();
+	httpObjects[id] = std::make_shared<HTTPConnection>(templateID, baseURL.Host().c_str(), baseURL.Protocol().c_str(), baseURL.Port(), enableKeepalive);
+	return hleLogDebug(Log::sceNet, id);
 }
 
 // id: ID of the template or connection
 static int sceHttpSetRecvTimeOut(int id, u32 timeout) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpSetRecvTimeOut(%d, %d)", id, timeout);
-	if (id <= 0 || id > (int)httpObjects.size())
+	if (id <= 0 || id >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	const auto& conn = httpObjects[id - 1LL];
+	const auto& conn = httpObjects.find(id)->second.get();
 	if (!(conn->className() == name_HTTPTemplate || conn->className() == name_HTTPConnection))
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id (%s)", conn->className());
 
@@ -1016,7 +1035,7 @@ static int sceHttpSetRecvTimeOut(int id, u32 timeout) {
 // Note: Megaman PoweredUp seems to have an invalid address stored at the headerAddrPtr location, may be the game expecting us (network library) to give them a valid header address?
 static int sceHttpGetAllHeader(int requestID, u32 headerAddrPtr, u32 headerSizePtr) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpGetAllHeader(%d, %x, %x)", requestID, headerAddrPtr, headerSizePtr);
-	if (requestID <= 0 || requestID > (int)httpObjects.size())
+	if (requestID <= 0 || requestID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
 	if (!Memory::IsValidRange(headerAddrPtr, 4))
@@ -1025,7 +1044,7 @@ static int sceHttpGetAllHeader(int requestID, u32 headerAddrPtr, u32 headerSizeP
 	if (!Memory::IsValidRange(headerSizePtr, 4)) 
 		return hleLogError(Log::sceNet, -1, "invalid arg"); //SCE_HTTP_ERROR_INVALID_VALUE;
 
-	const auto& req = (HTTPRequest*)httpObjects[requestID - 1LL].get();
+	const auto& req = (HTTPRequest*)httpObjects.find(requestID)->second.get();
 	// FIXME: According to JPCSP, try to connect the request first
 	//req->connect();
 	int retval = req->getAllResponseHeaders(headerAddrPtr, headerSizePtr);
@@ -1035,13 +1054,13 @@ static int sceHttpGetAllHeader(int requestID, u32 headerAddrPtr, u32 headerSizeP
 // FIXME: contentLength is SceULong64 but this contentLengthPtr argument should be a 32bit pointer instead of 64bit, right?
 static int sceHttpGetContentLength(int requestID, u32 contentLengthPtr) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpGetContentLength(%d, %x)", requestID, contentLengthPtr);
-	if (requestID <= 0 || requestID > (int)httpObjects.size())
+	if (requestID <= 0 || requestID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
 	if (!Memory::IsValidRange(contentLengthPtr, 8))
 		return hleLogError(Log::sceNet, -1, "invalid arg"); //SCE_HTTP_ERROR_INVALID_VALUE;
 
-	const auto& req = (HTTPRequest*)httpObjects[requestID - 1LL].get();
+	const auto& req = (HTTPRequest*)httpObjects.find(requestID)->second.get();
 	// FIXME: According to JPCSP, try to connect the request first
 	//req->connect();
 	int len = req->getResponseContentLength();
