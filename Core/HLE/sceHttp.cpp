@@ -591,11 +591,10 @@ static int sceHttpDeleteRequest(int requestID) {
 	if (requestID <= 0 || requestID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	auto it = httpObjects.find(requestID);
-	if (it->second->className() != name_HTTPRequest)
+	if (httpObjects.find(requestID)->second->className() != name_HTTPRequest)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 	//httpObjects.erase(httpObjects.begin() + requestID - 1);
-	httpObjects.erase(it);
+	httpObjects.erase(requestID);
 	return 0;
 }
 
@@ -615,12 +614,11 @@ static int sceHttpDeleteConnection(int connectionID) {
 	if (connectionID <= 0 || connectionID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	auto it = httpObjects.find(connectionID);
-	if (it->second->className() != name_HTTPConnection)
+	if (httpObjects.find(connectionID)->second->className() != name_HTTPConnection)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
 	//httpObjects.erase(httpObjects.begin() + connectionID - 1);
-	httpObjects.erase(it);
+	httpObjects.erase(connectionID);
 	return 0;
 }
 
@@ -874,11 +872,10 @@ static int sceHttpDeleteTemplate(int templateID) {
 	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	auto& it = httpObjects.find(templateID);
-	if (it->second->className() != name_HTTPTemplate)
+	if (httpObjects.find(templateID)->second->className() != name_HTTPTemplate)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	httpObjects.erase(it);
+	httpObjects.erase(templateID);
 	return 0;
 }
 

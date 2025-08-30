@@ -19,6 +19,7 @@
 
 #include <cstddef>
 #include <algorithm>
+#include <cstdio> // Needed for linux compatibility
 
 #include "ppsspp_config.h"
 #include "CommonFuncs.h"
