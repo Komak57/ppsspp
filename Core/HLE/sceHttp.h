@@ -260,13 +260,14 @@ protected:
 	u16 port = 80;
 	int enableKeepalive = 0;
 
-	mbedtls_ssl_context sslCtx;
+	net::MBEDTLS_Connection tls;
+	/*mbedtls_ssl_context sslCtx;
 	mbedtls_net_context netCtx;
 
 	mbedtls_ssl_config sslConfig;
 	mbedtls_ctr_drbg_context ctrDrbg;
 	mbedtls_entropy_context entropy;
-	mbedtls_x509_crt caCert;
+	mbedtls_x509_crt caCert;*/
 
 public:
 	HTTPConnection() {}

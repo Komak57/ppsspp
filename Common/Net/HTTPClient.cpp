@@ -26,12 +26,12 @@ namespace net {
 Connection::~Connection() {
 	if (sslEnabled) {
 		Disconnect();
-		mbedtls_net_free(&netCtx);
-		mbedtls_ssl_free(&sslCtx);
+		mbedtls_net_free(&tls.netCtx);
+		mbedtls_ssl_free(&tls.sslCtx);
 
-		mbedtls_ssl_config_free(&sslConfig);
-		mbedtls_ctr_drbg_free(&ctrDrbg);
-		mbedtls_entropy_free(&entropy);
+		mbedtls_ssl_config_free(&tls.sslConfig);
+		mbedtls_ctr_drbg_free(&tls.ctrDrbg);
+		mbedtls_entropy_free(&tls.entropy);
 	}
 	Disconnect();
 	if (resolved_ != nullptr)
@@ -221,18 +221,22 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 		ERROR_LOG(Log::IO, "SSLConnect - Bad port");
 		return false;
 	}
-	if (connected) {
-		mbedtls_ssl_session_reset(&sslCtx);
-		mbedtls_ssl_config_free(&sslConfig);
+	// This will only occur if we pass the tls pointer correctly
+	// Currently doesn't function as desired.
+	if (tls.connected) {
+		mbedtls_ssl_session_reset(&tls.sslCtx);
+		mbedtls_ssl_config_free(&tls.sslConfig);
 
-		mbedtls_ssl_free(&sslCtx);
-		mbedtls_net_free(&netCtx);
+		mbedtls_ssl_free(&tls.sslCtx);
+		mbedtls_net_free(&tls.netCtx);
+
+		mbedtls_ssl_set_session(&tls.sslCtx, &tls.session);
 		connected = false;
 	}
 
 
 	for (int tries = maxTries; tries > 0; --tries) {
-		mbedtls_ssl_setup(&sslCtx, &sslConfig);
+		mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig);
 		for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
 			if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
 				continue;
@@ -245,36 +249,36 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 			FormatAddr(addrStr, sizeof(addrStr), possible);
 			char portStr[8]{};
 			memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
-			if ((ret = mbedtls_net_connect(&netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
+			if ((ret = mbedtls_net_connect(&tls.netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
 				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", addrStr, portStr, (unsigned int)-ret);
 				goto retry;
 			}
 			// Set NonBlocking
-			fd_util::SetNonBlocking(netCtx.fd, true);
+			fd_util::SetNonBlocking(tls.netCtx.fd, true);
 			/*
 			 * 2. Setup stuff
 			 */
-			if ((ret = mbedtls_ssl_setup(&sslCtx, &sslConfig)) != 0) {
+			if ((ret = mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig)) != 0) {
 				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_setup returned 0x%04x", ret);
 				goto retry;
 			}
 
 			//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
-			if ((ret = mbedtls_ssl_set_hostname(&sslCtx, host_.c_str())) != 0) {
+			if ((ret = mbedtls_ssl_set_hostname(&tls.sslCtx, host_.c_str())) != 0) {
 				char errbuf[128];
 				mbedtls_strerror(ret, errbuf, sizeof(errbuf));
 				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
 				goto retry;
 			}
 
-			mbedtls_ssl_set_bio(&sslCtx, &netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
+			mbedtls_ssl_set_bio(&tls.sslCtx, &tls.netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
 
 			/*
 			 * 4. Handshake
 			 */
 			NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
 
-			while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
+			while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
 				if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
 					char errbuf[128];
 					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
@@ -290,7 +294,7 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 			NOTICE_LOG(Log::sceNet, "SSLConnect - Verifying peer X.509 certificate...");
 
 			/* In real life, we probably want to bail out when ret != 0 */
-			if ((flags = mbedtls_ssl_get_verify_result(&sslCtx)) != 0) {
+				if ((flags = mbedtls_ssl_get_verify_result(&tls.sslCtx)) != 0) {
 				char vrfy_buf[512];
 
 				mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
@@ -301,14 +305,16 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 
 			INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
 			connected = true;
+			tls.connected = true;
+			mbedtls_ssl_get_session(&tls.sslCtx, &tls.session);
 			return true;
 		retry:
 			INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
-			mbedtls_ssl_session_reset(&sslCtx);
-			mbedtls_ssl_config_free(&sslConfig);
+			mbedtls_ssl_session_reset(&tls.sslCtx);
+			mbedtls_ssl_config_free(&tls.sslConfig);
 
-			mbedtls_ssl_free(&sslCtx);
-			mbedtls_net_free(&netCtx);
+			mbedtls_ssl_free(&tls.sslCtx);
+			mbedtls_net_free(&tls.netCtx);
 
 			continue;
 		}
@@ -319,7 +325,7 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 
 void Connection::Disconnect() {
 	if (sslEnabled) {
-		mbedtls_ssl_close_notify(&sslCtx);
+		//mbedtls_ssl_close_notify(&tls.sslCtx);
 	}
 	else {
 		if ((intptr_t)sock_ != -1) {
@@ -346,10 +352,10 @@ Client::Client(net::ResolveFunc func) : Connection(func) {
 Client::~Client() {
 	DEBUG_LOG(Log::HTTP, "~Client()");
 	if (sslEnabled) {
-		mbedtls_ssl_close_notify(&sslCtx);  // Optional, sends close_notify
-		mbedtls_ssl_free(&sslCtx);
-		mbedtls_ssl_config_free(&sslConfig);
-		mbedtls_net_free(&netCtx);
+		mbedtls_ssl_close_notify(&tls.sslCtx);  // Optional, sends close_notify
+		mbedtls_ssl_free(&tls.sslCtx);
+		mbedtls_ssl_config_free(&tls.sslConfig);
+		mbedtls_net_free(&tls.netCtx);
 		sslEnabled = false;
 
 		// Clear cert if you're not persisting it across sessions
@@ -514,7 +520,7 @@ int Client::SendRequestWithData(const char *method, const RequestParams &req, st
 
 	buffer.Append(data);
 	if (sslEnabled) {
-		bool flushed = buffer.FlushSocket(&sslCtx, &netCtx, dataTimeout_, progress->cancelled);
+		bool flushed = buffer.FlushSocket(&tls.sslCtx, &tls.netCtx, dataTimeout_, progress->cancelled);
 		if (!flushed) {
 			return -1;  // TODO error code.
 		}
@@ -531,7 +537,7 @@ int Client::SendRequestWithData(const char *method, const RequestParams &req, st
 int Client::ReadResponse(net::Buffer* readbuf, net::RequestProgress* progress) {
 	DEBUG_LOG(Log::HTTP, "ReadResponse()");
 	// maps the socket for HTTPS or HTTP
-	int fd = sslEnabled ? netCtx.fd : sock();
+	int fd = sslEnabled ? tls.netCtx.fd : sock();
 
 	// Snarf all the data we can into RAM. A little unsafe but hey.
 	static constexpr float CANCEL_INTERVAL = 0.25f;
@@ -558,7 +564,7 @@ begin:
 	};
 	// Read small chunk
 	int ret;
-	if ((ret = readbuf->ReadHTML(fd, sslEnabled, (sslEnabled ? &sslCtx : nullptr))) < 0) {
+	if ((ret = readbuf->ReadHTML(fd, sslEnabled, (sslEnabled ? &tls.sslCtx : nullptr))) < 0) {
 		ERROR_LOG(Log::HTTP, "Failed to read Response -0x%04x", -ret);
 		return -1;
 	}
@@ -569,7 +575,7 @@ begin:
 int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &responseHeaders, net::RequestProgress *progress, std::string *statusLine) {
 	DEBUG_LOG(Log::HTTP, "ReadResponseHeaders()");
 	// maps the socket for HTTPS or HTTP
-	int fd = sslEnabled ? netCtx.fd : sock();
+	int fd = sslEnabled ? tls.netCtx.fd : sock();
 	// Snarf all the data we can into RAM. A little unsafe but hey.
 	static constexpr float CANCEL_INTERVAL = 0.25f;
 	int ready = 0;
@@ -595,7 +601,7 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 	};
 	// Let's hope all the headers are available in a single packet...
 	int ret;
-	if ((ret = readbuf->Read(fd, 64, sslEnabled, (sslEnabled? &sslCtx : nullptr))) < 0) {
+	if ((ret = readbuf->Read(fd, 64, sslEnabled, (sslEnabled? &tls.sslCtx : nullptr))) < 0) {
 		ERROR_LOG(Log::HTTP, "Failed to read HTTP headers -0x%04x", -ret);
 		return -1;
 	}
@@ -669,7 +675,7 @@ int Client::ReadPartialResponseEntity(net::Buffer* readbuf, int chunkSize, int c
 	if (remainingLength > 0) {
 		INFO_LOG(Log::sceNet, "ReadResponseEntity - %i/%i bytes remaining", remainingLength, contentLength);
 		int ret;
-		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? netCtx.fd : sock(), pack, progress, sslEnabled, (sslEnabled ? &sslCtx : nullptr))) < 0)
+		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? tls.netCtx.fd : sock(), pack, progress, sslEnabled, (sslEnabled ? &tls.sslCtx : nullptr))) < 0)
 			return -1;
 	}
 
@@ -729,7 +735,7 @@ int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::stri
 	if (remainingLength > 0) {
 		INFO_LOG(Log::sceNet, "ReadResponseEntity - %i/%i bytes remaining", remainingLength, contentLength);
 		int ret;
-		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? netCtx.fd : sock(), remainingLength, progress, sslEnabled, (sslEnabled ? &sslCtx : nullptr))) < 0)
+		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? tls.netCtx.fd : sock(), remainingLength, progress, sslEnabled, (sslEnabled ? &tls.sslCtx : nullptr))) < 0)
 			return -1;
 	}
 	// output now contains the rest of the reply. Dechunk it.

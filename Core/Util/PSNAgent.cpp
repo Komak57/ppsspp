@@ -77,12 +77,13 @@ namespace net {
 			return false;
 		}
 		if (tls.connected) {
-			mbedtls_ssl_session_reset(&tls.sslCtx);
+			return true;
+			/*mbedtls_ssl_session_reset(&tls.sslCtx);
 			mbedtls_ssl_config_free(&tls.sslConfig);
 
 			mbedtls_ssl_free(&tls.sslCtx);
 			mbedtls_net_free(&tls.netCtx);
-			tls.connected = false;
+			tls.connected = false;*/
 		}
 
 

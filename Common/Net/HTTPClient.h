@@ -18,6 +18,7 @@
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/x509_crt.h"
+#include <mbedtls/timing.h>
 
 namespace net {
 const int legacy_ciphersuites_array[] = {
@@ -25,6 +26,21 @@ MBEDTLS_TLS_RSA_WITH_3DES_EDE_CBC_SHA,  // DES-CBC3-SHA
 MBEDTLS_TLS_RSA_WITH_RC4_128_SHA,       // RC4-SHA
 MBEDTLS_TLS_RSA_WITH_RC4_128_MD5,       // RC4-MD5
 0                                       // terminator (required)
+};
+
+class MBEDTLS_Connection {
+public:
+	bool connected = false;
+	mbedtls_ssl_context sslCtx;
+	mbedtls_net_context netCtx;
+
+	mbedtls_ssl_config sslConfig;
+	mbedtls_ctr_drbg_context ctrDrbg;
+	mbedtls_entropy_context entropy;
+	mbedtls_x509_crt caCert;
+	// For UDP retransmissions
+	mbedtls_timing_delay_context timerCtx;
+	mbedtls_ssl_session session;
 };
 
 typedef std::function<std::string(const std::string &)> ResolveFunc;
@@ -53,13 +69,15 @@ protected:
 
 	addrinfo *resolved_ = nullptr;
 
-	mbedtls_ssl_context sslCtx;
+	//std::shared_ptr<MBEDTLS_Connection> tls;
+	MBEDTLS_Connection tls;
+	/*mbedtls_ssl_context sslCtx;
 	mbedtls_net_context netCtx;
 
 	mbedtls_ssl_config sslConfig;
 	mbedtls_ctr_drbg_context ctrDrbg;
 	mbedtls_entropy_context entropy;
-	mbedtls_x509_crt caCert;
+	mbedtls_x509_crt caCert;*/
 
 	int useCookie = 0;
 	int useKeepAlive = 0;
@@ -98,13 +116,9 @@ public:
 	Client(net::ResolveFunc func);
 	~Client();
 
-	void Initialize(mbedtls_ssl_context sslCtx, mbedtls_net_context netCtx, mbedtls_ssl_config sslConfig, mbedtls_ctr_drbg_context ctrDrbg, mbedtls_entropy_context entropy, mbedtls_x509_crt caCert) {
-		this->sslCtx = sslCtx;
-		this->netCtx = netCtx;
-		this->sslConfig = sslConfig;
-		this->ctrDrbg = ctrDrbg;
-		this->entropy = entropy;
-		this->caCert = caCert;
+	//void Initialize(std::shared_ptr<net::MBEDTLS_Connection> tls, std::unordered_map<int, bool> options) {
+	void Initialize(net::MBEDTLS_Connection tls, std::unordered_map<int, bool> options) {
+		this->tls = tls;
 		this->sslEnabled = true;
 		return;
 	}

@@ -475,23 +475,11 @@ namespace net {
 		std::vector<u8> data;
 		vec_stream* stream;
 	};
-	class MBEDTLS_Connection {
-	public:
-		bool connected = false;
-		mbedtls_ssl_context sslCtx;
-		mbedtls_net_context netCtx;
 
-		mbedtls_ssl_config sslConfig;
-		mbedtls_ctr_drbg_context ctrDrbg;
-		mbedtls_entropy_context entropy;
-		mbedtls_x509_crt caCert;
-		// For UDP retransmissions
-		mbedtls_timing_delay_context timerCtx;
-	};
 	enum class NPAgentType { PSN, RPCN };
 	class NPAgent {
 	public:
-		MBEDTLS_Connection tls;
+		net::MBEDTLS_Connection tls;
 		virtual ~NPAgent() = default;
 
 		// Inits the sockaddr_in.
@@ -622,7 +610,7 @@ namespace net {
 
 	class NPAuthAgent {
 	public:
-		MBEDTLS_Connection tls;
+		net::MBEDTLS_Connection tls;
 
 		virtual ~NPAuthAgent() = default;
 
