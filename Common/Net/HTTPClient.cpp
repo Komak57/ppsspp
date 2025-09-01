@@ -20,7 +20,7 @@
 #include "Common/Log.h"
 #include <mbedtls/debug.h>
 #include <mbedtls/error.h>
-#include <Core\HLE\sceHttp.h>
+#include <Core/HLE/sceHttp.h>
 
 namespace net {
 
