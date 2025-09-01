@@ -128,7 +128,7 @@ namespace net {
 			//}
 			//DEBUG_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
 
-			if (packet.Length() <= RPCN_HEADER_SIZE) {
+			if (packet.Length() <= RPCN_HEADER_SIZE + 1) {
 				ERROR_LOG(Log::sceNet, "RPCN Malformed Packet Length (%d)", packet.Length());
 				running = false;
 				return;
