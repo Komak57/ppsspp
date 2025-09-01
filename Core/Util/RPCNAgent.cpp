@@ -98,8 +98,13 @@ namespace net {
 	RPCNResponse RPCNAgent::take_pending_request(u64 request_id) {
 		std::unique_lock<std::mutex> lock(buffer_mutex);
 		buffer_cv.wait(lock, [&]() {
-			return responses.find(request_id) != responses.end();
+			return running && responses.find(request_id) != responses.end();
 		});
+		if (!running) {
+			RPCNResponse ret{};
+			ret.error = (u8)ErrorType::Unsupported;
+			return ret;
+		}
 
 		auto data = std::move(responses[request_id]);
 		responses.erase(request_id);
@@ -128,7 +133,7 @@ namespace net {
 			//}
 			//DEBUG_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
 
-			if (packet.Length() <= RPCN_HEADER_SIZE + 1) {
+			if (packet.Length() < RPCN_HEADER_SIZE) {
 				ERROR_LOG(Log::sceNet, "RPCN Malformed Packet Length (%d)", packet.Length());
 				running = false;
 				return;
@@ -136,7 +141,6 @@ namespace net {
 
 			PacketHeader header;
 			memcpy(&header, packet.Data(), sizeof(PacketHeader));
-			u8 error = packet.Data()[RPCN_HEADER_SIZE];
 			// Get data and assign it to the request id related buffer
 			RPCNResponse buf;
 			buf.header = header;
@@ -146,12 +150,17 @@ namespace net {
 			std::lock_guard<std::mutex> lock(buffer_mutex);
 			switch ((PacketType)header.request) {
 			case PacketType::Reply:
+				if (packet.Length() < RPCN_HEADER_SIZE + 1) {
+					ERROR_LOG(Log::sceNet, "RPCN Malformed Packet Length (%d)", packet.Length());
+					running = false;
+					return;
+				}
 				buf.error = buf.stream->get<u8>();
-				if ((ErrorType)error != ErrorType::NoError) {
-					if (error > sizeof(PacketTypeNames))
-						ERROR_LOG(Log::sceNet, "RPCN Read Error %d: %s", error, hexdata.c_str());
+				if ((ErrorType)buf.error != ErrorType::NoError) {
+					if (buf.error > sizeof(PacketTypeNames))
+						ERROR_LOG(Log::sceNet, "RPCN Read Error %d: %s", buf.error, hexdata.c_str());
 					else
-						ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", error, PacketTypeNames[error]);
+						ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", buf.error, PacketTypeNames[buf.error]);
 				}
 				responses[header.reqId] = std::move(buf);
 				break;
