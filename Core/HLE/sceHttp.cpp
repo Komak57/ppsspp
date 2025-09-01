@@ -449,7 +449,7 @@ int HTTPRequest::getResponseContentLength() {
 	if (state_ == ThreadState::HAS_ERROR) {
 		if (worker_.joinable()) worker_.join();
 		if (state_ == ThreadState::HAS_ERROR)
-			DEBUG_LOG(Log::HTTP, "getResponseContentLength - Error %08x", hleLogError(Log::HTTP, GetLastError()));
+			DEBUG_LOG(Log::HTTP, "getResponseContentLength - Error %08x", hleLogError(Log::HTTP, client.GetLastError()));
 		return -1;
 	}
 
@@ -473,7 +473,7 @@ int HTTPRequest::abortRequest() {
 	cv_.wait(lk, [&] { return state_ >= ThreadState::COMPLETE || state_ == ThreadState::HAS_ERROR; });
 	if (worker_.joinable()) worker_.join();
 	if (state_ == ThreadState::HAS_ERROR)
-		DEBUG_LOG(Log::HTTP, "abortRequest - Error %08x", hleLogError(Log::HTTP, GetLastError()));
+		DEBUG_LOG(Log::HTTP, "abortRequest - Error %08x", hleLogError(Log::HTTP, client.GetLastError()));
 	return 0;
 
 	// FIXME: Will sceHttpAbortRequest returns an error if the request was not sent yet?
@@ -492,7 +492,7 @@ int HTTPRequest::getStatusCode() {
 	if (state_ == ThreadState::HAS_ERROR) {
 		if (worker_.joinable()) worker_.join();
 		if (state_ == ThreadState::HAS_ERROR)
-			DEBUG_LOG(Log::HTTP, "getStatusCode - Error %08x", hleLogError(Log::HTTP, GetLastError()));
+			DEBUG_LOG(Log::HTTP, "getStatusCode - Error %08x", hleLogError(Log::HTTP, client.GetLastError()));
 		return 0;
 	}
 
@@ -507,7 +507,7 @@ int HTTPRequest::getAllResponseHeaders(u32 headerAddrPtr, u32 headerSizePtr) {
 	cv_.wait(lk, [&] { return state_ >= ThreadState::HEADERS_AVAILABLE || state_ == ThreadState::HAS_ERROR; });
 	if (state_ == ThreadState::HAS_ERROR) {
 		if (worker_.joinable()) worker_.join();
-		return GetLastError();
+		return client.GetLastError();
 	}
 
 	const char* const delim = "\r\n";
@@ -567,7 +567,7 @@ wait_for_next:
 		cv_.wait(lk, [&] { return state_ >= ThreadState::DATA_AVAILABLE || state_ == ThreadState::HAS_ERROR; });
 		if (state_ == ThreadState::HAS_ERROR) {
 			if (worker_.joinable()) worker_.join();
-			return hleLogError(Log::HTTP, GetLastError());
+			return hleLogError(Log::HTTP, client.GetLastError());
 		}
 		buf_len = this->buffer_.size();
 		if (state_ == ThreadState::DATA_AVAILABLE) {
@@ -601,7 +601,7 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 		if (worker_.joinable()) worker_.join();
 		if (state_ == ThreadState::HAS_ERROR) {
 			if (worker_.joinable()) worker_.join();
-			return hleLogError(Log::HTTP, GetLastError());
+			return hleLogError(Log::HTTP, client.GetLastError());
 		}
 	}
 
@@ -614,7 +614,7 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 		cv_.wait(lk, [&] { return state_ >= ThreadState::HEADERS_AVAILABLE || state_ == ThreadState::HAS_ERROR; });
 		if (state_ == ThreadState::HAS_ERROR) {
 			if (worker_.joinable()) worker_.join();
-			return hleLogError(Log::HTTP, GetLastError());
+			return hleLogError(Log::HTTP, client.GetLastError());
 		}
 	}
 	//if (postDataSize > 0)
