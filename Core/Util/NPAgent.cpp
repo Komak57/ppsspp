@@ -475,23 +475,23 @@ namespace net {
 
 		while (state != ReadState::Complete) {
 			if (SSLEnabled) {
-				DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read reading %i bytes", toRead);
+				DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
 				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
 				//int ready = 0;
 				if (retval < 0) {
 					switch (retval) {
 					case MBEDTLS_ERR_NET_CONN_RESET:
 					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-						WARN_LOG(Log::HTTP, "Read - Client closed connection gracefully");
+						WARN_LOG(Log::sceNet, "Read - Client closed connection gracefully");
 						return (int)received > 0 ? (int)received : retval;
 					case MBEDTLS_ERR_SSL_TIMEOUT:
-						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
+						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned TIMOUT");
 						return retval;
 					case MBEDTLS_ERR_SSL_WANT_WRITE:
-						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_WRITE");
+						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_WRITE");
 						return retval;
 					case MBEDTLS_ERR_SSL_WANT_READ:
-						DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_READ");
+						DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
 						/*while (!ready)
 							ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);*/
 							// Read some more!
@@ -499,14 +499,14 @@ namespace net {
 					default:
 						char errbuf[128];
 						mbedtls_strerror(retval, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::HTTP, "Read Failed: -0x%04x -> %s", -retval, errbuf);
+						ERROR_LOG(Log::sceNet, "Read Failed: -0x%04x -> %s", -retval, errbuf);
 						return retval;
 					}
 				}
 
 			}
 			else {
-				DEBUG_LOG(Log::HTTP, "socket reading %i bytes", toRead);
+				DEBUG_LOG(Log::sceNet, "socket reading %i bytes", toRead);
 				retval = recv(sock(), buf, toRead, MSG_NOSIGNAL);
 
 				if (retval < 0)
@@ -534,7 +534,7 @@ namespace net {
 			if (state == ReadState::Complete) {
 				switch ((PacketType)header.request) {
 				case PacketType::Request:
-					ERROR_LOG(Log::HTTP, "Response Error: Request made to Client not allowed");
+					ERROR_LOG(Log::sceNet, "Response Error: Request made to Client not allowed");
 					break;
 				case PacketType::Reply:
 					// Proper response to a request
@@ -562,11 +562,11 @@ namespace net {
 					break;
 				case PacketType::ServerInfo: {
 					u8 version = packet->Data()[sizeof(PacketHeader)];
-					INFO_LOG(Log::HTTP, "Server is communicating on version %d", version);
+					INFO_LOG(Log::sceNet, "Server is communicating on version %d", version);
 					break;
 				}
 				default:
-					ERROR_LOG(Log::HTTP, "Unexpected Packet Type - %d", header.request);
+					ERROR_LOG(Log::sceNet, "Unexpected Packet Type - %d", header.request);
 					break;
 				}
 			}
@@ -672,15 +672,15 @@ namespace net {
 
 		while (state != ReadState::Complete) {
 			if (*cancelled) {
-				WARN_LOG(Log::HTTP, "NPAgent::Recv() Cancelled");
+				WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");
 				return 0;
 			}
 			if (SSLEnabled) {
-				DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read reading %i bytes", toRead);
+				DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
 				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
 
 				if (*cancelled) {
-					WARN_LOG(Log::HTTP, "NPAgent::Recv() Cancelled");
+					WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");
 					return 0;
 				}
 				//int ready = 0;
@@ -688,16 +688,16 @@ namespace net {
 					switch (retval) {
 					case MBEDTLS_ERR_NET_CONN_RESET:
 					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-						WARN_LOG(Log::HTTP, "Read - Client closed connection gracefully");
+						WARN_LOG(Log::sceNet, "Read - Client closed connection gracefully");
 						return (int)received > 0 ? (int)received : retval;
 					case MBEDTLS_ERR_SSL_TIMEOUT:
-						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
+						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned TIMOUT");
 						return retval;
 					case MBEDTLS_ERR_SSL_WANT_WRITE:
-						ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_WRITE");
+						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_WRITE");
 						return retval;
 					case MBEDTLS_ERR_SSL_WANT_READ:
-						DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_READ");
+						DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
 						/*while (!ready)
 							ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);*/
 							// Read some more!
@@ -712,7 +712,7 @@ namespace net {
 
 			}
 			else {
-				DEBUG_LOG(Log::HTTP, "socket reading %i bytes", toRead);
+				DEBUG_LOG(Log::sceNet, "socket reading %i bytes", toRead);
 				retval = recv(sock(), buf, toRead, MSG_NOSIGNAL);
 
 				if (retval < 0)
@@ -740,7 +740,7 @@ namespace net {
 			if (state == ReadState::Complete) {
 				switch ((PacketType)header.request) {
 				case PacketType::Request:
-					ERROR_LOG(Log::HTTP, "Response Error: Request made to Client not allowed");
+					ERROR_LOG(Log::sceNet, "Response Error: Request made to Client not allowed");
 					break;
 				case PacketType::Reply:
 					// Proper response to a request
@@ -769,15 +769,15 @@ namespace net {
 				case PacketType::ServerInfo: {
 					u8 version = packet->Data()[sizeof(PacketHeader)];
 					if (version != RPCNAgent::PROTOCOL_VERSION) {
-						ERROR_LOG(Log::HTTP, "Server Version mismatch. Current version %d does not match Server version %d", version, RPCNAgent::PROTOCOL_VERSION);
+						ERROR_LOG(Log::sceNet, "Server Version mismatch. Current version %d does not match Server version %d", version, RPCNAgent::PROTOCOL_VERSION);
 						// TODO: Version mismatch may interfere with requests and responses. Should disconnect
 						break;
 					}
-					INFO_LOG(Log::HTTP, "Server is communicating on version %d", version);
+					INFO_LOG(Log::sceNet, "Server is communicating on version %d", version);
 					break;
 				}
 				default:
-					ERROR_LOG(Log::HTTP, "Unexpected Packet Type - %d", header.request);
+					ERROR_LOG(Log::sceNet, "Unexpected Packet Type - %d", header.request);
 					break;
 				}
 			}

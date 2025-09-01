@@ -70,7 +70,7 @@ size_t Write(int fd, const std::string &str) {
 }
 
 int WaitUntilReady(int fd, double timeout, bool for_write) {
-	DEBUG_LOG(Log::HTTP, "HTTP WaitUntilReady");
+	DEBUG_LOG(Log::sceNet, "HTTP WaitUntilReady");
 	struct timeval tv;
 	tv.tv_sec = (long)floor(timeout);
 	tv.tv_usec = (long)((timeout - floor(timeout)) * 1000000.0);

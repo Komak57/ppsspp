@@ -198,23 +198,23 @@ int Buffer::Read(int fd, size_t sz, bool useSSL, mbedtls_ssl_context* sslCtx) {
 	while (sz > 0) {
 		int toRead = (int)std::min(sz, sizeof(buf));
 		if (useSSL) {
-			DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read reading %i bytes", toRead);
+			DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
 			retval = mbedtls_ssl_read(sslCtx, (unsigned char*)buf, toRead);
 			int ready = 0;
 			if (retval < 0) {
 				switch (retval) {
 				case MBEDTLS_ERR_NET_CONN_RESET:
 				case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-					WARN_LOG(Log::HTTP, "Read - Client closed connection gracefully");
+					WARN_LOG(Log::sceNet, "Read - Client closed connection gracefully");
 					return (int)received > 0 ? (int)received : retval;
 				case MBEDTLS_ERR_SSL_TIMEOUT:
-					ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned TIMOUT");
+					ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned TIMOUT");
 					return retval;
 				case MBEDTLS_ERR_SSL_WANT_WRITE:
-					ERROR_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_WRITE");
+					ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_WRITE");
 					return retval;
 				case MBEDTLS_ERR_SSL_WANT_READ:
-					DEBUG_LOG(Log::HTTP, "mbedtls_ssl_read returned WANT_READ");
+					DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
 					while (!ready)
 						ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);
 					// Read some more!
@@ -222,7 +222,7 @@ int Buffer::Read(int fd, size_t sz, bool useSSL, mbedtls_ssl_context* sslCtx) {
 				default:
 					char errbuf[128];
 					mbedtls_strerror(retval, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::HTTP, "Read Failed: -0x%04x -> %s", -retval, errbuf);
+					ERROR_LOG(Log::sceNet, "Read Failed: -0x%04x -> %s", -retval, errbuf);
 					return retval;
 				}
 			}
