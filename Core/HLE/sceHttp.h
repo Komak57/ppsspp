@@ -18,6 +18,7 @@
 #pragma once
 
 #include <map>
+#include <condition_variable>
 #include "Common/Net/HTTPClient.h"
 
 // Based on https://docs.vitasdk.org/group__SceHttpUser.html
@@ -287,8 +288,20 @@ public:
 	int getKeepAlive() { return enableKeepalive; }
 };
 
+enum class ThreadState {
+	HAS_ERROR,
+	INIT,
+	CONNECTED,
+	HEADERS_AVAILABLE,
+	DATA_AVAILABLE,
+	COMPLETE
+};
+
 class HTTPRequest : public HTTPConnection {
 private:
+	void threadedStartConnect();
+	void threadedStartRequest(u32 postDataPtr, u32 postDataSize);
+
 	int connectionID;
 	int method;
 	u64 contentLength;
@@ -306,9 +319,12 @@ private:
 	net::RequestProgress progress_;
 	std::vector<std::string> responseHeaders_;
 	std::string httpLine_;
-	std::string responseContent_;
 	int readIndex = 0;
 
+	std::thread worker_;
+	std::mutex mtx_;
+	std::condition_variable cv_;
+	ThreadState state_;
 public:
 	HTTPRequest(int connectionID, int method, const char* url, u64 contentLength, net::ResolveFunc customResolver);
 	virtual ~HTTPRequest() override;
@@ -317,7 +333,7 @@ public:
 
 	void setInternalHeaderAddr(u32 addr) { headerAddr_ = addr; }
 	int getConnectionID() { return connectionID; }
-	int getResponseRemainingContentLength() { return (int)responseContent_.size(); }
+	int getResponseRemainingContentLength() { return (int)buffer_.size(); }
 
 	int getResponseContentLength();
 	int abortRequest();
