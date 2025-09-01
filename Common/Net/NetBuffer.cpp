@@ -191,7 +191,8 @@ int Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress
 
 int Buffer::Read(int fd, size_t sz, bool useSSL, mbedtls_ssl_context* sslCtx) {
 	static constexpr float CANCEL_INTERVAL = 0.25f;
-	char buf[4096];
+	//char buf[4096];
+	char* buf = new char[sz];
 	int retval = 0;
 	size_t received = 0;
 
