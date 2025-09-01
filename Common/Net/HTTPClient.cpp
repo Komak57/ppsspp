@@ -20,6 +20,7 @@
 #include "Common/Log.h"
 #include <mbedtls/debug.h>
 #include <mbedtls/error.h>
+#include <Core\HLE\sceHttp.h>
 
 namespace net {
 
@@ -61,10 +62,12 @@ const char *DNSTypeAsString(DNSType type) {
 bool Connection::Resolve(const char *host, int port, DNSType type) {
 	if ((intptr_t)sock_ != -1) {
 		ERROR_LOG(Log::IO, "Resolve: Already have a socket");
+		lastError = SCE_HTTP_ERROR_ALREADY_INITED;
 		return false;
 	}
 	if (!host || port < 1 || port > 65535) {
 		ERROR_LOG(Log::IO, "Resolve: Invalid host or port (%d)", port);
+		lastError = SCE_HTTP_ERROR_NETWORK;
 		return false;
 	}
 
@@ -85,6 +88,7 @@ bool Connection::Resolve(const char *host, int port, DNSType type) {
 		WARN_LOG(Log::IO, "Failed to resolve host '%s': '%s' (%s)", host, err.c_str(), DNSTypeAsString(type));
 		// Zero port so that future calls fail.
 		port_ = 0;
+		lastError = SCE_HTTP_ERROR_PARSE_HTTP_NOT_FOUND;
 		return false;
 	}
 
@@ -110,6 +114,7 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 	NOTICE_LOG(Log::sceNet, "Connection::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 	if (port_ <= 0) {
 		ERROR_LOG(Log::IO, "Bad port");
+		lastError = SCE_HTTP_ERROR_NETWORK;
 		return false;
 	}
 	sock_ = -1;
@@ -211,6 +216,7 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 		sleep_ms(1, "connect");
 	}
 
+	lastError = SCE_HTTP_ERROR_PARSE_HTTP_NOT_FOUND;
 	// Nothing connected, unfortunately.
 	return false;
 }
@@ -219,6 +225,7 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 	WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 	if (port_ <= 0) {
 		ERROR_LOG(Log::IO, "SSLConnect - Bad port");
+		lastError = SCE_HTTP_ERROR_NETWORK;
 		return false;
 	}
 	// This will only occur if we pass the tls pointer correctly
@@ -327,6 +334,7 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 		}
 		sleep_ms(1, "connect");
 	}
+	lastError = SCE_HTTP_ERROR_PARSE_HTTP_NOT_FOUND;
 	return false;
 }
 
@@ -553,27 +561,27 @@ int Client::ReadResponse(net::Buffer* readbuf, net::RequestProgress* progress) {
 begin:
 	while (ready == 0) {
 		if (progress->cancelled && *progress->cancelled)
-			return -1;
+			return SCE_HTTP_ERROR_ABORTED;
 		// Check for silent fails
 		if (fd < 0) {
 			ERROR_LOG(Log::HTTP, "HTTP Connection lost");
-			return -1;
+			return SCE_HTTP_DEFAULT_CONNECT_TIMEOUT;
 		}
 		ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);
 		if (ready < 0) {
 			ERROR_LOG(Log::HTTP, "HTTP WaitUntilReady Failed");
-			return -1;
+			return SCE_HTTP_DEFAULT_RECV_TIMEOUT;
 		}
 		if (!ready && time_now_d() > endTimeout) {
 			ERROR_LOG(Log::HTTP, "HTTP headers timed out");
-			return -1;
+			return SCE_HTTP_DEFAULT_RECV_TIMEOUT;
 		}
 	};
 	// Read small chunk
 	int ret;
 	if ((ret = readbuf->ReadHTML(fd, sslEnabled, (sslEnabled ? &tls.sslCtx : nullptr))) < 0) {
 		ERROR_LOG(Log::HTTP, "Failed to read Response -0x%04x", -ret);
-		return -1;
+		return SCE_HTTP_ERROR_UNKNOWN;
 	}
 
 	return ret;
@@ -583,84 +591,68 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 	DEBUG_LOG(Log::HTTP, "ReadResponseHeaders()");
 	// maps the socket for HTTPS or HTTP
 	int fd = sslEnabled ? tls.netCtx.fd : sock();
-	// Snarf all the data we can into RAM. A little unsafe but hey.
 	static constexpr float CANCEL_INTERVAL = 0.25f;
-	int ready = 0;
-	double endTimeout = time_now_d() + dataTimeout_;
-	begin:
-	while (ready == 0) {
-		if (progress->cancelled && *progress->cancelled)
-			return -1;
-		// Check for silent fails
-		if (fd < 0) {
-			ERROR_LOG(Log::HTTP, "HTTP Connection lost");
-			return -1;
-		}
-		ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);
-		if (ready < 0) {
-			ERROR_LOG(Log::HTTP, "HTTP WaitUntilReady Failed");
-			return -1;
-		}
-		if (!ready && time_now_d() > endTimeout) {
-			ERROR_LOG(Log::HTTP, "HTTP headers timed out");
-			return -1;
-		}
-	};
-	// Let's hope all the headers are available in a single packet...
-	int ret;
-	if ((ret = readbuf->Read(fd, 64, sslEnabled, (sslEnabled? &tls.sslCtx : nullptr))) < 0) {
-		ERROR_LOG(Log::HTTP, "Failed to read HTTP headers -0x%04x", -ret);
-		return -1;
-	}
-	if (readbuf->empty()) {
-		ERROR_LOG(Log::HTTP, "Empty HTTP header read buffer :(");
-		return -1;
-	}
-	// Check for header marker
-	int i = readbuf->Contains("\r\n\r\n");
-	// Still no header eof? Try again!
-	if (i < 0) {
+	// Adjustable read size
+	size_t toRead = 64;
+	int code = 404;
+	int content_length = 0;
+	int eoh;
+	while (true) {
+		int retval = readbuf->Read(fd, toRead, sslEnabled, &tls.sslCtx);
+		if (*progress->cancelled)
+			return SCE_HTTP_ERROR_ABORTED;
+		if (retval < 0)
+			return retval;
+		// Check for header marker
+		eoh = readbuf->Contains("\r\n\r\n");
+		// Still no header eof? Try again!
+		if (eoh >= 0)
+			break;
 		DEBUG_LOG(Log::HTTP, "Headers not yet found in %i bytes", readbuf->size());
-		goto begin;
 	}
 
-	// Pull the raw header data
 	std::string header;
-	readbuf->Take(i+4, &header);
-
-	// Grab the first header line that contains the http code.
+	readbuf->Take(eoh + 4, &header);
 
 	// Split lines into responseHeaders
 	size_t start = 0;
 	size_t end;
 	while ((end = header.find("\r\n", start)) != std::string::npos) {
 		std::string line = header.substr(start, end - start);
-		if (line != "")
-			responseHeaders.push_back(line);
+		DEBUG_LOG(Log::HTTP, "HEADER: %s", line.c_str());
+		responseHeaders.push_back(line);
 		start = end + 2;  // Skip past the \r\n
 	}
-	// take first line
-	std::string line = responseHeaders.front();
 
-	// Find HTTP Code
-	int code;
-	size_t code_pos = line.find(' ');
-	if (code_pos != line.npos) {
-		code_pos = line.find_first_not_of(' ', code_pos);
+	return 0;  // Return HTML Status Code or Error Code
+}
+
+int Client::ReadPartialResponseEntity(net::Buffer* readbuf, int chunkSize, int contentLength, net::RequestProgress* progress) {
+	DEBUG_LOG(Log::HTTP, "ReadPartialResponseEntity()");
+	_dbg_assert_(progress->cancelled);
+
+	if (contentLength < 0) {
+		WARN_LOG(Log::HTTP, "Negative Content Length %d", contentLength);
+		// Just sanity checking...
+		contentLength = 0;
 	}
 
-	if (code_pos != line.npos) {
-		code = atoi(&line[code_pos]);
+	// Minimize calls to readbuf->size() for performance
+	int readbufLength = readbuf->size();
+	int remainingLength = contentLength - progress->bytes_read;
+	progress->Update(0, contentLength, (remainingLength == 0));
+	int pack = std::min(remainingLength, chunkSize);
+	int obtained = 0;
+	// Only read if we're expecting more data
+	if (remainingLength > 0) {
+		INFO_LOG(Log::sceNet, "ReadResponseEntity - Reading %i bytes of the %i bytes remaining", pack, remainingLength);
+		int ret;
+		if ((ret = readbuf->Read(sslEnabled ? tls.netCtx.fd : sock(), pack, sslEnabled, (sslEnabled ? &tls.sslCtx : nullptr))) < 0)
+			return ret;
+		obtained = ret;
 	}
-	else {
-		ERROR_LOG(Log::HTTP, "Could not parse HTTP status code: '%s'", line.c_str());
-		return -1;
-	}
-
-	if (statusLine)
-		*statusLine = line;
-
-	return code;
+	progress->Update(obtained, contentLength, (readbufLength == contentLength));
+	return 0;
 }
 
 int Client::ReadPartialResponseEntity(net::Buffer* readbuf, int chunkSize, int contentLength, net::Buffer* output, net::RequestProgress* progress) {
@@ -683,7 +675,7 @@ int Client::ReadPartialResponseEntity(net::Buffer* readbuf, int chunkSize, int c
 		INFO_LOG(Log::sceNet, "ReadResponseEntity - %i/%i bytes remaining", remainingLength, contentLength);
 		int ret;
 		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? tls.netCtx.fd : sock(), pack, progress, sslEnabled, (sslEnabled ? &tls.sslCtx : nullptr))) < 0)
-			return -1;
+			return ret;
 	}
 
 	// Pull out the chunk requested, or everything available, including 0 if required
@@ -696,6 +688,31 @@ int Client::ReadPartialResponseEntity(net::Buffer* readbuf, int chunkSize, int c
 	}
 
 	progress->Update(consume, contentLength, (progress->bytes_read + consume == contentLength));
+	return 0;
+}
+
+int Client::ReadResponseEntity(net::Buffer* readbuf, int contentLength, net::RequestProgress* progress) {
+	DEBUG_LOG(Log::HTTP, "ReadResponseEntity()");
+	_dbg_assert_(progress->cancelled);
+
+	if (contentLength < 0) {
+		WARN_LOG(Log::HTTP, "Negative content length %d", contentLength);
+		// Just sanity checking...
+		contentLength = 0;
+	}
+	// Minimize calls to readbuf->size() for performance
+	int readbufLength = readbuf->size();
+	int remainingLength = contentLength - readbufLength;
+	progress->Update(readbufLength - progress->bytes_read, contentLength, (remainingLength == 0));
+	// Only read if we're expecting more data
+	if (remainingLength > 0) {
+		INFO_LOG(Log::sceNet, "ReadResponseEntity - %i/%i bytes remaining", remainingLength, contentLength);
+		int ret;
+		if ((ret = readbuf->ReadAllWithProgress(sslEnabled ? tls.netCtx.fd : sock(), remainingLength, progress, sslEnabled, (sslEnabled ? &tls.sslCtx : nullptr))) < 0)
+			return -1;
+	}
+
+	progress->Update(contentLength - progress->bytes_read, contentLength, true);
 	return 0;
 }
 

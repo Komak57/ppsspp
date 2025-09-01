@@ -58,6 +58,10 @@ public:
 	bool SSLConnect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 	void Disconnect();
 
+	u32 GetLastError() {
+		return lastError;
+	}
+
 	bool GetOption(int id) {
 		auto it = this->httpsOptions.find(28);
 		if (it == this->httpsOptions.end())
@@ -94,7 +98,7 @@ protected:
 	int sslEnabled = 0;
 
 	bool connected = false;
-
+	u32 lastError = 0;
 	u32 flags;
 
 private:
@@ -145,8 +149,10 @@ public:
 	int SendRequestWithData(const char* method, const RequestParams& req, std::string_view data, const char* otherHeaders, net::RequestProgress* progress);
 	// Read until content length obtained, then read until complete
 	int ReadResponse(net::Buffer* readbuf, net::RequestProgress* progress);
+	int ReadResponseEntity(net::Buffer* readbuf, int contentLength, net::RequestProgress* progress);
 	int ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &responseHeaders, net::RequestProgress *progress, std::string *statusLine = nullptr);
 	// If your response contains a response, you must read it.
+	int ReadPartialResponseEntity(net::Buffer* readbuf, int chunkSize, int contentLength, net::RequestProgress* progress);
 	int ReadPartialResponseEntity(net::Buffer* readbuf, int chunkSize, int contentLength, net::Buffer* output, net::RequestProgress* progress);
 	int ReadResponseEntity(net::Buffer* readbuf, const std::vector<std::string>& responseHeaders, Buffer* output, net::RequestProgress* progress);
 
