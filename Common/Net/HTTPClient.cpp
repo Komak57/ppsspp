@@ -259,7 +259,7 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 			 * 4. Handshake
 			 */
 			NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
-
+			auto start_time = std::chrono::high_resolution_clock::now();
 			while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
 				if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
 					char errbuf[128];
@@ -268,7 +268,16 @@ bool Connection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
 					goto retry;
 				}
 			}
-
+			auto end_time = std::chrono::high_resolution_clock::now();
+			auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+			if (duration_ms > 100)
+				ERROR_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+			else if (duration_ms > 60)
+				WARN_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+			else
+				NOTICE_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+			// Fake latency
+			//std::this_thread::sleep_for(std::chrono::milliseconds(60-duration_ms));
 			/*
 			 * 5. Verify the server certificate
 			 */
