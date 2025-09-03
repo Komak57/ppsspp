@@ -19,7 +19,9 @@
 
 #include <map>
 #include <condition_variable>
+#include "Common/Net/SocketCompat.h"
 #include "Common/Net/HTTPClient.h"
+#include <Common/Net/Resolve.h>
 
 // Based on https://docs.vitasdk.org/group__SceHttpUser.html
 #define 	SCE_HTTP_DEFAULT_RESOLVER_TIMEOUT   (1 * 1000 * 1000U)
@@ -279,28 +281,26 @@ public:
 
 class HTTPConnection : public HTTPTemplate {
 protected:
+	net::MBEDTLS_Connection tls;
 	int templateID = 0;
 	std::string hostString;
 	std::string scheme;
+	std::string host;
 	u16 port = 80;
 	int enableKeepalive = 0;
 
-	net::MBEDTLS_Connection tls;
-	/*mbedtls_ssl_context sslCtx;
-	mbedtls_net_context netCtx;
-
-	mbedtls_ssl_config sslConfig;
-	mbedtls_ctr_drbg_context ctrDrbg;
-	mbedtls_entropy_context entropy;
-	mbedtls_x509_crt caCert;*/
-
+	u32 lastError = 0;
+	addrinfo* resolved_ = nullptr;
 public:
 	HTTPConnection() {}
 	HTTPConnection(int templateID, const char* hostString, const char* scheme, u32 port, int enableKeepalive);
 	virtual ~HTTPConnection() override;
 
 	virtual const char* className() override { return name_HTTPConnection; }
-
+	bool Resolve(const char* host, int port, net::DNSType type);
+	bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
+	bool SSLConnect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
+	void Disconnect();
 	// SSL Related Functions
 	int InitializeSSL();
 
@@ -310,6 +310,12 @@ public:
 	const std::string getScheme() { return scheme; }
 	u16 getPort() { return port; }
 	int getKeepAlive() { return enableKeepalive; }
+	bool GetOption(int id) {
+		auto it = this->httpsOptions.find(id);
+		if (it == this->httpsOptions.end())
+			return false;
+		return it->second;
+	}
 };
 
 enum class ThreadState {
@@ -323,9 +329,6 @@ enum class ThreadState {
 
 class HTTPRequest : public HTTPConnection {
 private:
-	void threadedStartConnect();
-	void threadedStartRequest(u32 postDataPtr, u32 postDataSize);
-
 	int connectionID;
 	int method;
 	u64 contentLength;
@@ -338,17 +341,13 @@ private:
 	int responseCode_ = -1;
 	int entityLength_ = -1;
 
+	net::MBEDTLS_Connection tls_;
 	http::Client client;
 	net::Buffer buffer_;
 	net::RequestProgress progress_;
 	std::vector<std::string> responseHeaders_;
 	std::string httpLine_;
-	int readIndex = 0;
 
-	std::thread worker_;
-	std::mutex mtx_;
-	std::condition_variable cv_;
-	ThreadState state_;
 public:
 	HTTPRequest(int connectionID, int method, const char* url, u64 contentLength, net::ResolveFunc customResolver);
 	virtual ~HTTPRequest() override;

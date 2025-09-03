@@ -29,8 +29,8 @@ Connection::~Connection() {
 		Disconnect();
 	}
 	Disconnect();
-	if (resolved_ != nullptr)
-		DNSResolveFree(resolved_);
+	//if (resolved_ != nullptr)
+		//DNSResolveFree(resolved_);
 }
 
 // For whatever crazy reason, htons isn't available on android x86 on the build server. so here we go.

@@ -33,7 +33,9 @@
 #include "Common/LogReporting.h"
 #include "Common/Net/URL.h"
 #include "Common/Net/HTTPClient.h"
+#include <Common/File/FileDescriptor.h>
 #include <mbedtls/debug.h>
+#include <mbedtls/error.h>
 
 static std::map<u32, std::shared_ptr<HTTPTemplate>> httpObjects;
 static std::mutex httpLock;
@@ -97,16 +99,57 @@ HTTPConnection::HTTPConnection(int templateID, const char* hostString, const cha
 	this->scheme = scheme;
 	this->port = port;
 	this->enableKeepalive = enableKeepalive;
-	this->tls = net::MBEDTLS_Connection();
+	if (strcmp(scheme, "https") == 0) {
+		this->tls = net::MBEDTLS_Connection();
+		Resolve(hostString, port, net::DNSType::IPV4);
+		InitializeSSL();
+		SSLConnect();
+	}
 }
 
 HTTPConnection::~HTTPConnection() {
 	WARN_LOG(Log::sceNet, "HTTPConnection::~HTTPConnection(templateID: %i)", this->templateID);
-	// Clean up and free SSL resources
-	mbedtls_ssl_close_notify(&tls.sslCtx);  // Optional, sends close_notify
-	mbedtls_ssl_free(&tls.sslCtx);
-	mbedtls_ssl_config_free(&tls.sslConfig);
-	mbedtls_net_free(&tls.netCtx);
+	// NOTE: Do not clean up and free SSL resources here. The entire parent collapses on destruction.
+	// Instead, clean up these in sceHttpDeleteConnection
+}
+
+void HTTPConnection::Disconnect() {
+	if (tlsEnabled) {
+		//mbedtls_ssl_close_notify(&tls.sslCtx);
+		mbedtls_ssl_session_reset(&tls.sslCtx);
+		mbedtls_ssl_config_free(&tls.sslConfig);
+
+		mbedtls_ssl_free(&tls.sslCtx);
+		mbedtls_net_free(&tls.netCtx);
+		tlsEnabled = false;
+	}
+}
+
+bool HTTPConnection::Resolve(const char* host, int port, net::DNSType type) {
+	if (!host || port < 1 || port > 65535) {
+		ERROR_LOG(Log::IO, "Resolve: Invalid host or port (%d)", port);
+		lastError = SCE_HTTP_ERROR_NETWORK;
+		return false;
+	}
+
+	this->host = host;
+	this->port = port;
+
+	char port_str[16];
+	snprintf(port_str, sizeof(port_str), "%d", port);
+
+	std::string processedHostname(host);
+
+	std::string err;
+	if (!net::DNSResolve(processedHostname.c_str(), port_str, &resolved_, err, type)) {
+		WARN_LOG(Log::IO, "Failed to resolve host '%s': '%s' (%s)", host, err.c_str(), DNSTypeAsString(type));
+		// Zero port so that future calls fail.
+		port = 0;
+		lastError = SCE_HTTP_ERROR_PARSE_HTTP_NOT_FOUND;
+		return false;
+	}
+
+	return true;
 }
 
 int HTTPConnection::InitializeSSL() {
@@ -171,15 +214,148 @@ int HTTPConnection::InitializeSSL() {
 	}*/
 
 	// Enable Legacy Cipher
-	//mbedtls_ssl_conf_ciphersuites(&sslConfig, net::legacy_ciphersuites_array); // optional if you’ve recompiled with weak cipher support
+	mbedtls_ssl_conf_ciphersuites(&tls.sslConfig, net::legacy_ciphersuites_array); // optional if you’ve recompiled with weak cipher support
 	// Limit to TLS 1.0 - TLS 1.2 to match Hardware Limitations
 	mbedtls_ssl_conf_min_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
-	mbedtls_ssl_conf_max_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
+	mbedtls_ssl_conf_max_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_2);
 
 	enableTLS();
 	return 0;
 }
 
+bool HTTPConnection::Connect(int maxTries, double timeout, bool* cancelConnect) {
+	if (tlsEnabled)
+		return SSLConnect(maxTries, timeout, cancelConnect);
+	WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+	_dbg_assert_(!tlsEnabled);
+	return hleLogError(Log::sceNet, false, "HTTP Not Supported Yet");
+}
+
+bool HTTPConnection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
+	WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+	if (port <= 0) {
+		ERROR_LOG(Log::IO, "SSLConnect - Bad port");
+		lastError = SCE_HTTP_ERROR_NETWORK;
+		return false;
+	}
+	// This will only occur if we pass the tls pointer correctly
+	// Currently doesn't function as desired.
+	if (tls.connected) {
+		mbedtls_ssl_session_reset(&tls.sslCtx);
+		mbedtls_ssl_config_free(&tls.sslConfig);
+
+		mbedtls_ssl_free(&tls.sslCtx);
+		mbedtls_net_free(&tls.netCtx);
+
+		mbedtls_ssl_set_session(&tls.sslCtx, &tls.session);
+		tls.connected = false;
+	}
+
+
+	for (int tries = maxTries; tries > 0; --tries) {
+		mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig);
+		for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
+			if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
+				continue;
+
+			int ret;
+			/*
+			 * 1. Start the connection
+			 */
+			char addrStr[128]{};
+			memset(addrStr, 0, 128);
+			FormatAddr(addrStr, sizeof(addrStr), possible);
+			if (strncmp(addrStr, "0.0.0.0", 8) == 0) {
+				ERROR_LOG(Log::sceNet, "SSLConnect - Cannot connect to loopback.");
+				return false;
+			}
+			char portStr[8]{};
+			memset(portStr, 0, 8);
+			memcpy(portStr, std::to_string(port).c_str(), std::to_string(port).length());
+			if ((ret = mbedtls_net_connect(&tls.netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
+				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", addrStr, portStr, (unsigned int)-ret);
+				goto retry;
+			}
+			// Set NonBlocking
+			fd_util::SetNonBlocking(tls.netCtx.fd, true);
+			/*
+			 * 2. Setup stuff
+			 */
+			if ((ret = mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig)) != 0) {
+				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_setup returned 0x%04x", ret);
+				goto retry;
+			}
+
+			//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
+			if ((ret = mbedtls_ssl_set_hostname(&tls.sslCtx, host.c_str())) != 0) {
+				char errbuf[128];
+				mbedtls_strerror(ret, errbuf, sizeof(errbuf));
+				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
+				goto retry;
+			}
+
+			mbedtls_ssl_set_bio(&tls.sslCtx, &tls.netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
+
+			/*
+			 * 4. Handshake
+			 */
+			NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
+			auto start_time = std::chrono::high_resolution_clock::now();
+			while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
+				if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
+					char errbuf[128];
+					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
+					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
+					goto retry;
+				}
+			}
+			auto end_time = std::chrono::high_resolution_clock::now();
+			auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+			if (duration_ms > 100)
+				ERROR_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+			else if (duration_ms > 60)
+				WARN_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+			else
+				NOTICE_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+			// Fake latency
+			std::this_thread::sleep_for(std::chrono::milliseconds(60 - duration_ms));
+			/*
+			 * 5. Verify the server certificate
+			 */
+			 // HTTPS Option 28 may relate to disabling this check
+			if (GetOption(28)) {
+				NOTICE_LOG(Log::sceNet, "SSLConnect - Verifying peer X.509 certificate...");
+
+				/* In real life, we probably want to bail out when ret != 0 */
+				u32 flags;
+				if ((flags = mbedtls_ssl_get_verify_result(&tls.sslCtx)) != 0) {
+					char vrfy_buf[512];
+
+					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
+
+					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
+					goto retry;
+				}
+			}
+			INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
+			tls.connected = true;
+			// Save session for recycle
+			mbedtls_ssl_get_session(&tls.sslCtx, &tls.session);
+			return true;
+		retry:
+			INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
+			mbedtls_ssl_session_reset(&tls.sslCtx);
+			mbedtls_ssl_config_free(&tls.sslConfig);
+
+			mbedtls_ssl_free(&tls.sslCtx);
+			mbedtls_net_free(&tls.netCtx);
+
+			continue;
+		}
+	}
+	lastError = SCE_HTTP_ERROR_PARSE_HTTP_NOT_FOUND;
+	return false;
+}
 
 HTTPRequest::HTTPRequest(int connectionID, int method, const char *url, u64 contentLength, net::ResolveFunc customResolver) : client(customResolver), progress_(&cancelled_) {
 	// Copy base data as initial base value for this
@@ -191,20 +367,20 @@ HTTPRequest::HTTPRequest(int connectionID, int method, const char *url, u64 cont
 	this->method = method;
 	this->contentLength = contentLength;
 	this->progress_ = net::RequestProgress(&cancelled_);
-	this->state_ = ThreadState::INIT;
 
+	tls_ = tls;
 	if (tlsEnabled) {
-		// FIXME: The first connection breaks the original TLS object, and doesn't re-initialize
-		client.Initialize(this->tls, this->httpsOptions);
+		NOTICE_LOG(Log::HTTP, "HTTPRequest::HTTPRequest() - Re-Enabling TLS Session");
+		mbedtls_ssl_set_session(&this->tls_.sslCtx, &this->tls_.session);
+		client.Initialize(this->tls_, this->httpsOptions);
 	}
 
 	// Note: LittleBigPlanet onlu passed the path (ie. /LITTLEBIGPLANETPSP_XML/login?) during sceHttpCreateRequest without the host domain, thus will need to be construced into a valid URI using the data from sceHttpCreateConnection upon validating/parsing the URL.
 	if (startsWithNoCase(url, "/")) {
 		this->fullURL = scheme + "://" + hostString + ":" + std::to_string(port) + url;
 	}
+	// Simulate connected
 	ErrorCode = SCE_HTTP_OKAY;
-
-	this->worker_ = std::thread(&HTTPRequest::threadedStartConnect, this);
 }
 
 HTTPRequest::~HTTPRequest() {
@@ -215,159 +391,10 @@ HTTPRequest::~HTTPRequest() {
 		userMemory.Free(headerAddr_);
 }
 
-void HTTPRequest::threadedStartConnect() {
-	DEBUG_LOG(Log::HTTP, "threadedStartConnect()");
-	// Initialize Connection
-	client.SetDataTimeout(getRecvTimeout() / 1000000.0);
-	// Initialize Headers
-	if (getHttpVer() == SCE_HTTP_VERSION_1_0)
-		client.SetHttpVersion("1.0");
-	else
-		client.SetHttpVersion("1.1");
-	client.SetUserAgent(getUserAgent());
-
-	// TODO: Do this on a separate thread, since this may blocks "Emu" thread here
-	// Try to resolve first
-
-
-	Url fileUrl(this->fullURL);
-	if (!fileUrl.Valid()) {
-		ErrorCode = SCE_HTTP_ERROR_INVALID_URL;
-		return;
-	}
-	if (!client.Resolve(fileUrl.Host().c_str(), fileUrl.Port())) {
-		ERROR_LOG(Log::HTTP, "threadedStartConnect - Failed resolving %s", fileUrl.ToString().c_str());
-		std::unique_lock lk(mtx_);
-		ErrorCode = client.GetLastError();
-		state_ = ThreadState::HAS_ERROR;
-		cv_.notify_all();
-		return;
-	}
-	DEBUG_LOG(Log::HTTP, "threadedStartConnect - Connection Resolved");
-
-	// Establish Connection
-	if (!client.Connect(getResolveRetryCount(), getConnectTimeout() / 1000000.0, &cancelled_)) {
-		ERROR_LOG(Log::HTTP, "threadedStartConnect - Failed connecting to server or cancelled.");
-		std::unique_lock lk(mtx_);
-		ErrorCode = client.GetLastError();
-		state_ = ThreadState::HAS_ERROR;
-		cv_.notify_all();
-		return; // SCE_HTTP_ERROR_ABORTED
-	}
-	if (cancelled_) {
-		DEBUG_LOG(Log::HTTP, "threadedStartRequest - Canelled");
-		std::unique_lock lk(mtx_);
-		ErrorCode = SCE_HTTP_ERROR_ABORTED;
-		state_ = ThreadState::HAS_ERROR;
-		cv_.notify_all();
-		return;
-	}
-
-	{
-		std::unique_lock lk(mtx_);
-		state_ = ThreadState::CONNECTED;
-		cv_.notify_all();
-	}
-	DEBUG_LOG(Log::HTTP, "threadedStartConnect - Connected");
-}
-
-void HTTPRequest::threadedStartRequest(u32 postDataPtr, u32 postDataSize) {
-	DEBUG_LOG(Log::HTTP, "threadedStartRequest()");
-	if (postDataSize > 0)
-		requestHeaders_["Content-Length"] = std::to_string(postDataSize);
-	const std::string delimiter = "\r\n";
-	const std::string extraHeaders = std::accumulate(requestHeaders_.begin(), requestHeaders_.end(), std::string(),
-		[delimiter](const std::string& s, const std::pair<const std::string, std::string>& p) {
-		return s + p.first + ": " + p.second + delimiter;
-	});
-
-	Url fileUrl(this->fullURL);
-	if (!fileUrl.Valid()) {
-		std::unique_lock lk(mtx_);
-		ErrorCode = SCE_HTTP_ERROR_INVALID_URL;
-		state_ = ThreadState::HAS_ERROR;
-		cv_.notify_all();
-		return;
-	}
-
-	// Send the Request
-	std::string methodstr = "GET";
-	switch (method) {
-	case PSP_HTTP_METHOD_POST:
-		methodstr = "POST";
-		break;
-	case PSP_HTTP_METHOD_HEAD:
-		methodstr = "HEAD";
-		break;
-	default:
-		break;
-	}
-
-	this->progress_ = net::RequestProgress(&cancelled_);
-	http::RequestParams req(fileUrl.Resource(), "*/*");
-	const char* postData = Memory::GetCharPointer(postDataPtr);
-	if (postDataSize > 0)
-		NotifyMemInfo(MemBlockFlags::READ, postDataPtr, postDataSize, "HttpSendRequest");
-	
-	int err = client.SendRequestWithData(methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
-	if (err < 0) {
-		std::unique_lock lk(mtx_);
-		ErrorCode = err;
-		state_ = ThreadState::HAS_ERROR;
-		cv_.notify_all();
-		return;
-	}
-
-	if (cancelled_) {
-		DEBUG_LOG(Log::HTTP, "threadedStartRequest - Canelled");
-		std::unique_lock lk(mtx_);
-		ErrorCode = SCE_HTTP_ERROR_ABORTED;
-		state_ = ThreadState::HAS_ERROR;
-		cv_.notify_all();
-		return;
-	}
-
-	DEBUG_LOG(Log::HTTP, "threadedStartRequest - Request Sent");
-
-	err = client.ReadResponseHeaders(&this->buffer_, responseHeaders_, &this->progress_, &httpLine_);
-	if (err < 0) {
-		DEBUG_LOG(Log::HTTP, "threadedStartRequest - Header Error %d", responseCode_);
-		std::unique_lock lk(mtx_);
-		ErrorCode = err;
-		state_ = ThreadState::HAS_ERROR;
-		cv_.notify_all();
-		return;
-	}
-	if (cancelled_) {
-		DEBUG_LOG(Log::HTTP, "threadedStartRequest - Canelled");
-		std::unique_lock lk(mtx_);
-		ErrorCode = SCE_HTTP_ERROR_ABORTED;
-		state_ = ThreadState::HAS_ERROR;
-		cv_.notify_all();
-		return;
-	}
-
+int HTTPRequest::getResponseContentLength() {
 	// Split lines into responseHeaders
 	static const std::string clen = "Content-Length:";
 	static const std::string tenc = "Transfer-Encoding:";
-
-	// Find HTTP Code
-	{
-		std::string line = responseHeaders_[0];
-
-		size_t code_pos = line.find(' ');
-		if (code_pos != line.npos) {
-			code_pos = line.find_first_not_of(' ', code_pos);
-		}
-
-		if (code_pos != line.npos) {
-			this->responseCode_ = atoi(&line[code_pos]);
-		}
-		else {
-			ERROR_LOG(Log::HTTP, "Could not parse HTTP status code: '%s'", line.c_str());
-			this->responseCode_ = -1;
-		}
-	}
 	// Process additional conditions
 	for (const std::string& line : responseHeaders_) {
 		if (line != "") {
@@ -391,111 +418,34 @@ void HTTPRequest::threadedStartRequest(u32 postDataPtr, u32 postDataSize) {
 			}
 		}
 	}
-
-	DEBUG_LOG(Log::HTTP, "threadedStartRequest - Headers Received - Status: %d, Content-Length: %d", responseCode_, contentLength);
-	{
-		std::unique_lock lk(mtx_);
-		state_ = ThreadState::HEADERS_AVAILABLE;
-		cv_.notify_all();
-	}
-	// Read Entity Data in Chunks
-	this->progress_ = net::RequestProgress(&cancelled_);
-	this->progress_.Update(this->buffer_.size(), contentLength, false);
-	while (!cancelled_ && progress_.bytes_read < contentLength) {
-		DEBUG_LOG(Log::HTTP, "threadedStartRequest - Bytes Read: %d => Content Length: %d", progress_.bytes_read, contentLength);
-		int res = client.ReadPartialResponseEntity(&this->buffer_, 8208, contentLength, &progress_);
-		if (res != 0) {
-			DEBUG_LOG(Log::HTTP, "threadedStartRequest - Response Error %d", res);
-			std::unique_lock lk(mtx_);
-			ErrorCode = res;
-			state_ = ThreadState::HAS_ERROR;
-			cv_.notify_all();
-			return;
-		}
-
-		if (cancelled_) {
-			DEBUG_LOG(Log::HTTP, "threadedStartRequest - Canelled");
-			std::unique_lock lk(mtx_);
-			ErrorCode = SCE_HTTP_ERROR_ABORTED;
-			state_ = ThreadState::HAS_ERROR;
-			cv_.notify_all();
-			return;
-		}
-
-		DEBUG_LOG(Log::HTTP, "threadedStartRequest - Partial Response Received");
-		{
-			std::unique_lock lk(mtx_);
-			state_ = ThreadState::DATA_AVAILABLE;
-			cv_.notify_all();
-		}
-	}
-
-	DEBUG_LOG(Log::HTTP, "threadedStartRequest - Full Response Received: %d / %d", progress_.bytes_read, contentLength);
-
-	{
-		std::unique_lock lk(mtx_);
-		state_ = ThreadState::COMPLETE;
-		cv_.notify_all();
-	}
-}
-
-int HTTPRequest::getResponseContentLength() {
-	// FIXME: Will sceHttpGetContentLength returns an error if the request was not sent yet?
-	//if (progress_.progress == 0.0f)
-	//	return SCE_HTTP_ERROR_BEFORE_SEND;
-
-	std::unique_lock lk(mtx_);
-	cv_.wait(lk, [&] { return state_ >= ThreadState::HEADERS_AVAILABLE || state_ == ThreadState::HAS_ERROR; });
-	if (state_ == ThreadState::HAS_ERROR) {
-		if (worker_.joinable()) worker_.join();
-		if (state_ == ThreadState::HAS_ERROR)
-			DEBUG_LOG(Log::HTTP, "getResponseContentLength - Error %08x", hleLogError(Log::HTTP, client.GetLastError()));
-		return -1;
-	}
-
-	//entityLength_ = -1; // FIXME: should we default to 0 instead?
-	//for (std::string& line : responseHeaders_) {
-	//	if (startsWithNoCase(line, "Content-Length")) {
-	//		size_t pos = line.find_first_of(':');
-	//		if (pos != line.npos) {
-	//			pos++;
-	//			entityLength_ = atoi(&line[pos]);
-	//		}
-	//	}
-	//}
-	return contentLength;
+	return this->contentLength;
 }
 
 int HTTPRequest::abortRequest() {
-
-	std::unique_lock lk(mtx_);
-	cancelled_ = true;
-	cv_.wait(lk, [&] { return state_ >= ThreadState::COMPLETE || state_ == ThreadState::HAS_ERROR; });
-	if (worker_.joinable()) worker_.join();
-	if (state_ == ThreadState::HAS_ERROR)
-		DEBUG_LOG(Log::HTTP, "abortRequest - Error %08x", hleLogError(Log::HTTP, client.GetLastError()));
-	return 0;
-
 	// FIXME: Will sceHttpAbortRequest returns an error if the request was not sent yet?
-	//if (progress_.progress == 0.0f)
-	//	return SCE_HTTP_ERROR_BEFORE_SEND;
-	//return 0;
+	if (progress_.progress == 0.0f)
+		return SCE_HTTP_ERROR_BEFORE_SEND;
+	return 0;
 }
 
 int HTTPRequest::getStatusCode() {
-	// FIXME: Will sceHttpGetStatusCode returns an error if the request was not sent yet?
-	//if (progress_.progress == 0.0f)
-	//	return SCE_HTTP_ERROR_BEFORE_SEND;
-
-	std::unique_lock lk(mtx_);
-	cv_.wait(lk, [&] { return state_ >= ThreadState::HEADERS_AVAILABLE || state_ == ThreadState::HAS_ERROR; });
-	if (state_ == ThreadState::HAS_ERROR) {
-		if (worker_.joinable()) worker_.join();
-		if (state_ == ThreadState::HAS_ERROR)
-			DEBUG_LOG(Log::HTTP, "getStatusCode - Error %08x", hleLogError(Log::HTTP, client.GetLastError()));
-		return 0;
+	// Find HTTP Code
+	{
+		std::string line = responseHeaders_[0];
+	
+		size_t code_pos = line.find(' ');
+		if (code_pos != line.npos) {
+			code_pos = line.find_first_not_of(' ', code_pos);
+		}
+	
+		if (code_pos != line.npos) {
+			this->responseCode_ = atoi(&line[code_pos]);
+		}
+		else {
+			ERROR_LOG(Log::HTTP, "Could not parse HTTP status code: '%s'", line.c_str());
+			this->responseCode_ = -1;
+		}
 	}
-
 	return responseCode_;
 }
 
@@ -503,13 +453,6 @@ int HTTPRequest::getAllResponseHeaders(u32 headerAddrPtr, u32 headerSizePtr) {
 	// FIXME: Will sceHttpGetAllHeader returns an error if the request was not sent yet?
 	//if (progress_.progress == 0.0f)
 	//	return SCE_HTTP_ERROR_BEFORE_SEND;
-	std::unique_lock lk(mtx_);
-	cv_.wait(lk, [&] { return state_ >= ThreadState::HEADERS_AVAILABLE || state_ == ThreadState::HAS_ERROR; });
-	if (state_ == ThreadState::HAS_ERROR) {
-		if (worker_.joinable()) worker_.join();
-		return client.GetLastError();
-	}
-
 	const char* const delim = "\r\n";
 	std::ostringstream imploded;
 	std::copy(responseHeaders_.begin(), responseHeaders_.end(), std::ostream_iterator<std::string>(imploded, delim));
@@ -559,31 +502,23 @@ int HTTPRequest::getAllResponseHeaders(u32 headerAddrPtr, u32 headerSizePtr) {
 }
 
 int HTTPRequest::readData(u32 destDataPtr, u32 size) {
-	//HEX_LOG(Log::Printf, "HTTPRequest::readData()", entity.c_str(), entity.length());
-	u32 buf_len = 0;
-wait_for_next:
-	{
-		std::unique_lock lk(mtx_);
-		cv_.wait(lk, [&] { return state_ >= ThreadState::DATA_AVAILABLE || state_ == ThreadState::HAS_ERROR; });
-		if (state_ == ThreadState::HAS_ERROR) {
-			if (worker_.joinable()) worker_.join();
-			return hleLogError(Log::HTTP, client.GetLastError());
-		}
-		buf_len = this->buffer_.size();
-		if (state_ == ThreadState::DATA_AVAILABLE) {
-			// Still have data to pull
-			if (buf_len < size)
-				goto wait_for_next;
-		}
+	// TODO: Read response entity within readData() in smaller chunk(based on size arg of sceHttpReadData) instead of the whole content at once here
+	net::Buffer partial;
+	int res = client.ReadPartialResponseEntity(&this->buffer_, size, contentLength, &partial, &progress_);
+	if (res != 0) {
+		ERROR_LOG(Log::sceNet, "Unable to read HTTP response entity: %d", res);
+	}
+	//entity_.TakeAll(&responseContent_);
+	if (cancelled_) {
+		return SCE_HTTP_ERROR_ABORTED;
 	}
 
-	u32 sz = std::min(size, (u32)buf_len);
-	if (sz > 0) {
-		std::string entity;
-		this->buffer_.Take(sz, &entity);
-		DEBUG_LOG(Log::HTTP, "Buffer has %d bytes, writing %d bytes", buf_len, sz);
+	std::string entity;
+	partial.TakeAll(&entity);
 
-		//entity_.Take(sz, &chunk);
+	u32 sz = std::min(size, (u32)entity.length());
+	if (sz > 0) {
+		DEBUG_LOG(Log::HTTP, "Buffer has %d bytes, writing %d bytes", entity.length(), sz);
 		Memory::MemcpyUnchecked(destDataPtr, entity.c_str(), sz);
 		NotifyMemInfo(MemBlockFlags::WRITE, destDataPtr, sz, "HttpReadData");
 		entity.erase(0, sz);
@@ -592,74 +527,50 @@ wait_for_next:
 }
 
 int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
-	readIndex = 0;
+	// FIXME: Probably doesn't adhere to the new requestHeaders format
+	if (postDataSize > 0)
+		requestHeaders_["Content-Length"] = std::to_string(postDataSize);
+	const std::string delimiter = "\r\n";
+	const std::string extraHeaders = std::accumulate(requestHeaders_.begin(), requestHeaders_.end(), std::string(),
+		[delimiter](const std::string& s, const std::pair<const std::string, std::string>& p) {
+		return s + p.first + ": " + p.second + delimiter;
+	});
 
-	// Wait for Connect to finish, or Error
-	{
-		std::unique_lock lk(mtx_);
-		cv_.wait(lk, [&] { return state_ >= ThreadState::CONNECTED || state_ == ThreadState::HAS_ERROR; });
-		if (worker_.joinable()) worker_.join();
-		if (state_ == ThreadState::HAS_ERROR) {
-			if (worker_.joinable()) worker_.join();
-			return hleLogError(Log::HTTP, client.GetLastError());
-		}
+	Url fileUrl(this->fullURL);
+	if (!fileUrl.Valid()) {
+		ErrorCode = SCE_HTTP_ERROR_INVALID_URL;
+		return ErrorCode;
 	}
 
-	// Start the request
-	worker_ = std::thread(&HTTPRequest::threadedStartRequest, this, postDataPtr, postDataSize);
-
-	// Wait for headers
-	{
-		std::unique_lock lk(mtx_);
-		cv_.wait(lk, [&] { return state_ >= ThreadState::HEADERS_AVAILABLE || state_ == ThreadState::HAS_ERROR; });
-		if (state_ == ThreadState::HAS_ERROR) {
-			if (worker_.joinable()) worker_.join();
-			return hleLogError(Log::HTTP, client.GetLastError());
-		}
+	// Send the Request
+	std::string methodstr = "GET";
+	switch (method) {
+	case PSP_HTTP_METHOD_POST:
+		methodstr = "POST";
+		break;
+	case PSP_HTTP_METHOD_HEAD:
+		methodstr = "HEAD";
+		break;
+	default:
+		break;
 	}
-	//if (postDataSize > 0)
-	//	requestHeaders_["Content-Length"] = std::to_string(postDataSize);
-	//const std::string delimiter = "\r\n";
-	//const std::string extraHeaders = std::accumulate(requestHeaders_.begin(), requestHeaders_.end(), std::string(),
-	//	[delimiter](const std::string& s, const std::pair<const std::string, std::string>& p) {
-	//	return s + p.first + ": " + p.second + delimiter;
-	//});
 
-	//Url fileUrl(this->fullURL);
-	//if (!fileUrl.Valid()) {
-	//	ErrorCode = SCE_HTTP_ERROR_INVALID_URL;
-	//	return ErrorCode;
-	//}
+	net::RequestProgress progress_(&cancelled_);
+	http::RequestParams req(fileUrl.Resource(), "*/*");
+	const char* postData = Memory::GetCharPointer(postDataPtr);
+	if (postDataSize > 0)
+		NotifyMemInfo(MemBlockFlags::READ, postDataPtr, postDataSize, "HttpSendRequest");
+	
+	int err = client.SendRequestWithData(methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
+	if (err < 0)
+		return err;
 
-	//// Send the Request
-	//std::string methodstr = "GET";
-	//switch (method) {
-	//case PSP_HTTP_METHOD_POST:
-	//	methodstr = "POST";
-	//	break;
-	//case PSP_HTTP_METHOD_HEAD:
-	//	methodstr = "HEAD";
-	//	break;
-	//default:
-	//	break;
-	//}
+	if (cancelled_) {
+		ErrorCode = SCE_HTTP_ERROR_ABORTED;
+		return ErrorCode;
+	}
 
-	//net::RequestProgress progress_(&cancelled_);
-	//http::RequestParams req(fileUrl.Resource(), "*/*");
-	//const char* postData = Memory::GetCharPointer(postDataPtr);
-	//if (postDataSize > 0)
-	//	NotifyMemInfo(MemBlockFlags::READ, postDataPtr, postDataSize, "HttpSendRequest");
-	//
-	//int err = client.SendRequestWithData(methodstr.c_str(), req, std::string(postData ? postData : "", postData ? postDataSize : 0), extraHeaders.c_str(), &progress_);
-	//if (err < 0)
-	//	return err;
-
-	//if (cancelled_) {
-	//	ErrorCode = SCE_HTTP_ERROR_ABORTED;
-	//	return ErrorCode;
-	//}
-
-	//responseCode_ = client.ReadResponseHeaders(&this->buffer_, responseHeaders_, &this->progress_, &httpLine_);
+	responseCode_ = client.ReadResponseHeaders(&this->buffer_, responseHeaders_, &this->progress_, &httpLine_);
 	return ErrorCode;
 }
 
@@ -855,6 +766,9 @@ static int sceHttpDeleteConnection(int connectionID) {
 	if (httpObjects.find(connectionID)->second->className() != name_HTTPConnection)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
+	const auto& conn = (HTTPConnection*)httpObjects.find(connectionID)->second.get();
+
+	conn->Disconnect();
 	//httpObjects.erase(httpObjects.begin() + connectionID - 1);
 	httpObjects.erase(connectionID);
 	return 0;
@@ -1070,7 +984,8 @@ static int sceHttpCreateConnection(int templateID, const char *hostString, const
 	// TODO: Look up hostString in DNS here.
 	int objId = NextObjectID();
 	auto conn = std::make_shared<HTTPConnection>(templateID, hostString ? hostString : "", scheme ? scheme : "", port, enableKeepalive);
-	conn->InitializeSSL();
+	//conn->InitializeSSL();
+	//conn->Connect();
 	httpObjects[objId] = conn;
 	return hleLogDebug(Log::sceNet, objId);
 }
