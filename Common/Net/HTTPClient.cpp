@@ -27,12 +27,6 @@ namespace net {
 Connection::~Connection() {
 	if (sslEnabled) {
 		Disconnect();
-		mbedtls_net_free(&tls.netCtx);
-		mbedtls_ssl_free(&tls.sslCtx);
-
-		mbedtls_ssl_config_free(&tls.sslConfig);
-		mbedtls_ctr_drbg_free(&tls.ctrDrbg);
-		mbedtls_entropy_free(&tls.entropy);
 	}
 	Disconnect();
 	if (resolved_ != nullptr)
@@ -367,18 +361,6 @@ Client::Client(net::ResolveFunc func) : Connection(func) {
 Client::~Client() {
 	DEBUG_LOG(Log::HTTP, "~Client()");
 	if (sslEnabled) {
-		mbedtls_ssl_close_notify(&tls.sslCtx);  // Optional, sends close_notify
-		mbedtls_ssl_free(&tls.sslCtx);
-		mbedtls_ssl_config_free(&tls.sslConfig);
-		mbedtls_net_free(&tls.netCtx);
-		sslEnabled = false;
-
-		// Clear cert if you're not persisting it across sessions
-		//mbedtls_x509_crt_free(&caCert);
-
-		// Also clear entropy and rng contexts if reinitialized every time
-		//mbedtls_ctr_drbg_free(&ctrDrbg);
-		//mbedtls_entropy_free(&entropy);
 	}
 	Disconnect();
 }
