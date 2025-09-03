@@ -115,7 +115,7 @@ namespace net {
 		bool cancelled = false;
 		while (running) {
 			Packet packet;
-			cancelled = !running;
+			cancelled = !&running;
 			int ret = Recv(&packet, &cancelled); // Uses NPAuthAgent::Recv
 			if (cancelled)
 				return;
