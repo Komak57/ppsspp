@@ -63,7 +63,7 @@ public:
 	}
 
 	bool GetOption(int id) {
-		auto it = this->httpsOptions.find(28);
+		auto it = this->httpsOptions.find(id);
 		if (it == this->httpsOptions.end())
 			return false;
 		return it->second;
