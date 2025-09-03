@@ -133,7 +133,7 @@
       <ForcedIncludeFiles>Common/DbgNew.h</ForcedIncludeFiles>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PreprocessorDefinitions>_CRTDBG_MAP_ALLOC;USING_WIN_UI;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;WIN32;_ARCH_64=1;_M_X64=1;_DEBUG;_LIB;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>../ext/OpenXR-SDK/include;../ext/glew;../ext/snappy;../ext/glslang;../ext/libpng17;../ext;../ext/zlib;..;../ext/zstd/lib;../ext/mbedtls/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../ext/OpenXR-SDK/include;../ext/glew;../ext/snappy;../ext/glslang;../ext/libpng17;../ext;../ext/zlib;..;../ext/zstd/lib;../ext/wolfssl/build</AdditionalIncludeDirectories>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
       <FloatingPointModel>Precise</FloatingPointModel>
       <OmitFramePointers>false</OmitFramePointers>
@@ -1004,8 +1004,8 @@
     <ProjectReference Include="..\ext\cpu_features.vcxproj">
       <Project>{c249f016-7f82-45cf-bb6e-0642a988c4d3}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\ext\mbedtls.vcxproj">
-      <Project>{bdc4a507-b7c8-4fdf-acd4-608656e37445}</Project>
+    <ProjectReference Include="..\ext\wolfssl\wolfssl-VS2022.vcxproj">
+      <Project>{12226dbe-7278-4dfa-a119-5a0294cf0b33}</Project>
     </ProjectReference>
     <ProjectReference Include="..\ext\zlib\zlib.vcxproj">
       <Project>{f761046e-6c38-4428-a5f1-38391a37bb34}</Project>
