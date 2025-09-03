@@ -76,18 +76,6 @@ bool Connection::Resolve(const char *host, int port, DNSType type) {
 	return true;
 }
 
-static void FormatAddr(char *addrbuf, size_t bufsize, const addrinfo *info) {
-	switch (info->ai_family) {
-	case AF_INET:
-	case AF_INET6:
-		inet_ntop(info->ai_family, &((sockaddr_in *)info->ai_addr)->sin_addr, addrbuf, bufsize);
-		break;
-	default:
-		snprintf(addrbuf, bufsize, "(Unknown AF %d)", info->ai_family);
-		break;
-	}
-}
-
 bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 	if (sslEnabled)
 		return SSLConnect(maxTries, timeout, cancelConnect);
