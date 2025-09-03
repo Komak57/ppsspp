@@ -40,19 +40,6 @@ inline unsigned short myhtons(unsigned short x) {
 	return (x >> 8) | (x << 8);
 }
 
-const char *DNSTypeAsString(DNSType type) {
-	switch (type) {
-	case DNSType::IPV4:
-		return "IPV4";
-	case DNSType::IPV6:
-		return "IPV6";
-	case DNSType::ANY:
-		return "ANY";
-	default:
-		return "N/A";
-	}
-}
-
 bool Connection::Resolve(const char *host, int port, DNSType type) {
 	if ((intptr_t)sock_ != -1) {
 		ERROR_LOG(Log::IO, "Resolve: Already have a socket");
