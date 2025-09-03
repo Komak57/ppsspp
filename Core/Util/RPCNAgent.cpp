@@ -871,7 +871,7 @@ namespace net {
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::LeaveRoom, reqId);
 
-		INFO_LOG(Log::sceNet, "Join Room #%d", req->roomId);
+		INFO_LOG(Log::sceNet, "Leaving Room #%d", req->roomId);
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {

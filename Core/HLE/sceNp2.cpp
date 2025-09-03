@@ -695,13 +695,12 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		}
 
 		int ret;
-		/*ret = servers[tServer]->CreateAccount(npid.c_str(), "lemmein", "bl00d", "http://DummyAvatarUrl", "bl00d@email.com");
+		/*ret = servers[tServer]->CreateAccount(npid.c_str(), "password", "online_id", "http://DummyAvatarUrl", "email@email.com");
 		if (ret != 0) {
 			ERROR_LOG(Log::sceNet, "Unable to Register");
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 		}*/
 		
-		//ret = servers[tServer]->Login("RPCS3_ZSgScc4D7x", "4D571528FECEBD1A", "lemmein");
 		std::string* creds = NpGetLogin();
 		ret = servers[tServer]->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
 		if (ret != 0) {
@@ -1020,6 +1019,7 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32
 		int ret = servers[tServer]->LeaveRoom(req, &roomId);
 
 		// TODO: execute signaling callback to update users
+		//g_signaling.disconnect_sig2_users(room_id);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);
 	});
