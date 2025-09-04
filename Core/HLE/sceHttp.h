@@ -52,19 +52,6 @@ inline void FormatAddr(char* addrbuf, size_t bufsize, const addrinfo* info) {
 	}
 }
 
-inline const char* DNSTypeAsString(net::DNSType type) {
-	switch (type) {
-	case net::DNSType::IPV4:
-		return "IPV4";
-	case net::DNSType::IPV6:
-		return "IPV6";
-	case net::DNSType::ANY:
-		return "ANY";
-	default:
-		return "N/A";
-	}
-}
-
 // lib_http specific error codes, based on https://uofw.github.io/uofw/lib__http_8h_source.html, combined with https://github.com/vitasdk/vita-headers/blob/master/include/psp2/net/http.h
 enum SceHttpErrorCode {
 	SCE_HTTP_OKAY = 0x00000000,

@@ -27,4 +27,17 @@ int inet_pton(int af, const char* src, void* dst);
 // Does a DNS lookup without involving the OS, so you can hit any DNS server.
 bool DirectDNSLookupIPV4(const char *dnsServer, const char *host, uint32_t *ipv4_addr);
 
+inline const char* DNSTypeAsString(net::DNSType type) {
+	switch (type) {
+	case net::DNSType::IPV4:
+		return "IPV4";
+	case net::DNSType::IPV6:
+		return "IPV6";
+	case net::DNSType::ANY:
+		return "ANY";
+	default:
+		return "N/A";
+	}
+}
+
 }  // namespace net
