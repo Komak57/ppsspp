@@ -39,19 +39,6 @@
 #define 	SCE_HTTP_USERNAME_MAX_SIZE   256
 #define 	SCE_HTTP_PASSWORD_MAX_SIZE   256
 
-// If http isn't loaded (seems unlikely), most functions should return SCE_KERNEL_ERROR_LIBRARY_NOTFOUND
-inline void FormatAddr(char* addrbuf, size_t bufsize, const addrinfo* info) {
-	switch (info->ai_family) {
-	case AF_INET:
-	case AF_INET6:
-		inet_ntop(info->ai_family, &((sockaddr_in*)info->ai_addr)->sin_addr, addrbuf, bufsize);
-		break;
-	default:
-		snprintf(addrbuf, bufsize, "(Unknown AF %d)", info->ai_family);
-		break;
-	}
-}
-
 // lib_http specific error codes, based on https://uofw.github.io/uofw/lib__http_8h_source.html, combined with https://github.com/vitasdk/vita-headers/blob/master/include/psp2/net/http.h
 enum SceHttpErrorCode {
 	SCE_HTTP_OKAY = 0x00000000,
