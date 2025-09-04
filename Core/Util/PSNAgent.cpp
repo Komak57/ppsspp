@@ -2,7 +2,6 @@
 #include <Core/HLE/HLE.h>
 #include <Common/Net/NetBuffer.h>
 #include <Common/File/FileDescriptor.h>
-#include <mbedtls/error.h>
 #include <TimeUtil.h>
 
 /*

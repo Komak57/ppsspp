@@ -2,11 +2,9 @@
 
 #include <cstdint>
 #include <functional>
-#include <mbedtls/ssl.h>
 
 #include "Common/Net/HTTPS.h"
 #include "Common/Buffer.h"
-#include <mbedtls/net_sockets.h>
 
 namespace net {
 

@@ -12,12 +12,6 @@
 
 #include "Core/HLE/Np2Types.h"
 #include <Core/np2_structs_generated.h>
-
-#include "mbedtls/ssl.h"
-#include "mbedtls/net_sockets.h"
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/timing.h"
 // 0x88 bytes
 //struct RoomInfo {
 //	u16_le ID;

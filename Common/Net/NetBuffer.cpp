@@ -12,7 +12,6 @@
 #include "Common/Log.h"
 #include "Common/Net/NetBuffer.h"
 #include "Common/TimeUtil.h"
-#include <mbedtls/error.h>
 
 namespace net {
 

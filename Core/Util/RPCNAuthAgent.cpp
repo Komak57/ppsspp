@@ -1,9 +1,8 @@
 #include "Core/Util/NPAgent.h"
 #include <Core/HLE/HLE.h>
 #include <File/FileDescriptor.h>
-#include <mbedtls/error.h>
 #include <TimeUtil.h>
-#include <mbedtls/debug.h>
+#include <SysError.h>
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN
 	RPCNAuthAgent::RPCNAuthAgent(std::string host, int port) {

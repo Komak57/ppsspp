@@ -34,8 +34,7 @@
 #include "Common/Net/URL.h"
 #include "Common/Net/HTTPClient.h"
 #include <Common/File/FileDescriptor.h>
-#include <mbedtls/debug.h>
-#include <mbedtls/error.h>
+#include <SysError.h>
 
 static std::map<u32, std::shared_ptr<HTTPTemplate>> httpObjects;
 static std::mutex httpLock;
