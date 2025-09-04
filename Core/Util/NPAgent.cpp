@@ -259,23 +259,37 @@ namespace net {
 		double endTimeout = time_now_d() + timeout;
 		const char* data = reinterpret_cast<const char*>(packet->Data());
 		for (size_t pos = 0, end = strlen(data); pos < end; ) {
-			if (time_now_d() > endTimeout) {
-				ERROR_LOG(Log::IO, "Send timed out");
+			// Check cancelation flag
+			if (*cancelled)
 				return false;
+			while (!ready) {
+				// Wait a moment for data to be ready
+				ready = fd_util::WaitUntilReady(wolfSSL_get_fd(tls.ssl), CANCEL_INTERVAL, true);
+				// Check cancelation flag each loop
+				if (*cancelled)
+					return false;
+				// Check for Timeout
+				if (time_now_d() > endTimeout) {
+					ERROR_LOG(Log::sceNet, "FlushSocket: Client timed out");
+					return false;
+				}
 			}
 			int sent;
-			if (SSLEnabled) {
-				sent = mbedtls_ssl_write(&tls.sslCtx, (const unsigned char*)data + pos, end - pos);
+			if (tls.enabled) {
+				sent = wolfSSL_write(tls.ssl, data + pos, (int)(end - pos));
 				//int sent = send(sock, &data[pos], end - pos, MSG_NOSIGNAL);
 				// TODO: Do we need some retry logic here, instead of just giving up?
 				if (sent <= 0) {
-					switch (sent) {
-					case MBEDTLS_ERR_NET_CONN_RESET:
-					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-						ERROR_LOG(Log::sceNet, "FlushSocket: Client closed connection gracefully");
+					int err = wolfSSL_get_error(tls.ssl, sent);
+					switch (err) {
+					case WOLFSSL_ERROR_ZERO_RETURN:
+						ERROR_LOG(Log::sceNet, "WolfSSL: Client closed connection gracefully");
 						return true;
+					case WOLFSSL_ERROR_WANT_WRITE:
+						ready = false;
+						continue;
 					default:
-						ERROR_LOG(Log::sceNet, "SSL write failed: -0x%04x", -sent);
+						ERROR_LOG(Log::sceNet, "WolfSSL write failed: -0x%04x", -err);
 						return false;
 					}
 				}
@@ -336,34 +350,31 @@ namespace net {
 		size_t received = 0;
 		ReadState state = ReadState::Headers;
 		int content_length = 0;
+		bool ready = true;
 
 		while (state != ReadState::Complete) {
-			if (SSLEnabled) {
-				DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
-				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
+			if (tls.enabled) {
+				// Check cancelation flag?
+				while (!ready) {
+					// Wait a moment for data to be ready
+					ready = fd_util::WaitUntilReady(wolfSSL_get_fd(tls.ssl), CANCEL_INTERVAL, true);
+					// Check cancelation flag each loop?
+					// Check for Timeout?
+				}
+				DEBUG_LOG(Log::sceNet, "WolfSSL reading %i bytes", toRead);
+				retval = wolfSSL_read(tls.ssl, (unsigned char*)buf, toRead);
 				//int ready = 0;
 				if (retval < 0) {
-					switch (retval) {
-					case MBEDTLS_ERR_NET_CONN_RESET:
-					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-						WARN_LOG(Log::sceNet, "Read - Client closed connection gracefully");
+					int err = wolfSSL_get_error(tls.ssl, retval);
+					switch (err) {
+					case WOLFSSL_ERROR_ZERO_RETURN:
+						WARN_LOG(Log::sceNet, "WolfSSL - Client closed connection gracefully");
 						return (int)received > 0 ? (int)received : retval;
-					case MBEDTLS_ERR_SSL_TIMEOUT:
-						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned TIMOUT");
-						return retval;
-					case MBEDTLS_ERR_SSL_WANT_WRITE:
-						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_WRITE");
-						return retval;
-					case MBEDTLS_ERR_SSL_WANT_READ:
-						DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
-						/*while (!ready)
-							ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);*/
-							// Read some more!
+					case WOLFSSL_ERROR_WANT_READ:
+						ready = false;
 						continue;
 					default:
-						char errbuf[128];
-						mbedtls_strerror(retval, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::sceNet, "Read Failed: -0x%04x -> %s", -retval, errbuf);
+						ERROR_LOG(Log::sceNet, "Read Failed: -0x%04x", -retval);
 						return retval;
 					}
 				}
@@ -468,17 +479,17 @@ namespace net {
 				return false;
 			}
 			int sent;
-			if (SSLEnabled) {
-				sent = mbedtls_ssl_write(&tls.sslCtx, packet->Data() + pos, end - pos);
+			if (tls.enabled) {
+				sent = wolfSSL_write(tls.ssl, packet->Data() + pos, (int)(end - pos));
 				// TODO: Do we need some retry logic here, instead of just giving up?
 				if (sent <= 0) {
-					switch (sent) {
-					case MBEDTLS_ERR_NET_CONN_RESET:
-					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+					int err = wolfSSL_get_error(tls.ssl, sent);
+					switch (err) {
+					case WOLFSSL_ERROR_ZERO_RETURN:
 						ERROR_LOG(Log::sceNet, "FlushSocket: Client closed connection gracefully");
 						return true;
 					default:
-						ERROR_LOG(Log::sceNet, "SSL write failed: -0x%04x", -sent);
+						ERROR_LOG(Log::sceNet, "SSL write failed: -0x%04x", -err);
 						return false;
 					}
 				}
@@ -539,38 +550,29 @@ namespace net {
 				WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");
 				return 0;
 			}
-			if (SSLEnabled) {
-				DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
-				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
-
+			if (tls.enabled) {
+				DEBUG_LOG(Log::sceNet, "WolfSSL reading %i bytes", toRead);
+				retval = wolfSSL_read(tls.ssl, (unsigned char*)buf, toRead);
 				if (*cancelled) {
 					WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");
 					return 0;
 				}
 				//int ready = 0;
 				if (retval < 0) {
-					switch (retval) {
-					case MBEDTLS_ERR_NET_CONN_RESET:
-					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-						WARN_LOG(Log::sceNet, "Read - Client closed connection gracefully");
-						return (int)received > 0 ? (int)received : retval;
-					case MBEDTLS_ERR_SSL_TIMEOUT:
-						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned TIMOUT");
-						return retval;
-					case MBEDTLS_ERR_SSL_WANT_WRITE:
-						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_WRITE");
-						return retval;
-					case MBEDTLS_ERR_SSL_WANT_READ:
-						DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
+					int err = wolfSSL_get_error(tls.ssl, retval);
+					switch (err) {
+					case WOLFSSL_ERROR_ZERO_RETURN:
+						WARN_LOG(Log::sceNet, "WolfSSL - Client closed connection gracefully");
+						return (int)received > 0 ? (int)received : err;
+					case WOLFSSL_ERROR_WANT_READ:
+						DEBUG_LOG(Log::sceNet, "WolfSSL returned WANT_READ");
 						/*while (!ready)
 							ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);*/
 							// Read some more!
 						continue;
 					default:
-						char errbuf[128];
-						mbedtls_strerror(retval, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::HTTP, "Read Failed: -0x%04x -> %s", -retval, errbuf);
-						return retval;
+						ERROR_LOG(Log::HTTP, "Read Failed: -0x%04x", -err);
+						return err;
 					}
 				}
 
