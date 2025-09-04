@@ -55,12 +55,8 @@ namespace net {
 	}
 
 	void PSNAgent::Disconnect() {
-		if (SSLEnabled) {
-			mbedtls_ssl_close_notify(&tls.sslCtx);
-			mbedtls_ssl_free(&tls.sslCtx);
-			mbedtls_ssl_config_free(&tls.sslConfig);
-			mbedtls_net_free(&tls.netCtx);
-			SSLEnabled = false;
+		if (tls.enabled) {
+			ResetSSL();
 		}
 		else {
 			if ((intptr_t)sock_ != -1) {

@@ -185,7 +185,7 @@ static const char* name_HTTPTemplate = "HTTPTemplate";
 static const char* name_HTTPConnection = "HTTPConnection";
 static const char* name_HTTPRequest = "HTTPRequest";
 
-class HTTPTemplate {
+class HTTPTemplate : public HTTPS {
 protected:
 	std::string userAgent; // char userAgent[512];
 	SceHttpVersion httpVer = SCE_HTTP_VERSION_1_0;
@@ -196,7 +196,6 @@ protected:
 	int useCache = 0;
 	int useAuth = 0;
 	int useRedirect = 0;
-	int tlsEnabled = 0;
 
 	u32 connectTimeout = SCE_HTTP_DEFAULT_CONNECT_TIMEOUT;
 	u32 sendTimeout = SCE_HTTP_DEFAULT_SEND_TIMEOUT;
@@ -206,7 +205,6 @@ protected:
 
 	std::map<std::string, std::string> requestHeaders_;
 	std::string certPEM;
-	std::unordered_map<int, bool> httpsOptions = {};
 
 public:
 	HTTPTemplate() {}
@@ -233,12 +231,11 @@ public:
 	void enableAuth() { this->useAuth = 1; }
 	void enableOption(int option) { this->httpsOptions[option] = 1; };
 	void disableOption(int option) { this->httpsOptions[option] = 0; };
-	void enableTLS() { this->tlsEnabled = 1; }
 
 	void CopyFrom(HTTPTemplate parent) {
 		this->certPEM = parent.certPEM;
 		this->httpsOptions = parent.httpsOptions;
-		this->tlsEnabled = parent.tlsEnabled;
+		this->tls.enabled = parent.tls.enabled;
 	}
 
 	void setUserAgent(const char* userAgent) { this->userAgent = userAgent ? userAgent : ""; }
@@ -254,8 +251,9 @@ public:
 };
 
 class HTTPConnection : public HTTPTemplate {
+private:
+	uintptr_t sock_ = -1;
 protected:
-	net::MBEDTLS_Connection tls;
 	int templateID = 0;
 	std::string hostString;
 	std::string scheme;
@@ -273,23 +271,13 @@ public:
 	virtual const char* className() override { return name_HTTPConnection; }
 	bool Resolve(const char* host, int port, net::DNSType type);
 	bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
-	bool SSLConnect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 	void Disconnect();
-	// SSL Related Functions
-	int InitializeSSL();
-
-	bool isSSLEnabled() { return tlsEnabled; }
+	
 	int getTemplateID() { return templateID; }
 	const std::string getHost() { return hostString; }
 	const std::string getScheme() { return scheme; }
 	u16 getPort() { return port; }
 	int getKeepAlive() { return enableKeepalive; }
-	bool GetOption(int id) {
-		auto it = this->httpsOptions.find(id);
-		if (it == this->httpsOptions.end())
-			return false;
-		return it->second;
-	}
 };
 
 enum class ThreadState {
@@ -315,7 +303,6 @@ private:
 	int responseCode_ = -1;
 	int entityLength_ = -1;
 
-	net::MBEDTLS_Connection tls_;
 	http::Client client;
 	net::Buffer buffer_;
 	net::RequestProgress progress_;

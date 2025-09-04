@@ -477,14 +477,12 @@ namespace net {
 	};
 
 	enum class NPAgentType { PSN, RPCN };
-	class NPAgent {
+	class NPAgent : public HTTPS {
 	public:
-		net::MBEDTLS_Connection tls;
 		virtual ~NPAgent() = default;
 
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
-		int InitializeSSL(int transport, std::string certPEM);
 		virtual void Disconnect() = 0;
 		bool Send(Packet* packet, double timeout, bool* cancelled);
 		int Recv(Packet* packet, bool* cancelled);
@@ -520,8 +518,7 @@ namespace net {
 		}
 
 		// Only to be used for bring-up and debugging.
-		uintptr_t sock() const { if (SSLEnabled) return tls.netCtx.fd; else return sock_; }
-		bool isSslEnabled() { return SSLEnabled; }
+		uintptr_t sock() const { if (tls.enabled) return wolfSSL_get_fd(tls.ssl); else return sock_; }
 
 		u32 worldInfoPtr;
 		std::map<u32, SceNpMatching2World> worlds;
@@ -537,9 +534,6 @@ namespace net {
 		u8 status;
 		addrinfo* resolved_ = nullptr;
 		addrinfo* conn = nullptr;
-
-
-		bool SSLEnabled = false;
 
 		std::unordered_map<u64, RPCNResponse> responses;
 		std::unordered_map<u64, RPCNResponse> notifications;
@@ -608,15 +602,12 @@ namespace net {
 		std::condition_variable buffer_cv;
 	};
 
-	class NPAuthAgent {
+	class NPAuthAgent : public HTTPS {
 	public:
-		net::MBEDTLS_Connection tls;
-
 		virtual ~NPAuthAgent() = default;
 
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
-		int InitializeSSL(int transport, std::string certPEM);
 		virtual bool Connect(int maxTries = 1, double timeout = 20.0f, bool* cancelConnect = nullptr) = 0;
 		void Disconnect();
 
@@ -631,8 +622,7 @@ namespace net {
 		//virtual int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) = 0;
 
 		// Only to be used for bring-up and debugging.
-		uintptr_t sock() const { if (SSLEnabled) return tls.netCtx.fd; else return sock_; }
-		bool isSslEnabled() { return SSLEnabled; }
+		uintptr_t sock() const { if (tls.enabled) return wolfSSL_get_fd(tls.ssl); else return sock_; }
 
 	protected:
 		u16 ID;
@@ -644,8 +634,6 @@ namespace net {
 		u8 status;
 		addrinfo* resolved_ = nullptr;
 		addrinfo* conn = nullptr;
-
-		bool SSLEnabled = false;
 	};
 	class PSNAuthAgent : public NPAuthAgent {
 	public:

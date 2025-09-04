@@ -53,7 +53,7 @@ namespace net {
 			"QOEp77RsayaYFiPcARNf+LoGYgpE7m8n9COxBI0D35FNaIKv4igoUvDEvxeEedU+"
 			"J0bA8B9r2b16KdmcSov97fDQbBgmL+EEaRFfDQq+4WGkWJ+ppw==\n"
 			"-----END CERTIFICATE-----\n";
-		InitializeSSL(MBEDTLS_SSL_TRANSPORT_STREAM, certPem);
+		InitializeSSL(certPem);
 		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 
 		if (port_ <= 0) {

@@ -28,9 +28,11 @@ namespace net {
 
 	void RPCNAgent::Disconnect() {
 		NOTICE_LOG(Log::sceNet, "NPAgent::Disconnect()");
-		if (SSLEnabled) {
+		stop_read_thread();
+
+		if (tls.enabled) {
 			// First shut down network I/O so ssl_read unblocks
-			mbedtls_net_free(&tls.netCtx);  // closes socket
+			ResetSSL();
 		}
 		else {
 			if ((intptr_t)sock_ != -1) {
@@ -40,17 +42,7 @@ namespace net {
 			}
 		}
 
-		stop_read_thread();
-
-		if (SSLEnabled) {
-			mbedtls_ssl_close_notify(&tls.sslCtx);
-			mbedtls_ssl_free(&tls.sslCtx);
-			mbedtls_ssl_config_free(&tls.sslConfig);
-			mbedtls_net_free(&tls.netCtx);
-			SSLEnabled = false;
-			tls.connected = false;
 		}
-	}
 
 	void RPCNAgent::start_read_thread() {
 		if (running) return;
@@ -234,7 +226,7 @@ namespace net {
 			"QOEp77RsayaYFiPcARNf+LoGYgpE7m8n9COxBI0D35FNaIKv4igoUvDEvxeEedU+"
 			"J0bA8B9r2b16KdmcSov97fDQbBgmL+EEaRFfDQq+4WGkWJ+ppw==\n"
 			"-----END CERTIFICATE-----\n";
-		InitializeSSL(MBEDTLS_SSL_TRANSPORT_STREAM, certPem);
+		InitializeSSL(certPem);
 		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 
 		if (port_ <= 0) {

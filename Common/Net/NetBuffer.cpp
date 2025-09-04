@@ -59,7 +59,8 @@ bool Buffer::FlushSocket(uintptr_t sock, double timeout, bool* cancelled) {
 	data_.clear();
 	return true;
 }
-bool Buffer::FlushSocket(mbedtls_ssl_context *sslCtx, mbedtls_net_context* netCtx, double timeout, bool* cancelled) {
+
+bool Buffer::FlushSocket(HTTPS_Config* tls, double timeout, bool* cancelled) {
 	static constexpr float CANCEL_INTERVAL = 0.25f;
 
 	data_.iterate_blocks([&](const char* data, size_t size) {
@@ -98,7 +99,7 @@ bool Buffer::FlushSocket(mbedtls_ssl_context *sslCtx, mbedtls_net_context* netCt
 	return true;
 }
 
-int Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress, bool useSSL, mbedtls_ssl_context* sslCtx) {
+int Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress, bool useSSL, HTTPS_Config* tls) {
 	static constexpr float CANCEL_INTERVAL = 0.25f;
 	std::vector<char> buf;
 	// We're non-blocking and reading from an OS buffer, so try to read as much as we can at a time.
@@ -189,7 +190,7 @@ int Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress
 //	return (int)received;
 //}
 
-int Buffer::Read(int fd, size_t sz, bool useSSL, mbedtls_ssl_context* sslCtx) {
+int Buffer::Read(int fd, size_t sz, bool useSSL, HTTPS_Config* tls) {
 	static constexpr float CANCEL_INTERVAL = 0.25f;
 	//char buf[4096];
 	char* buf = new char[sz];
@@ -249,7 +250,7 @@ enum ReadState {
 	Complete
 };
 
-int Buffer::ReadHTML(int fd, bool useSSL, mbedtls_ssl_context* sslCtx) {
+int Buffer::ReadHTML(int fd, bool useSSL, HTTPS_Config* tls) {
 	static constexpr float CANCEL_INTERVAL = 0.25f;
 	char buf[4096];
 	// Adjustable read size

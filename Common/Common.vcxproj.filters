@@ -689,6 +689,12 @@
       <Filter>Audio</Filter>
     </ClInclude>
     <ClInclude Include="LoongArch64Emitter.h" />
+    <ClInclude Include="Net\HTTPS.h">
+      <Filter>Net</Filter>
+    </ClInclude>
+    <ClInclude Include="ext\wolfssl\user_settings.h">
+      <Filter>ext\wolfssl</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ABI.cpp" />
@@ -1290,6 +1296,9 @@
       <Filter>ext\imgui</Filter>
     </ClCompile>
     <ClCompile Include="LoongArch64Emitter.cpp" />
+    <ClCompile Include="Net\HTTPS.cpp">
+      <Filter>Net</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Crypto">
@@ -1417,6 +1426,9 @@
     </Filter>
     <Filter Include="Audio">
       <UniqueIdentifier>{92746a51-33a9-4a00-af10-3538322f04f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ext\wolfssl">
+      <UniqueIdentifier>{87e67237-bc44-43d9-8b59-296c8b4491f2}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
