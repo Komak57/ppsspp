@@ -24,7 +24,7 @@
 namespace net {
 
 Connection::~Connection() {
-		Disconnect();
+	Disconnect();
 	//if (resolved_ != nullptr)
 		//DNSResolveFree(resolved_);
 }
@@ -161,6 +161,28 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 				}
 			}
 
+			// TODO: Wrap socket with WolfSSL
+			if (tls.enabled) {
+				// Optional, based on the hosting servers strictness
+				//wolfSSL_UseSNI(tls.ssl, WOLFSSL_SNI_HOST_NAME, host_.c_str(), (unsigned short)host_.length());
+
+				wolfSSL_set_fd(tls.ssl, sock_);
+				// Then initiate handshake
+				if (wolfSSL_connect(tls.ssl) != WOLFSSL_SUCCESS) {
+					if (wolfSSL_is_init_finished(tls.ssl)) {
+						ERROR_LOG(Log::HTTP, "Connection failed (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(tls.ssl, 0)));
+					}
+					else {
+						const char* cipher = wolfSSL_get_cipher(tls.ssl);
+						if (cipher == "NONE")	// Reports (NONE) when handshake failed
+							ERROR_LOG(Log::HTTP, "TLS handshake failed / Unable to agree on a cipher (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(tls.ssl, 0)));
+						else
+							ERROR_LOG(Log::HTTP, "TLS handshake failed / Using Cipher %s (%s)", cipher, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(tls.ssl, 0)));
+					}
+
+					break;
+				}
+			}
 			// Great, now we're good to go.
 			return true;
 		} else {
@@ -181,10 +203,10 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 	lastError = SCE_HTTP_ERROR_PARSE_HTTP_NOT_FOUND;
 	// Nothing connected, unfortunately.
 	return false;
-	}
+}
 
 void Connection::Disconnect() {
-	}
+}
 
 }	// net
 

@@ -1,9 +1,11 @@
+#include <TimeUtil.h>
+#include <SysError.h>
+
 #include "Core/Util/NPAgent.h"
 #include <Core/HLE/HLE.h>
-#include <Net/URL.h>
-#include "Common/Net/HTTPClient.h"
 #include <File/FileDescriptor.h>
-#include <TimeUtil.h>
+#include "Common/Net/HTTPClient.h"
+#include <Common/Net/URL.h>
 namespace net {
 	// FIXME: Populate with actual connection credentials for PSN
 	PSNAuthAgent::PSNAuthAgent(std::string host, int port) {
@@ -26,115 +28,141 @@ namespace net {
 
 
 	bool PSNAuthAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
-		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
-		std::string certPem = "-----BEGIN CERTIFICATE-----\n"
-			"\n"
-			"-----END CERTIFICATE-----\n";
-		InitializeSSL(MBEDTLS_SSL_TRANSPORT_STREAM, certPem);
+		WARN_LOG(Log::sceNet, "UNTESTED PSNAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 
 		if (port_ <= 0) {
-			ERROR_LOG(Log::IO, "Connect - Bad port");
+			ERROR_LOG(Log::IO, "Bad port");
 			return false;
 		}
-		if (tls.connected) {
-			return true;
-			/*mbedtls_ssl_session_reset(&tls.sslCtx);
-			mbedtls_ssl_config_free(&tls.sslConfig);
-
-			mbedtls_ssl_free(&tls.sslCtx);
-			mbedtls_net_free(&tls.netCtx);
-			tls.connected = false;*/
-		}
-
+		sock_ = -1;
 
 		for (int tries = maxTries; tries > 0; --tries) {
-			mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig);
+			std::vector<uintptr_t> sockets;
+			fd_set fds;
+			int maxfd = 1;
+			FD_ZERO(&fds);
 			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
 				if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
 					continue;
 
-				int ret;
-				/*
-				 * 1. Start the connection
-				 */
-				char* ip_address = new char[128];
-				inet_ntop(possible->ai_family, &((sockaddr_in*)possible->ai_addr)->sin_addr, ip_address, 128);
-				char portStr[8]{};
-				memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
-				if ((ret = mbedtls_net_connect(&tls.netCtx, ip_address, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
-					char errbuf[128];
-					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call failed with -0x%04x (%s))", ip_address, portStr, ret, errbuf);
-					goto sslretry;
+				int sock = socket(possible->ai_family, SOCK_STREAM, IPPROTO_TCP);
+				if ((intptr_t)sock == -1) {
+					ERROR_LOG(Log::IO, "Bad socket");
+					continue;
 				}
-				// Set NonBlocking
-				fd_util::SetNonBlocking(tls.netCtx.fd, true);
-				/*
-				 * 2. Setup stuff
-				 */
-				if ((ret = mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig)) != 0) {
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_setup returned 0x%04x", ret);
-					goto sslretry;
+				// Windows sockets aren't limited by socket number, just by count, so checking FD_SETSIZE there is wrong.
+#if !PPSSPP_PLATFORM(WINDOWS)
+				if (sock >= FD_SETSIZE) {
+					ERROR_LOG(Log::IO, "Socket doesn't fit in FD_SET: %d   We probably have a leak.", sock);
+					closesocket(sock);
+					continue;
 				}
+#endif
+				fd_util::SetNonBlocking(sock, true);
 
-				//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
-				if ((ret = mbedtls_ssl_set_hostname(&tls.sslCtx, host_.c_str())) != 0) {
-					char errbuf[128];
-					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
-					goto sslretry;
+				// Start trying to connect (async with timeout.)
+				errno = 0;
+				if (connect(sock, possible->ai_addr, (int)possible->ai_addrlen) < 0) {
+					int errorCode = socket_errno;
+					std::string errorString = GetStringErrorMsg(errorCode);
+					bool unreachable = errorCode == ENETUNREACH;
+					bool inProgress = errorCode == EINPROGRESS || errorCode == EWOULDBLOCK;
+					if (!inProgress) {
+						char addrStr[128]{};
+						FormatAddr(addrStr, sizeof(addrStr), possible);
+						if (!unreachable) {
+							ERROR_LOG(Log::HTTP, "connect(%d) call to %s failed (%d: %s)", sock, addrStr, errorCode, errorString.c_str());
+						}
+						else {
+							INFO_LOG(Log::HTTP, "connect(%d): Ignoring unreachable resolved address %s", sock, addrStr);
+						}
+						closesocket(sock);
+						continue;
+					}
 				}
+				sockets.push_back(sock);
+				FD_SET(sock, &fds);
+				if (maxfd < sock + 1) {
+					maxfd = sock + 1;
+				}
+			}
 
-				mbedtls_ssl_set_bio(&tls.sslCtx, &tls.netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
+			int selectResult = 0;
+			long timeoutHalfSeconds = floor(2 * timeout);
+			while (timeoutHalfSeconds >= 0 && selectResult == 0) {
+				struct timeval tv {};
+				tv.tv_sec = 0;
+				if (timeoutHalfSeconds > 0) {
+					// Wait up to 0.5 seconds between cancel checks.
+					tv.tv_usec = 500000;
+				}
+				else {
+					// Wait the remaining <= 0.5 seconds.  Possibly 0, but that's okay.
+					tv.tv_usec = (timeout - floor(2 * timeout) / 2) * 1000000.0;
+				}
+				--timeoutHalfSeconds;
 
-				/*
-				 * 4. Handshake
-				 */
-				NOTICE_LOG(Log::sceNet, "Connect - Performing the SSL/TLS handshake...");
-
-				while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
-					if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-						char errbuf[128];
-						mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
-						goto sslretry;
+				selectResult = select(maxfd, nullptr, &fds, nullptr, &tv);
+				if (cancelConnect && *cancelConnect) {
+					WARN_LOG(Log::HTTP, "connect: cancelled (1): %s:%d", host_.c_str(), port_);
+					break;
+				}
+			}
+			if (selectResult > 0) {
+				// Something connected.  Pick the first one that did (if multiple.)
+				for (int sock : sockets) {
+					if ((intptr_t)sock_ == -1 && FD_ISSET(sock, &fds)) {
+						sock_ = sock;
+					}
+					else {
+						closesocket(sock);
 					}
 				}
 
-				/*
-				 * 5. Verify the server certificate
-				 */
-				 // HTTPS Option 28 may relate to disabling this check
-				NOTICE_LOG(Log::sceNet, "Connect - Verifying peer X.509 certificate...");
+				// TODO: Wrap socket with WolfSSL
+				if (tls.enabled) {
+					// Optional, based on the hosting servers strictness
+					//wolfSSL_UseSNI(tls.ssl, WOLFSSL_SNI_HOST_NAME, host_.c_str(), (unsigned short)host_.length());
 
-				/* In real life, we probably want to bail out when ret != 0 */
-				u32 flags;
-				if ((flags = mbedtls_ssl_get_verify_result(&tls.sslCtx)) != 0) {
-					char vrfy_buf[512];
+					wolfSSL_set_fd(tls.ssl, sock_);
+					// Then initiate handshake
+					if (wolfSSL_connect(tls.ssl) != WOLFSSL_SUCCESS) {
+						if (wolfSSL_is_init_finished(tls.ssl)) {
+							ERROR_LOG(Log::HTTP, "Connection failed (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(tls.ssl, 0)));
+						}
+						else {
+							const char* cipher = wolfSSL_get_cipher(tls.ssl);
+							if (cipher == "NONE")	// Reports (NONE) when handshake failed
+								ERROR_LOG(Log::HTTP, "TLS handshake failed / Unable to agree on a cipher (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(tls.ssl, 0)));
+							else
+								ERROR_LOG(Log::HTTP, "TLS handshake failed / Using Cipher %s (%s)", cipher, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(tls.ssl, 0)));
+						}
 
-					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
-
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
-					goto sslretry;
+						break;
+					}
 				}
-
-				INFO_LOG(Log::sceNet, "Connect - Connection Successful");
-				tls.connected = true;
+				// Great, now we're good to go.
 				return true;
-			sslretry:
-				INFO_LOG(Log::sceNet, "Connect - Connection Failed, retrying");
-				mbedtls_ssl_session_reset(&tls.sslCtx);
-				mbedtls_ssl_config_free(&tls.sslConfig);
-
-				mbedtls_ssl_free(&tls.sslCtx);
-				mbedtls_net_free(&tls.netCtx);
-
-				continue;
 			}
+			else {
+				// Fail. Close all the sockets.
+				for (int sock : sockets) {
+					closesocket(sock);
+				}
+			}
+
+			if (cancelConnect && *cancelConnect) {
+				WARN_LOG(Log::HTTP, "connect: cancelled (2): %s:%d", host_.c_str(), port_);
+				break;
+			}
+
 			sleep_ms(1, "connect");
 		}
+
+		// Nothing connected, unfortunately.
 		return false;
 	}
+
 	/*
 		22:37:312 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:185 net::PSNAuthAgent::GetServers - Title ID: NPWR01446_00
 		22:37:312 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:206 net::PSNAuthAgent::GetServers - Agent-FQDN#1 ID: 1
@@ -161,7 +189,8 @@ namespace net {
 		bool cancelled = false;
 		net::RequestProgress progress(&cancelled);
 		if (!client.Resolve(url.Host().c_str(), url.Port())) {
-			return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "HTTP failed to resolve %s", url.Resource().c_str());
+			ERROR_LOG(Log::sceNet, "HTTP failed to resolve %s", url.Resource().c_str());
+			return SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE;
 		}
 
 		client.SetDataTimeout(20.0);
@@ -175,7 +204,8 @@ namespace net {
 			int err = client.SendRequest("GET", req, requestHeaders, &progress);
 			if (err < 0) {
 				client.Disconnect();
-				return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_FORBIDDEN, "HTTP GET Error = %d", err);
+				ERROR_LOG(Log::sceNet, "HTTP GET Error = %d", err);
+				return SCE_NP_COMMUNITY_SERVER_ERROR_FORBIDDEN;
 			}
 
 			net::Buffer readbuf;
@@ -183,7 +213,8 @@ namespace net {
 			int code = client.ReadResponse(&readbuf, &progress);
 			if (code != 200) {
 				client.Disconnect();
-				return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_INTERNAL_SERVER_ERROR, "HTTP Error Code = %d", code);
+				ERROR_LOG(Log::sceNet, "HTTP Error Code = %d", code);
+				return SCE_NP_COMMUNITY_SERVER_ERROR_INTERNAL_SERVER_ERROR;
 			}
 			client.Disconnect();
 
@@ -196,8 +227,10 @@ namespace net {
 			// TODO: Use XML Parser to get the Tag and it's attributes instead of searching for keywords on the string
 			std::string text;
 			size_t ofs = entity.find("titleid=");
-			if (ofs == std::string::npos)
-				return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "titleid not found");
+			if (ofs == std::string::npos) {
+				ERROR_LOG(Log::sceNet, "titleid not found");
+				return SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE;
+			}
 
 			ofs += 9;
 			size_t ofs2 = entity.find('"', ofs);
@@ -208,16 +241,20 @@ namespace net {
 			while (true) {
 				ofs = entity.find("<agent-fqdn", ++ofs2);
 				if (ofs == std::string::npos) {
-					if (i == 1)
-						return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent-fqdn not found");
+					if (i == 1) {
+						ERROR_LOG(Log::sceNet, "agent-fqdn not found");
+						return SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE;
+					}
 					else
 						break;
 				}
 
 				size_t frontPos = ++ofs;
 				ofs = entity.find("id=", frontPos);
-				if (ofs == std::string::npos)
-					return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent id not found");
+				if (ofs == std::string::npos) {
+					ERROR_LOG(Log::sceNet, "agent id not found");
+					return SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE;
+				}
 
 				ofs += 4;
 				ofs2 = entity.find('"', ofs);
@@ -226,8 +263,10 @@ namespace net {
 				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d ID: %s", __FUNCTION__, i, text.c_str());
 
 				ofs = entity.find("port=", frontPos);
-				if (ofs == std::string::npos)
-					return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent port not found");
+				if (ofs == std::string::npos) {
+					ERROR_LOG(Log::sceNet, "agent port not found");
+					return SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE;
+				}
 
 				ofs += 6;
 				ofs2 = entity.find('"', ofs);
@@ -236,8 +275,10 @@ namespace net {
 				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Port: %s", __FUNCTION__, i, text.c_str());
 
 				ofs = entity.find("status=", frontPos);
-				if (ofs == std::string::npos)
-					return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent status not found");
+				if (ofs == std::string::npos) {
+					ERROR_LOG(Log::sceNet, "agent status not found");
+					return SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE;
+				}
 
 				ofs += 8;
 				ofs2 = entity.find('"', ofs);
@@ -249,8 +290,10 @@ namespace net {
 				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Status: %s", __FUNCTION__, i, text.c_str());
 
 				ofs = entity.find('>', ++ofs2);
-				if (ofs == std::string::npos)
-					return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent host not found");
+				if (ofs == std::string::npos) {
+					ERROR_LOG(Log::sceNet, "agent host not found");
+					return SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE;
+				}
 
 				ofs2 = entity.find("</agent-fqdn", ++ofs);
 				text = entity.substr(ofs, ofs2 - ofs);

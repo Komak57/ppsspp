@@ -3,6 +3,7 @@
 #include <Common/Net/NetBuffer.h>
 #include <Common/File/FileDescriptor.h>
 #include <TimeUtil.h>
+#include <SysError.h>
 
 /*
 	< 12010036100100000100100000000000e288f336a613981d1f8b0253f34d40281010000c4e50575230313434365f3030407300020001
@@ -65,107 +66,140 @@ namespace net {
 			}
 		}
 	}
+
 	bool PSNAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
-		WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+		WARN_LOG(Log::sceNet, "UNTESTED PSNAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+
 		if (port_ <= 0) {
-			ERROR_LOG(Log::IO, "SSLConnect - Bad port");
+			ERROR_LOG(Log::IO, "Bad port");
 			return false;
 		}
-		if (tls.connected) {
-			return true;
-			/*mbedtls_ssl_session_reset(&tls.sslCtx);
-			mbedtls_ssl_config_free(&tls.sslConfig);
-
-			mbedtls_ssl_free(&tls.sslCtx);
-			mbedtls_net_free(&tls.netCtx);
-			tls.connected = false;*/
-		}
-
+		sock_ = -1;
 
 		for (int tries = maxTries; tries > 0; --tries) {
-			mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig);
+			std::vector<uintptr_t> sockets;
+			fd_set fds;
+			int maxfd = 1;
+			FD_ZERO(&fds);
 			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
 				if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
 					continue;
 
-				int ret;
-				/*
-				 * 1. Start the connection
-				 */
-				char* ip_address = new char[128];
-				inet_ntop(possible->ai_family, &((sockaddr_in*)possible->ai_addr)->sin_addr, ip_address, 128);
-				char portStr[8]{};
-				memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
-				if ((ret = mbedtls_net_connect(&tls.netCtx, ip_address, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", ip_address, portStr, (unsigned int)-ret);
-					goto retry;
+				int sock = socket(possible->ai_family, SOCK_STREAM, IPPROTO_TCP);
+				if ((intptr_t)sock == -1) {
+					ERROR_LOG(Log::IO, "Bad socket");
+					continue;
 				}
-				// Set NonBlocking
-				fd_util::SetNonBlocking(tls.netCtx.fd, true);
-				/*
-				 * 2. Setup stuff
-				 */
-				if ((ret = mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig)) != 0) {
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_setup returned 0x%04x", ret);
-					goto retry;
+				// Windows sockets aren't limited by socket number, just by count, so checking FD_SETSIZE there is wrong.
+#if !PPSSPP_PLATFORM(WINDOWS)
+				if (sock >= FD_SETSIZE) {
+					ERROR_LOG(Log::IO, "Socket doesn't fit in FD_SET: %d   We probably have a leak.", sock);
+					closesocket(sock);
+					continue;
 				}
+#endif
+				fd_util::SetNonBlocking(sock, true);
 
-				//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
-				if ((ret = mbedtls_ssl_set_hostname(&tls.sslCtx, host_.c_str())) != 0) {
-					char errbuf[128];
-					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
-					goto retry;
+				// Start trying to connect (async with timeout.)
+				errno = 0;
+				if (connect(sock, possible->ai_addr, (int)possible->ai_addrlen) < 0) {
+					int errorCode = socket_errno;
+					std::string errorString = GetStringErrorMsg(errorCode);
+					bool unreachable = errorCode == ENETUNREACH;
+					bool inProgress = errorCode == EINPROGRESS || errorCode == EWOULDBLOCK;
+					if (!inProgress) {
+						char addrStr[128]{};
+						FormatAddr(addrStr, sizeof(addrStr), possible);
+						if (!unreachable) {
+							ERROR_LOG(Log::HTTP, "connect(%d) call to %s failed (%d: %s)", sock, addrStr, errorCode, errorString.c_str());
+						}
+						else {
+							INFO_LOG(Log::HTTP, "connect(%d): Ignoring unreachable resolved address %s", sock, addrStr);
+						}
+						closesocket(sock);
+						continue;
+					}
 				}
+				sockets.push_back(sock);
+				FD_SET(sock, &fds);
+				if (maxfd < sock + 1) {
+					maxfd = sock + 1;
+				}
+			}
 
-				mbedtls_ssl_set_bio(&tls.sslCtx, &tls.netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
+			int selectResult = 0;
+			long timeoutHalfSeconds = floor(2 * timeout);
+			while (timeoutHalfSeconds >= 0 && selectResult == 0) {
+				struct timeval tv {};
+				tv.tv_sec = 0;
+				if (timeoutHalfSeconds > 0) {
+					// Wait up to 0.5 seconds between cancel checks.
+					tv.tv_usec = 500000;
+				}
+				else {
+					// Wait the remaining <= 0.5 seconds.  Possibly 0, but that's okay.
+					tv.tv_usec = (timeout - floor(2 * timeout) / 2) * 1000000.0;
+				}
+				--timeoutHalfSeconds;
 
-				/*
-				 * 4. Handshake
-				 */
-				NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
-
-				while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
-					if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-						char errbuf[128];
-						mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
-						goto retry;
+				selectResult = select(maxfd, nullptr, &fds, nullptr, &tv);
+				if (cancelConnect && *cancelConnect) {
+					WARN_LOG(Log::HTTP, "connect: cancelled (1): %s:%d", host_.c_str(), port_);
+					break;
+				}
+			}
+			if (selectResult > 0) {
+				// Something connected.  Pick the first one that did (if multiple.)
+				for (int sock : sockets) {
+					if ((intptr_t)sock_ == -1 && FD_ISSET(sock, &fds)) {
+						sock_ = sock;
+					}
+					else {
+						closesocket(sock);
 					}
 				}
 
-				/*
-				 * 5. Verify the server certificate
-				 */
-				 // HTTPS Option 28 may relate to disabling this check
-				NOTICE_LOG(Log::sceNet, "SSLConnect - Verifying peer X.509 certificate...");
+				// TODO: Wrap socket with WolfSSL
+				if (tls.enabled) {
+					// Optional, based on the hosting servers strictness
+					//wolfSSL_UseSNI(tls.ssl, WOLFSSL_SNI_HOST_NAME, host_.c_str(), (unsigned short)host_.length());
 
-				/* In real life, we probably want to bail out when ret != 0 */
-				u32 flags;
-				if ((flags = mbedtls_ssl_get_verify_result(&tls.sslCtx)) != 0) {
-					char vrfy_buf[512];
+					wolfSSL_set_fd(tls.ssl, sock_);
+					// Then initiate handshake
+					if (wolfSSL_connect(tls.ssl) != WOLFSSL_SUCCESS) {
+						if (wolfSSL_is_init_finished(tls.ssl)) {
+							ERROR_LOG(Log::HTTP, "Connection failed (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(tls.ssl, 0)));
+						}
+						else {
+							const char* cipher = wolfSSL_get_cipher(tls.ssl);
+							if (cipher == "NONE")	// Reports (NONE) when handshake failed
+								ERROR_LOG(Log::HTTP, "TLS handshake failed / Unable to agree on a cipher (%s)", wolfSSL_ERR_reason_error_string(wolfSSL_get_error(tls.ssl, 0)));
+							else
+								ERROR_LOG(Log::HTTP, "TLS handshake failed / Using Cipher %s (%s)", cipher, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(tls.ssl, 0)));
+						}
 
-					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
-
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
-					goto retry;
+						break;
+					}
 				}
-
-				INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
-				tls.connected = true;
+				// Great, now we're good to go.
 				return true;
-			retry:
-				INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
-				mbedtls_ssl_session_reset(&tls.sslCtx);
-				mbedtls_ssl_config_free(&tls.sslConfig);
-
-				mbedtls_ssl_free(&tls.sslCtx);
-				mbedtls_net_free(&tls.netCtx);
-
-				continue;
 			}
+			else {
+				// Fail. Close all the sockets.
+				for (int sock : sockets) {
+					closesocket(sock);
+				}
+			}
+
+			if (cancelConnect && *cancelConnect) {
+				WARN_LOG(Log::HTTP, "connect: cancelled (2): %s:%d", host_.c_str(), port_);
+				break;
+			}
+
 			sleep_ms(1, "connect");
 		}
+
+		// Nothing connected, unfortunately.
 		return false;
 	}
 
