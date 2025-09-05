@@ -705,7 +705,7 @@ static int sceHttpGetContentLength(int requestID, u32 contentLengthPtr) {
 	DEBUG_LOG(Log::HTTP, "ContentLength = %lld (in) => %lld (out)", Memory::Read_U64(contentLengthPtr), (u64)len);
 	Memory::Write_U64((u64)len, contentLengthPtr);
 	NotifyMemInfo(MemBlockFlags::WRITE, contentLengthPtr, 8, "HttpGetContentLength");
-	return 0;
+	return hleLogWarning(Log::sceNet, 0, ": ContentLength => %d", len);
 }
 
 /*

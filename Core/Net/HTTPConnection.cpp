@@ -290,6 +290,9 @@ int HTTPRequest::getResponseContentLength() {
 			}
 		}
 	}
+	// Reset Progress to indicate how much data is in the buffer
+	progress = core::RequestProgress(&cancelled);
+	progress.Update(readbuf.size(), contentLength, false);
 	return this->contentLength;
 }
 
@@ -376,7 +379,7 @@ int HTTPRequest::getAllResponseHeaders(u32 headerAddrPtr, u32 headerSizePtr) {
 int HTTPRequest::readData(u32 destDataPtr, u32 size) {
 	// Minimize calls to readbuf->size() for performance
 	size_t readbufLength = readbuf.size();
-	u32 remainingLength = contentLength - progress.bytes_read - readbufLength;
+	u32 remainingLength = contentLength - progress.bytes_read;
 	progress.Update(0, contentLength, (remainingLength == 0));
 	int pack = std::min(remainingLength, size);
 	int obtained = 0;
