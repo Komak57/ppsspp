@@ -34,8 +34,6 @@
 #include "Common/LogReporting.h"
 #include "Common/Net/URL.h"
 #include <Common/File/FileDescriptor.h>
-#include <mbedtls/debug.h>
-#include <mbedtls/error.h>
 
 std::map<u32, std::shared_ptr<HTTPTemplate>> httpObjects;
 static std::mutex httpLock;
