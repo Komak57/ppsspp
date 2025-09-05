@@ -61,7 +61,7 @@ void __HttpShutdown() {
 	httpCacheInited = false;
 
 	for (const auto& it : httpObjects) {
-		if (it.second->className() == name_HTTPRequest)
+		if (strcmp(it.second->className(), name_HTTPRequest) == 0)
 			(static_cast<HTTPRequest*>(it.second.get()))->abortRequest();
 	}
 	httpObjects.clear();
@@ -73,11 +73,11 @@ int sceHttpSetResolveRetry(int connectionID, int retryCount) {
 	if (connectionID <= 0 || connectionID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	const auto& conn = httpObjects.find(connectionID)->second.get();
-	if (!(conn->className() == name_HTTPTemplate || conn->className() == name_HTTPConnection))
-		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id (%s)", conn->className());
+	const auto http_object = httpObjects.find(connectionID)->second;
+	if (strcmp(http_object->className(), name_HTTPTemplate) != 0 && strcmp(http_object->className(), name_HTTPConnection) != 0)
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s or %s", connectionID, http_object->className(), name_HTTPTemplate, name_HTTPConnection);
 
-	conn->setResolveRetry(retryCount);
+	http_object->setResolveRetry(retryCount);
 	return 0;
 }
 
@@ -166,7 +166,7 @@ static int sceHttpReadData(int requestID, u32 dataPtr, u32 dataSize) {
 	// FIXME: According to JPCSP, try to connect the request first
 	//req->connect();
 
-	DEBUG_LOG(Log::HTTP, "Entity remaining: size = %d / %d", req->getResponseRemainingContentLength(), req->getResponseContentLength());
+	//DEBUG_LOG(Log::HTTP, "Entity remaining: size = %d / %d", req->getResponseRemainingContentLength(), req->getResponseContentLength());
 	//if (req->getResponseContentLength()) == 0)
 	//	return hleLogError(SCENET, SCE_HTTP_ERROR_NO_CONTENT_LENGTH, "no content length");
 	int retval = req->readData(dataPtr, dataSize);
@@ -217,8 +217,10 @@ static int sceHttpDeleteRequest(int requestID) {
 	if (requestID <= 0 || requestID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects.find(requestID)->second->className() != name_HTTPRequest)
-		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+	const auto http_object = httpObjects.find(requestID)->second;
+	if (strcmp(http_object->className(), name_HTTPRequest) != 0)
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s", requestID, http_object->className(), name_HTTPRequest);
+
 	//httpObjects.erase(httpObjects.begin() + requestID - 1);
 	httpObjects.erase(requestID);
 	return 0;
@@ -240,8 +242,9 @@ static int sceHttpDeleteConnection(int connectionID) {
 	if (connectionID <= 0 || connectionID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects.find(connectionID)->second->className() != name_HTTPConnection)
-		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+	const auto http_object = httpObjects.find(connectionID)->second;
+	if (strcmp(http_object->className(), name_HTTPConnection) != 0)
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s", connectionID, http_object->className(), name_HTTPConnection);
 
 	const auto& conn = (HTTPConnection*)httpObjects.find(connectionID)->second.get();
 
@@ -387,7 +390,7 @@ static int sceHttpsInit(int ctxId, int certPtr, int unknown3, int unknown4) {
 
 		bufferTemplate.setCert(certPEM);
 	}
-	bufferTemplate.enableTLS();
+	bufferTemplate.tls.enabled = true;
 	httpsInited = true;
 	return 0;
 }
@@ -434,14 +437,15 @@ static int sceHttpCreateRequest(int connectionID, int method, const char *path, 
 	if (connectionID <= 0 || connectionID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects.find(connectionID)->second->className() != name_HTTPConnection)
-		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+	const auto http_object = httpObjects.find(connectionID)->second;
+	if (strcmp(http_object->className(),name_HTTPConnection) != 0)
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s", connectionID, http_object->className(), name_HTTPConnection);
 
 	if (method < PSPHttpMethod::PSP_HTTP_METHOD_GET || method > PSPHttpMethod::PSP_HTTP_METHOD_HEAD)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_UNKNOWN_METHOD, "unknown method");
 
 	int objId = NextObjectID();
-	auto req = std::make_shared<HTTPRequest>(connectionID, method, path ? path : "", contentLength, &ProcessHostnameWithInfraDNS);
+	auto req = std::make_shared<HTTPRequest>(connectionID, method, path ? path : "", contentLength);
 	if (req->getErrorCode() < 0)
 		return hleLogError(Log::sceNet, req->getErrorCode());
 	httpObjects[objId] = req;
@@ -455,8 +459,9 @@ static int sceHttpCreateConnection(int templateID, const char *hostString, const
 	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects.find(templateID)->second->className() != name_HTTPTemplate)
-		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+	const auto http_object = httpObjects.find(templateID)->second;
+	if (strcmp(http_object->className(), name_HTTPTemplate) != 0)
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s", templateID, http_object->className(), name_HTTPTemplate);
 
 	// TODO: Look up hostString in DNS here.
 	int objId = NextObjectID();
@@ -502,8 +507,9 @@ static int sceHttpDeleteTemplate(int templateID) {
 	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects.find(templateID)->second->className() != name_HTTPTemplate)
-		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+	const auto http_object = httpObjects.find(templateID)->second;
+	if (strcmp(http_object->className(), name_HTTPTemplate) != 0)
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s", templateID, http_object->className(), name_HTTPTemplate);
 
 	httpObjects.erase(templateID);
 	return 0;
@@ -520,11 +526,11 @@ static int sceHttpSetResolveTimeOut(int id, u32 timeout) {
 	if (id <= 0 || id >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	const auto& conn = httpObjects.find(id)->second.get();
-	if (!(conn->className() == name_HTTPTemplate || conn->className() == name_HTTPConnection))
-		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id (%s)", conn->className());
+	const auto http_object = httpObjects.find(id)->second;
+	if ((strcmp(http_object->className(), name_HTTPTemplate) != 0) && (strcmp(http_object->className(), name_HTTPConnection) != 0))
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s or %s", id, http_object->className(), name_HTTPTemplate, name_HTTPConnection);
 
-	conn->setResolveTimeout(timeout);
+	http_object->setResolveTimeout(timeout);
 	return 0;
 }
 
@@ -611,8 +617,9 @@ static int sceHttpCreateRequestWithURL(int connectionID, int method, const char 
 	if (connectionID <= 0 || connectionID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects.find(connectionID)->second->className() != name_HTTPConnection)
-		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+	const auto http_object = httpObjects.find(connectionID)->second;
+	if (strcmp(http_object->className(), name_HTTPConnection) != 0)
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s", connectionID, http_object->className(), name_HTTPConnection);
 
 	if (method < PSPHttpMethod::PSP_HTTP_METHOD_GET || method > PSPHttpMethod::PSP_HTTP_METHOD_HEAD)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_UNKNOWN_METHOD, "unknown method");
@@ -622,7 +629,7 @@ static int sceHttpCreateRequestWithURL(int connectionID, int method, const char 
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_URL, "invalid url");
 
 	u32 id = NextObjectID();
-	httpObjects[id] = std::make_shared<HTTPRequest>(connectionID, method, url ? url : "", contentLength, &ProcessHostnameWithInfraDNS);
+	httpObjects[id] = std::make_shared<HTTPRequest>(connectionID, method, url ? url : "", contentLength);
 	return hleLogDebug(Log::sceNet, id);
 }
 
@@ -632,8 +639,9 @@ static int sceHttpCreateConnectionWithURL(int templateID, const char *url, int e
 	if (templateID <= 0 || templateID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	if (httpObjects.find(templateID)->second->className() != name_HTTPTemplate)
-		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
+	const auto http_object = httpObjects.find(templateID)->second;
+	if (strcmp(http_object->className(), name_HTTPTemplate) != 0)
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s", templateID, http_object->className(), name_HTTPTemplate);
 
 	Url baseURL(url ? url: "");
 	if (!baseURL.Valid())
@@ -650,11 +658,11 @@ static int sceHttpSetRecvTimeOut(int id, u32 timeout) {
 	if (id <= 0 || id >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 
-	const auto& conn = httpObjects.find(id)->second.get();
-	if (!(conn->className() == name_HTTPTemplate || conn->className() == name_HTTPConnection))
-		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id (%s)", conn->className());
+	const auto http_object = httpObjects.find(id)->second;
+	if (strcmp(http_object->className(), name_HTTPTemplate) != 0 && strcmp(http_object->className(), name_HTTPConnection) != 0)
+		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s or %s", id, http_object->className(), name_HTTPTemplate, name_HTTPConnection);
 
-	conn->setRecvTimeout(timeout);
+	http_object->setRecvTimeout(timeout);
 	return 0;
 }
 
