@@ -22,12 +22,12 @@
 #include <algorithm>
 #include <cctype> // for std::tolower
 
+#include "Core/HLE/sceHttp.h"
 #include "Core/Net/HTTPConnection.h"
 #include "Core/Core.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/sceKernelMemory.h"
-#include "Core/HLE/sceHttp.h"
 #include "Core/HLE/sceNet.h"
 #include "Core/Debugger/MemBlockInfo.h"
 #include "Common/StringUtils.h"
