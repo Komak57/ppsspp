@@ -442,13 +442,15 @@ static int sceNpMatching2ContextStop(int ctxId)
 
 	//TODO: Stop any in-progress HTTPClient communication used on sceNpMatching2ContextStart
 	//npMatching2Ctx.started = false;
+	// 
+	//TODO: Cancel all async tasks and return SCE_NP_MATCHING2_ERROR_ABORTED for each.
+	//abortNpMatching2Handlers();
+
 	g_signaling.stop();
 
 	if (tServer != 0 && servers[tServer]->IsConnected())
 		servers[tServer]->Disconnect();
 
-	//TODO: Cancel all async tasks and return SCE_NP_MATCHING2_ERROR_ABORTED for each.
-	abortNpMatching2Handlers();
 	// Delete all tasks
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 	npMatching2Handlers.clear();
@@ -591,7 +593,7 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 	if (!Memory::IsValidAddress(serverIdsPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	if (tServer > 0) {
+	if (tServer > 0 && servers[tServer]->IsConnected()) {
 		g_signaling.stop();
 		servers[tServer]->Disconnect();
 		tServer = 0;
