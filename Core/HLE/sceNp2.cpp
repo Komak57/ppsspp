@@ -691,7 +691,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		bool connected = servers[tServer]->Connect();
 		if (!connected) {
 			ERROR_LOG(Log::sceNet, "Could not connect.");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		int ret;
