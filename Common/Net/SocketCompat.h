@@ -36,6 +36,7 @@
 // Missing include, *shrugs*
 extern "C" struct hostent *gethostbyname(const char *name);
 #endif // defined(HAVE_LIBNX) || PPSSPP_PLATFORM(SWITCH)
+#include <stdio.h>
 
 #if PPSSPP_PLATFORM(SWITCH) && !defined(INADDR_NONE)
 // Missing toolchain define
@@ -130,3 +131,16 @@ inline bool isDisconnected(int errcode) { return (errcode == EPIPE || errcode ==
 // Default value to 0x00 (do nothing) in systems where it's not supported.
 #define MSG_NOSIGNAL 0x00
 #endif
+
+// If http isn't loaded (seems unlikely), most functions should return SCE_KERNEL_ERROR_LIBRARY_NOTFOUND
+inline void FormatAddr(char* addrbuf, size_t bufsize, const addrinfo* info) {
+	switch (info->ai_family) {
+	case AF_INET:
+	case AF_INET6:
+		inet_ntop(info->ai_family, &((sockaddr_in*)info->ai_addr)->sin_addr, addrbuf, bufsize);
+		break;
+	default:
+		snprintf(addrbuf, bufsize, "(Unknown AF %d)", info->ai_family);
+		break;
+	}
+}
