@@ -24,13 +24,13 @@
 #include "Core/HLE/ErrorCodes.h"
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/sceNp2.h"
-#include <Core/Util/NPAgent.h>
+#include <Core/Net/NPAgent.h>
 #include "sceNetResolver.h"
 #include <future>
-#include "SignalingHandler.h"
+#include "Core/Net/SignalingHandler.h"
 #include "sceNp.h"
 #include "sceKernelMemory.h"
-#include "Core/HLE/fb_helpers.h"
+#include "Core/Net/fb_helpers.h"
 #include "proAdhoc.h"
 //#include "NpMatchingContext.h"
 //#include "Np2SignalingHandler.h"
