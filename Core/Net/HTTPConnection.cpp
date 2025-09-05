@@ -130,6 +130,9 @@ bool HTTPConnection::SSLConnect(int maxTries, double timeout, bool* cancelConnec
 	}
 
 
+	auto start_time = std::chrono::high_resolution_clock::now();
+	auto end_time = std::chrono::high_resolution_clock::now();
+	long long duration_ms = 0;
 	for (int tries = maxTries; tries > 0; --tries) {
 		mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig);
 		for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
@@ -178,7 +181,7 @@ bool HTTPConnection::SSLConnect(int maxTries, double timeout, bool* cancelConnec
 			 * 4. Handshake
 			 */
 			NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
-			auto start_time = std::chrono::high_resolution_clock::now();
+			start_time = std::chrono::high_resolution_clock::now();
 			while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
 				if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
 					char errbuf[128];
@@ -187,8 +190,8 @@ bool HTTPConnection::SSLConnect(int maxTries, double timeout, bool* cancelConnec
 					goto retry;
 				}
 			}
-			auto end_time = std::chrono::high_resolution_clock::now();
-			auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+			end_time = std::chrono::high_resolution_clock::now();
+			duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 			if (duration_ms > 100)
 				ERROR_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
 			else if (duration_ms > 60)
