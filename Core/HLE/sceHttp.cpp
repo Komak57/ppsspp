@@ -37,7 +37,7 @@
 #include <mbedtls/debug.h>
 #include <mbedtls/error.h>
 
-static std::map<u32, std::shared_ptr<HTTPTemplate>> httpObjects;
+std::map<u32, std::shared_ptr<HTTPTemplate>> httpObjects;
 static std::mutex httpLock;
 
 bool httpInited = false;
