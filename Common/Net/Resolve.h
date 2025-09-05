@@ -18,6 +18,19 @@ enum class DNSType {
 	IPV6 = 2,
 };
 
+inline const char* DNSTypeAsString(net::DNSType type) {
+	switch (type) {
+	case net::DNSType::IPV4:
+		return "IPV4";
+	case net::DNSType::IPV6:
+		return "IPV6";
+	case net::DNSType::ANY:
+		return "ANY";
+	default:
+		return "N/A";
+	}
+}
+
 bool DNSResolve(const std::string &host, const std::string &service, addrinfo **res, std::string &error, DNSType type = DNSType::ANY);
 void DNSResolveFree(addrinfo *res);
 bool GetIPList(std::vector<std::string>& IP4s);
