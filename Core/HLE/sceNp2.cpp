@@ -444,7 +444,7 @@ static int sceNpMatching2ContextStop(int ctxId)
 	//npMatching2Ctx.started = false;
 	g_signaling.stop();
 
-	if (tServer != 0)
+	if (tServer != 0 && servers[tServer]->IsConnected())
 		servers[tServer]->Disconnect();
 
 	//TODO: Cancel all async tasks and return SCE_NP_MATCHING2_ERROR_ABORTED for each.
