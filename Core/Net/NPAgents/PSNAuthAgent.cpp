@@ -1,6 +1,6 @@
 #include "Core/Net/NPAgent.h"
 #include <Core/HLE/HLE.h>
-#include <Net/URL.h>
+#include <Common/Net/URL.h>
 #include "Common/Net/HTTPClient.h"
 #include <Common/File/FileDescriptor.h>
 #include <TimeUtil.h>

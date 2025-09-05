@@ -2194,12 +2194,13 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/Plugins.h
 	Core/HLE/Plugins.cpp
 	Core/HLE/ThreadQueueList.h
-	Core/HLE/fb_helpers.h
-	Core/HLE/fb_helpers.cpp
+	Core/Net/fb_helpers.h
+	Core/Net/fb_helpers.cpp
 	Core/HLE/NpTypes.h
 	Core/HLE/Np2Types.h
-	Core/HLE/SignalingHandler.h
-	Core/HLE/SignalingHandler.cpp
+	Core/HLE/HttpTypes.h
+	Core/Net/SignalingHandler.h
+	Core/Net/SignalingHandler.cpp
 	Core/HLE/__sceAudio.cpp
 	Core/HLE/__sceAudio.h
 	Core/HLE/sceAdler.cpp
@@ -2462,20 +2463,24 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/Util/MemStick.h
 	Core/Util/GameDB.cpp
 	Core/Util/GameDB.h
-	Core/Util/NPAgent.h
-	Core/Util/NPAgent.cpp
+	Core/Net/NPAgent.h
+	Core/Net/NPAgent.cpp
 	Core/Util/PortManager.cpp
 	Core/Util/PortManager.h
-	Core/Util/PSNAgent.cpp
-	Core/Util/PSNAuthAgent.cpp
+	Core/Net/NPAgents/PSNAgent.cpp
+	Core/Net/NPAgents/PSNAuthAgent.cpp
 	Core/Util/BlockAllocator.cpp
 	Core/Util/BlockAllocator.h
 	Core/Util/PPGeDraw.cpp
 	Core/Util/PPGeDraw.h
 	Core/Util/RecentFiles.cpp
 	Core/Util/RecentFiles.h
-	Core/Util/RPCNAgent.cpp
-	Core/Util/RPCNAuthAgent.cpp
+	Core/Net/NPAgents/RPCNAgent.cpp
+	Core/Net/NPAgents/RPCNAuthAgent.cpp
+	Core/Net/HTTPS.h
+	Core/Net/HTTPS.cpp
+	Core/Net/HTTPConnection.h
+	Core/Net/HTTPConnection.cpp
 	${GPU_SOURCES}
 	ext/disarm.cpp
 	ext/disarm.h

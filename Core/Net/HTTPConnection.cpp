@@ -5,15 +5,14 @@
 #include <numeric>
 #include <chrono>
 #include <thread>
-
 #include <sstream>
 
-#include <Core/HLE/HLE.h>
-#include <Core/MemMap.h>
-#include <Core/HLE/sceKernelMemory.h>
-#include <Core\Debugger\MemBlockInfo.h>
-#include <Net\URL.h>
-#include <File\FileDescriptor.h>
+#include "Core/HLE/HLE.h"
+#include "Core/MemMap.h"
+#include "Core/HLE/sceKernelMemory.h"
+#include "Core/Debugger/MemBlockInfo.h"
+#include "Common/Net/URL.h"
+#include "Common/File/FileDescriptor.h"
 
 HTTPTemplate::HTTPTemplate(const char* userAgent, int httpVer, int autoProxyConf) {
 	this->userAgent = userAgent ? userAgent : "";

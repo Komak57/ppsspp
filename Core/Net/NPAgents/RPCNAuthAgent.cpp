@@ -1,6 +1,6 @@
 #include "Core/Net/NPAgent.h"
 #include <Core/HLE/HLE.h>
-#include <File/FileDescriptor.h>
+#include <Common/File/FileDescriptor.h>
 #include <TimeUtil.h>
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN

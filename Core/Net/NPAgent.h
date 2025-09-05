@@ -4,14 +4,15 @@
 #include <unordered_set>
 #include <condition_variable>
 #include <unordered_map>
+#include <thread>   // For std::thread
 
 #include "Common/CommonTypes.h"
 #include "Common/Net/Resolve.h"
 #include "Common/Net/SocketCompat.h"
-//#include "Common/Net/HTTPClient.h"
 
 #include "Core/HLE/Np2Types.h"
-#include <Core/np2_structs_generated.h>
+#include "Core/np2_structs_generated.h"
+#include "Core/Net/HTTPS.h"
 
 // 0x88 bytes
 //struct RoomInfo {

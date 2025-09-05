@@ -1,6 +1,6 @@
 #include "Core/Net/NPAgent.h"
 #include <Core/HLE/HLE.h>
-#include <File/FileDescriptor.h>
+#include <Common/File/FileDescriptor.h>
 #include <TimeUtil.h>
 #include "Core/MemMapHelpers.h"
 #include <Core/Net/SignalingHandler.h>
