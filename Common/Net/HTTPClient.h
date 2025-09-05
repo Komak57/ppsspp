@@ -10,39 +10,8 @@
 #include "Common/Net/NetBuffer.h"
 #include "Common/Net/Resolve.h"
 #include "Common/Net/HTTPRequest.h"
-#include "mbedtls/ssl.h"
-#include "mbedtls/net_sockets.h"
-#include "mbedtls/platform.h"
-#include "mbedtls/ssl_cache.h"
-#include "mbedtls/ssl_ciphersuites.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/x509_crt.h"
-#include <mbedtls/timing.h>
 
 namespace net {
-const int legacy_ciphersuites_array[] = {
-MBEDTLS_TLS_RSA_WITH_3DES_EDE_CBC_SHA,  // DES-CBC3-SHA
-MBEDTLS_TLS_RSA_WITH_RC4_128_SHA,       // RC4-SHA
-MBEDTLS_TLS_RSA_WITH_RC4_128_MD5,       // RC4-MD5
-0                                       // terminator (required)
-};
-
-class MBEDTLS_Connection {
-public:
-	bool connected = false;
-	mbedtls_ssl_context sslCtx;
-	mbedtls_net_context netCtx;
-
-	mbedtls_ssl_config sslConfig;
-	mbedtls_ctr_drbg_context ctrDrbg;
-	mbedtls_entropy_context entropy;
-	mbedtls_x509_crt caCert;
-	// For UDP retransmissions
-	mbedtls_timing_delay_context timerCtx;
-	mbedtls_ssl_session session;
-};
-
 typedef std::function<std::string(const std::string &)> ResolveFunc;
 
 class Connection {
@@ -55,19 +24,12 @@ public:
 	bool Resolve(const char *host, int port, DNSType type = DNSType::ANY);
 
 	bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
-	bool SSLConnect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 	void Disconnect();
 
 	u32 GetLastError() {
 		return lastError;
 	}
 
-	bool GetOption(int id) {
-		auto it = this->httpsOptions.find(id);
-		if (it == this->httpsOptions.end())
-			return false;
-		return it->second;
-	}
 	// Only to be used for bring-up and debugging.
 	uintptr_t sock() const { return sock_; }
 
@@ -79,17 +41,6 @@ protected:
 
 	addrinfo *resolved_ = nullptr;
 
-	//std::shared_ptr<MBEDTLS_Connection> tls;
-	MBEDTLS_Connection tls;
-	std::unordered_map<int, bool> httpsOptions;
-	/*mbedtls_ssl_context sslCtx;
-	mbedtls_net_context netCtx;
-
-	mbedtls_ssl_config sslConfig;
-	mbedtls_ctr_drbg_context ctrDrbg;
-	mbedtls_entropy_context entropy;
-	mbedtls_x509_crt caCert;*/
-
 	int useCookie = 0;
 	int useKeepAlive = 0;
 	int useCache = 0;
@@ -99,7 +50,7 @@ protected:
 
 	bool connected = false;
 	u32 lastError = 0;
-	u32 flags;
+	u32 flags = 0;
 
 private:
 	uintptr_t sock_ = -1;
@@ -127,14 +78,6 @@ public:
 	Client(net::ResolveFunc func);
 	~Client();
 
-	//void Initialize(std::shared_ptr<net::MBEDTLS_Connection> tls, std::unordered_map<int, bool> options) {
-	void Initialize(net::MBEDTLS_Connection tls, std::unordered_map<int, bool> options) {
-		this->tls = tls;
-		this->sslEnabled = true;
-		this->httpsOptions = options;
-		return;
-	}
-
 	// Return value is the HTTP return code. 200 means OK. < 0 means some local error.
 	int GET(const RequestParams &req, Buffer *output, net::RequestProgress *progress);
 	int GET(const RequestParams &req, Buffer *output, std::vector<std::string> &responseHeaders, net::RequestProgress *progress);
@@ -148,7 +91,6 @@ public:
 	int SendRequest(const char *method, const RequestParams &req, const char *otherHeaders, net::RequestProgress *progress);
 	int SendRequestWithData(const char* method, const RequestParams& req, std::string_view data, const char* otherHeaders, net::RequestProgress* progress);
 	// Read until content length obtained, then read until complete
-	int ReadResponse(net::Buffer* readbuf, net::RequestProgress* progress);
 	int ReadResponseEntity(net::Buffer* readbuf, int contentLength, net::RequestProgress* progress);
 	int ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &responseHeaders, net::RequestProgress *progress, std::string *statusLine = nullptr);
 	// If your response contains a response, you must read it.
@@ -156,9 +98,6 @@ public:
 	int ReadPartialResponseEntity(net::Buffer* readbuf, int chunkSize, int contentLength, net::Buffer* output, net::RequestProgress* progress);
 	int ReadResponseEntity(net::Buffer* readbuf, const std::vector<std::string>& responseHeaders, Buffer* output, net::RequestProgress* progress);
 
-	int isSSLEnabled() {
-		return sslEnabled;
-	}
 	void SetDataTimeout(double t) {
 		dataTimeout_ = t;
 	}

@@ -20,7 +20,6 @@
 #include <map>
 #include <condition_variable>
 #include "Common/Net/SocketCompat.h"
-#include "Common/Net/HTTPClient.h"
 #include <Common/Net/Resolve.h>
 
 // Based on https://docs.vitasdk.org/group__SceHttpUser.html

@@ -33,7 +33,6 @@
 #include "Common/StringUtils.h"
 #include "Common/LogReporting.h"
 #include "Common/Net/URL.h"
-#include "Common/Net/HTTPClient.h"
 #include <Common/File/FileDescriptor.h>
 #include <mbedtls/debug.h>
 #include <mbedtls/error.h>
