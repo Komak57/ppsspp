@@ -1,4 +1,4 @@
-#include "Core/Util/NPAgent.h"
+#include "Core/Net/NPAgent.h"
 #include <Core/HLE/HLE.h>
 #include <File/FileDescriptor.h>
 #include <mbedtls/error.h>
@@ -53,20 +53,18 @@ namespace net {
 			"QOEp77RsayaYFiPcARNf+LoGYgpE7m8n9COxBI0D35FNaIKv4igoUvDEvxeEedU+"
 			"J0bA8B9r2b16KdmcSov97fDQbBgmL+EEaRFfDQq+4WGkWJ+ppw==\n"
 			"-----END CERTIFICATE-----\n";
-		InitializeSSL(MBEDTLS_SSL_TRANSPORT_STREAM, certPem);
+		InitializeSSL(certPem);
+		mbedtls_ssl_conf_max_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 
 		if (port_ <= 0) {
 			ERROR_LOG(Log::IO, "Connect - Bad port");
 			return false;
 		}
-		if (tls.connected) {
-			mbedtls_ssl_session_reset(&tls.sslCtx);
-			mbedtls_ssl_config_free(&tls.sslConfig);
-
-			mbedtls_ssl_free(&tls.sslCtx);
-			mbedtls_net_free(&tls.netCtx);
-			tls.connected = false;
+		if (connected) {
+			ERROR_LOG(Log::IO, "Connect - Already Connected");
+			ResetSSL();
+			connected = false;
 		}
 
 
@@ -142,16 +140,11 @@ namespace net {
 				}
 
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful. TLS: %s, Cipher: %s", mbedtls_ssl_get_version(&tls.sslCtx), mbedtls_ssl_get_ciphersuite(&tls.sslCtx));
-				tls.connected = true;
+				connected = true;
 				return true;
 			sslretry:
 				INFO_LOG(Log::sceNet, "Connect - Connection Failed, retrying");
-				mbedtls_ssl_session_reset(&tls.sslCtx);
-				mbedtls_ssl_config_free(&tls.sslConfig);
-
-				mbedtls_ssl_free(&tls.sslCtx);
-				mbedtls_net_free(&tls.netCtx);
-
+				ResetSSL();
 				continue;
 			}
 			sleep_ms(1, "connect");

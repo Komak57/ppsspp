@@ -8,7 +8,7 @@
 #include "Common/CommonTypes.h"
 #include "Common/Net/Resolve.h"
 #include "Common/Net/SocketCompat.h"
-#include "Common/Net/HTTPClient.h"
+//#include "Common/Net/HTTPClient.h"
 
 #include "Core/HLE/Np2Types.h"
 #include <Core/np2_structs_generated.h>
@@ -18,6 +18,7 @@
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/entropy.h"
 #include "mbedtls/timing.h"
+#include "HTTPS.h"
 // 0x88 bytes
 //struct RoomInfo {
 //	u16_le ID;
@@ -466,9 +467,17 @@ protected:
 
 namespace np {
 	bool is_valid_npid(const SceNpId& npid);
+
 }
 
 namespace net {
+	typedef std::function<std::string(const std::string&)> ResolveFunc;
+
+	static const int forceCiphers[] = {
+		MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+		0
+	};
+
 	struct RPCNResponse {
 		PacketHeader header;
 		u8 error;
@@ -477,14 +486,12 @@ namespace net {
 	};
 
 	enum class NPAgentType { PSN, RPCN };
-	class NPAgent {
+	class NPAgent : public HTTPS {
 	public:
-		net::MBEDTLS_Connection tls;
 		virtual ~NPAgent() = default;
 
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
-		int InitializeSSL(int transport, std::string certPEM);
 		virtual void Disconnect() = 0;
 		bool Send(Packet* packet, double timeout, bool* cancelled);
 		int Recv(Packet* packet, bool* cancelled);
@@ -507,6 +514,7 @@ namespace net {
 		virtual int SetUserInfo(SceNpMatching2SetUserInfoRequest* req) = 0;
 		virtual int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse* respData) = 0;
 
+		bool IsConnected() { return connected; }
 		u8 GetStatus();
 		//int GetID() { return ID; }
 		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
@@ -520,8 +528,7 @@ namespace net {
 		}
 
 		// Only to be used for bring-up and debugging.
-		uintptr_t sock() const { if (SSLEnabled) return tls.netCtx.fd; else return sock_; }
-		bool isSslEnabled() { return SSLEnabled; }
+		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
 
 		u32 worldInfoPtr;
 		std::map<u32, SceNpMatching2World> worlds;
@@ -538,8 +545,7 @@ namespace net {
 		addrinfo* resolved_ = nullptr;
 		addrinfo* conn = nullptr;
 
-
-		bool SSLEnabled = false;
+		bool connected = false;
 
 		std::unordered_map<u64, RPCNResponse> responses;
 		std::unordered_map<u64, RPCNResponse> notifications;
@@ -608,15 +614,12 @@ namespace net {
 		std::condition_variable buffer_cv;
 	};
 
-	class NPAuthAgent {
+	class NPAuthAgent : public HTTPS {
 	public:
-		net::MBEDTLS_Connection tls;
-
 		virtual ~NPAuthAgent() = default;
 
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
-		int InitializeSSL(int transport, std::string certPEM);
 		virtual bool Connect(int maxTries = 1, double timeout = 20.0f, bool* cancelConnect = nullptr) = 0;
 		void Disconnect();
 
@@ -631,8 +634,7 @@ namespace net {
 		//virtual int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) = 0;
 
 		// Only to be used for bring-up and debugging.
-		uintptr_t sock() const { if (SSLEnabled) return tls.netCtx.fd; else return sock_; }
-		bool isSslEnabled() { return SSLEnabled; }
+		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
 
 	protected:
 		u16 ID;
@@ -645,14 +647,14 @@ namespace net {
 		addrinfo* resolved_ = nullptr;
 		addrinfo* conn = nullptr;
 
-		bool SSLEnabled = false;
+		bool connected = false;
 	};
 	class PSNAuthAgent : public NPAuthAgent {
 	public:
 		~PSNAuthAgent();
 		PSNAuthAgent(std::string host, int port);
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
-		static int GetServers(net::ResolveFunc func, SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
+		static int GetServers(ResolveFunc func, SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
 		bool Login(const char* npid, const char* token, const char* password);
 		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 	};

@@ -1,10 +1,11 @@
-#include "Core/Util/NPAgent.h"
+#include "Core/Net/NPAgent.h"
 #include <Core/HLE/HLE.h>
 #include <Net/URL.h>
 #include "Common/Net/HTTPClient.h"
 #include <mbedtls/error.h>
 #include <File/FileDescriptor.h>
 #include <TimeUtil.h>
+#include <Core/Net/Buffer.cpp>
 namespace net {
 	// FIXME: Populate with actual connection credentials for PSN
 	PSNAuthAgent::PSNAuthAgent(std::string host, int port) {
@@ -31,13 +32,13 @@ namespace net {
 		std::string certPem = "-----BEGIN CERTIFICATE-----\n"
 			"\n"
 			"-----END CERTIFICATE-----\n";
-		InitializeSSL(MBEDTLS_SSL_TRANSPORT_STREAM, certPem);
+		InitializeSSL(certPem);
 
 		if (port_ <= 0) {
 			ERROR_LOG(Log::IO, "Connect - Bad port");
 			return false;
 		}
-		if (tls.connected) {
+		if (connected) {
 			return true;
 			/*mbedtls_ssl_session_reset(&tls.sslCtx);
 			mbedtls_ssl_config_free(&tls.sslConfig);
@@ -120,7 +121,7 @@ namespace net {
 				}
 
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful");
-				tls.connected = true;
+				connected = true;
 				return true;
 			sslretry:
 				INFO_LOG(Log::sceNet, "Connect - Connection Failed, retrying");
@@ -179,9 +180,10 @@ namespace net {
 				return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_FORBIDDEN, "HTTP GET Error = %d", err);
 			}
 
-			net::Buffer readbuf;
+			core::Buffer readbuf;
 			std::vector<std::string> responseHeaders;
-			int code = client.ReadResponse(&readbuf, &progress);
+			int code = readbuf.ReadHTML(client.sock(), nullptr);
+			//int code = client.ReadResponse(&readbuf, &progress);
 			if (code != 200) {
 				client.Disconnect();
 				return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_INTERNAL_SERVER_ERROR, "HTTP Error Code = %d", code);

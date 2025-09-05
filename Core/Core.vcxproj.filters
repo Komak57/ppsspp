@@ -97,6 +97,12 @@
     <Filter Include="MIPS\LoongArch64">
       <UniqueIdentifier>{1ef9e44d-2e76-4984-a6e5-5f6f143acfc8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Net">
+      <UniqueIdentifier>{43dcb5e5-5809-45c0-a464-1498df10903f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Net\NPAgents">
+      <UniqueIdentifier>{fba7ea6d-13f3-4f40-ade1-f58867c564e4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ELF\ElfReader.cpp">
@@ -1393,26 +1399,35 @@
     <ClCompile Include="HW\GranularMixer.cpp">
       <Filter>HW</Filter>
     </ClCompile>
-    <ClCompile Include="Util\NPAgent.cpp">
-      <Filter>Util</Filter>
+    <ClCompile Include="Net\NPAgents\PSNAgent.cpp">
+      <Filter>Net\NPAgents</Filter>
     </ClCompile>
-    <ClCompile Include="Util\PSNAgent.cpp">
-      <Filter>Util</Filter>
+    <ClCompile Include="Net\NPAgents\PSNAuthAgent.cpp">
+      <Filter>Net\NPAgents</Filter>
     </ClCompile>
-    <ClCompile Include="Util\PSNAuthAgent.cpp">
-      <Filter>Util</Filter>
+    <ClCompile Include="Net\NPAgents\RPCNAgent.cpp">
+      <Filter>Net\NPAgents</Filter>
     </ClCompile>
-    <ClCompile Include="Util\RPCNAgent.cpp">
-      <Filter>Util</Filter>
+    <ClCompile Include="Net\NPAgents\RPCNAuthAgent.cpp">
+      <Filter>Net\NPAgents</Filter>
     </ClCompile>
-    <ClCompile Include="Util\RPCNAuthAgent.cpp">
-      <Filter>Util</Filter>
+    <ClCompile Include="Net\fb_helpers.cpp">
+      <Filter>Net</Filter>
     </ClCompile>
-    <ClCompile Include="HLE\fb_helpers.cpp">
-      <Filter>HLE</Filter>
+    <ClCompile Include="Net\NPAgent.cpp">
+      <Filter>Net</Filter>
     </ClCompile>
-    <ClCompile Include="HLE\SignalingHandler.cpp">
-      <Filter>HLE</Filter>
+    <ClCompile Include="Net\SignalingHandler.cpp">
+      <Filter>Net</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\HTTPConnection.cpp">
+      <Filter>Net</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\HTTPS.cpp">
+      <Filter>Net</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\Buffer.cpp">
+      <Filter>Net</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -2272,19 +2287,31 @@
       <Filter>HW</Filter>
     </ClInclude>
     <ClInclude Include="np2_structs_generated.h" />
-    <ClInclude Include="Util\NPAgent.h">
-      <Filter>Util</Filter>
-    </ClInclude>
     <ClInclude Include="HLE\NpTypes.h">
       <Filter>HLE</Filter>
     </ClInclude>
     <ClInclude Include="HLE\Np2Types.h">
       <Filter>HLE</Filter>
     </ClInclude>
-    <ClInclude Include="HLE\fb_helpers.h">
-      <Filter>HLE</Filter>
+    <ClInclude Include="Net\NPAgent.h">
+      <Filter>Net</Filter>
     </ClInclude>
-    <ClInclude Include="HLE\SignalingHandler.h">
+    <ClInclude Include="Net\fb_helpers.h">
+      <Filter>Net</Filter>
+    </ClInclude>
+    <ClInclude Include="Net\SignalingHandler.h">
+      <Filter>Net</Filter>
+    </ClInclude>
+    <ClInclude Include="Net\HTTPConnection.h">
+      <Filter>Net</Filter>
+    </ClInclude>
+    <ClInclude Include="Net\HTTPS.h">
+      <Filter>Net</Filter>
+    </ClInclude>
+    <ClInclude Include="Net\Buffer.h">
+      <Filter>Net</Filter>
+    </ClInclude>
+    <ClInclude Include="HLE\HttpTypes.h">
       <Filter>HLE</Filter>
     </ClInclude>
   </ItemGroup>

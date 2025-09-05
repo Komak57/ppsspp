@@ -11,7 +11,7 @@
 
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/Np2Types.h"
-#include <Core/Util/NPAgent.h>
+#include <Core/Net/NPAgent.h>
 
 #include "Common/Net/SocketCompat.h"
 #include <Core/Util/BlockAllocator.h>

@@ -1,8 +1,7 @@
-#include "Core/Util/NPAgent.h"
+#include "Core/Net/NPAgent.h"
 #include <Core/HLE/HLE.h>
-#include <Common/Net/NetBuffer.h>
+#include <Core/Net/Buffer.h>
 #include <Common/File/FileDescriptor.h>
-#include <mbedtls/error.h>
 #include <TimeUtil.h>
 
 /*
@@ -55,12 +54,8 @@ namespace net {
 	}
 
 	void PSNAgent::Disconnect() {
-		if (SSLEnabled) {
-			mbedtls_ssl_close_notify(&tls.sslCtx);
-			mbedtls_ssl_free(&tls.sslCtx);
-			mbedtls_ssl_config_free(&tls.sslConfig);
-			mbedtls_net_free(&tls.netCtx);
-			SSLEnabled = false;
+		if (tls.enabled) {
+			ResetSSL();
 		}
 		else {
 			if ((intptr_t)sock_ != -1) {
@@ -76,14 +71,8 @@ namespace net {
 			ERROR_LOG(Log::IO, "SSLConnect - Bad port");
 			return false;
 		}
-		if (tls.connected) {
+		if (connected) {
 			return true;
-			/*mbedtls_ssl_session_reset(&tls.sslCtx);
-			mbedtls_ssl_config_free(&tls.sslConfig);
-
-			mbedtls_ssl_free(&tls.sslCtx);
-			mbedtls_net_free(&tls.netCtx);
-			tls.connected = false;*/
 		}
 
 
@@ -157,7 +146,7 @@ namespace net {
 				}
 
 				INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
-				tls.connected = true;
+				connected = true;
 				return true;
 			retry:
 				INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
@@ -229,19 +218,19 @@ namespace net {
 		INFO_LOG(Log::sceNet, "Request: %s", hexdata.c_str());
 
 		// packet.Pack(0x0112, packet.Length()+4);
-		net::Buffer buffer;
+		core::Buffer buffer;
 		void* dst = buffer.Append(packet_size);
 		memcpy(dst, packet.Data(), packet.Length());
 
-		bool flushed = buffer.FlushSocket(sock(), 60.0, &cancelled);
+		bool flushed = buffer.FlushSocketSSL(&tls, 60.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return -1;
 		}
-		net::Buffer readbuf;
+		core::Buffer readbuf;
 		// Read response
 		int ret;
-		if ((ret = readbuf.Read(sock_, 4096, false, nullptr)) < 0) {
+		if ((ret = readbuf.Read(sock(), 4096, &tls)) < 0) {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return -1;
 		}
@@ -280,7 +269,7 @@ namespace net {
 
 	int PSNAgent::SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::SearchRoom()");
-		if (sock_ <= 0) {
+		if (sock() <= 0) {
 			ERROR_LOG(Log::sceNet, "SearchRoom: Socket not connected");
 			return -1;
 		}
@@ -313,10 +302,10 @@ namespace net {
 			return -1;
 		}
 
-		net::Buffer readbuf;
+		core::Buffer readbuf;
 		// Read response
 		int ret;
-		if ((ret = readbuf.Read(sock_, 4096, false, nullptr)) < 0) {
+		if ((ret = readbuf.Read(sock(), 4096, &tls)) < 0) {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return -1;
 		}
@@ -372,10 +361,10 @@ namespace net {
 			return -1;
 		}
 
-		net::Buffer readbuf;
+		core::Buffer readbuf;
 		// Read response
 		int ret;
-		if ((ret = readbuf.Read(sock_, 4096, false, nullptr)) < 0) {
+		if ((ret = readbuf.Read(sock(), 4096, &tls)) < 0) {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return -1;
 		}

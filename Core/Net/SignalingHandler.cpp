@@ -1,7 +1,7 @@
-#include "Core/HLE/SignalingHandler.h"
+#include "Core/Net/SignalingHandler.h"
 #include <cassert>
 #include <cstring>
-#include "Core/HLE/fb_helpers.h"
+#include "Core/Net/fb_helpers.h"
 #include <Core/Util/PortManager.h>
 #include "Core/HLE/sceNp.h"
 #include "Core/HLE/sceNp2.h"

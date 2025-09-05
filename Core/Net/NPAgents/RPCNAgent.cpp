@@ -1,10 +1,10 @@
-#include "Core/Util/NPAgent.h"
+#include "Core/Net/NPAgent.h"
 #include <Core/HLE/HLE.h>
 #include <File/FileDescriptor.h>
 #include <mbedtls/error.h>
 #include <TimeUtil.h>
 #include "Core/MemMapHelpers.h"
-#include <Core/HLE/SignalingHandler.h>
+#include <Core/Net/SignalingHandler.h>
 
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN
@@ -22,34 +22,27 @@ namespace net {
 
 	RPCNAgent::~RPCNAgent() {
 		NOTICE_LOG(Log::sceNet, "~NPAgent");
-		stop_read_thread();
 		Disconnect();
 	}
 
 	void RPCNAgent::Disconnect() {
 		NOTICE_LOG(Log::sceNet, "NPAgent::Disconnect()");
-		if (SSLEnabled) {
-			// First shut down network I/O so ssl_read unblocks
-			mbedtls_net_free(&tls.netCtx);  // closes socket
-		}
-		else {
-			if ((intptr_t)sock_ != -1) {
-				cancelled = true;
-				closesocket(sock_);
-				sock_ = -1;
+		cancelled = true;
+		if (running)
+			stop_read_thread();
+		if (connected) {
+			if (tls.enabled) {
+				// First shut down network I/O so ssl_read unblocks
+				ResetSSL();
+			}
+			else {
+				if ((intptr_t)sock_ != -1) {
+					closesocket(sock_);
+					sock_ = -1;
+				}
 			}
 		}
-
-		stop_read_thread();
-
-		if (SSLEnabled) {
-			mbedtls_ssl_close_notify(&tls.sslCtx);
-			mbedtls_ssl_free(&tls.sslCtx);
-			mbedtls_ssl_config_free(&tls.sslConfig);
-			mbedtls_net_free(&tls.netCtx);
-			SSLEnabled = false;
-			tls.connected = false;
-		}
+		connected = false;
 	}
 
 	void RPCNAgent::start_read_thread() {
@@ -112,10 +105,8 @@ namespace net {
 	}
 
 	void RPCNAgent::read_loop() {
-		bool cancelled = false;
 		while (running) {
 			Packet packet;
-			cancelled = !&running;
 			int ret = Recv(&packet, &cancelled); // Uses NPAuthAgent::Recv
 			if (cancelled)
 				return;
@@ -234,20 +225,18 @@ namespace net {
 			"QOEp77RsayaYFiPcARNf+LoGYgpE7m8n9COxBI0D35FNaIKv4igoUvDEvxeEedU+"
 			"J0bA8B9r2b16KdmcSov97fDQbBgmL+EEaRFfDQq+4WGkWJ+ppw==\n"
 			"-----END CERTIFICATE-----\n";
-		InitializeSSL(MBEDTLS_SSL_TRANSPORT_STREAM, certPem);
+		InitializeSSL(certPem);
+		mbedtls_ssl_conf_ciphersuites(&tls.sslConfig, forceCiphers);
+		mbedtls_ssl_conf_max_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
-
+		cancelled = false;
 		if (port_ <= 0) {
 			ERROR_LOG(Log::IO, "Connect - Bad port");
 			return false;
 		}
-		if (tls.connected) {
-			mbedtls_ssl_session_reset(&tls.sslCtx);
-			mbedtls_ssl_config_free(&tls.sslConfig);
-
-			mbedtls_ssl_free(&tls.sslCtx);
-			mbedtls_net_free(&tls.netCtx);
-			tls.connected = false;
+		if (connected) {
+			ResetSSL();
+			connected = false;
 		}
 
 
@@ -324,7 +313,7 @@ namespace net {
 				}
 
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful. TLS: %s, Cipher: %s", mbedtls_ssl_get_version(&tls.sslCtx), mbedtls_ssl_get_ciphersuite(&tls.sslCtx));
-				tls.connected = true;
+				connected = true;
 
 				// Start reading data
 				start_read_thread();
@@ -336,12 +325,7 @@ namespace net {
 				return true;
 			sslretry:
 				INFO_LOG(Log::sceNet, "Connect - Connection Failed, retrying");
-				mbedtls_ssl_session_reset(&tls.sslCtx);
-				mbedtls_ssl_config_free(&tls.sslConfig);
-
-				mbedtls_ssl_free(&tls.sslCtx);
-				mbedtls_net_free(&tls.netCtx);
-
+				ResetSSL();
 				continue;
 			}
 			sleep_ms(1, "connect");

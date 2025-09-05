@@ -473,7 +473,6 @@
     <ClCompile Include="FrameTiming.cpp" />
     <ClCompile Include="HLE\AtracCtx.cpp" />
     <ClCompile Include="HLE\AtracCtx2.cpp" />
-    <ClCompile Include="HLE\fb_helpers.cpp" />
     <ClCompile Include="HLE\KUBridge.cpp" />
     <ClCompile Include="HLE\NetInetConstants.cpp" />
     <ClCompile Include="HLE\Plugins.cpp" />
@@ -487,7 +486,6 @@
     <ClCompile Include="HLE\sceUsbAcc.cpp" />
     <ClCompile Include="HLE\sceUsbCam.cpp" />
     <ClCompile Include="HLE\sceUsbMic.cpp" />
-    <ClCompile Include="HLE\SignalingHandler.cpp" />
     <ClCompile Include="HLE\SocketManager.cpp" />
     <ClCompile Include="HW\Atrac3Standalone.cpp" />
     <ClCompile Include="HW\BufferQueue.cpp" />
@@ -549,6 +547,16 @@
     <ClCompile Include="MIPS\x86\X64IRCompSystem.cpp" />
     <ClCompile Include="MIPS\x86\X64IRCompVec.cpp" />
     <ClCompile Include="MIPS\x86\X64IRJit.cpp" />
+    <ClCompile Include="Net\Buffer.cpp" />
+    <ClCompile Include="Net\fb_helpers.cpp" />
+    <ClCompile Include="Net\HTTPConnection.cpp" />
+    <ClCompile Include="Net\HTTPS.cpp" />
+    <ClCompile Include="Net\NPAgent.cpp" />
+    <ClCompile Include="Net\NPAgents\PSNAgent.cpp" />
+    <ClCompile Include="Net\NPAgents\PSNAuthAgent.cpp" />
+    <ClCompile Include="Net\NPAgents\RPCNAgent.cpp" />
+    <ClCompile Include="Net\NPAgents\RPCNAuthAgent.cpp" />
+    <ClCompile Include="Net\SignalingHandler.cpp" />
     <ClCompile Include="Replay.cpp" />
     <ClCompile Include="Compatibility.cpp" />
     <ClCompile Include="Config.cpp" />
@@ -938,7 +946,6 @@
     <ClCompile Include="Util\GameDB.cpp" />
     <ClCompile Include="Util\GameManager.cpp" />
     <ClCompile Include="Util\MemStick.cpp" />
-    <ClCompile Include="Util\NPAgent.cpp" />
     <ClCompile Include="Util\PortManager.cpp" />
     <ClCompile Include="Util\PPGeDraw.cpp" />
     <ClCompile Include="..\ext\xxhash.c">
@@ -962,11 +969,7 @@
       <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Release|x64'">AnySuitable</InlineFunctionExpansion>
       <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">AnySuitable</InlineFunctionExpansion>
     </ClCompile>
-    <ClCompile Include="Util\PSNAgent.cpp" />
-    <ClCompile Include="Util\PSNAuthAgent.cpp" />
     <ClCompile Include="Util\RecentFiles.cpp" />
-    <ClCompile Include="Util\RPCNAgent.cpp" />
-    <ClCompile Include="Util\RPCNAuthAgent.cpp" />
     <ClCompile Include="WaveFile.cpp" />
     <ClCompile Include="WebServer.cpp" />
     <ClCompile Include="MIPS\x86\X64IRRegCache.cpp" />
@@ -1039,7 +1042,7 @@
     <ClInclude Include="HLE\AtracCtx.h" />
     <ClInclude Include="HLE\AtracCtx2.h" />
     <ClInclude Include="HLE\ErrorCodes.h" />
-    <ClInclude Include="HLE\fb_helpers.h" />
+    <ClInclude Include="HLE\HttpTypes.h" />
     <ClInclude Include="HLE\KernelThreadDebugInterface.h" />
     <ClInclude Include="HLE\KUBridge.h" />
     <ClInclude Include="HLE\NetInetConstants.h" />
@@ -1057,7 +1060,6 @@
     <ClInclude Include="HLE\sceUsbAcc.h" />
     <ClInclude Include="HLE\sceUsbCam.h" />
     <ClInclude Include="HLE\sceUsbMic.h" />
-    <ClInclude Include="HLE\SignalingHandler.h" />
     <ClInclude Include="HLE\SocketManager.h" />
     <ClInclude Include="HW\Atrac3Standalone.h" />
     <ClInclude Include="HW\Camera.h" />
@@ -1085,6 +1087,12 @@
     <ClInclude Include="MIPS\RiscV\RiscVJit.h" />
     <ClInclude Include="MIPS\RiscV\RiscVRegCache.h" />
     <ClInclude Include="MIPS\x86\X64IRJit.h" />
+    <ClInclude Include="Net\Buffer.h" />
+    <ClInclude Include="Net\fb_helpers.h" />
+    <ClInclude Include="Net\HTTPConnection.h" />
+    <ClInclude Include="Net\HTTPS.h" />
+    <ClInclude Include="Net\NPAgent.h" />
+    <ClInclude Include="Net\SignalingHandler.h" />
     <ClInclude Include="np2_structs_generated.h" />
     <ClInclude Include="Replay.h" />
     <ClInclude Include="Compatibility.h" />
@@ -1316,7 +1324,6 @@
     <ClInclude Include="Util\GameDB.h" />
     <ClInclude Include="Util\GameManager.h" />
     <ClInclude Include="Util\MemStick.h" />
-    <ClInclude Include="Util\NPAgent.h" />
     <ClInclude Include="Util\PortManager.h" />
     <ClInclude Include="Util\PPGeDraw.h" />
     <ClInclude Include="..\ext\xxhash.h" />

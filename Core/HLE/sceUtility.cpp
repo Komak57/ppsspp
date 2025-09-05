@@ -30,7 +30,7 @@
 #include "Core/HLE/ErrorCodes.h"
 #include "Core/HLE/HLEHelperThread.h"
 #include "Core/HLE/FunctionWrappers.h"
-#include "Core/Util/NPAgent.h"
+#include "Core/Net/NPAgent.h"
 #include "Core/MIPS/MIPS.h"
 #include "Core/MIPS/MIPSCodeUtils.h"
 #include "Core/Reporting.h"
