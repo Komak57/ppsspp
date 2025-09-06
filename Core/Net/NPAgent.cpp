@@ -378,46 +378,7 @@ namespace net {
 				if (received == content_length)
 					state = ReadState::Complete;
 			}
-			if (state == ReadState::Complete) {
-				switch ((PacketType)header.request) {
-				case PacketType::Request:
-					ERROR_LOG(Log::sceNet, "Response Error: Request made to Client not allowed");
-					break;
-				case PacketType::Reply:
-					// Proper response to a request
-					//u8 body = packet->Data()[sizeof(PacketHeader)];
-					//INFO_LOG(Log::HTTP, "Response Error: Login Failed -> %s", PacketTypeNames[error]);
-					break;
-				case PacketType::Notification:
-					switch ((NotificationType)header.command) {
-					case NotificationType::FriendNew:
-					case NotificationType::FriendLost:
-					case NotificationType::FriendQuery:
-					case NotificationType::FriendStatus:
-					case NotificationType::FriendPresenceChanged:
-						// Friends not supported on PSP
-						//handle_friend_notification
-						break;
-					case NotificationType::MessageReceived:
-						// Private messages not supported on PSP?
-						// handle_message
-					default:
-						// Append all other notifications for later requests
-						// notifications
-						break;
-					}
-					break;
-				case PacketType::ServerInfo: {
-					u8 version = packet->Data()[sizeof(PacketHeader)];
-					INFO_LOG(Log::sceNet, "Server is communicating on version %d", version);
-					break;
 				}
-				default:
-					ERROR_LOG(Log::sceNet, "Unexpected Packet Type - %d", header.request);
-					break;
-				}
-			}
-		}
 		return received;  // Return HTML Status Code or Error Code
 	}
 
@@ -583,50 +544,6 @@ namespace net {
 				// Should always be true
 				if (received == content_length)
 					state = ReadState::Complete;
-			}
-			if (state == ReadState::Complete) {
-				switch ((PacketType)header.request) {
-				case PacketType::Request:
-					ERROR_LOG(Log::sceNet, "Response Error: Request made to Client not allowed");
-					break;
-				case PacketType::Reply:
-					// Proper response to a request
-					//u8 body = packet->Data()[sizeof(PacketHeader)];
-					//INFO_LOG(Log::HTTP, "Response Error: Login Failed -> %s", PacketTypeNames[error]);
-					break;
-				case PacketType::Notification:
-					switch ((NotificationType)header.command) {
-					case NotificationType::FriendNew:
-					case NotificationType::FriendLost:
-					case NotificationType::FriendQuery:
-					case NotificationType::FriendStatus:
-					case NotificationType::FriendPresenceChanged:
-						// Friends not supported on PSP
-						//handle_friend_notification
-						break;
-					case NotificationType::MessageReceived:
-						// Private messages not supported on PSP?
-						// handle_message
-					default:
-						// Append all other notifications for later requests
-						// notifications
-						break;
-					}
-					break;
-				case PacketType::ServerInfo: {
-					u8 version = packet->Data()[sizeof(PacketHeader)];
-					if (version != RPCNAgent::PROTOCOL_VERSION) {
-						ERROR_LOG(Log::sceNet, "Server Version mismatch. Current version %d does not match Server version %d", version, RPCNAgent::PROTOCOL_VERSION);
-						// TODO: Version mismatch may interfere with requests and responses. Should disconnect
-						break;
-					}
-					INFO_LOG(Log::sceNet, "Server is communicating on version %d", version);
-					break;
-				}
-				default:
-					ERROR_LOG(Log::sceNet, "Unexpected Packet Type - %d", header.request);
-					break;
-				}
 			}
 		}
 		return received;  // Return HTML Status Code or Error Code

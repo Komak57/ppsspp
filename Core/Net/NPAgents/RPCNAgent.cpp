@@ -179,7 +179,16 @@ namespace net {
 				}
 				break;
 			case PacketType::ServerInfo:
+			{
+				u8 version = buf.stream->get<u8>();
+				if (version != RPCNAgent::PROTOCOL_VERSION) {
+					ERROR_LOG(Log::sceNet, "Server Version mismatch. Current version %d does not match Server version %d", version, RPCNAgent::PROTOCOL_VERSION);
+					// TODO: Version mismatch may interfere with requests and responses. Should disconnect
 				break;
+				}
+				INFO_LOG(Log::sceNet, "Server is communicating on version %d", version);
+				break;
+			}
 			default:
 				WARN_LOG(Log::sceNet, "RPCN Responded with UNHANDLED PacketType (%d)", header.request);
 				break;
