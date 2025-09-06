@@ -201,20 +201,6 @@ namespace net {
 		return true;
 	}
 
-	void NPAuthAgent::Disconnect() {
-		if (tls.enabled) {
-			ResetSSL();
-			tls.enabled = false;
-		}
-		else {
-			if ((intptr_t)sock_ != -1) {
-				cancelled = true;
-				closesocket(sock_);
-				sock_ = -1;
-			}
-		}
-	}
-
 	//u64 NPAgent::get_signaling_context(u32 ctx_id)
 	//{
 	//	static u64 fallback_id = 1; // In case map is empty
@@ -395,7 +381,7 @@ namespace net {
 				if (received == content_length)
 					state = ReadState::Complete;
 			}
-				}
+		}
 		return received;  // Return HTML Status Code or Error Code
 	}
 
