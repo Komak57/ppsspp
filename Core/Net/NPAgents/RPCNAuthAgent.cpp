@@ -15,6 +15,165 @@ namespace net {
 		Disconnect();
 	}
 
+	void RPCNAuthAgent::Disconnect() {
+		NOTICE_LOG(Log::sceNet, "NPAuthAgent::Disconnect()");
+		cancelled = true;
+		if (running)
+			stop_read_thread();
+		if (connected) {
+			if (tls.enabled) {
+				// First shut down network I/O so ssl_read unblocks
+				ResetSSL();
+			}
+			else {
+				if ((intptr_t)sock_ != -1) {
+					closesocket(sock_);
+					sock_ = -1;
+				}
+			}
+			connected = false;
+		}
+	}
+
+	std::string RPCNAuthAgent::generate_npid()
+	{
+		std::string gen_npid = "RPCS3_";
+
+		const char list_chars[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+			'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z' };
+
+		std::srand(static_cast<u32>(time(nullptr)));
+
+		for (int i = 0; i < 10; i++)
+		{
+			gen_npid += list_chars[std::rand() % (sizeof(list_chars))];
+		}
+
+		return gen_npid;
+	}
+
+	u64 RPCNAuthAgent::generate_request_id()
+	{
+		static u64 fallback_id = 1; // In case map is empty
+
+		if (responses.empty())
+			return fallback_id++;
+
+		u64 max_key = 0;
+		for (const auto& [key, _] : responses)
+		{
+			if (key > max_key)
+				max_key = key;
+		}
+		return max_key + 1;
+	}
+
+	void RPCNAuthAgent::start_read_thread() {
+		if (running) return;
+		running = true;
+		read_thread = std::thread(&RPCNAuthAgent::read_loop, this);
+	}
+
+	void RPCNAuthAgent::stop_read_thread() {
+		running = false;
+		if (read_thread.joinable()) {
+			read_thread.join();
+		}
+	}
+
+	// Blocking wait for a specific request_id
+	RPCNResponse RPCNAuthAgent::take_pending_request(u64 request_id) {
+		std::unique_lock<std::mutex> lock(buffer_mutex);
+		buffer_cv.wait(lock, [&]() {
+			return running && responses.find(request_id) != responses.end();
+		});
+		if (!running) {
+			RPCNResponse ret{};
+			ret.error = (u8)ErrorType::Unsupported;
+			return ret;
+		}
+
+		auto data = std::move(responses[request_id]);
+		responses.erase(request_id);
+		return data;
+	}
+
+	void RPCNAuthAgent::read_loop() {
+		while (running) {
+			Packet packet;
+			int ret = Recv(&packet, &cancelled); // Uses NPAuthAgent::Recv
+			if (cancelled)
+				return;
+			if (ret <= 0) {
+				connected = false;
+				running = false;
+				break;
+			}
+
+			//int i;
+			std::string hexdata = "";
+			//for (i = 0; i < packet.Length(); i++) {
+			//	char const c = packet.Data()[i];
+			//	hexdata += hex_chars[(c & 0xF0) >> 4];
+			//	hexdata += hex_chars[(c & 0x0F) >> 0];
+			//}
+			//DEBUG_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());
+
+			if (packet.Length() < RPCN_HEADER_SIZE) {
+				ERROR_LOG(Log::sceNet, "RPCN Malformed Packet Length (%d)", packet.Length());
+				running = false;
+				return;
+			}
+
+			PacketHeader header;
+			memcpy(&header, packet.Data(), sizeof(PacketHeader));
+			// Get data and assign it to the request id related buffer
+			RPCNResponse buf;
+			buf.header = header;
+			buf.data.insert(buf.data.end(), packet.Data() + RPCN_HEADER_SIZE, packet.Data() + packet.Length());
+			buf.stream = new vec_stream(buf.data);
+
+			std::lock_guard<std::mutex> lock(buffer_mutex);
+			switch ((PacketType)header.request) {
+			case PacketType::Reply:
+				if (packet.Length() < RPCN_HEADER_SIZE + 1) {
+					ERROR_LOG(Log::sceNet, "RPCN Malformed Packet Length (%d)", packet.Length());
+					running = false;
+					return;
+				}
+				buf.error = buf.stream->get<u8>();
+				if ((ErrorType)buf.error != ErrorType::NoError) {
+					if (buf.error > sizeof(PacketTypeNames))
+						ERROR_LOG(Log::sceNet, "RPCN Read Error %d: %s", buf.error, hexdata.c_str());
+					else
+						ERROR_LOG(Log::sceNet, "RPCN Read Error 0x%02X: %s", buf.error, PacketTypeNames[buf.error]);
+				}
+				responses[header.reqId] = std::move(buf);
+				break;
+			case PacketType::Notification:
+				NOTICE_LOG(Log::sceNet, "RPCN Unknown Notification: %d", header.command);
+				notifications[header.reqId] = buf;
+				break;
+			case PacketType::ServerInfo:
+			{
+				u8 version = buf.stream->get<u8>();
+				if (version != RPCNAgent::PROTOCOL_VERSION) {
+					ERROR_LOG(Log::sceNet, "Server Version mismatch. Current version %d does not match Server version %d", version, RPCNAgent::PROTOCOL_VERSION);
+					// TODO: Version mismatch may interfere with requests and responses. Should disconnect
+					break;
+				}
+				INFO_LOG(Log::sceNet, "Server is communicating on version %d", version);
+				break;
+			}
+			default:
+				WARN_LOG(Log::sceNet, "RPCN Responded with UNHANDLED PacketType (%d)", header.request);
+				break;
+			}
+
+			buffer_cv.notify_all();
+		}
+	}
+
 	bool RPCNAuthAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
 		std::string certPem = "-----BEGIN CERTIFICATE-----\n"
 			"MIIGITCCBAmgAwIBAgIUdkeQlAaaQsrixKtU72S0ug43r9YwDQYJKoZIhvcNAQEL"

@@ -18,11 +18,29 @@ namespace net {
 		Disconnect();
 	}
 
-	bool PSNAuthAgent::Login(const char* titleId, const char* token, const char* password) {
+	int PSNAuthAgent::Login(const char* titleId, const char* token, const char* password) {
 		return false;
 	}
-	bool PSNAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
+	int PSNAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
 		return false;
+	}
+
+	void PSNAuthAgent::Disconnect() {
+		NOTICE_LOG(Log::sceNet, "NPAuthAgent::Disconnect()");
+		cancelled = true;
+		if (connected) {
+			if (tls.enabled) {
+				// First shut down network I/O so ssl_read unblocks
+				ResetSSL();
+			}
+			else {
+				if ((intptr_t)sock_ != -1) {
+					closesocket(sock_);
+					sock_ = -1;
+				}
+			}
+		}
+		connected = false;
 	}
 
 
@@ -147,7 +165,7 @@ namespace net {
 		22:37:313 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:229 net::PSNAuthAgent::GetServers - Agent-FQDN#2 Status: alive
 		22:37:313 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:238 net::PSNAuthAgent::GetServers - Agent-FQDN#2 Host: agent-20901.ww.np.matching.playstation.net
 	*/
-	int PSNAuthAgent::GetServers(net::ResolveFunc func, SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
+	int PSNAuthAgent::GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
         /*
         Url url("http://static-resource.np.community.playstation.net/np/resource/psp-title/" + std::string(npTitleId.data) + "_00/matching/" + std::string(npTitleId.data) + "_00-matching.xml");
         http::Client client(&ProcessHostnameWithInfraDNS);

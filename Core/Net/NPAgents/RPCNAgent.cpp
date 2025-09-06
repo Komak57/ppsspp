@@ -44,6 +44,22 @@ namespace net {
 		connected = false;
 	}
 
+	u64 RPCNAgent::generate_request_id()
+	{
+		static u64 fallback_id = 1; // In case map is empty
+
+		if (responses.empty())
+			return fallback_id++;
+
+		u64 max_key = 0;
+		for (const auto& [key, _] : responses)
+		{
+			if (key > max_key)
+				max_key = key;
+		}
+		return max_key + 1;
+	}
+
 	void RPCNAgent::start_read_thread() {
 		if (running) return;
 		running = true;
@@ -71,21 +87,6 @@ namespace net {
 		}
 	}
 
-	std::vector<u8> get_rawdata(std::vector<u8> data)
-	{
-		u32 size;
-		memcpy(&size, data.data(), sizeof(u32));
-
-		if (size > data.size())
-		{
-			return {};
-		}
-
-		std::vector<u8> ret;
-		std::copy(data.begin(), data.begin() + size, std::back_inserter(ret));
-
-		return ret;
-	}
 	// Blocking wait for a specific request_id
 	RPCNResponse RPCNAgent::take_pending_request(u64 request_id) {
 		std::unique_lock<std::mutex> lock(buffer_mutex);

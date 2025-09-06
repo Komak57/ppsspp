@@ -513,14 +513,7 @@ namespace net {
 		u8 GetStatus();
 		//int GetID() { return ID; }
 		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
-		u64 generate_request_id();
-		std::vector<u8> GetCommHeader() {
-			u8* data = new u8[COMMUNICATION_ID_SIZE];
-			memcpy(data, npTitleId, 9);		// NPWR01446
-			memcpy(data + 9, "_00", 3);		// _00
-			std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
-			return ret;
-		}
+
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
@@ -542,8 +535,6 @@ namespace net {
 
 		bool connected = false;
 
-		std::unordered_map<u64, RPCNResponse> responses;
-		std::unordered_map<u64, RPCNResponse> notifications;
 		char npTitleId[9];
 	};
 
@@ -596,6 +587,14 @@ namespace net {
 		void start_read_thread();
 		void stop_read_thread();
 
+		u64 generate_request_id();
+		std::vector<u8> GetCommHeader() {
+			u8* data = new u8[COMMUNICATION_ID_SIZE];
+			memcpy(data, npTitleId, 9);		// NPWR01446
+			memcpy(data + 9, "_00", 3);		// _00
+			std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
+			return ret;
+		}
 		// Waits for a response matching request_id
 		// Blocks until the full packet for that request is ready
 		RPCNResponse take_pending_request(u64 request_id);
@@ -607,6 +606,9 @@ namespace net {
 
 		std::mutex buffer_mutex;
 		std::condition_variable buffer_cv;
+
+		std::unordered_map<u64, RPCNResponse> responses;
+		std::unordered_map<u64, RPCNResponse> notifications;
 	};
 
 	class NPAuthAgent : public HTTPS {
@@ -616,17 +618,17 @@ namespace net {
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
 		virtual bool Connect(int maxTries = 1, double timeout = 20.0f, bool* cancelConnect = nullptr) = 0;
-		void Disconnect();
+		virtual void Disconnect() = 0;
 
 		bool Send(Packet* packet, double timeout, bool* cancelled);
-		int Recv(Packet* packet);
+		int Recv(Packet* packet, bool* cancelled);
 
 		//int GetID() { return ID; }
 		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
 
-		virtual bool Login(const char* npid, const char* token, const char* password) = 0;
-		virtual bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
-		//virtual int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) = 0;
+		virtual int Login(const char* npid, const char* token, const char* password) = 0;
+		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
+		virtual int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) = 0;
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
@@ -643,25 +645,54 @@ namespace net {
 		addrinfo* conn = nullptr;
 
 		bool connected = false;
+		char npTitleId[9];
 	};
 	class PSNAuthAgent : public NPAuthAgent {
 	public:
 		~PSNAuthAgent();
 		PSNAuthAgent(std::string host, int port);
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
-		static int GetServers(ResolveFunc func, SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
-		bool Login(const char* npid, const char* token, const char* password);
-		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		void Disconnect();
+		int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
+		int Login(const char* npid, const char* token, const char* password);
+		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 	};
 	class RPCNAuthAgent : public NPAuthAgent {
 	public:
 		~RPCNAuthAgent();
 		RPCNAuthAgent(std::string host, int port);
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
-		static int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
+		void Disconnect();
+		int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
 		static std::string generate_npid();
-		bool Login(const char* npid, const char* token, const char* password);
-		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		int Login(const char* npid, const char* token, const char* password);
+		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+
+		void start_read_thread();
+		void stop_read_thread();
+
+		u64 generate_request_id();
+		std::vector<u8> GetCommHeader() {
+			u8* data = new u8[COMMUNICATION_ID_SIZE];
+			memcpy(data, npTitleId, 9);		// NPWR01446
+			memcpy(data + 9, "_00", 3);		// _00
+			std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
+			return ret;
+		}
+		// Waits for a response matching request_id
+		// Blocks until the full packet for that request is ready
+		RPCNResponse take_pending_request(u64 request_id);
+	private:
+		void read_loop();
+
+		std::thread read_thread;
+		bool running = false;
+
+		std::mutex buffer_mutex;
+		std::condition_variable buffer_cv;
+
+		std::unordered_map<u64, RPCNResponse> responses;
+		std::unordered_map<u64, RPCNResponse> notifications;
 	};
 
 	inline std::unique_ptr<NPAuthAgent> CreateNPAuthAgent(NPAgentType type, std::string host = "", int port = 0) {
@@ -679,3 +710,5 @@ namespace net {
 		return nullptr;
 	}
 }
+
+extern std::unique_ptr<net::NPAuthAgent> npAuthServer;
