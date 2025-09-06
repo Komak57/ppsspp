@@ -19,14 +19,27 @@
 
 #include "Core/Dialog/PSPDialog.h"
 #include "Core/MemMapHelpers.h"
+#include <Core/Net/NPAgent.h>
 
 struct SceUtilityNpSigninParam {
 	pspUtilityDialogCommon common;
 	// Initially all zero? Or is there a possibility for one of these unknown to be a buffer to a packet data if it wasn't null?
 	int npSigninStatus;
-	int unknown1;
-	int unknown2;
+	int unknown1; // Pointer to struct
+	int unknown2; // flags? 0x00300000
 	int unknown3;
+};
+
+enum class SigninStage {
+	INIT,           // param copied, heap allocated
+	AUTO_LOGIN,     // if saved credentials + auto-login flag
+	MANUAL_LOGIN,   // show input fields for NP ID + password
+	CONNECT_REQUEST,           // "Signing in... Please wait"
+	AUTH_REQUEST,   // talk to RPCNAuthAgent/PSNAuthAgent
+	SUCCESS,        // finished, result OK
+	FAIL,           // failed, show error + retry option
+	CANCELLED,      // user pressed cancel
+	SHUTDOWN,       // fade out + cleanup
 };
 
 class PSPNpSigninDialog : public PSPDialog {
@@ -39,6 +52,9 @@ public:
 	void DoState(PointerWrap &p) override;
 	pspUtilityDialogCommon* GetCommonParam() override;
 
+	std::unique_ptr<net::NPAuthAgent> GetServer() {
+		return std::move(server);
+	}
 protected:
 	bool UseAutoStatus() override {
 		return false;
@@ -54,5 +70,7 @@ private:
 	//int npSigninResult = -1;
 
 	u64 startTime = 0;
-	int step = 0;
+	SigninStage stage;
+
+	std::unique_ptr<net::NPAuthAgent> server;
 };

@@ -30,11 +30,13 @@
 #include "Core/Dialog/PSPNpSigninDialog.h"
 #include "Common/Data/Encoding/Utf8.h"
 #include "Core/Reporting.h"
+#include <Core/Config.h>
 
 // Needs testing.
 const static int NP_INIT_DELAY_US = 200000; 
 const static int NP_SHUTDOWN_DELAY_US = 501000; 
 const static int NP_RUNNING_DELAY_US = 1000000; // faked delay to simulate signin process to give chance for players to read the text on the dialog
+
 
 int PSPNpSigninDialog::Init(u32 paramAddr) {
 	// Already running
@@ -57,7 +59,8 @@ int PSPNpSigninDialog::Init(u32 paramAddr) {
 
 	//npSigninResult = -1;
 	startTime = (u64)(time_now_d() * 1000000.0);
-	step = 0;
+	stage = SigninStage::INIT;
+	server = net::CreateNPAuthAgent(net::NPAgentType::RPCN, "rpcn.revurb.us", 31313);
 
 	StartFade(true);
 	return 0;
@@ -104,49 +107,138 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		DrawBanner();
 		DrawIndicator();
 
-		// TODO: Not sure what should happen here.. may be something like this https://pastebin.com/1eW48zBb ? but we can do test on Open DNAS Server later https://dnas.hashsploit.net/us-gw/
-		// DNAS dialog
-		if (step >= 2 && now - startTime > NP_RUNNING_DELAY_US) {
+		switch (stage) {
+		case SigninStage::INIT:
+			// Check Flags for AutoLogin
+			if (g_Config.sPSNNPID.empty())
+				stage = SigninStage::MANUAL_LOGIN;
+			else
+				stage = SigninStage::AUTO_LOGIN;
+			break;
+		case SigninStage::AUTO_LOGIN:
 			DrawLogo();
-			DisplayMessage2(di->T("PleaseWait", "Please wait..."));
-			step++;
-		}
-		// Signin dialog
-		else {
-			// Skipping the Select Connection screen since we only have 1 fake profile
-			DisplayMessage2(di->T("SigninPleaseWait", "Signing in...\nPlease wait."));
-		}
-		DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
-		
-		if (step >= 2 && now - startTime > NP_RUNNING_DELAY_US*2) {
-			if (pendingStatus != SCE_UTILITY_STATUS_FINISHED) {
-				StartFade(false);
-				ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
-				step++;
+			DisplayMessage2(di->T("SigninPleaseWait", "Auto-Login in process...\nPlease wait."));
+			if (now - startTime > NP_RUNNING_DELAY_US) {
+				startTime = now;
+				stage = SigninStage::CONNECT_REQUEST;
 			}
-		}
+			break;
+		case SigninStage::MANUAL_LOGIN:
+			DrawLogo();
+			DisplayMessage2(di->T("SigninPleaseWait", "To play in Infrastructure Mode, you must enter a username"));
+			//if (IsButtonPressed(okButtonFlag)) {
+			//	SigninStage::CONNECT_REQUEST;
+			//}
+			break;
+		case SigninStage::CONNECT_REQUEST:
+			DrawLogo();
+			DisplayMessage2(di->T("SigninPleaseWait", "Connecting..."));
+			if (now - startTime > NP_RUNNING_DELAY_US) {
+				startTime = now;
+				if (!server->Resolve()) {
+					stage = SigninStage::SHUTDOWN;
+				}
+				if (!server->Connect()) {
+					stage = SigninStage::SHUTDOWN;
+				}
+				stage = SigninStage::AUTH_REQUEST;
+			}
+			break;
+		case SigninStage::AUTH_REQUEST:
+			DrawLogo();
+			DisplayMessage2(di->T("SigninPleaseWait", "Signing in...\nPlease wait."));
+			if (now - startTime > NP_RUNNING_DELAY_US) {
+				startTime = now;
+				std::string* creds = NpGetLogin();
+				if (server->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str()) != 0) {
+					stage = SigninStage::FAIL;
+				}
+				StartFade(true);
 
-		else if (step == 1 && now - startTime > NP_RUNNING_DELAY_US) {
-			// Switch to the next message (with DNAS logo)
-			StartFade(true);
-			step++;
-		}
-
-		else if (step == 0) {
-			/*if (npAuthResult < 0 && request.NpSigninData.IsValid()) {
-				npAuthResult = sceNpAuthCreateStartRequest(request.NpSigninData->paramAddr);
-			}*/
-			step++;
-		}
-
-		if (/*npAuthResult >= 0 &&*/ IsButtonPressed(cancelButtonFlag)) {
+				stage = SigninStage::SUCCESS;
+			}
+			break;
+		case SigninStage::SUCCESS:
+			DisplayMessage2(di->T("SigninPleaseWait", "Success!"));
+			if (now - startTime > NP_RUNNING_DELAY_US) {
+				startTime = now;
+				if (pendingStatus != SCE_UTILITY_STATUS_FINISHED) {
+					StartFade(false);
+					ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
+				}
+				stage = SigninStage::SHUTDOWN;
+			}
+			break;
+		case SigninStage::FAIL:
+			DrawLogo();
+			DisplayMessage2(di->T("PleaseWait", "Authentication Failed. Retry?"));
+			if (IsButtonPressed(okButtonFlag))
+				SigninStage::MANUAL_LOGIN;
+			break;
+		case SigninStage::CANCELLED:
+			DisplayMessage2(di->T("PleaseWait", "Cancelling..."));
+			if (now - startTime > NP_RUNNING_DELAY_US) {
+				startTime = now;
+				StartFade(false);
+				//sceNpAuthAbortRequest(npAuthResult);
+				//sceNpAuthDestroyRequest(npAuthResult);
+				ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
+				request.common.result = SCE_UTILITY_DIALOG_RESULT_ABORT;
+				request.npSigninStatus = NP_SIGNIN_STATUS_CANCELED;
+			}
+			break;
+		case SigninStage::SHUTDOWN:
+			DisplayMessage2(di->T("PleaseWait", "Exiting..."));
 			StartFade(false);
-			//sceNpAuthAbortRequest(npAuthResult);
-			//sceNpAuthDestroyRequest(npAuthResult);
 			ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
 			request.common.result = SCE_UTILITY_DIALOG_RESULT_ABORT;
-			request.npSigninStatus = NP_SIGNIN_STATUS_CANCELED;
+			request.npSigninStatus = NP_SIGNIN_STATUS_FAILED;
+			break;
+		}
+		//// TODO: Not sure what should happen here.. may be something like this https://pastebin.com/1eW48zBb ? but we can do test on Open DNAS Server later https://dnas.hashsploit.net/us-gw/
+		//// DNAS dialog
+		//if (step >= 2 && now - startTime > NP_RUNNING_DELAY_US) {
+		//	DrawLogo();
+		//	DisplayMessage2(di->T("PleaseWait", "Please wait..."));
+		//	step++;
+		//}
+		//// Signin dialog
+		//else {
+		//	// Skipping the Select Connection screen since we only have 1 fake profile
+		//	DisplayMessage2(di->T("SigninPleaseWait", "Signing in...\nPlease wait."));
+		//}
+		//DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
+		//
+		//if (step >= 2 && now - startTime > NP_RUNNING_DELAY_US*2) {
+		//	if (pendingStatus != SCE_UTILITY_STATUS_FINISHED) {
+		//		StartFade(false);
+		//		ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
+		//		step++;
+		//	}
+		//}
+
+		//else if (step == 1 && now - startTime > NP_RUNNING_DELAY_US) {
+		//	// Switch to the next message (with DNAS logo)
+		//	StartFade(true);
+		//	step++;
+		//}
+
+		//else if (step == 0) {
+		//	/*if (npAuthResult < 0 && request.NpSigninData.IsValid()) {
+		//		npAuthResult = sceNpAuthCreateStartRequest(request.NpSigninData->paramAddr);
+		//	}*/
+		//	step++;
+		//}
+
+		if (/*npAuthResult >= 0 &&*/ IsButtonPressed(cancelButtonFlag)) {
+			//StartFade(false);
+			////sceNpAuthAbortRequest(npAuthResult);
+			////sceNpAuthDestroyRequest(npAuthResult);
+			//ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
+			//request.common.result = SCE_UTILITY_DIALOG_RESULT_ABORT;
+			//request.npSigninStatus = NP_SIGNIN_STATUS_CANCELED;
 			//step = 0;
+			stage = SigninStage::CANCELLED;
 		}
 
 		EndDraw();
@@ -184,7 +276,7 @@ void PSPNpSigninDialog::DoState(PointerWrap &p) {
 		return;
 
 	Do(p, request);
-	Do(p, step);
+	Do(p, stage);
 	//Do(p, npSigninResult);
 
 	if (p.mode == p.MODE_READ) {
