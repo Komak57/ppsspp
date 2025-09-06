@@ -236,20 +236,28 @@ namespace net {
 			ERROR_LOG(Log::IO, "Send Failed - Invalid Socket");
 			return false;
 		}
+
+		int i;
+		std::string hexdata = "";
+		for (i = 0; i < packet->Length(); i++) {
+			char const c = packet->Data()[i];
+			hexdata += hex_chars[(c & 0xF0) >> 4];
+			hexdata += hex_chars[(c & 0x0F) >> 0];
+		}
+		DEBUG_LOG(Log::sceNet, "NPAgent::Send('%s')", hexdata.c_str());
 		static constexpr float CANCEL_INTERVAL = 0.25f;
 
 		bool ready = false;
 		double endTimeout = time_now_d() + timeout;
-		const char* data = reinterpret_cast<const char*>(packet->Data());
-		for (size_t pos = 0, end = strlen(data); pos < end; ) {
+		//const char* data = reinterpret_cast<const char*>(packet->Data());
+		for (size_t pos = 0, end = packet->Length(); pos < end; ) {
 			if (time_now_d() > endTimeout) {
 				ERROR_LOG(Log::IO, "Send timed out");
 				return false;
 			}
 			int sent;
 			if (tls.enabled) {
-				sent = mbedtls_ssl_write(&tls.sslCtx, (const unsigned char*)data + pos, end - pos);
-				//int sent = send(sock, &data[pos], end - pos, MSG_NOSIGNAL);
+				sent = mbedtls_ssl_write(&tls.sslCtx, packet->Data() + pos, end - pos);
 				// TODO: Do we need some retry logic here, instead of just giving up?
 				if (sent <= 0) {
 					switch (sent) {
@@ -264,7 +272,7 @@ namespace net {
 				}
 			}
 			else {
-				sent = send(sock(), data, end - pos, 0);
+				sent = send(sock(), (const char*)packet->Data() + pos, end - pos, 0);
 				// Only await when we failed to receive data we're expecting
 				if (sent < 0) {
 #if !PPSSPP_PLATFORM(WINDOWS)
@@ -309,7 +317,7 @@ namespace net {
 		Complete
 	};
 
-	int NPAuthAgent::Recv(Packet* packet) {
+	int NPAuthAgent::Recv(Packet* packet, bool* cancelled) {
 		static constexpr float CANCEL_INTERVAL = 0.25f;
 		char buf[4096];
 		// Adjustable read size
@@ -321,9 +329,18 @@ namespace net {
 		int content_length = 0;
 
 		while (state != ReadState::Complete) {
+			if (*cancelled) {
+				WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");
+				return 0;
+			}
 			if (tls.enabled) {
 				DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
 				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
+
+				if (*cancelled) {
+					WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");
+					return 0;
+				}
 				//int ready = 0;
 				if (retval < 0) {
 					switch (retval) {
@@ -346,7 +363,7 @@ namespace net {
 					default:
 						char errbuf[128];
 						mbedtls_strerror(retval, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::sceNet, "Read Failed: -0x%04x -> %s", -retval, errbuf);
+						ERROR_LOG(Log::HTTP, "Read Failed: -0x%04x -> %s", -retval, errbuf);
 						return retval;
 					}
 				}

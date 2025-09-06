@@ -211,6 +211,7 @@ namespace net {
 			"J0bA8B9r2b16KdmcSov97fDQbBgmL+EEaRFfDQq+4WGkWJ+ppw==\n"
 			"-----END CERTIFICATE-----\n";
 		InitializeSSL(certPem);
+		mbedtls_ssl_conf_ciphersuites(&tls.sslConfig, forceCiphers);
 		mbedtls_ssl_conf_max_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 
@@ -298,6 +299,10 @@ namespace net {
 
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful. TLS: %s, Cipher: %s", mbedtls_ssl_get_version(&tls.sslCtx), mbedtls_ssl_get_ciphersuite(&tls.sslCtx));
 				connected = true;
+
+				// Start reading data
+				start_read_thread();
+
 				return true;
 			sslretry:
 				INFO_LOG(Log::sceNet, "Connect - Connection Failed, retrying");
@@ -308,38 +313,8 @@ namespace net {
 		}
 		return false;
 	}
-	std::string RPCNAuthAgent::generate_npid()
-	{
-		std::string gen_npid = "RPCS3_";
 
-		const char list_chars[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-			'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z' };
-
-		std::srand(static_cast<u32>(time(nullptr)));
-
-		for (int i = 0; i < 10; i++)
-		{
-			gen_npid += list_chars[std::rand() % (sizeof(list_chars))];
-		}
-
-		return gen_npid;
-	}
-
-	bool RPCNAuthAgent::Login(const char* npid, const char* token, const char* password) {
-		// npid
-		// password
-		// token
-
-		// Send CommandType::Login, req_id, data, packet_data
-
-		// Get Reply
-		// online_name
-		// avatar_url
-		// user_id 
-		// friends (PS3)
-
-		// Disconnect on Error
-		// Disconnect on malformed data
+	int RPCNAuthAgent::Login(const char* npid, const char* token, const char* password) {
 		Packet packet = Packet();
 		packet.Write(npid);
 		packet.Write((u8)0);
@@ -348,62 +323,32 @@ namespace net {
 		packet.Write(token);
 		packet.Write((u8)0);
 
-		packet.Pack(CommandType::Login, 1);
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::Login, reqId);
 
-		//int i;
-		//std::string hexdata = "";
-		//for (i = 0; i < packet.Length(); i++) {
-		//	char const c = packet.Data()[i];
-		//	hexdata += hex_chars[(c & 0xF0) >> 4];
-		//	hexdata += hex_chars[(c & 0x0F) >> 0];
-		//}
-		//// 00 0000 4D000000 0100000000000000 52504353335F6969516F34513032494600 6C656D6D65696E00 61363866326362612D326536322D346536382D396330382D37663262303431356564636200
-		//// 00 0000 0000004D 0000000000000001 52504353335F5039663465543266377100 6C656D6D65696E00 61363866326362612D326536322D346536382D396330382D37663262303431356564636200
-		//INFO_LOG(Log::sceNet, "Request: %s", hexdata.c_str());
 		INFO_LOG(Log::sceNet, "Sending Login Request");
 
-		// packet.Pack(0x0112, packet.Length()+4);
-		//net::Buffer buffer;
-		//void* dst = buffer.Append(packet_size);
-		//memcpy(dst, packet.Data(), packet.Length());
-
-		//bool flushed = buffer.FlushSocket(sock_, 60.0, &canceled);
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return false;
 		}
-		//net::Buffer readbuf;
-		//// Read response
-		int ret = Recv(&packet);
 
-		/*if (packet.Length() > 0) {
-			hexdata = "";
-			for (i = 0; i < packet.Length(); i++) {
-				int c = packet.Data()[i];
-				hexdata += hex_chars[(c & 0xF0) >> 4];
-				hexdata += hex_chars[(c & 0x0F) >> 0];
-			}
-			INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
-		}*/
-
+		/*Packet response = Packet();
+		int ret = Recv(&response);
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
-		}
+		}*/
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return ErrorToPSPError[resp.error];
+		resp.stream = new vec_stream(resp.data, 1);
 
-		//std::string response;
-		//readbuf.Take(ret, &response);
-
-		// 03 0000 13000000 0000000000000000 1A000000
-
-		PacketHeader header;
-		memcpy(&header, packet.Data(), sizeof(PacketHeader));
-
-		return true;
+		return 0;
 	}
 
-	bool RPCNAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
+	int RPCNAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
 		Packet packet = Packet();
 		packet.Write(npid);
 		packet.Write((u8)0);
@@ -416,7 +361,8 @@ namespace net {
 		packet.Write(email);
 		packet.Write((u8)0);
 
-		packet.Pack(CommandType::Create, 2);
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::Create, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Registration Request");
 
@@ -426,16 +372,50 @@ namespace net {
 			return false;
 		}
 
-		int ret = Recv(&packet);
-		if (ret < 0) {
-			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
-			return false;
-		}
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return ErrorToPSPError[resp.error];
+		resp.stream = new vec_stream(resp.data, 1);
+
 		return true;
 	}
 
 	int RPCNAuthAgent::GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
-		serversPtr->emplace(1, net::CreateNPAgent(net::NPAgentType::RPCN, 1, "rpcn.revurb.us", 31313, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		memcpy(this->npTitleId, npTitleId.data, sizeof(this->npTitleId));
+
+		Packet packet = Packet();
+		packet.Write(this->GetCommHeader());
+
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::GetServerList, reqId);
+
+		INFO_LOG(Log::sceNet, "Sending Server List Request");
+
+		bool flushed = Send(&packet, 5.0, &cancelled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND;
+		}
+
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return ErrorToPSPError[resp.error];
+		resp.stream = new vec_stream(resp.data, 1);
+		
+		u16 num_servs = resp.stream->get<u16>();
+
+		serversPtr->clear();
+		for (u16 i = 0; i < num_servs; i++)
+		{
+			u16 server_id = resp.stream->get<u16>();
+			serversPtr->emplace(server_id, net::CreateNPAgent(net::NPAgentType::RPCN, server_id, this->host_, this->port_, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		}
+		if (resp.stream->is_error()) {
+			serversPtr->clear();
+			ERROR_LOG(Log::sceNet, "Malformed reply to GetServerList command");
+			return SCE_NP_MATCHING2_ERROR_CONNECTION_CLOSED_BY_SERVER;
+		}
+		//serversPtr->emplace(1, net::CreateNPAgent(net::NPAgentType::RPCN, 1, "rpcn.revurb.us", 31313, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
 		//serversPtr->emplace(2, net::CreateNPAgent(net::NPAgentType::RPCN, 2, "rpcn.revurb.us", 3657, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
 		return 0;
 	}
