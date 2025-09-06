@@ -176,7 +176,7 @@ namespace net {
         }
         */
 		Url url("http://static-resource.np.community.playstation.net/np/resource/psp-title/" + std::string(npTitleId.data) + "_00/matching/" + std::string(npTitleId.data) + "_00-matching.xml");
-		http::Client client(func);
+		http::Client client(nullptr);
 		bool cancelled = false;
 		net::RequestProgress progress(&cancelled);
 		if (!client.Resolve(url.Host().c_str(), url.Port())) {
