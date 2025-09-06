@@ -1359,63 +1359,11 @@ static int sceUtilityHtmlViewerUpdate(int n) {
 	return 0;
 }
 
-std::thread psnLoginThread;
-bool psnLoginThreadProcessing = 0;
-bool trigerLogin = 1;
 pspUtilityPsnStatus psnStatus = pspUtilityPsnStatus::PSN_STATUS_SHUTDOWN;
-static std::atomic<bool> psnStopRequested{ false };
-int dialog_State = PSP_UTILITY_DIALOG_NONE;
-std::unique_ptr<net::NPAuthAgent> server;
-
-static void PsnLoginThreadFunc(void) {
-	NOTICE_LOG(Log::sceUtility, "PsnLoginThreadFunc is starting");
-	// TODO: Move this to sceUtilityAuthDialogUpdate
-	std::string npid = net::RPCNAuthAgent::generate_npid();
-
-	if (!server->Resolve()) {
-		psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
-		ERROR_LOG(Log::sceUtility, "Could not Resolve"); // SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND
-		// TODO: Notify User and process out cleanly
-		goto exit_label;
-	}
-	// Connect to server before we collect information
-	if (!server->Connect(1)) {
-		psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
-		ERROR_LOG(Log::sceUtility, "Could not Connect"); // SCE_NP_MATCHING2_ERROR_SERVER_NOT_AVAILABLE
-		// TODO: Notify User and process out cleanly
-		goto exit_label;
-	}
-
-	// FIXME: uses psnParam.titleId2Ptr
-	if (!server->CreateAccount(npid.c_str(), "lemmein", "foxlovesyou", "", "test@email.com")) {
-		psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
-		ERROR_LOG(Log::sceUtility, "Could not Register"); // SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER
-		// TODO: Notify User and process out cleanly
-		goto exit_label;
-	}
-	if (!server->Login(npid.c_str(), "a68f2cba-2e62-4e68-9c08-7f2b0415edcb", "lemmein")) {
-		psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
-		ERROR_LOG(Log::sceUtility, "Could not Login"); // SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER
-		// TODO: Notify User and process out cleanly
-		goto exit_label;
-	}
-
-	psnStatus = pspUtilityPsnStatus::PSN_STATUS_AVAILABLE;
-exit_label:
-	if (psnStatus == pspUtilityPsnStatus::PSN_STATUS_ERROR)
-		server->Disconnect();
-	dialog_State = PSP_UTILITY_DIALOG_QUIT; // will execute sceUtilityAuthDialogShutdownStart
-	psnLoginThreadProcessing = false;
-	NOTICE_LOG(Log::sceUtility, "PsnLoginThreadFunc is closing");
-	return;
-}
 
 // This function begins the AuthDialog. Render the GUI, and instantiate any variables
 static int sceUtilityAuthDialogInitStart(u32 paramsPtr) {
 	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityAuthDialogInitStart(%08x)", paramsPtr);
-	dialog_State = PSP_UTILITY_DIALOG_INIT;
-	if (psnLoginThread.joinable())
-		psnLoginThread.join();  // In case it was left dangling
 
 	//pspUtilityPsnParam psnParam;
 	//Memory::Memcpy(&psnParam, paramsPtr, sizeof(psnParam));
@@ -1427,52 +1375,20 @@ static int sceUtilityAuthDialogInitStart(u32 paramsPtr) {
 static int sceUtilityAuthDialogShutdownStart() {
 	DEBUG_LOG(Log::sceUtility, "UNIMPL sceUtilityAuthDialogShutdownStart()");
 
-	while (psnLoginThreadProcessing)
-		psnStopRequested = true; // wait for thread to close (not implemented)
-	if (psnLoginThread.joinable())
-		psnLoginThread.join();
-	dialog_State = PSP_UTILITY_DIALOG_FINISHED;
 	return 0;
 }
 
 // NOTE: This function processes every frame after sceUtilityAuthDialogInitStart until PSP_UTILITY_DIALOG_FINISHED closes cleanly
 static int sceUtilityAuthDialogGetStatus() {
-	DEBUG_LOG(Log::sceUtility, "UNIMPL sceUtilityAuthDialogGetStatus() => %i", dialog_State);
+	DEBUG_LOG(Log::sceUtility, "UNIMPL sceUtilityAuthDialogGetStatus()");
 
-	switch (dialog_State) {
-	case PSP_UTILITY_DIALOG_INIT:
-		// Wait for GUI to render and then trigger VISIBLE
-		dialog_State = PSP_UTILITY_DIALOG_VISIBLE; // begins executing sceUtilityAuthDialogUpdate
-		break;
-	case PSP_UTILITY_DIALOG_VISIBLE:
-		// Process any logic in sceUtilityAuthDialogUpdate instead
-		break;
-	case PSP_UTILITY_DIALOG_QUIT:
-		// About to process sceUtilityAuthDialogShutdownStart
-		break;
-	case PSP_UTILITY_DIALOG_FINISHED:
-		// We're done here, preparing to exit
-		break;
-	default:
-		break;
+	return PSP_UTILITY_DIALOG_QUIT;
 	}
-	return dialog_State;
-}
 
 // NOTE: This function only triggers during PSP_UTILITY_DIALOG_VISIBLE
 static int sceUtilityAuthDialogUpdate(int n) {
 	DEBUG_LOG(Log::sceUtility, "UNIMPL sceUtilityAuthDialogUpdate(%i)", n);
-	// TODO: Render Dialog
-	// TODO: Process Inputs to start PsnLoginThreadFunc
-	// TODO: Process Inputs to exit cleanly - the thread should auto-exit in the case of success
 
-	// TODO: This should be triggered after the user has requested the login
-	if (trigerLogin) {
-		trigerLogin = 0;
-		psnLoginThreadProcessing = 1;
-		psnLoginThread = std::thread(PsnLoginThreadFunc);
-		//psnLoginThread.detach();
-	}
 	return 0;
 }
 static u32 sceUtilityLoadUsbModule(u32 module)
@@ -1497,51 +1413,17 @@ static u32 sceUtilityUnloadUsbModule(u32 module)
 	return hleNoLog(0);
 }
 
-std::thread psnDialogThread;
-bool psnDialogThreadProcessing = 0;
-
-static void PsnDialogAuthThreadFunc(u32 psnParamPtr) {
-	NOTICE_LOG(Log::sceUtility, "PsnDialogAuthThreadFunc is starting");
-
-	sceUtilityAuthDialogInitStart(psnParamPtr);
-	while (true) {
-		int status = sceUtilityAuthDialogGetStatus();
-		if (status == PSP_UTILITY_DIALOG_NONE)
-			break; // Exit cleanly
-		if (status == PSP_UTILITY_DIALOG_INIT)
-			continue; // Only triggers when we're waiting on something to start
-		if (status == PSP_UTILITY_DIALOG_VISIBLE)
-			sceUtilityAuthDialogUpdate(0); // Update GUI
-		if (status == PSP_UTILITY_DIALOG_QUIT)
-			sceUtilityAuthDialogShutdownStart(); // Start Shutdown Procedures
-		if (status == PSP_UTILITY_DIALOG_FINISHED)
-			dialog_State = PSP_UTILITY_DIALOG_NONE; // Proceed to exit next frame
-	}
-	psnDialogThreadProcessing = 0;
-	NOTICE_LOG(Log::sceUtility, "PsnDialogAuthThreadFunc is closing");
-	return;
-}
 static int sceUtilityPsnShutdownStart()
 {
 	// Related Flag for PSP2i => "JP0177-NPJH50332_00"
 	WARN_LOG_REPORT(Log::sceUtility, "UNIMPL sceUtilityPsnShutdownStart()");
 
-	if (psnLoginThreadProcessing) {
-		while (!psnLoginThread.joinable())
-			psnStopRequested = true; // wait for thread to close (not implemented)
-		psnLoginThread.join();
-	}
-	if (psnDialogThreadProcessing) {
-		while (!psnDialogThread.joinable())
-			psnStopRequested = true; // wait for thread to close (not implemented)
-		psnDialogThread.join();
-	}
-	if (server != nullptr)
-		server->Disconnect();
 	psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
 	return 0;
 }
 
+std::unique_ptr<net::NPAuthAgent> npAuthServer;
+u64 last;
 static void sceUtilityPsnInitStart(u32 paramPtr)
 {
 	// Related Flag for PSP2i => "JP0177-NPJH50332_00"
@@ -1557,22 +1439,8 @@ static void sceUtilityPsnInitStart(u32 paramPtr)
 	if (psnDialogThread.joinable())
 		psnDialogThread.join();  // In case it was left dangling
 
-	server = net::CreateNPAuthAgent(net::NPAgentType::RPCN, "rpcn.revurb.us", 31313);
-
-	psnStatus = pspUtilityPsnStatus::PSN_STATUS_PROCESSING;
-	//psnDialogThread = std::thread(PsnDialogAuthThreadFunc, paramPtr);
-
-	if (!server->Resolve()) {
-		psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
-		ERROR_LOG(Log::sceUtility, "Could not Resolve"); // SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND
-		// TODO: Notify User and process out cleanly
 		return hleNoLogVoid();
 	}
-	psnStatus = pspUtilityPsnStatus::PSN_STATUS_AVAILABLE;
-	//psnDialogThread.detach();
-
-	return hleNoLogVoid();
-}
 
 static int sceUtilityPsnGetStatus()
 {
