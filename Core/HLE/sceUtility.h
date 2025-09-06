@@ -18,6 +18,7 @@
 #pragma once
 
 #include <map>
+#include "Core/Net/NPAgent.h"
 
 class PointerWrap;
 
@@ -169,6 +170,17 @@ struct sceUtilityPsnConfig {
 	u32 var7;
 	int var8;
 };
+//struct sceUtilityPsnParam {
+//	PSPPointer<pspUtilityDialogCommon> DialogCommon;
+//	u32 mode;
+//	u32 heapPtr;
+//	u32 heapSize;
+//	u32 ctxId;
+//	u32 target_type;
+//	char* titleId2;
+//	char* titleId;
+//	u32 exit_code;
+//};
 
 const std::map<int, u32> &__UtilityGetLoadedModules();  // ->first gets the module ID, for use in the following two functions.
 const ModuleLoadInfo *__UtilityModuleInfo(int moduleID);

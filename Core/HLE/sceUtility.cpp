@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <set>
+#include <TimeUtil.h>
 
 #include "Common/Data/Format/IniFile.h"
 
@@ -30,7 +31,6 @@
 #include "Core/HLE/ErrorCodes.h"
 #include "Core/HLE/HLEHelperThread.h"
 #include "Core/HLE/FunctionWrappers.h"
-#include "Core/Net/NPAgent.h"
 #include "Core/MIPS/MIPS.h"
 #include "Core/MIPS/MIPSCodeUtils.h"
 #include "Core/Reporting.h"
@@ -1383,7 +1383,7 @@ static int sceUtilityAuthDialogGetStatus() {
 	DEBUG_LOG(Log::sceUtility, "UNIMPL sceUtilityAuthDialogGetStatus()");
 
 	return PSP_UTILITY_DIALOG_QUIT;
-	}
+}
 
 // NOTE: This function only triggers during PSP_UTILITY_DIALOG_VISIBLE
 static int sceUtilityAuthDialogUpdate(int n) {
@@ -1429,38 +1429,63 @@ static void sceUtilityPsnInitStart(u32 paramPtr)
 	// Related Flag for PSP2i => "JP0177-NPJH50332_00"
 	WARN_LOG(Log::sceUtility, "UNIMPL sceUtilityPsnInitStart(0x%08x)", paramPtr);
 
-	if (psnStatus == pspUtilityPsnStatus::PSN_STATUS_PROCESSING) {
+	if (psnStatus != pspUtilityPsnStatus::PSN_STATUS_AVAILABLE &&
+		psnStatus != pspUtilityPsnStatus::PSN_STATUS_SHUTDOWN &&
+		psnStatus != pspUtilityPsnStatus::PSN_STATUS_ERROR) {
 		// Already started
 		return;
 	}
 
-	//WARN_LOG(Log::sceUtility, "sceUtilityPsnInitStart(0x%08x) => [%d, %d, %d, %d, %d, %d, %d, %d]", paramPtr, psnParam.ctxId);
+	psnStatus = pspUtilityPsnStatus::PSN_STATUS_BUSY;
 
-	if (psnDialogThread.joinable())
-		psnDialogThread.join();  // In case it was left dangling
+	last = (u64)(time_now_d() * 1000000.0);
+	//currentDialogType = UtilityDialogType::NPSIGNIN;
+	sceUtilityNpSigninInitStart(paramPtr);
 
-		return hleNoLogVoid();
-	}
+	return hleNoLogVoid();
+}
 
 static int sceUtilityPsnGetStatus()
 {
-	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityPsnGetStatus() => %d", psnStatus);
-	if (psnStatus == pspUtilityPsnStatus::PSN_STATUS_ERROR) {
-		if (psnLoginThreadProcessing) {
-			while (!psnLoginThread.joinable())
-				psnStopRequested = true; // wait for thread to close (not implemented)
-			NOTICE_LOG(Log::sceUtility, "psnLoginThread.join()");
-			psnLoginThread.join();
+	u64 now = (u64)(time_now_d() * 1000000.0);
+	int i = sceUtilityNpSigninUpdate(now - last);
+	if (i == 0) {
+		switch (npSigninDialog->GetStatus()) {
+		case 0: // NP_SIGNIN_STATUS_NONE
+			break;
+		case 1: // SCE_UTILITY_STATUS_INITIALIZE
+			psnStatus = pspUtilityPsnStatus::PSN_STATUS_BUSY;
+			break;
+		case 2: // SCE_UTILITY_STATUS_RUNNING
+			psnStatus = pspUtilityPsnStatus::PSN_STATUS_PROCESSING;
+			break;
+		case 3: // SCE_UTILITY_STATUS_FINISHED
+			switch (npSigninDialog->GetCommonParam()->result) {
+			case 0: //SCE_UTILITY_DIALOG_RESULT_SUCCESS
+				psnStatus = pspUtilityPsnStatus::PSN_STATUS_AVAILABLE;
+				npAuthServer = npSigninDialog->GetServer();
+				sceUtilityNpSigninShutdownStart();
+				break;
+			case 1: //SCE_UTILITY_DIALOG_RESULT_CANCEL
+			case 2: //SCE_UTILITY_DIALOG_RESULT_ABORT
+			default:
+				psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
+				sceUtilityNpSigninShutdownStart();
+				break;
+			}
+			break;
+		case 4: // SCE_UTILITY_STATUS_SHUTDOWN
+			psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
+			sceUtilityNpSigninShutdownStart();
+			break;
+		case 5: // SCE_UTILITY_STATUS_SCREENSHOT_UNKNOWN
+			break;
+		default: // Unhandled
+			break;
 		}
-		if (psnDialogThreadProcessing) {
-			while (!psnDialogThread.joinable())
-				psnStopRequested = true; // wait for thread to close (not implemented)
-			NOTICE_LOG(Log::sceUtility, "psnDialogThread.join()");
-			psnDialogThread.join();
-		}
-		if (server != nullptr)
-			server->Disconnect();
 	}
+	last = now;
+
 	/* PSN Status Codes
 	0: PSN Available
 		Flag at 0x84 calls sceRtcGetCurrentNetworkTick
