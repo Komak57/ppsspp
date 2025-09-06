@@ -412,8 +412,10 @@ static int sceNpMatching2ContextStart(int ctxId)
 
 	servers.clear();
 	//net::PSNAuthAgent::GetServers(&ProcessHostnameWithInfraDNS, npTitleId, &servers);
-	net::RPCNAuthAgent::GetServers(npTitleId, &servers);
-
+	//net::RPCNAuthAgent::GetServers(npTitleId, &servers);
+	npAuthServer->GetServers(npTitleId, &servers);
+	// We don't need the auth agent after this.
+	npAuthServer->Disconnect();
 	////signaling_handler::print_interfaces();
 	//if (g_signaling.connect("fe80::be24:11ff:fed8:39c4", 3657, 21)) {
 	//	NOTICE_LOG(Log::sceNet, "Connected to Signaling Server!");
