@@ -354,6 +354,8 @@ void DeveloperToolsScreen::CreateNetworkTab(UI::LinearLayout *list) {
 	usernameChoice->SetRestriction(StringRestriction::AlphaNumDashUnderscore, 3);
 	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sPSNPassword, di->T("Password"), "", 64, screenManager()))->SetPasswordDisplay();
 	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sPSNToken, "Token", "", 64, screenManager()))->SetPasswordDisplay();
+	list->Add(new CheckBox(&g_Config.sPSNAutoSignIn, dev->T("Auto Sign-In")));
+	list->Add(new CheckBox(&g_Config.sPSNRememberPwd, dev->T("Remember Password")));
 }
 
 void DeveloperToolsScreen::CreateGraphicsTab(UI::LinearLayout *list) {

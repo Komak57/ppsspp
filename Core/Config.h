@@ -496,6 +496,8 @@ public:
 	std::string sPSNNPID;
 	std::string sPSNPassword;
 	std::string sPSNToken;  // This will be set by a login mechanism
+	bool sPSNRememberPwd;
+	bool sPSNAutoSignIn;
 
 	bool bEnableWlan;
 	std::map<std::string, std::string> mHostToAlias;  // Local DNS database stored in ini file

@@ -178,8 +178,11 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 					selected = SigninSelected::PASSWORD;
 				if (IsButtonPressed(downButtonFlag))
 					selected = SigninSelected::REMEMBERME;
-				if (IsButtonPressed(okButtonFlag))
-					; // TODO: Toggle auto-login setting
+				if (IsButtonPressed(okButtonFlag)) {
+					g_Config.sPSNAutoSignIn = !g_Config.sPSNAutoSignIn;
+					if (g_Config.sPSNAutoSignIn)
+						g_Config.sPSNRememberPwd = true;
+				}
 				break;
 			case SigninSelected::REMEMBERME:
 				PPGeDrawRect(70, 170, 300, 190, CalcFadedColor(0xC0C8B2AC));
@@ -187,8 +190,11 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 					selected = SigninSelected::AUTOLOGIN;
 				if (IsButtonPressed(downButtonFlag))
 					selected = SigninSelected::SIGNIN;
-				if (IsButtonPressed(okButtonFlag))
-					; // TODO: Toggle remember-password setting?
+				if (IsButtonPressed(okButtonFlag)) {
+					g_Config.sPSNRememberPwd = !g_Config.sPSNRememberPwd;
+					if (!g_Config.sPSNRememberPwd)
+						g_Config.sPSNAutoSignIn = false;
+				}
 				break;
 			case SigninSelected::SIGNIN:
 				PPGeDrawRect(200, 200, 280, 220, CalcFadedColor(0xC0C8B2AC));
@@ -228,9 +234,15 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			PPGeDrawText(di->T("Password"), 70, 95, leftAligned);
 			// FIXME: This should be an Input Box
 			PPGeDrawText(di->T(std::string(g_Config.sPSNPassword.size(), '*')), 70, 115, leftAligned);
-			PPGeDrawImage(chkboxBtnImage, 70, 145, 20, 20, leftAligned);
+			{
+				ImageID autoSignInChkBox = g_Config.sPSNAutoSignIn ? ImageID("I_CROSS") : ImageID("I_SQUARE");
+				PPGeDrawImage(autoSignInChkBox, 70, 145, 20, 20, leftAligned);
+			}
 			PPGeDrawText(di->T("Sign In Automatically (Auto Sign-In)"), 90, 145, leftAligned);
-			PPGeDrawImage(chkboxBtnImage, 70, 170, 20, 20, leftAligned);
+			{
+				ImageID savePswdChkBox = g_Config.sPSNRememberPwd ? ImageID("I_CROSS") : ImageID("I_SQUARE");
+				PPGeDrawImage(savePswdChkBox, 70, 170, 20, 20, leftAligned);
+			}
 			PPGeDrawText(di->T("Save Password"), 90, 170, leftAligned);
 
 			PPGeDrawText(di->T("Sign In"), 240, 200, centerAligned);
