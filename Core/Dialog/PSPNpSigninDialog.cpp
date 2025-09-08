@@ -129,6 +129,21 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			//if (IsButtonPressed(okButtonFlag)) {
 			//	SigninStage::CONNECT_REQUEST;
 			//}
+			PPGeDrawText(di->T("Sign-in ID (Username)"), 70, 50, leftAligned);
+			PPGeDrawText(di->T(g_Config.sPSNNPID), 70, 70, leftAligned);
+			PPGeDrawText(di->T("Password"), 70, 95, leftAligned);
+			PPGeDrawText(di->T(std::string(g_Config.sPSNPassword.size(), '*')), 70, 115, leftAligned);
+			PPGeDrawImage(chkboxBtnImage, 70, 145, 20, 20, leftAligned);
+			PPGeDrawText(di->T("Sign in automatically next time"), 90, 145, leftAligned);
+			PPGeDrawImage(chkboxBtnImage, 70, 170, 20, 20, leftAligned);
+			PPGeDrawText(di->T("Save password"), 90, 170, leftAligned);
+
+			PPGeDrawText(di->T("Sign In"), 240, 200, centerAligned);
+			PPGeDrawText(di->T("Forgot Password"), 240, 230, centerAligned);
+			DisplayButtons(DS_BUTTON_OK, di->T("Confirm"));
+			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
+			if (IsButtonPressed(cancelButtonFlag))
+				stage = SigninStage::CANCELLED;
 			break;
 		case SigninStage::CONNECT_REQUEST:
 			DrawLogo();
