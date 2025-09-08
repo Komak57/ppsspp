@@ -122,13 +122,13 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		switch (stage) {
 		case SigninStage::INIT:
 			// Check Flags for AutoLogin
-			if (g_Config.sPSNNPID.empty())
+			if (g_Config.sPSNNPID.empty() || g_Config.sPSNPassword.empty() || g_Config.sPSNToken.empty())
 				stage = SigninStage::MANUAL_LOGIN;
 			else
 				stage = SigninStage::AUTO_LOGIN;
+			stage = SigninStage::MANUAL_LOGIN;
 			break;
 		case SigninStage::AUTO_LOGIN:
-			DrawLogo();
 			DisplayMessage2(di->T("SigninPleaseWait", "Auto-Login in process...\nPlease wait."));
 			if (now - startTime > NP_RUNNING_DELAY_US) {
 				startTime = now;
@@ -141,6 +141,8 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				PPGeDrawRect(70, 70, 405, 90, CalcFadedColor(0xC0C8B2AC));
 				if (IsButtonPressed(downButtonFlag))
 					selected = SigninSelected::PASSWORD;
+				if (IsButtonPressed(okButtonFlag))
+					; // TODO: Pop up Input Dialog for Username
 				break;
 			case SigninSelected::PASSWORD:
 				PPGeDrawRect(70, 115, 405, 135, CalcFadedColor(0xC0C8B2AC));
@@ -148,6 +150,8 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 					selected = SigninSelected::LOGIN;
 				if (IsButtonPressed(downButtonFlag))
 					selected = SigninSelected::AUTOLOGIN;
+				if (IsButtonPressed(okButtonFlag))
+					; // TODO: Pop up Input Dialog for Username
 				break;
 			case SigninSelected::AUTOLOGIN:
 				PPGeDrawRect(70, 145, 300, 165, CalcFadedColor(0xC0C8B2AC));
@@ -155,6 +159,8 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 					selected = SigninSelected::PASSWORD;
 				if (IsButtonPressed(downButtonFlag))
 					selected = SigninSelected::REMEMBERME;
+				if (IsButtonPressed(okButtonFlag))
+					; // TODO: Toggle auto-login setting
 				break;
 			case SigninSelected::REMEMBERME:
 				PPGeDrawRect(70, 170, 300, 190, CalcFadedColor(0xC0C8B2AC));
@@ -162,6 +168,8 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 					selected = SigninSelected::AUTOLOGIN;
 				if (IsButtonPressed(downButtonFlag))
 					selected = SigninSelected::SIGNIN;
+				if (IsButtonPressed(okButtonFlag))
+					; // TODO: Toggle remember-password setting?
 				break;
 			case SigninSelected::SIGNIN:
 				PPGeDrawRect(200, 200, 280, 220, CalcFadedColor(0xC0C8B2AC));
@@ -176,16 +184,20 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				PPGeDrawRect(170, 230, 310, 250, CalcFadedColor(0xC0C8B2AC));
 				if (IsButtonPressed(upButtonFlag))
 					selected = SigninSelected::SIGNIN;
+				if (IsButtonPressed(okButtonFlag))
+					; // TODO: Start Browser to recover password
 				break;
 			}
-			PPGeDrawText(di->T("Sign-in ID (Username)"), 70, 50, leftAligned);
+			PPGeDrawText(di->T("Sign-In ID (Username)"), 70, 50, leftAligned);
+			// FIXME: This should be an Input Box
 			PPGeDrawText(di->T(g_Config.sPSNNPID), 70, 70, leftAligned);
 			PPGeDrawText(di->T("Password"), 70, 95, leftAligned);
+			// FIXME: This should be an Input Box
 			PPGeDrawText(di->T(std::string(g_Config.sPSNPassword.size(), '*')), 70, 115, leftAligned);
 			PPGeDrawImage(chkboxBtnImage, 70, 145, 20, 20, leftAligned);
-			PPGeDrawText(di->T("Sign in automatically next time"), 90, 145, leftAligned);
+			PPGeDrawText(di->T("Sign In Automatically (Auto Sign-In)"), 90, 145, leftAligned);
 			PPGeDrawImage(chkboxBtnImage, 70, 170, 20, 20, leftAligned);
-			PPGeDrawText(di->T("Save password"), 90, 170, leftAligned);
+			PPGeDrawText(di->T("Save Password"), 90, 170, leftAligned);
 
 			PPGeDrawText(di->T("Sign In"), 240, 200, centerAligned);
 			PPGeDrawText(di->T("Forgot Password"), 240, 230, centerAligned);
@@ -234,8 +246,8 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			}
 			break;
 		case SigninStage::SUCCESS:
-					StartFade(false);
-					ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
+			StartFade(false);
+			ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
 			request.common.result = SCE_UTILITY_DIALOG_RESULT_SUCCESS;
 			request.npSigninStatus = NP_SIGNIN_STATUS_SUCCESS;
 			break;
