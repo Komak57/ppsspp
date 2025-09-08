@@ -210,13 +210,16 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 							[&](const std::string& value, int) {
 							// Success callback
 							g_Config.sPSNToken = value;
+							stage = SigninStage::CONNECT_REQUEST;
 						},
 							[&]() {
 							// Failure callback
 						}
 						);
 					}
+					else {
 					stage = SigninStage::CONNECT_REQUEST;
+				}
 				}
 				break;
 			case SigninSelected::FORGOTPSWD:
