@@ -495,3 +495,45 @@ void PSPDialog::DisplayMessage2(std::string_view text1, std::string_view text2a,
 	PPGeDrawRect(60.0f, sy, 420.0f, sy + 1.0f, CalcFadedColor(0xFFFFFFFF));
 	PPGeDrawRect(60.0f, ey, 420.0f, ey + 1.0f, CalcFadedColor(0xFFFFFFFF));
 }
+
+void PSPDialog::DisplayInputBox(std::string& input, float x, float y, float x2, float y2, u32 color, PPGeStyle &style, bool mask, bool showCaret) {
+	auto di = GetI18NCategory(I18NCat::DIALOG);
+
+	// Draw background box (black with border)
+	PPGeDrawRect(x, y, x2, y2, color);   // background
+	PPGeDrawRect(x, y, x2, y + 1, CalcFadedColor(0xFF000000)); // top border
+	PPGeDrawRect(x, y2, x2, y2 + 1, CalcFadedColor(0xFF000000)); // bottom border
+	PPGeDrawRect(x, y, x + 1, y2, CalcFadedColor(0xFF000000)); // left border
+	PPGeDrawRect(x2, y, x2 + 1, y2, CalcFadedColor(0xFF000000)); // right border
+
+	// Prepare displayed text (masked if requested)
+	std::string display = mask ? std::string(input.size(), '*') : input;
+
+	// Clip text so it fits inside the box
+	float maxWidth = (x2 - x - 16.0f);
+	while (!display.empty()) {
+		float textW = 0.0f, textH = 0.0f;
+		PPGeMeasureText(&textW, &textH, display, style.scale, PPGE_LINE_USE_ELLIPSIS, maxWidth);
+		if (textW <= maxWidth) break;
+		display.erase(display.begin());  // drop leading chars until it fits
+	}
+
+	// Draw the current text inside the box
+	PPGeDrawText(display, x + 8.0f, (y + y2) / 2.0f - 8.0f, style);
+
+	if (showCaret) {
+		// Draw a blinking caret at the end
+		static int frame = 0;
+		frame++;
+		if ((frame / 30) % 2 == 0) {
+			float caretX = x + 8.0f;
+			float caretY = (y + y2) / 2.0f - 8.0f;
+			if (!display.empty()) {
+				float caretW = 0.0f, caretH = 0.0f;
+				PPGeMeasureText(&caretW, &caretH, display, style.scale);
+				caretX += caretW;
+			}
+			PPGeDrawRect(caretX, caretY, caretX + 2.0f, caretY + 14.0f, color);
+		}
+	}
+}
