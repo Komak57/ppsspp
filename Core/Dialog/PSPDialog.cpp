@@ -76,6 +76,11 @@ void PSPDialog::UpdateCommon() {
 	cancelButtonImg = ImageID("I_CROSS");
 	okButtonFlag = CTRL_CIRCLE;
 	cancelButtonFlag = CTRL_CROSS;
+
+	upButtonFlag = CTRL_UP;
+	downButtonFlag = CTRL_DOWN;
+	leftButtonFlag = CTRL_LEFT;
+	rightButtonFlag = CTRL_RIGHT;
 	if (GetCommonParam() && GetCommonParam()->buttonSwap == 1) {
 		okButtonImg = ImageID("I_CROSS");
 		cancelButtonImg = ImageID("I_CIRCLE");

@@ -139,6 +139,10 @@ protected:
 	ImageID cancelButtonImg;
 	int okButtonFlag = 0;
 	int cancelButtonFlag = 0;
+	int upButtonFlag = 0;
+	int downButtonFlag = 0;
+	int leftButtonFlag = 0;
+	int rightButtonFlag = 0;
 
 	// DisplayMessage2 variables
 	int yesnoChoice = 0;
