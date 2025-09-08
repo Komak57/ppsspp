@@ -42,6 +42,15 @@ enum class SigninStage {
 	SHUTDOWN,       // fade out + cleanup
 };
 
+enum class SigninSelected {
+	LOGIN,
+	PASSWORD,
+	AUTOLOGIN,
+	REMEMBERME,
+	SIGNIN,
+	FORGOTPSWD
+};
+
 class PSPNpSigninDialog : public PSPDialog {
 public:
 	PSPNpSigninDialog(UtilityDialogType type) : PSPDialog(type) {}
@@ -71,6 +80,7 @@ private:
 
 	u64 startTime = 0;
 	SigninStage stage;
+	SigninSelected selected;
 
 	std::unique_ptr<net::NPAuthAgent> server;
 };

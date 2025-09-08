@@ -60,6 +60,7 @@ int PSPNpSigninDialog::Init(u32 paramAddr) {
 	//npSigninResult = -1;
 	startTime = (u64)(time_now_d() * 1000000.0);
 	stage = SigninStage::INIT;
+	selected = SigninSelected::SIGNIN;
 	server = net::CreateNPAuthAgent(net::NPAgentType::RPCN, "rpcn.revurb.us", 31313);
 
 	StartFade(true);
@@ -135,11 +136,48 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			}
 			break;
 		case SigninStage::MANUAL_LOGIN:
-			DrawLogo();
-			DisplayMessage2(di->T("SigninPleaseWait", "To play in Infrastructure Mode, you must enter a username"));
-			//if (IsButtonPressed(okButtonFlag)) {
-			//	SigninStage::CONNECT_REQUEST;
-			//}
+			switch (selected) {
+			case SigninSelected::LOGIN:
+				PPGeDrawRect(70, 70, 405, 90, CalcFadedColor(0xC0C8B2AC));
+				if (IsButtonPressed(downButtonFlag))
+					selected = SigninSelected::PASSWORD;
+				break;
+			case SigninSelected::PASSWORD:
+				PPGeDrawRect(70, 115, 405, 135, CalcFadedColor(0xC0C8B2AC));
+				if (IsButtonPressed(upButtonFlag))
+					selected = SigninSelected::LOGIN;
+				if (IsButtonPressed(downButtonFlag))
+					selected = SigninSelected::AUTOLOGIN;
+				break;
+			case SigninSelected::AUTOLOGIN:
+				PPGeDrawRect(70, 145, 300, 165, CalcFadedColor(0xC0C8B2AC));
+				if (IsButtonPressed(upButtonFlag))
+					selected = SigninSelected::PASSWORD;
+				if (IsButtonPressed(downButtonFlag))
+					selected = SigninSelected::REMEMBERME;
+				break;
+			case SigninSelected::REMEMBERME:
+				PPGeDrawRect(70, 170, 300, 190, CalcFadedColor(0xC0C8B2AC));
+				if (IsButtonPressed(upButtonFlag))
+					selected = SigninSelected::AUTOLOGIN;
+				if (IsButtonPressed(downButtonFlag))
+					selected = SigninSelected::SIGNIN;
+				break;
+			case SigninSelected::SIGNIN:
+				PPGeDrawRect(200, 200, 280, 220, CalcFadedColor(0xC0C8B2AC));
+				if (IsButtonPressed(upButtonFlag))
+					selected = SigninSelected::REMEMBERME;
+				if (IsButtonPressed(downButtonFlag))
+					selected = SigninSelected::FORGOTPSWD;
+				if (IsButtonPressed(okButtonFlag))
+					stage = SigninStage::CONNECT_REQUEST;
+				break;
+			case SigninSelected::FORGOTPSWD:
+				PPGeDrawRect(170, 230, 310, 250, CalcFadedColor(0xC0C8B2AC));
+				if (IsButtonPressed(upButtonFlag))
+					selected = SigninSelected::SIGNIN;
+				break;
+			}
 			PPGeDrawText(di->T("Sign-in ID (Username)"), 70, 50, leftAligned);
 			PPGeDrawText(di->T(g_Config.sPSNNPID), 70, 70, leftAligned);
 			PPGeDrawText(di->T("Password"), 70, 95, leftAligned);
