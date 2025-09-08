@@ -244,11 +244,13 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			DisplayMessage2(di->T("PleaseWait", "Authentication Failed. Retry?"));
 			DisplayButtons(DS_BUTTON_OK, di->T("Confirm"));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
+			server->Disconnect();
 			if (IsButtonPressed(okButtonFlag))
 				SigninStage::MANUAL_LOGIN;
 			break;
 		case SigninStage::CANCELLED:
 			DisplayMessage2(di->T("PleaseWait", "Cancelling..."));
+			server->Disconnect();
 			if (now - startTime > NP_RUNNING_DELAY_US) {
 				startTime = now;
 				StartFade(false);
