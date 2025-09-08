@@ -234,15 +234,10 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			}
 			break;
 		case SigninStage::SUCCESS:
-			DisplayMessage2(di->T("SigninPleaseWait", "Success!"));
-			if (now - startTime > NP_RUNNING_DELAY_US) {
-				startTime = now;
-				if (pendingStatus != SCE_UTILITY_STATUS_FINISHED) {
 					StartFade(false);
 					ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
-				}
-				stage = SigninStage::SHUTDOWN;
-			}
+			request.common.result = SCE_UTILITY_DIALOG_RESULT_SUCCESS;
+			request.npSigninStatus = NP_SIGNIN_STATUS_SUCCESS;
 			break;
 		case SigninStage::FAIL:
 			DrawLogo();
