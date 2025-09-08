@@ -258,15 +258,19 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			DrawIndicator();
 			DisplayMessage2(di->T("SigninPleaseWait", "You are currently signing in.\nPlease wait for a moment."));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
-			if (IsButtonPressed(cancelButtonFlag))
+			if (IsButtonPressed(cancelButtonFlag)) {
 				stage = SigninStage::CANCELLED;
+				break;
+			}
 			if (now - startTime > NP_RUNNING_DELAY_US) {
 				startTime = now;
 				if (!server->Resolve()) {
 					stage = SigninStage::SHUTDOWN;
+					break;
 				}
 				if (!server->Connect()) {
 					stage = SigninStage::SHUTDOWN;
+					break;
 				}
 				stage = SigninStage::AUTH_REQUEST;
 			}
@@ -278,13 +282,17 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			DrawLogo();
 			DisplayMessage2(di->T("SigninPleaseWait", "Please wait for a moment."));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
-			if (IsButtonPressed(cancelButtonFlag))
+			if (IsButtonPressed(cancelButtonFlag)) {
 				stage = SigninStage::CANCELLED;
+				break;
+			}
 			if (now - startTime > NP_RUNNING_DELAY_US) {
 				startTime = now;
 				std::string* creds = NpGetLogin();
 				if (server->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str()) != 0) {
+					g_Config.sPSNToken = ""; // Reset the Token to force re-entry
 					stage = SigninStage::FAIL;
+					break;
 				}
 				StartFade(true);
 
@@ -305,14 +313,20 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			DisplayButtons(DS_BUTTON_OK, di->T("Confirm"));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
 			if (server->IsConnected())
-			server->Disconnect();
-			if (IsButtonPressed(okButtonFlag))
-				SigninStage::MANUAL_LOGIN;
+				server->Disconnect();
+			if (IsButtonPressed(okButtonFlag)) {
+				stage = SigninStage::MANUAL_LOGIN;
+				break;
+			}
+			if (IsButtonPressed(cancelButtonFlag)) {
+				SigninStage::SHUTDOWN;
+				break;
+			}
 			break;
 		case SigninStage::CANCELLED:
 			DisplayMessage2(di->T("PleaseWait", "Cancelling..."));
 			if (server->IsConnected())
-			server->Disconnect();
+				server->Disconnect();
 			if (now - startTime > NP_RUNNING_DELAY_US) {
 				startTime = now;
 				StartFade(false);
