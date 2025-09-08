@@ -31,6 +31,7 @@
 #include "Common/Data/Encoding/Utf8.h"
 #include "Core/Reporting.h"
 #include <Core/Config.h>
+#include <System/Request.h>
 
 // Needs testing.
 const static int NP_INIT_DELAY_US = 200000; 
@@ -141,8 +142,17 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				PPGeDrawRect(70, 70, 405, 90, CalcFadedColor(0xC0C8B2AC));
 				if (IsButtonPressed(downButtonFlag))
 					selected = SigninSelected::PASSWORD;
-				if (IsButtonPressed(okButtonFlag))
-					; // TODO: Pop up Input Dialog for Username
+				if (IsButtonPressed(okButtonFlag)) {
+					System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Username", g_Config.sPSNNPID, false,
+						[&](const std::string& value, int) {
+						// Success callback
+						g_Config.sPSNNPID = value;
+					},
+						[&]() {
+						// Failure callback
+					}
+					);
+				}
 				break;
 			case SigninSelected::PASSWORD:
 				PPGeDrawRect(70, 115, 405, 135, CalcFadedColor(0xC0C8B2AC));
@@ -150,8 +160,17 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 					selected = SigninSelected::LOGIN;
 				if (IsButtonPressed(downButtonFlag))
 					selected = SigninSelected::AUTOLOGIN;
-				if (IsButtonPressed(okButtonFlag))
-					; // TODO: Pop up Input Dialog for Username
+				if (IsButtonPressed(okButtonFlag)) {
+					System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", g_Config.sPSNPassword, true,
+						[&](const std::string& value, int) {
+						// Success callback
+						g_Config.sPSNPassword = value;
+					},
+						[&]() {
+						// Failure callback
+					}
+					);
+				}
 				break;
 			case SigninSelected::AUTOLOGIN:
 				PPGeDrawRect(70, 145, 300, 165, CalcFadedColor(0xC0C8B2AC));
@@ -177,8 +196,23 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 					selected = SigninSelected::REMEMBERME;
 				if (IsButtonPressed(downButtonFlag))
 					selected = SigninSelected::FORGOTPSWD;
-				if (IsButtonPressed(okButtonFlag))
+				if (IsButtonPressed(okButtonFlag)) {
+					// Sanity Check
+					if (g_Config.sPSNNPID.empty() || g_Config.sPSNPassword.empty())
+						break;
+					if (g_Config.sPSNToken.empty()) {
+						System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Token", g_Config.sPSNToken, true,
+							[&](const std::string& value, int) {
+							// Success callback
+							g_Config.sPSNToken = value;
+						},
+							[&]() {
+							// Failure callback
+						}
+						);
+					}
 					stage = SigninStage::CONNECT_REQUEST;
+				}
 				break;
 			case SigninSelected::FORGOTPSWD:
 				PPGeDrawRect(170, 230, 310, 250, CalcFadedColor(0xC0C8B2AC));
