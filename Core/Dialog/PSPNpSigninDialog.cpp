@@ -229,11 +229,9 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				break;
 			}
 			PPGeDrawText(di->T("Sign-In ID (Username)"), 70, 50, leftAligned);
-			// FIXME: This should be an Input Box
-			PPGeDrawText(di->T(g_Config.sPSNNPID), 70, 70, leftAligned);
+			DisplayInputBox(g_Config.sPSNNPID, 70, 70, 405, 90, CalcFadedColor(0x40000000), leftAligned);
 			PPGeDrawText(di->T("Password"), 70, 95, leftAligned);
-			// FIXME: This should be an Input Box
-			PPGeDrawText(di->T(std::string(g_Config.sPSNPassword.size(), '*')), 70, 115, leftAligned);
+			DisplayInputBox(g_Config.sPSNPassword, 70, 115, 405, 135, CalcFadedColor(0x40000000), leftAligned, true);
 			{
 				ImageID autoSignInChkBox = g_Config.sPSNAutoSignIn ? ImageID("I_CROSS") : ImageID("I_SQUARE");
 				PPGeDrawImage(autoSignInChkBox, 70, 145, 20, 20, leftAligned);
