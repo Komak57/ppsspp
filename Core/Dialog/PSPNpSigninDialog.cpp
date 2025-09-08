@@ -123,11 +123,10 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		switch (stage) {
 		case SigninStage::INIT:
 			// Check Flags for AutoLogin
-			if (g_Config.sPSNNPID.empty() || g_Config.sPSNPassword.empty() || g_Config.sPSNToken.empty())
+			if (g_Config.sPSNNPID.empty() || g_Config.sPSNPassword.empty() || g_Config.sPSNToken.empty() || !g_Config.sPSNAutoSignIn)
 				stage = SigninStage::MANUAL_LOGIN;
 			else
 				stage = SigninStage::AUTO_LOGIN;
-			stage = SigninStage::MANUAL_LOGIN;
 			break;
 		case SigninStage::AUTO_LOGIN:
 			DisplayMessage2(di->T("SigninPleaseWait", "Auto-Login in process...\nPlease wait."));
