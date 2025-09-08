@@ -103,9 +103,20 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		UpdateFade(animSpeed);
 		StartDraw();
 
-		PPGeDrawRect(0, 0, 480, 272, CalcFadedColor(0xC0C8B2AC));
-		DrawBanner();
-		DrawIndicator();
+		const int confirmBtn = GetConfirmButton();
+		const int cancelBtn = GetCancelButton();
+		const ImageID confirmBtnImage = confirmBtn == CTRL_CROSS ? ImageID("I_CROSS") : ImageID("I_CIRCLE");
+		const ImageID cancelBtnImage = cancelBtn == CTRL_CIRCLE ? ImageID("I_CIRCLE") : ImageID("I_CROSS");
+
+		const ImageID selectImage = ImageID("I_SOLIDWHITE");
+		const ImageID chkboxBtnImage = ImageID("I_CHECKEDBOX");
+
+		PPGeStyle leftAligned = FadedStyle(PPGeAlign::BOX_LEFT, 0.6f);
+		PPGeStyle centerAligned = FadedStyle(PPGeAlign::BOX_HCENTER, 0.6f);
+		//PPGeDrawImage(confirmBtnImage, 275, 240, 20, 20, buttonStyle);
+		//PPGeDrawImage(cancelBtnImage, 255, 240, 20, 20, buttonStyle);
+		//PPGeDrawText(di->T("Confirm"), 285, 243, buttonStyle);
+		//PPGeDrawText(di->T("Cancel"), 285, 243, buttonStyle);
 
 		switch (stage) {
 		case SigninStage::INIT:
@@ -148,6 +159,9 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		case SigninStage::CONNECT_REQUEST:
 			DrawLogo();
 			DisplayMessage2(di->T("SigninPleaseWait", "Connecting..."));
+			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
+			if (IsButtonPressed(cancelButtonFlag))
+				stage = SigninStage::CANCELLED;
 			if (now - startTime > NP_RUNNING_DELAY_US) {
 				startTime = now;
 				if (!server->Resolve()) {
@@ -162,6 +176,9 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		case SigninStage::AUTH_REQUEST:
 			DrawLogo();
 			DisplayMessage2(di->T("SigninPleaseWait", "Signing in...\nPlease wait."));
+			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
+			if (IsButtonPressed(cancelButtonFlag))
+				stage = SigninStage::CANCELLED;
 			if (now - startTime > NP_RUNNING_DELAY_US) {
 				startTime = now;
 				std::string* creds = NpGetLogin();
@@ -187,6 +204,8 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		case SigninStage::FAIL:
 			DrawLogo();
 			DisplayMessage2(di->T("PleaseWait", "Authentication Failed. Retry?"));
+			DisplayButtons(DS_BUTTON_OK, di->T("Confirm"));
+			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
 			if (IsButtonPressed(okButtonFlag))
 				SigninStage::MANUAL_LOGIN;
 			break;
@@ -245,16 +264,16 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		//	step++;
 		//}
 
-		if (/*npAuthResult >= 0 &&*/ IsButtonPressed(cancelButtonFlag)) {
-			//StartFade(false);
-			////sceNpAuthAbortRequest(npAuthResult);
-			////sceNpAuthDestroyRequest(npAuthResult);
-			//ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
-			//request.common.result = SCE_UTILITY_DIALOG_RESULT_ABORT;
-			//request.npSigninStatus = NP_SIGNIN_STATUS_CANCELED;
-			//step = 0;
-			stage = SigninStage::CANCELLED;
-		}
+		//if (/*npAuthResult >= 0 &&*/ IsButtonPressed(cancelButtonFlag)) {
+		//	StartFade(false);
+		//	//sceNpAuthAbortRequest(npAuthResult);
+		//	//sceNpAuthDestroyRequest(npAuthResult);
+		//	ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
+		//	request.common.result = SCE_UTILITY_DIALOG_RESULT_ABORT;
+		//	request.npSigninStatus = NP_SIGNIN_STATUS_CANCELED;
+		//	step = 0;
+		//	stage = SigninStage::CANCELLED;
+		//}
 
 		EndDraw();
 	}
