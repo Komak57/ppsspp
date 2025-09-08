@@ -983,8 +983,8 @@ static const ConfigSetting networkSettings[] = {
 	ConfigSetting("PSNNPID", &g_Config.sPSNNPID, &DefaultInfrastructureUsername, CfgFlag::PER_GAME),
 	ConfigSetting("PSNPassword", &g_Config.sPSNPassword, "", CfgFlag::PER_GAME),
 	ConfigSetting("PSNToken", &g_Config.sPSNToken, "", CfgFlag::PER_GAME),
-	ConfigSetting("PSNToken", &g_Config.sPSNAutoSignIn, false, CfgFlag::PER_GAME),
-	ConfigSetting("PSNToken", &g_Config.sPSNRememberPwd, false, CfgFlag::PER_GAME),
+	ConfigSetting("PSNAutoSignIn", &g_Config.sPSNAutoSignIn, false, CfgFlag::PER_GAME),
+	ConfigSetting("PSNRememberPwd", &g_Config.sPSNRememberPwd, false, CfgFlag::PER_GAME),
 
 	ConfigSetting("EnableNetworkChat", &g_Config.bEnableNetworkChat, false, CfgFlag::PER_GAME),
 	ConfigSetting("ChatButtonPosition", &g_Config.iChatButtonPosition, (int)ScreenEdgePosition::BOTTOM_LEFT, CfgFlag::PER_GAME),

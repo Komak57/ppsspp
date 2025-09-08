@@ -216,8 +216,8 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						);
 					}
 					else {
-					stage = SigninStage::CONNECT_REQUEST;
-				}
+						stage = SigninStage::CONNECT_REQUEST;
+					}
 				}
 				break;
 			case SigninSelected::FORGOTPSWD:
@@ -298,6 +298,8 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			request.npSigninStatus = NP_SIGNIN_STATUS_SUCCESS;
 			break;
 		case SigninStage::FAIL:
+			// Disable Token to force re-aquire ?
+			//g_Config.sPSNToken = "";
 			DrawLogo();
 			DisplayMessage2(di->T("PleaseWait", "Authentication Failed. Retry?"));
 			DisplayButtons(DS_BUTTON_OK, di->T("Confirm"));
