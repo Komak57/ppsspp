@@ -619,6 +619,7 @@ namespace net {
 		bool Resolve(DNSType type = DNSType::ANY);
 		virtual bool Connect(int maxTries = 1, double timeout = 20.0f, bool* cancelConnect = nullptr) = 0;
 		virtual void Disconnect() = 0;
+		virtual NPAgentType GetAuthType() const = 0;
 
 		bool Send(Packet* packet, double timeout, bool* cancelled);
 		int Recv(Packet* packet, bool* cancelled);
@@ -657,6 +658,7 @@ namespace net {
 		int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		NPAgentType GetAuthType() const override { return NPAgentType::PSN; }
 	};
 	class RPCNAuthAgent : public NPAuthAgent {
 	public:
@@ -669,6 +671,7 @@ namespace net {
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
+		NPAgentType GetAuthType() const override { return NPAgentType::RPCN; }
 		void start_read_thread();
 		void stop_read_thread();
 

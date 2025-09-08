@@ -140,7 +140,10 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				if (IsButtonPressed(downButtonFlag))
 					selected = SigninSelected::PASSWORD;
 				if (IsButtonPressed(okButtonFlag)) {
-					System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Username", g_Config.sPSNNPID, false,
+					std::string LoginType = "Username";
+					if (server->GetAuthType() == net::NPAgentType::PSN)
+						LoginType = "E-mail Address";
+					System_InputBoxGetString(NON_EPHEMERAL_TOKEN, LoginType, g_Config.sPSNNPID, false,
 						[&](const std::string& value, int) {
 						// Success callback
 						g_Config.sPSNNPID = value;
@@ -182,7 +185,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				}
 				break;
 			case SigninSelected::REMEMBERME:
-				PPGeDrawRect(70, 170, 300, 190, CalcFadedColor(0xC0C8B2AC));
+				PPGeDrawRect(70, 170, 200, 190, CalcFadedColor(0xC0C8B2AC));
 				if (IsButtonPressed(upButtonFlag))
 					selected = SigninSelected::AUTOLOGIN;
 				if (IsButtonPressed(downButtonFlag))
@@ -208,6 +211,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 							[&](const std::string& value, int) {
 							// Success callback
 							g_Config.sPSNToken = value;
+							startTime = now;
 							stage = SigninStage::CONNECT_REQUEST;
 						},
 							[&]() {
@@ -216,6 +220,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						);
 					}
 					else {
+						startTime = now;
 						stage = SigninStage::CONNECT_REQUEST;
 					}
 				}
@@ -228,7 +233,14 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 					; // TODO: Start Browser to recover password
 				break;
 			}
-			PPGeDrawText(di->T("Sign-In ID (Username)"), 70, 50, leftAligned);
+			if (server->GetAuthType() == net::NPAgentType::RPCN) {
+				PPGeDrawText(di->T("RPCN"), 240, 5, centerAligned);
+				PPGeDrawText(di->T("Sign-In ID (Username)"), 70, 50, leftAligned);
+			}
+			else {
+				PPGeDrawText(di->T("PSN"), 240, 5, centerAligned);
+				PPGeDrawText(di->T("Sign-In ID (E-mail Address)"), 70, 50, leftAligned);
+			}
 			DisplayInputBox(g_Config.sPSNNPID, 70, 70, 405, 90, CalcFadedColor(0x40000000), leftAligned);
 			PPGeDrawText(di->T("Password"), 70, 95, leftAligned);
 			DisplayInputBox(g_Config.sPSNPassword, 70, 115, 405, 135, CalcFadedColor(0x40000000), leftAligned, true);
@@ -343,51 +355,6 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			request.npSigninStatus = NP_SIGNIN_STATUS_FAILED;
 			break;
 		}
-		//// TODO: Not sure what should happen here.. may be something like this https://pastebin.com/1eW48zBb ? but we can do test on Open DNAS Server later https://dnas.hashsploit.net/us-gw/
-		//// DNAS dialog
-		//if (step >= 2 && now - startTime > NP_RUNNING_DELAY_US) {
-		//	DrawLogo();
-		//	DisplayMessage2(di->T("PleaseWait", "Please wait..."));
-		//	step++;
-		//}
-		//// Signin dialog
-		//else {
-		//	// Skipping the Select Connection screen since we only have 1 fake profile
-		//	DisplayMessage2(di->T("SigninPleaseWait", "Signing in...\nPlease wait."));
-		//}
-		//DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
-		//
-		//if (step >= 2 && now - startTime > NP_RUNNING_DELAY_US*2) {
-		//	if (pendingStatus != SCE_UTILITY_STATUS_FINISHED) {
-		//		StartFade(false);
-		//		ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
-		//		step++;
-		//	}
-		//}
-
-		//else if (step == 1 && now - startTime > NP_RUNNING_DELAY_US) {
-		//	// Switch to the next message (with DNAS logo)
-		//	StartFade(true);
-		//	step++;
-		//}
-
-		//else if (step == 0) {
-		//	/*if (npAuthResult < 0 && request.NpSigninData.IsValid()) {
-		//		npAuthResult = sceNpAuthCreateStartRequest(request.NpSigninData->paramAddr);
-		//	}*/
-		//	step++;
-		//}
-
-		//if (/*npAuthResult >= 0 &&*/ IsButtonPressed(cancelButtonFlag)) {
-		//	StartFade(false);
-		//	//sceNpAuthAbortRequest(npAuthResult);
-		//	//sceNpAuthDestroyRequest(npAuthResult);
-		//	ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
-		//	request.common.result = SCE_UTILITY_DIALOG_RESULT_ABORT;
-		//	request.npSigninStatus = NP_SIGNIN_STATUS_CANCELED;
-		//	step = 0;
-		//	stage = SigninStage::CANCELLED;
-		//}
 
 		EndDraw();
 	}
