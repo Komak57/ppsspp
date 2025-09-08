@@ -632,6 +632,7 @@ namespace net {
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
+		bool IsConnected() { return connected; }
 
 	protected:
 		u16 ID;
