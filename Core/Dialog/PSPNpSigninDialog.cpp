@@ -110,8 +110,6 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		const ImageID confirmBtnImage = confirmBtn == CTRL_CROSS ? ImageID("I_CROSS") : ImageID("I_CIRCLE");
 		const ImageID cancelBtnImage = cancelBtn == CTRL_CIRCLE ? ImageID("I_CIRCLE") : ImageID("I_CROSS");
 
-		const ImageID selectImage = ImageID("I_SOLIDWHITE");
-		const ImageID chkboxBtnImage = ImageID("I_CHECKEDBOX");
 
 		PPGeStyle leftAligned = FadedStyle(PPGeAlign::BOX_LEFT, 0.6f);
 		PPGeStyle centerAligned = FadedStyle(PPGeAlign::BOX_HCENTER, 0.6f);
