@@ -195,8 +195,10 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				stage = SigninStage::CANCELLED;
 			break;
 		case SigninStage::CONNECT_REQUEST:
-			DrawLogo();
-			DisplayMessage2(di->T("SigninPleaseWait", "Connecting..."));
+			PPGeDrawRect(0, 0, 480, 272, CalcFadedColor(0xC0C8B2AC));
+			DrawBanner();
+			DrawIndicator();
+			DisplayMessage2(di->T("SigninPleaseWait", "You are currently signing in.\nPlease wait for a moment."));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
 			if (IsButtonPressed(cancelButtonFlag))
 				stage = SigninStage::CANCELLED;
