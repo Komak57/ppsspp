@@ -374,8 +374,7 @@ namespace np
 			if (room_info)
 			{
 				// If we have SceNpMatching2RoomDataInternal available we point the pointers to the group there
-				sce_member_data->roomGroup = PSPPointer<SceNpMatching2RoomGroup>::Create((room_info->roomGroup + (fb_roomgroup->groupId() - 1)).ptr);
-				//sce_member_data->roomGroup = room_info->roomGroup + (fb_roomgroup->groupId() - 1);
+				sce_member_data->roomGroup = room_info->roomGroup + (fb_roomgroup->groupId() - 1);
 				//edata.add_relocation<SceNpMatching2RoomGroup>(sce_member_data->roomGroup);
 			}
 			else
