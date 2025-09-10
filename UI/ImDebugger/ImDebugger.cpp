@@ -606,9 +606,8 @@ static void DrawNp(ImConfig &cfg) {
 	ImGui::Text("Signed in: %d", npSigninState);
 	ImGui::Text("Title ID: %s", npTitleId.data);
 
-	SceNpId id{};
-	NpGetNpId(&id);
-	ImGui::Text("User Handle: %s", id.handle.data);
+	SceNpId* id = NpGetNpId();
+	ImGui::Text("User Handle: %s", id->handle.data);
 
 
 	ImGui::End();
