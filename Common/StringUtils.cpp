@@ -118,6 +118,14 @@ std::string SanitizeString(std::string_view input, StringRestriction restriction
 		case StringRestriction::None:
 			sanitized.push_back(c);
 			break;
+		case StringRestriction::AlphaNumUnderscore:
+			if ((c >= 'A' && c <= 'Z') ||
+				(c >= 'a' && c <= 'z') ||
+				(c >= '0' && c <= '9') || c == '_') {
+				// Allowed chars.
+				sanitized.push_back(c);
+			}
+			break;
 		case StringRestriction::AlphaNumDashUnderscore:
 			if ((c >= 'A' && c <= 'Z') ||
 				(c >= 'a' && c <= 'z') ||

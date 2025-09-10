@@ -1051,7 +1051,7 @@ void GameSettingsScreen::CreateNetworkingSettings(UI::ViewGroup *networkingSetti
 		networkingSettings->Add(new NoticeView(NoticeLevel::WARN, n->T("To play in Infrastructure Mode, you must enter your RPCN Credentials"), ""));
 	}
 	PopupTextInputChoice *usernameChoice = networkingSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sPSNNPID, di->T("Username"), "", 16, screenManager()));
-	usernameChoice->SetRestriction(StringRestriction::AlphaNumDashUnderscore, 3);
+	usernameChoice->SetRestriction(StringRestriction::AlphaNumUnderscore, 3);
 	usernameChoice->OnChange.Add([this](UI::EventParams &e) {
 		RecreateViews();
 		return UI::EVENT_DONE;

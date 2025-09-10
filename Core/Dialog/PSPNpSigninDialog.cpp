@@ -145,8 +145,8 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						LoginType = "E-mail Address";
 					System_InputBoxGetString(NON_EPHEMERAL_TOKEN, LoginType, g_Config.sPSNNPID, false,
 						[&](const std::string& value, int) {
-						// Success callback
-						g_Config.sPSNNPID = value;
+						// TODO: Alert the user that some characters are not allowed
+						g_Config.sPSNNPID = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 					},
 						[&]() {
 						// Failure callback

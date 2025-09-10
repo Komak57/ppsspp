@@ -436,7 +436,7 @@ int sceNpAuthGetTicket(u32 requestId, u32 bufferAddr, u32 length) {
 	}
 
 	// We have validated, and this will be empty if the ID is bad.
-	if (npOnlineId.empty()) {
+	if (g_Config.sPSNNPID.empty() || g_Config.sPSNNPID != SanitizeString(g_Config.sPSNNPID, StringRestriction::AlphaNumUnderscore, 3, 16)) {
 		auto n = GetI18NCategory(I18NCat::NETWORKING);
 		// Temporary message.
 		g_OSD.Show(OSDType::MESSAGE_ERROR, n->T("To play in Infrastructure Mode, you must enter a username"), 5.0f);

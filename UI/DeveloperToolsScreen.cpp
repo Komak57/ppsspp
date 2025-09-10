@@ -351,7 +351,7 @@ void DeveloperToolsScreen::CreateNetworkTab(UI::LinearLayout *list) {
 	// regular settings after the code is merged.
 	list->Add(new ItemHeader("RPCN Login"));
 	PopupTextInputChoice *usernameChoice = list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sPSNNPID, di->T("Username"), "", 64, screenManager()));
-	usernameChoice->SetRestriction(StringRestriction::AlphaNumDashUnderscore, 3);
+	usernameChoice->SetRestriction(StringRestriction::AlphaNumUnderscore, 3);
 	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sPSNPassword, di->T("Password"), "", 64, screenManager()))->SetPasswordDisplay();
 	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sPSNToken, "Token", "", 64, screenManager()))->SetPasswordDisplay();
 	list->Add(new CheckBox(&g_Config.sPSNAutoSignIn, dev->T("Auto Sign-In")));

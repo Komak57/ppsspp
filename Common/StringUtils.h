@@ -82,6 +82,7 @@ bool containsNoCase(std::string_view haystack, std::string_view needle);
 
 enum class StringRestriction {
 	None,
+	AlphaNumUnderscore,
 	AlphaNumDashUnderscore,  // Used for infrastructure usernames
 	NoLineBreaksOrSpecials,  // Used for savedata UI. Removes line breaks, backslashes and similar.
 	ConvertToUnixEndings,
