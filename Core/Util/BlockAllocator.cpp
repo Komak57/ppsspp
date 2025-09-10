@@ -509,21 +509,3 @@ void BlockAllocator::Block::DoState(PointerWrap &p)
 	memset(tag + tagLen, 0, sizeof(tag) - tagLen);
 	DoArray(p, tag, sizeof(tag));
 }
-
-void BlockAllocator::add_relocation(u32& dest) {
-	// dest holds a PSPPointer address (u32).
-	// Save offset within the buffer.
-	u8* fieldPtr = reinterpret_cast<u8*>(&dest);
-	u32 offset = (u32)(fieldPtr - Memory::GetPointer(baseAddr_));
-	relocs_.push_back(offset);
-}
-
-void BlockAllocator::apply_relocations(u32 dest) {
-	u32 diff = dest - baseAddr_;
-	u8* base = Memory::GetPointerWrite(baseAddr_);
-	for (u32 off : relocs_) {
-		auto* ptr = reinterpret_cast<u32*>(base + off);
-		*ptr += diff;
-	}
-	baseAddr_ = dest;
-}

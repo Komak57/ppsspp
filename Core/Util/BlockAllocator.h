@@ -37,9 +37,6 @@ public:
 	u32 AllocAligned(u32 &size, u32 sizeGrain, u32 grain, bool fromTop = false, const char *tag = 0);
 	u32 AllocAt(u32 position, u32 size, const char *tag = 0);
 
-	void add_relocation(u32& guestPtrField);
-	void apply_relocations(u32 newBaseAddr);
-
 	bool Free(u32 position);
 	bool FreeExact(u32 position);
 	bool IsBlockFree(u32 position) {
