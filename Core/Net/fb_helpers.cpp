@@ -80,16 +80,19 @@ namespace np
 		NOTICE_LOG(Log::sceNet, "UserInfo_to_SceNpUserInfo()");
 		if (const auto npid = user->npId(); npid)
 		{
+			NOTICE_LOG(Log::sceNet, " - NPID: %s", npid->c_str());
 			std::memcpy(user_info->userId.handle.data, npid->c_str(), std::min<std::size_t>(16, npid->size()));
 		}
 
 		if (const auto online_name = user->onlineName(); online_name)
 		{
+			NOTICE_LOG(Log::sceNet, " - OnlineName: %s", online_name->c_str());
 			std::memcpy(user_info->name.data, online_name->c_str(), std::min<std::size_t>(48, online_name->size()));
 		}
 
 		if (const auto avatar_url = user->avatarUrl(); avatar_url)
 		{
+			NOTICE_LOG(Log::sceNet, " - Avatar: %s", avatar_url->c_str());
 			std::memcpy(user_info->icon.data, avatar_url->c_str(), std::min<std::size_t>(127, avatar_url->size()));
 		}
 	}
@@ -97,11 +100,14 @@ namespace np
 	void UserInfo_to_SceNpUserInfo2(BlockAllocator& edata, const UserInfo* user, SceNpUserInfo2* user_info, bool include_onlinename, bool include_avatarurl)
 	{
 		NOTICE_LOG(Log::sceNet, "UserInfo_to_SceNpUserInfo2()");
-		if (user->npId())
+		if (user->npId()) {
+			NOTICE_LOG(Log::sceNet, " - NPID: %s", user->npId()->c_str());
 			std::memcpy(user_info->npId.handle.data, user->npId()->c_str(), std::min<std::size_t>(16, user->npId()->size()));
+		}
 
 		if (include_onlinename && user->onlineName())
 		{
+			NOTICE_LOG(Log::sceNet, " - OnlineName: %s", user->onlineName()->c_str());
 			u32 alloc = sizeof(SceNpOnlineName);
 			auto ptr = PSPPointer<SceNpOnlineName>::Create(edata.Alloc(alloc));
 			user_info->onlineName = ptr;
@@ -109,6 +115,7 @@ namespace np
 		}
 		if (include_avatarurl && user->avatarUrl())
 		{
+			NOTICE_LOG(Log::sceNet, " - Avatar: %s", user->avatarUrl()->c_str());
 			u32 alloc = sizeof(SceNpAvatarUrl);
 			auto ptr = PSPPointer<SceNpAvatarUrl>::Create(edata.Alloc(alloc));
 			user_info->avatarUrl = ptr;
@@ -157,6 +164,7 @@ namespace np
 
 		if (auto owner = room->owner())
 		{
+			INFO_LOG(Log::sceNet, " - room->owner()");
 			//auto* ptr_owner = edata.allocate<SceNpUserInfo2>(sizeof(SceNpUserInfo2), room_info->owner);
 			u32 alloc = sizeof(SceNpUserInfo2);
 			auto ptr_owner = PSPPointer<SceNpUserInfo2>::Create(edata.Alloc(alloc));
@@ -264,12 +272,12 @@ namespace np
 	{
 		NOTICE_LOG(Log::sceNet, "RoomDataInternal_to_SceNpMatching2RoomDataInternal(server: %d, world: %d, lobby: %d, room: %d)", resp->serverId(), resp->worldId(), resp->lobbyId(), resp->roomId());
 		u16 member_id = 0;
-		room_info->serverId = resp->serverId();
-		room_info->worldId = resp->worldId();
-		room_info->lobbyId = resp->lobbyId();
-		room_info->roomId = resp->roomId();
+		room_info->serverId			= resp->serverId();
+		room_info->worldId			= resp->worldId();
+		room_info->lobbyId			= resp->lobbyId();
+		room_info->roomId			= resp->roomId();
 		room_info->passwordSlotMask = resp->passwordSlotMask();
-		room_info->maxSlot = resp->maxSlot();
+		room_info->maxSlot			= resp->maxSlot();
 
 		NOTICE_LOG(Log::sceNet, " - adding %d room groups", (resp->roomGroup() ? resp->roomGroup()->size() : 0));
 		if (resp->roomGroup() && resp->roomGroup()->size() != 0)
@@ -290,14 +298,13 @@ namespace np
 
 		for (flatbuffers::uoffset_t i = 0; i < resp->memberList()->size(); i++)
 		{
-			auto fb_member = resp->memberList()->Get(i);
+			auto fb_member												= resp->memberList()->Get(i);
 			PSPPointer<SceNpMatching2RoomMemberDataInternal> sce_member = room_info->memberList.members + i;
 
 			if (i < (resp->memberList()->size() - 1))
 			{
 				sce_member->next = room_info->memberList.members + i + 1;
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(sce_member->next);
-				edata.add_relocation(sce_member->next.ptr);
 			}
 
 			RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(edata, fb_member, room_info, sce_member, include_onlinename, include_avatarurl);
@@ -312,6 +319,7 @@ namespace np
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(room_info->memberList.me);
 				room_info->memberList.me = room_info->memberList.members + i;
 				member_id = sce_member->memberId;
+				INFO_LOG(Log::sceNet, " - Member #%d[%d] = %s, is Self at %08x", i, sce_member->memberId, sce_member->userInfo.npId.handle.data, room_info->memberList.me.ptr);
 				break;
 			}
 		}
@@ -324,6 +332,7 @@ namespace np
 				//room_info->memberList.owner = room_info->memberList.members + i;
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(room_info->memberList.owner);
 				room_info->memberList.owner = room_info->memberList.members + i;
+				INFO_LOG(Log::sceNet, " - Member #%d[%d] = %s, is Owner at %08x", i, sce_member->memberId, sce_member->userInfo.npId.handle.data, room_info->memberList.owner.ptr);
 				break;
 			}
 		}
@@ -363,7 +372,7 @@ namespace np
 
 	void RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(BlockAllocator& edata, const RoomMemberDataInternal* member_data, const SceNpMatching2RoomDataInternal* room_info, SceNpMatching2RoomMemberDataInternal* sce_member_data, bool include_onlinename, bool include_avatarurl)
 	{
-		NOTICE_LOG(Log::sceNet, "RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(member: %d)", sce_member_data->memberId);
+		NOTICE_LOG(Log::sceNet, "RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(joinDate: %d, memberId: %d, teamId: %d)", member_data->joinDate(), member_data->memberId(), member_data->teamId());
 		UserInfo_to_SceNpUserInfo2(edata, member_data->userInfo(), &sce_member_data->userInfo, include_onlinename, include_avatarurl);
 		sce_member_data->joinDate.tick = member_data->joinDate();
 		sce_member_data->memberId = member_data->memberId();
@@ -373,12 +382,13 @@ namespace np
 		{
 			if (room_info)
 			{
-				// If we have SceNpMatching2RoomDataInternal available we point the pointers to the group there
+				INFO_LOG(Log::sceNet, " - Valid Room");
 				sce_member_data->roomGroup = room_info->roomGroup + (fb_roomgroup->groupId() - 1);
 				//edata.add_relocation<SceNpMatching2RoomGroup>(sce_member_data->roomGroup);
 			}
 			else
 			{
+				INFO_LOG(Log::sceNet, " - Invalid Room, Creating");
 				// Otherwise we allocate for it
 				//auto* ptr_group = edata.allocate<SceNpMatching2RoomGroup>(sizeof(SceNpMatching2RoomGroup), sce_member_data->roomGroup);
 				u32 alloc = sizeof(SceNpMatching2RoomGroup);
@@ -388,9 +398,10 @@ namespace np
 			}
 		}
 
-		sce_member_data->natType = member_data->natType();
+		sce_member_data->natType  = member_data->natType();
 		sce_member_data->flagAttr = member_data->flagAttr();
 
+		INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternal has %d entries", member_data->roomMemberBinAttrInternal()->size());
 		if (member_data->roomMemberBinAttrInternal() && member_data->roomMemberBinAttrInternal()->size() != 0)
 		{
 			sce_member_data->roomMemberBinAttrInternalNum = member_data->roomMemberBinAttrInternal()->size();
@@ -401,6 +412,7 @@ namespace np
 			for (u32 b_index = 0; b_index < sce_member_data->roomMemberBinAttrInternalNum; b_index++)
 			{
 				const auto fb_battr = member_data->roomMemberBinAttrInternal()->Get(b_index);
+				INFO_LOG(Log::sceNet, " - entry #%d[%d] - update: %d, size: %d", b_index, fb_battr->data()->id(), fb_battr->updateDate(), fb_battr->data()->data()->size());
 				sce_binattrs[b_index].updateDate.tick = fb_battr->updateDate();
 
 				sce_binattrs[b_index].data.id = fb_battr->data()->id();
@@ -572,6 +584,7 @@ namespace np
 
 					ret_ptr++;
 				}
+				ERROR_LOG(Log::sceNet, "RoomMemberDataInternalUpdateInfo_to_SceNpMatching2RoomMemberDataInternalUpdateInfo: Couldn't find matching roomMemberBinAttrInternal!");
 				//rpcn_log.fatal("RoomMemberDataInternalUpdateInfo_to_SceNpMatching2RoomMemberDataInternalUpdateInfo: Couldn't find matching roomMemberBinAttrInternal!");
 				return PSPPointer<SceNpMatching2RoomMemberBinAttrInternal>();
 			};
