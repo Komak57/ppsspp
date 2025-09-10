@@ -30,6 +30,7 @@
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/sceNp.h"
+#include <Core/Net/NPAgent.h>
 
 
 bool npAuthInited = false;
@@ -45,10 +46,10 @@ static const SceNpMyLanguages npMyLangList = { 1033, 2057, 1036 };  // Languages
 // Fields are 4-sized, so the data needs to be too.
 static const char npCountryCode[4] = "us"; // dummy data taken from https://www.psdevwiki.com/ps3/X-I-5-Ticket. Mainly affects what EULA is downloaded.
 static const char npRegionCode[4] = "c9"; // not sure what "c9" meant, since it was close to country code data, might be region-related data?
-std::string npOnlineId = "DummyOnlineId"; // SceNpOnlineId struct?
 std::string npServiceId = ""; // UNO game uses EP2006-NPEH00020_00
-std::string npAvatarUrl = "http://DummyAvatarUrl"; // SceNpAvatarUrl struct?
 
+//std::string npOnlineId = "DummyOnlineId"; // SceNpOnlineId struct?
+//std::string npAvatarUrl = "http://DummyAvatarUrl"; // SceNpAvatarUrl struct?
 // Game-specific ID, I guess we can use this to auto-choose DNS?
 SceNpCommunicationId npTitleId;
 
@@ -200,8 +201,8 @@ static int sceNpGetOnlineId(u32 idPtr)
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_ARGUMENT, "invalid arg");
 
 	id.FillWithZero();
-	memcpy(id->data, g_Config.sPSNNPID.c_str(),
-		std::min<size_t>(16, g_Config.sPSNNPID.size()));
+	memcpy(id->data, npAuthServer->GetOnlineName().c_str(),
+		std::min<size_t>(16, npAuthServer->GetOnlineName().size()));
 	id.NotifyWrite("NpGetOnlineId");
 
 	return hleLogWarning(Log::sceNet, 0, "Online ID: %s", id->data);
@@ -294,8 +295,8 @@ static int sceNpGetUserProfile(u32 profilePtr)
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_ARGUMENT, "invalid arg");
 
 	profile.FillWithZero();
-	strncpy(profile->userId.handle.data, npOnlineId.c_str(), sizeof(profile->userId.handle.data));
-	truncate_cpy(profile->icon.data, sizeof(profile->icon.data), npAvatarUrl);
+	strncpy(profile->userId.handle.data, npAuthServer->GetOnlineName().c_str(), std::min<size_t>(16, npAuthServer->GetOnlineName().length()));
+	truncate_cpy(profile->icon.data, sizeof(profile->icon.data), npAuthServer->GetAvatarURL());
 
 	INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, profile->userId.handle.data);
 	std::string datahex;

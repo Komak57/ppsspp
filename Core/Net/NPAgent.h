@@ -514,7 +514,15 @@ namespace net {
 		u8 GetStatus();
 		//int GetID() { return ID; }
 		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
-
+		std::string GetOnlineName() {
+			return online_name;
+		}
+		std::string GetAvatarURL() {
+			return avatar_url;
+		}
+		s64 GetUserID() {
+			return user_id;
+		}
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
@@ -537,6 +545,9 @@ namespace net {
 		bool connected = false;
 
 		char npTitleId[9];
+		std::string online_name;
+		std::string avatar_url;
+		s64 user_id;
 	};
 
 	class PSNAgent : public NPAgent {
@@ -635,6 +646,15 @@ namespace net {
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
 		bool IsConnected() { return connected; }
+		std::string GetOnlineName() {
+			return online_name;
+		}
+		std::string GetAvatarURL() {
+			return avatar_url;
+		}
+		s64 GetUserID() {
+			return user_id;
+		}
 
 	protected:
 		u16 ID;
@@ -649,6 +669,10 @@ namespace net {
 
 		bool connected = false;
 		char npTitleId[9];
+
+		std::string online_name;
+		std::string avatar_url;
+		s64 user_id;
 	};
 	class PSNAuthAgent : public NPAuthAgent {
 	public:

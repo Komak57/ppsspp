@@ -345,6 +345,10 @@ namespace net {
 			return ErrorToPSPError[resp.error];
 		resp.stream = new vec_stream(resp.data, 1);
 
+		online_name = resp.stream->get_string(false);
+		avatar_url = resp.stream->get_string(false);
+		user_id = resp.stream->get<s64>();
+
 		return 0;
 	}
 
