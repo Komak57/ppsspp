@@ -299,19 +299,14 @@ namespace np
 			RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(edata, fb_member, room_info, sce_member, include_onlinename, include_avatarurl);
 		}
 
-		u32 self = 0;
 		for (u32 i = 0; i < room_info->memberList.membersNum; i++)
 		{
-			SceNpMatching2RoomMemberDataInternal* sce_member = &room_info->memberList.members[i];
-			if (strcmp(sce_member->userInfo.npId.handle.data, npid.handle.data) == 0)
+			PSPPointer<SceNpMatching2RoomMemberDataInternal> sce_member = room_info->memberList.members + i;
+			if (strcmp(sce_member->userInfo.npId.handle.data, npid->handle.data) == 0)
 			{
-				NOTICE_LOG(Log::sceNet, " - Member[%d] is Self", i);
 				//room_info->memberList.me = room_info->memberList.members + i;
-				//room_info->memberList.me = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(room_info->memberList.members.ptr + i * sizeof(SceNpMatching2RoomMemberDataInternal));
-				room_info->memberList.me = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create((room_info->memberList.members + i).ptr);
-				self = room_info->memberList.me.ptr;
-				NOTICE_LOG(Log::sceNet, " - Self at %08x", room_info->memberList.me.ptr);
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(room_info->memberList.me);
+				room_info->memberList.me = room_info->memberList.members + i;
 				member_id = sce_member->memberId;
 				break;
 			}
@@ -319,15 +314,12 @@ namespace np
 
 		for (u32 i = 0; i < room_info->memberList.membersNum; i++)
 		{
-			SceNpMatching2RoomMemberDataInternal* sce_member = &room_info->memberList.members[i];
+			PSPPointer<SceNpMatching2RoomMemberDataInternal> sce_member = room_info->memberList.members + i;
 			if (sce_member->memberId == resp->ownerId())
 			{
-				NOTICE_LOG(Log::sceNet, " - Member[%d] is Owner", i);
 				//room_info->memberList.owner = room_info->memberList.members + i;
-				//room_info->memberList.owner = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(room_info->memberList.members.ptr + i * sizeof(SceNpMatching2RoomMemberDataInternal));
-				room_info->memberList.owner = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create((room_info->memberList.members + i).ptr);
-				NOTICE_LOG(Log::sceNet, " - Owner at %08x", room_info->memberList.owner.ptr);
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(room_info->memberList.owner);
+				room_info->memberList.owner = room_info->memberList.members + i;
 				break;
 			}
 		}
