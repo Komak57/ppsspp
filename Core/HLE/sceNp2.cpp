@@ -373,17 +373,19 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 	SceNpCommunicationPassphrase* passph = (SceNpCommunicationPassphrase*)Memory::GetCharPointer(passPhrasePtr);
 
 	// TODO: Get NPID from RPCN - login(nous),password,token(from email) - RPCS3 @GalCiv
-	SceNpId npid{};
-	int retval = NpGetNpId(&npid);
-	if (retval < 0)
-		return hleLogError(Log::sceNet, retval);
+	/*SceNpId* npid = NpGetNpId();
+	if (!npid)
+		return hleLogError(Log::sceNet, SCE_NP_MANAGER_ERROR_ID_NOT_AVAIL);*/
 
 	INFO_LOG(Log::sceNet, "%s - Title ID: %s", __FUNCTION__, titleid->data);
-	INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npid.handle.data);
+	//INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npid->handle.data);
+	INFO_LOG(Log::sceNet, "%s - Online ID: %d", __FUNCTION__, npAuthServer->GetUserID());
+	INFO_LOG(Log::sceNet, "%s - Online Name: %s", __FUNCTION__, npAuthServer->GetOnlineName().c_str());
+	INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, npAuthServer->GetAvatarURL().c_str());
 	std::string datahex;
-	DataToHexString(npid.opt, sizeof(npid.opt), &datahex);
+	/*DataToHexString(npid->opt, sizeof(npid->opt), &datahex);
 	INFO_LOG(Log::sceNet, "%s - Options?: %s", __FUNCTION__, datahex.c_str());
-	datahex.clear();
+	datahex.clear();*/
 	DataToHexString(10, 0, passph->data, sizeof(passph->data), &datahex);
 	INFO_LOG(Log::sceNet, "%s - Passphrase: \n%s", __FUNCTION__, datahex.c_str());
 
