@@ -221,21 +221,31 @@ std::string* NpGetLogin() {
 
 static int sceNpGetNpId(u32 idPtr)
 {
-	auto id = PSPPointer<SceNpId>::Create(idPtr);
-	if (!id.IsValid())
+	auto npid = PSPPointer<SceNpId>::Create(idPtr);
+	if (!npid.IsValid())
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_ARGUMENT, "invalid arg");
 
-	SceNpId dummyNpId{};
-	id.FillWithZero();
-	int retval = NpGetNpId(id);
-	if (retval < 0)
-		return hleLogError(Log::sceNet, retval);
+	std::string system_hex;
+	DataToHexString(npid->opt, sizeof(npid->opt), &system_hex);
+	std::string stored_hex;
+	DataToHexString(npId.opt, sizeof(npId.opt), &stored_hex);
+	//if (!system_hex._Equal(stored_hex))
+	WARN_LOG(Log::sceNet, "%s(%08x) - %s - Online ID: %s  Options: %s", __FUNCTION__, idPtr, (system_hex._Equal(stored_hex)? "SAME" : "CHANGED"), npId.handle.data, system_hex.c_str());
 
-	std::string datahex;
-	DataToHexString(id->opt, sizeof(id->opt), &datahex);
-	id.NotifyWrite("NpGetNpId");
+	// Save options
+	memcpy(&npId.opt, npid->opt, 8);
+	// Write npId into PSP Memory
+	//memcpy(npid, &npId, sizeof(SceNpId));
+	// Write Username to NpId
+	memset(npid, 0, sizeof(SceNpId));
+	//memset(&npid->handle.data, 0, 16);
+	memcpy(&npid->handle.data, g_Config.sPSNNPID.c_str(),
+		std::min<size_t>(16, g_Config.sPSNNPID.length()));
+	// TODO: Should we save this pointer for future requests?
 
-	return hleLogWarning(Log::sceNet, 0, "Online ID: %s  Options: %s", id->handle.data, datahex.c_str());
+	npid.NotifyWrite("NpGetNpId");
+
+	return 0;
 }
 
 static int sceNpGetAccountRegion(u32 countryCodePtr, u32 regionCodePtr)
