@@ -508,7 +508,7 @@ void signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 	u32 _size = sizeof(SceNpMatching2RoomDataInternalUpdateInfo);
 	u32 ptr = np_memory.Alloc(_size);
 	auto notif_data = PSPPointer<SceNpMatching2RoomDataInternalUpdateInfo>::Create(ptr);
-	SceNpId npId; NpGetNpId(&npId);
+	SceNpId* npId = NpGetNpId();
 	np::RoomDataInternalUpdateInfo_to_SceNpMatching2RoomDataInternalUpdateInfo(np_memory, update_info, notif_data, npId, include_onlinename, include_avatarurl);
 
 	//np_cache.insert_room(notif_data->newRoomDataInternal.get_ptr());
