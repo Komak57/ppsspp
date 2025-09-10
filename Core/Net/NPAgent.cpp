@@ -129,6 +129,14 @@ void Packet::Write(const std::vector<u8>& data) {
 	memcpy(dataPtr + data_length, data.data(), data.size());
 	data_length += data.size();
 }
+void Packet::AddCommId(flatbuffers::FlatBufferBuilder* builder, uint8_t* commId) {
+	auto bufsize = builder->GetSize();
+	std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
+	memcpy(data.data(), commId, COMMUNICATION_ID_SIZE);
+	*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
+	memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder->GetBufferPointer(), bufsize);
+	this->Write(data);
+}
 
 namespace net {
 	bool NPAuthAgent::Resolve(DNSType type) {

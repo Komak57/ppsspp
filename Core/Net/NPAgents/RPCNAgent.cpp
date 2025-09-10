@@ -387,17 +387,9 @@ namespace net {
 			return ErrorToPSPError[resp.error];
 		resp.stream = new vec_stream(resp.data, 1);
 
-		/*int i;
-		std::string hexdata = "";
-		for (i = 0; i < response.size(); i++) {
-			char const c = response[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());*/
-
-		PacketHeader header;
-		memcpy(&header, packet.Data(), sizeof(PacketHeader));
+		online_name = resp.stream->get_string(false);
+		avatar_url = resp.stream->get_string(false);
+		user_id = resp.stream->get<s64>();
 
 		return 0;
 	}
@@ -546,16 +538,9 @@ namespace net {
 		auto req_finished = s_req.Finish();
 		builder.Finish(req_finished);
 
-		// Super overcomplicated system to attach the CommHeader to the packet
-		auto bufsize = builder.GetSize();
-		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
-		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
-		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
-		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
-
 		// Wrap and send the packet
 		Packet packet;
-		packet.Write(data);
+		packet.AddCommId(&builder, this->GetCommHeader().data());
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::SearchRoom, reqId);
@@ -746,15 +731,9 @@ namespace net {
 			final_memberbinattrinternal_vec, req->teamId, final_optparam);
 		builder.Finish(req_finished);
 
-		auto bufsize = builder.GetSize();
-		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
-		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
-		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
-		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
-
 		// Wrap and send the packet
 		Packet packet;
-		packet.Write(data);
+		packet.AddCommId(&builder, this->GetCommHeader().data());
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::CreateRoom, reqId);
@@ -809,15 +788,9 @@ namespace net {
 		auto req_finished = CreateJoinRoomRequest(builder, req->roomId, final_roompassword, final_grouplabel, final_memberbinattrinternal_vec, final_optdata, req->teamId);
 		builder.Finish(req_finished);
 
-		auto bufsize = builder.GetSize();
-		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
-		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
-		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
-		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
-
 		// Wrap and send the packet
 		Packet packet;
-		packet.Write(data);
+		packet.AddCommId(&builder, this->GetCommHeader().data());
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::JoinRoom, reqId);
@@ -851,15 +824,9 @@ namespace net {
 		auto req_finished = CreateLeaveRoomRequest(builder, req->roomId, final_optdata);
 		builder.Finish(req_finished);
 
-		auto bufsize = builder.GetSize();
-		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
-		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
-		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
-		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
-
 		// Wrap and send the packet
 		Packet packet;
-		packet.Write(data);
+		packet.AddCommId(&builder, this->GetCommHeader().data());
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::LeaveRoom, reqId);
@@ -900,15 +867,9 @@ namespace net {
 		auto req_finished = CreateGetRoomDataInternalRequest(builder, req->roomId, final_attr_ids_vec);
 		builder.Finish(req_finished);
 
-		auto bufsize = builder.GetSize();
-		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
-		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
-		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
-		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
-
 		// Wrap and send the packet
 		Packet packet;
-		packet.Write(data);
+		packet.AddCommId(&builder, this->GetCommHeader().data());
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::GetRoomDataInternal, reqId);
@@ -1033,15 +994,9 @@ namespace net {
 			CreateSetRoomDataInternalRequest(builder, req->roomId, req->flagFilter, req->flagAttr, final_binattrinternal_vec, final_grouppasswordconfig_vec, final_passwordSlotMask, final_ownerprivilege_vec);
 		builder.Finish(req_finished);
 
-		auto bufsize = builder.GetSize();
-		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
-		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
-		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
-		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
-
 		// Wrap and send the packet
 		Packet packet;
-		packet.Write(data);
+		packet.AddCommId(&builder, this->GetCommHeader().data());
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::SetRoomDataInternal, reqId);
@@ -1127,15 +1082,9 @@ namespace net {
 		auto req_finished = CreateSetRoomDataExternalRequest(builder, req->roomId, final_searchintattrexternal_vec, final_searchbinattrexternal_vec, final_binattrexternal_vec);
 		builder.Finish(req_finished);
 
-		auto bufsize = builder.GetSize();
-		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
-		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
-		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
-		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
-
 		// Wrap and send the packet
 		Packet packet;
-		packet.Write(data);
+		packet.AddCommId(&builder, this->GetCommHeader().data());
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::SetRoomDataExternal, reqId);
@@ -1174,15 +1123,9 @@ namespace net {
 		auto req_finished = CreateSetUserInfo(builder, req->serverId, final_memberbinattr_vec);
 		builder.Finish(req_finished);
 
-		auto bufsize = builder.GetSize();
-		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
-		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
-		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
-		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
-
 		// Wrap and send the packet
 		Packet packet;
-		packet.Write(data);
+		packet.AddCommId(&builder, this->GetCommHeader().data());
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::SetUserInfo, reqId);
@@ -1221,15 +1164,9 @@ namespace net {
 		auto req_finished = CreateGetRoomDataExternalListRequestDirect(builder, &roomIds, &attrIds);
 		builder.Finish(req_finished);
 
-		auto bufsize = builder.GetSize();
-		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
-		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
-		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
-		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
-
 		// Wrap and send the packet
 		Packet packet;
-		packet.Write(data);
+		packet.AddCommId(&builder, this->GetCommHeader().data());
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::GetRoomDataExternalList, reqId);

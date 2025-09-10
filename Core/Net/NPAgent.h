@@ -291,6 +291,7 @@ public:
 	void Write(u64 data);
 	void Write(std::string data);
 	void Write(const std::vector<u8>& data);
+	void AddCommId(flatbuffers::FlatBufferBuilder* builder, uint8_t* commId);
 
 	void Append(const char* data, int len) {
 		memcpy(dataPtr + data_length, data, len);
