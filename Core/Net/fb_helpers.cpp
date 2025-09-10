@@ -579,9 +579,11 @@ namespace np
 
 			sce_update_info->newRoomMemberBinAttrInternalNum = update_info->newRoomMemberBinAttrInternal()->size();
 			//edata.allocate_ptr_array<SceNpMatching2RoomMemberBinAttrInternal>(sce_update_info->newRoomMemberBinAttrInternalNum, sce_update_info->newRoomMemberBinAttrInternal);
+			u32 alloc = sce_update_info->newRoomMemberBinAttrInternalNum * sizeof(SceNpMatching2RoomMemberBinAttrInternal);
+			sce_update_info->newRoomMemberBinAttrInternal = PSPPointer<SceNpMatching2RoomMemberBinAttrInternal>::Create(edata.Alloc(alloc));
 			for (u32 i = 0; i < sce_update_info->newRoomMemberBinAttrInternalNum; i++)
 			{
-				sce_update_info->newRoomMemberBinAttrInternal[i] = *get_ptr_for_binattr(update_info->newRoomMemberBinAttrInternal()->Get(i));
+				sce_update_info->newRoomMemberBinAttrInternal + i = get_ptr_for_binattr(update_info->newRoomMemberBinAttrInternal()->Get(i));
 			}
 		}
 	}
