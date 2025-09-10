@@ -148,15 +148,6 @@ bool NpAuthProcessEvents() {
 static int sceNpInit()
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s()", __FUNCTION__);
-
-	// We'll sanitize an extra time here, just to be safe from ini modifications.
-	if (g_Config.sPSNNPID == SanitizeString(g_Config.sPSNNPID, StringRestriction::AlphaNumDashUnderscore, 3, 16)) {
-		npOnlineId = g_Config.sPSNNPID;
-	/*if (g_Config.sInfrastructureUsername == SanitizeString(g_Config.sInfrastructureUsername, StringRestriction::AlphaNumDashUnderscore, 3, 16)) {
-		npOnlineId = g_Config.sInfrastructureUsername;*/
-	} else {
-		npOnlineId.clear();
-	}
 	// NOTE: Checking validity and returning -1 here doesn't seem to work. Instead, we will fail to generate a ticket.
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
