@@ -538,8 +538,7 @@ namespace np
 
 		if (sce_update_info->newRoomMemberDataInternal->flagAttr != update_info->prevFlagAttr())
 		{
-			//sce_update_info->newFlagAttr = sce_update_info->newRoomMemberDataInternal.ptr(&SceNpMatching2RoomMemberDataInternal::flagAttr);
-			edata.add_relocation(sce_update_info->newFlagAttr.ptr);
+			sce_update_info->newFlagAttr = sce_update_info->newRoomMemberDataInternal.ptr + offsetof(SceNpMatching2RoomMemberDataInternal, flagAttr);
 			//sce_update_info->newFlagAttr = sce_update_info->newRoomMemberDataInternal->flagAttr;
 			//edata.add_relocation<u32>(sce_update_info->newFlagAttr);
 			//auto* ptr_sce_prevflag = edata.allocate<SceNpMatching2FlagAttr>(sizeof(SceNpMatching2FlagAttr), sce_update_info->prevFlagAttr);
@@ -551,8 +550,8 @@ namespace np
 
 		if (sce_update_info->newRoomMemberDataInternal->teamId != update_info->prevTeamId())
 		{
-			//sce_update_info->newTeamId = sce_update_info->newRoomMemberDataInternal.ptr(&SceNpMatching2RoomMemberDataInternal::teamId);
-			sce_update_info->newTeamId = sce_update_info->newRoomMemberDataInternal->teamId;
+			sce_update_info->newTeamId = sce_update_info->newRoomMemberDataInternal.ptr + offsetof(SceNpMatching2RoomMemberDataInternal, teamId);
+			//sce_update_info->newTeamId = sce_update_info->newRoomMemberDataInternal->teamId;
 			//edata.add_relocation<u8>(sce_update_info->newTeamId);
 		}
 
