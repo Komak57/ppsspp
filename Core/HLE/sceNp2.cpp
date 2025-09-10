@@ -909,7 +909,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
-		SceNpId npId; NpGetNpId(&npId);
+		SceNpId* npId = NpGetNpId();
 		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp, room_info, npId, true, false);
 
 		// Cache Rooms
@@ -980,8 +980,8 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 
 		room_resp->roomDataInternal = room_info;
 
-		SceNpId npId; NpGetNpId(&npId);
-		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp->room_data(), room_info, npId, true, false);
+		SceNpId* npId = NpGetNpId();
+		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp->room_data(), room_info, npId, false, false);
 		// TODO: cache room_info
 		// TODO: execute signaling callback to update ip/port
 		// TODO: Connect to Signaling Server
@@ -1472,7 +1472,7 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
 		const GetRoomDataExternalListResponse* resp;
 		servers[tServer]->GetRoomDataExternalList(req, resp);
 
-		bool include_onlinename = false, include_avatarurl = false;
+		bool include_onlinename = true, include_avatarurl = false;
 
 		u32 alloc = sizeof(SceNpMatching2GetRoomDataExternalListResponse);
 		auto sce_get_room_ext_resp = PSPPointer<SceNpMatching2GetRoomDataExternalListResponse>::Create(np_memory.Alloc(alloc));

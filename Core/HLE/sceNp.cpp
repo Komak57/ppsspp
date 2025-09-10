@@ -50,6 +50,8 @@ std::string npServiceId = ""; // UNO game uses EP2006-NPEH00020_00
 
 //std::string npOnlineId = "DummyOnlineId"; // SceNpOnlineId struct?
 //std::string npAvatarUrl = "http://DummyAvatarUrl"; // SceNpAvatarUrl struct?
+SceNpId npId;
+
 // Game-specific ID, I guess we can use this to auto-choose DNS?
 SceNpCommunicationId npTitleId;
 
@@ -208,14 +210,14 @@ static int sceNpGetOnlineId(u32 idPtr)
 	return hleLogWarning(Log::sceNet, 0, "Online ID: %s", id->data);
 }
 
-int NpGetNpId(SceNpId* npid) {
-	if (!npid) {
-		return -1; // invalid pointer
+SceNpId* NpGetNpId() {
+	if (npId.handle.data[0] == 0) {
+		WARN_LOG(Log::sceNet, "NpGetNpId() First Call");
+		memset(&npId, 0, sizeof(npId));
+		memcpy(&npId.handle.data, g_Config.sPSNNPID.c_str(),
+			std::min<size_t>(16, g_Config.sPSNNPID.length()));
 	}
-	memset(npid, 0, sizeof(*npid));
-	memcpy(npid->handle.data, g_Config.sPSNNPID.c_str(),
-		std::min<size_t>(16, g_Config.sPSNNPID.size()));
-	return 0;
+	return &npId;
 }
 
 std::string* NpGetLogin() {

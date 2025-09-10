@@ -51,7 +51,7 @@ extern SceNpCommunicationId npTitleId;
 
 void __NpInit();
 
-int NpGetNpId(SceNpId* npid);
+SceNpId* NpGetNpId();
 std::string* NpGetLogin();
 bool NpAuthProcessEvents();
 
