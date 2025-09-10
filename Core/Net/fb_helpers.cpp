@@ -409,6 +409,7 @@ namespace np
 				//auto* sce_binattr_data = edata.allocate<u8>(sce_binattrs[b_index].data.size, sce_binattrs[b_index].data.ptr);
 				if (sce_binattrs[b_index].data.size > 0) {
 					auto sce_binattr_data = PSPPointer<u8>::Create(edata.Alloc(sce_binattrs[b_index].data.size));
+					sce_binattrs[b_index].data.ptr = sce_binattr_data;
 					for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < sce_binattrs[b_index].data.size; tmp_index++)
 					{
 						sce_binattr_data[tmp_index] = fb_battr->data()->data()->Get(tmp_index);
