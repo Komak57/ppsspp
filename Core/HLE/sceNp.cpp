@@ -290,23 +290,25 @@ static int sceNpGetMyLanguages(u32 langListPtr)
 	return hleNoLog(0);
 }
 
+// Conflicting Information. PSPSDK suggests this uses SceNpUserInfo2, but PPSSPP originally used SceNpUserInformation
 static int sceNpGetUserProfile(u32 profilePtr)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x)", __FUNCTION__, profilePtr);
 
-	auto profile = PSPPointer<SceNpUserInformation>::Create(profilePtr);
+	auto profile = PSPPointer<SceNpUserInfo2>::Create(profilePtr);
 	if (!Memory::IsValidAddress(profilePtr))
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_ARGUMENT, "invalid arg");
 
 	profile.FillWithZero();
-	strncpy(profile->userId.handle.data, npAuthServer->GetOnlineName().c_str(), std::min<size_t>(16, npAuthServer->GetOnlineName().length()));
-	truncate_cpy(profile->icon.data, sizeof(profile->icon.data), npAuthServer->GetAvatarURL());
+	strncpy(profile->npId.handle.data, g_Config.sPSNNPID.c_str(), std::min<size_t>(16, g_Config.sPSNNPID.length()));
+	strncpy(profile->onlineName->data, npAuthServer->GetOnlineName().c_str(), std::min<size_t>(16, npAuthServer->GetOnlineName().length()));
+	truncate_cpy(profile->avatarUrl->data, sizeof(profile->avatarUrl), npAuthServer->GetAvatarURL());
 
-	INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, profile->userId.handle.data);
+	INFO_LOG(Log::sceNet, "%s - NpId: %s", __FUNCTION__, profile->npId.handle.data);
 	std::string datahex;
-	DataToHexString(profile->userId.opt, sizeof(profile->userId.opt), &datahex);
+	DataToHexString(profile->npId.opt, sizeof(profile->npId.opt), &datahex);
 	INFO_LOG(Log::sceNet, "%s - Options?: %s", __FUNCTION__, datahex.c_str());
-	INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, profile->icon.data);
+	INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, profile->avatarUrl->data);
 
 	profile.NotifyWrite("NpGetUserProfile");
 
