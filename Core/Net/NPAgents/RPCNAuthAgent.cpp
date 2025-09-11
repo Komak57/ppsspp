@@ -385,7 +385,7 @@ namespace net {
 	}
 
 	int RPCNAuthAgent::GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
-		memcpy(this->npTitleId, npTitleId.data, sizeof(this->npTitleId));
+		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 
 		Packet packet = Packet();
 		packet.Write(this->GetCommHeader());

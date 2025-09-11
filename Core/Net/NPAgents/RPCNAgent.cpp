@@ -438,9 +438,8 @@ namespace net {
 		return true;
 	}
 
-	int RPCNAgent::GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) {
-		// TODO: Possibly unsafe. Need to test
-		memcpy(this->npTitleId, npTitleId, sizeof(this->npTitleId));
+	int RPCNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::map<u32, SceNpMatching2World>* worldInfoOut) {
+		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 
 		Packet packet = Packet();
 		packet.Write(this->GetCommHeader());
@@ -920,15 +919,9 @@ namespace net {
 		auto req_finished = CreateSendRoomMessageRequest(builder, req->roomId, req->castType, builder.CreateVector(dst.data(), dst.size()), builder.CreateVector(Memory::GetPointer(req->msg.ptr), req->msgLen), req->option);
 		builder.Finish(req_finished);
 
-		auto bufsize = builder.GetSize();
-		std::vector<u8> data(COMMUNICATION_ID_SIZE + sizeof(u32) + bufsize);
-		memcpy(data.data(), this->GetCommHeader().data(), COMMUNICATION_ID_SIZE);
-		*reinterpret_cast<u32*>(data.data() + COMMUNICATION_ID_SIZE) = static_cast<u32>(bufsize);
-		memcpy(data.data() + COMMUNICATION_ID_SIZE + sizeof(u32), builder.GetBufferPointer(), bufsize);
-
 		// Wrap and send the packet
 		Packet packet;
-		packet.Write(data);
+		packet.AddCommId(&builder, this->GetCommHeader().data());
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::SendRoomMessage, reqId);

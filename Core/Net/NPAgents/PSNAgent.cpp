@@ -171,8 +171,8 @@ namespace net {
 		return false;
 	}
 
-	int PSNAgent::GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) {
-		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npTitleId);
+	int PSNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npCommId, std::map<u32, SceNpMatching2World>* worldInfoOut) {
+		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npCommId.data);
 #ifndef AGENT_TESTING
 		if (sock_ <= 0) {
 			ERROR_LOG(Log::sceNet, "GetWorldInfo: Socket not connected");
@@ -201,8 +201,8 @@ namespace net {
 			packet.Write((u8)guid[i]);	// GUID?
 		packet.Write((u16)0x1010);		// ?
 
-		packet.Write((u16)(sizeof(npTitleId) + 4));	// TITLE_LEN
-		packet.Write(npTitleId);
+		packet.Write((u16)(sizeof(npCommId.data) + 4));	// TITLE_LEN
+		packet.Write(npCommId.data);
 		packet.Write("_00");
 
 		packet.Write((u16)0x4073);		// ?

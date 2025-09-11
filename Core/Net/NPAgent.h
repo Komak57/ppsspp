@@ -498,7 +498,7 @@ namespace net {
 		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
 
 		// NPAgent Functions
-		virtual int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut) = 0;
+		virtual int GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::map<u32, SceNpMatching2World>* worldInfoOut) = 0;
 		virtual int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp) = 0;
 		virtual int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) = 0;
 		virtual int JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut) = 0;
@@ -544,7 +544,7 @@ namespace net {
 
 		bool connected = false;
 
-		char npTitleId[9];
+		SceNpCommunicationId commId;
 		std::string online_name;
 		std::string avatar_url;
 		s64 user_id;
@@ -560,7 +560,7 @@ namespace net {
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
-		int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
+		int GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp);
 		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
 		int JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut);
@@ -584,7 +584,7 @@ namespace net {
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
-		int GetWorldInfo(int server_id, char npTitleId[], std::map<u32, SceNpMatching2World>* worldInfoOut);
+		int GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::map<u32, SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp);
 		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
 		int JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut);
@@ -601,11 +601,11 @@ namespace net {
 
 		u64 generate_request_id();
 		std::vector<u8> GetCommHeader() {
-			u8* data = new u8[COMMUNICATION_ID_SIZE];
-			memcpy(data, npTitleId, 9);		// NPWR01446
-			memcpy(data + 9, "_00", 3);		// _00
-			std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
-			return ret;
+			std::array<char, COMMUNICATION_ID_SIZE+1> buffer{};
+			// Format directly into buffer: 9-char ID + "_%02d"
+			snprintf(buffer.data(), buffer.size(), "%.9s_%02d", commId.data, commId.num);
+			//std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
+			return std::vector<u8>(buffer.begin(), buffer.end());
 		}
 		// Waits for a response matching request_id
 		// Blocks until the full packet for that request is ready
@@ -668,7 +668,7 @@ namespace net {
 		addrinfo* conn = nullptr;
 
 		bool connected = false;
-		char npTitleId[9];
+		SceNpCommunicationId commId;
 
 		std::string online_name;
 		std::string avatar_url;
@@ -702,11 +702,11 @@ namespace net {
 
 		u64 generate_request_id();
 		std::vector<u8> GetCommHeader() {
-			u8* data = new u8[COMMUNICATION_ID_SIZE];
-			memcpy(data, npTitleId, 9);		// NPWR01446
-			memcpy(data + 9, "_00", 3);		// _00
-			std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
-			return ret;
+			std::array<char, COMMUNICATION_ID_SIZE + 1> buffer{};
+			// Format directly into buffer: 9-char ID + "_%02d"
+			snprintf(buffer.data(), buffer.size(), "%.9s_%02d", commId.data, commId.num);
+			//std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
+			return std::vector<u8>(buffer.begin(), buffer.end());
 		}
 		// Waits for a response matching request_id
 		// Blocks until the full packet for that request is ready

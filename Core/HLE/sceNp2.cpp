@@ -379,7 +379,7 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 
 	// FIXME: It seems Context are mapped to TitleID? may return 0x80550C05 or 0x80550C06 when finding an existing context
 	SceNpCommunicationId* titleid = (SceNpCommunicationId*)Memory::GetCharPointer(communicationIdPtr);
-	memcpy(npTitleId.data, titleid->data, sizeof(npTitleId));
+	memcpy(&npTitleId, titleid, sizeof(SceNpCommunicationId));
 
 	SceNpCommunicationPassphrase* passph = (SceNpCommunicationPassphrase*)Memory::GetCharPointer(passPhrasePtr);
 
@@ -388,7 +388,8 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 	if (!npid)
 		return hleLogError(Log::sceNet, SCE_NP_MANAGER_ERROR_ID_NOT_AVAIL);*/
 
-	INFO_LOG(Log::sceNet, "%s - Title ID: %s", __FUNCTION__, titleid->data);
+	INFO_LOG(Log::sceNet, "%s - Title ID: %s", __FUNCTION__, npTitleId.data);
+	INFO_LOG(Log::sceNet, "%s - Title NUM: %d", __FUNCTION__, npTitleId.num);
 	//INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npid->handle.data);
 	INFO_LOG(Log::sceNet, "%s - Online ID: %d", __FUNCTION__, npAuthServer->GetUserID());
 	INFO_LOG(Log::sceNet, "%s - Online Name: %s", __FUNCTION__, npAuthServer->GetOnlineName().c_str());
@@ -726,7 +727,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		}
 
 		// FIXME: Get worldInfo from PSN
-		ret = servers[tServer]->GetWorldInfo(tServer, npTitleId.data, &servers[tServer]->worlds);
+		ret = servers[tServer]->GetWorldInfo(tServer, npTitleId, &servers[tServer]->worlds);
 		if (ret != 0) {
 			ERROR_LOG(Log::sceNet, "Error requesting WorldInfo: %08X", ret);
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
