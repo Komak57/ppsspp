@@ -233,8 +233,8 @@ static int sceNpGetNpId(u32 idPtr)
 	DataToHexString(npid->opt, sizeof(npid->opt), &system_hex);
 	std::string stored_hex;
 	DataToHexString(npId.opt, sizeof(npId.opt), &stored_hex);
-	//if (!system_hex._Equal(stored_hex))
-	WARN_LOG(Log::sceNet, "%s(%08x) - %s - NpId: %s  Options: %s", __FUNCTION__, idPtr, (system_hex._Equal(stored_hex)? "SAME" : "CHANGED"), npId.handle.data, system_hex.c_str());
+	if (system_hex != stored_hex)
+		WARN_LOG(Log::sceNet, "%s(%08x) - CHANGED - NpId: %s  Options: %s", __FUNCTION__, idPtr, npId.handle.data, system_hex.c_str());
 
 	// Save options?
 	memcpy(&npId.opt, npid->opt, 8);
