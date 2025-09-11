@@ -33,6 +33,7 @@
 #include <Core/Net/NPAgent.h>
 
 
+std::unique_ptr<net::NPAuthAgent> npAuthServer;
 bool npAuthInited = false;
 int npSigninState = NP_SIGNIN_STATUS_NONE;
 SceNpAuthMemoryStat npAuthMemStat = {};

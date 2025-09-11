@@ -1425,7 +1425,6 @@ static int sceUtilityPsnShutdownStart()
 	return 0;
 }
 
-std::unique_ptr<net::NPAuthAgent> npAuthServer;
 u64 last;
 static void sceUtilityPsnInitStart(u32 paramPtr)
 {
