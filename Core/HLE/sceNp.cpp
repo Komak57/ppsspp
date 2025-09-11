@@ -579,6 +579,8 @@ void Register_sceNpAuth()
 
 static int sceNpServiceTerm()
 {
+	if (npAuthServer->IsConnected())
+		npAuthServer->Disconnect();
 	// No parameters
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
