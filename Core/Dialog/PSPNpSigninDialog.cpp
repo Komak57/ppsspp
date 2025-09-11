@@ -127,7 +127,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				stage = SigninStage::AUTO_LOGIN;
 			break;
 		case SigninStage::AUTO_LOGIN:
-				stage = SigninStage::CONNECT_REQUEST;
+			stage = SigninStage::CONNECT_REQUEST;
 			break;
 		case SigninStage::MANUAL_LOGIN:
 			switch (selected) {
@@ -302,6 +302,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				}
 				StartFade(true);
 
+				NOTICE_LOG(Log::sceNet, " - Login Successful");
 				stage = SigninStage::SUCCESS;
 			}
 			break;
@@ -318,8 +319,10 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			DisplayMessage2(di->T("PleaseWait", "Authentication Failed. Retry?"));
 			DisplayButtons(DS_BUTTON_OK, di->T("Confirm"));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
-			if (server->IsConnected())
+			if (server->IsConnected()) {
+				NOTICE_LOG(Log::sceNet, " - Login Failed");
 				server->Disconnect();
+			}
 			if (IsButtonPressed(okButtonFlag)) {
 				stage = SigninStage::MANUAL_LOGIN;
 				break;
