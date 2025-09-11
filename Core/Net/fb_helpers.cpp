@@ -3,6 +3,7 @@
 #include "fb_helpers.h"
 #include <Log.h>
 #include <Core/MemMapHelpers.h>
+#include <Core/Config.h>
 
 namespace np
 {
@@ -622,6 +623,7 @@ namespace np
 			sce_mi->dst = PSPPointer<SceNpMatching2RoomMessageDestination>::Create(edata.Alloc(alloc));
 		}
 
+		NOTICE_LOG(Log::sceNet, " - Cast Type: %d", sce_mi->castType);
 		switch (sce_mi->castType)
 		{
 		case SCE_NP_MATCHING2_CASTTYPE_BROADCAST: break;
@@ -650,11 +652,15 @@ namespace np
 			u32 alloc = sizeof(SceNpUserInfo2);
 			auto ptr_sce_userinfo = PSPPointer<SceNpUserInfo2>::Create(edata.Alloc(alloc));
 			sce_mi->srcMember = ptr_sce_userinfo;
-			UserInfo_to_SceNpUserInfo2(edata, src_member, sce_mi->srcMember, include_onlinename, include_avatarurl);
+			// ERROR: src_member unintialized during SCE_NP_MATCHING2_CASTTYPE_BROADCAST
+			UserInfo_to_SceNpUserInfo2(edata, src_member, ptr_sce_userinfo, include_onlinename, include_avatarurl);
 		}
 
 		if (auto msg = mi->msg())
 		{
+			std::string msg_hex;
+			DataToHexString(msg->Data(), msg->size(), &msg_hex);
+			NOTICE_LOG(Log::sceNet, " - Message Len: %d, Message: %s", msg->size(), msg_hex.c_str());
 			sce_mi->msgLen = msg->size();
 			//auto* ptr_msg_data = static_cast<u8*>(edata.allocate<void>(msg->size(), sce_mi->msg));
 			u32 alloc = msg->size();

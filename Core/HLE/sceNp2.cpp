@@ -1582,6 +1582,8 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 	auto req = PSPPointer<SceNpMatching2SendRoomMessageRequest>::Create(reqParamPtr);
 
 	INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
+	INFO_LOG(Log::sceNet, " - castType:   %d", req->castType);
+	INFO_LOG(Log::sceNet, " - msgLen:     %d", req->msgLen);
 
 	auto roomData = &servers[tServer]->rooms[req->roomId];
 

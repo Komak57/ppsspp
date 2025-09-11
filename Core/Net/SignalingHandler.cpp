@@ -591,7 +591,7 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 
 	const u32 event_key = 0; //get_event_key();
 	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
-	bool include_onlinename = false, include_avatarurl = false;
+	bool include_onlinename = true, include_avatarurl = false;
 
 	u32 _size = sizeof(SceNpMatching2RoomMessageInfo);
 	u32 ptr = np_memory.Alloc(_size);
