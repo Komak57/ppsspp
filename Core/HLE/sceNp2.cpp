@@ -723,7 +723,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 			ERROR_LOG(Log::sceNet, "Unable to Register");
 			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
 		}*/
-		
+
 		std::string* creds = NpGetLogin();
 		ret = servers[tServer]->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
 		if (ret != 0) {
@@ -925,6 +925,9 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		INFO_LOG(Log::sceNet, " - blockedUserNum:   %d", req->blockedUserNum);
 		INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternalNum: %d", req->roomMemberBinAttrInternalNum);
 		INFO_LOG(Log::sceNet, " - teamId:           %d", req->teamId);
+		// Patapon 3 requests WorldID 0. Is this suppose to be the first available world?
+		if (req->worldId == 0)
+			req->worldId = servers[tServer]->worlds.begin()->first;
 		bool found = false;
 		for (auto& pair : servers[tServer]->worlds) {
 			if (pair.second.worldId == req->worldId) {
