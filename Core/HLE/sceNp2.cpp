@@ -18,6 +18,8 @@
 #include <mutex>
 #include <deque>
 #include <StringUtils.h>
+#include <future>
+#include "Core/Config.h"
 #include "Core/MemMapHelpers.h"
 #include "Core/CoreTiming.h"
 #include "Core/HLE/HLE.h"
@@ -26,7 +28,6 @@
 #include "Core/HLE/sceNp2.h"
 #include <Core/Net/NPAgent.h>
 #include "sceNetResolver.h"
-#include <future>
 #include "Core/Net/SignalingHandler.h"
 #include "sceNp.h"
 #include "sceKernelMemory.h"
@@ -610,6 +611,9 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 	if (!Memory::IsValidAddress(serverIdsPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
+	if (servers.size() == 0)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND);
+
 	if (tServer > 0 && servers[tServer]->IsConnected()) {
 		g_signaling.stop();
 		servers[tServer]->Disconnect();
@@ -733,8 +737,17 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 			ERROR_LOG(Log::sceNet, "Error requesting WorldInfo: %08X", ret);
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 		}
+		// First attempts for new games won't contain a world.
+		if (servers[tServer]->worlds.size() == 0) {
+			ERROR_LOG(Log::sceNet, "Error requesting WorldInfo: %08X", ret);
+			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND), 0);
+		}
 
 		NOTICE_LOG(Log::sceNet, "Received %d worlds", servers[tServer]->worlds.size());
+		for (auto& pair : servers[tServer]->worlds) {
+			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d", pair.first, pair.second.worldId);
+		}
+
 
 		// First, allocate the Response. Then allocate and write worlds, then write the response
 		SceNpMatching2GetWorldInfoListResponse resp{};
@@ -809,8 +822,15 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 		INFO_LOG(Log::sceNet, " - intFilterNum: %d", req->intFilterNum);
 		INFO_LOG(Log::sceNet, " - binFilterNum: %d", req->binFilterNum);
 		INFO_LOG(Log::sceNet, " - attrIdNum:    %d", req->attrIdNum);
-		if (req->worldId < 0) {
-			ERROR_LOG(Log::sceNet, "Invalid Room ID");
+		bool found = false;
+		for (auto& pair : servers[tServer]->worlds) {
+			if (pair.second.worldId == req->worldId) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			ERROR_LOG(Log::sceNet, " - Invalid Room ID");
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
 		}
 			
@@ -905,7 +925,17 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		INFO_LOG(Log::sceNet, " - blockedUserNum:   %d", req->blockedUserNum);
 		INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternalNum: %d", req->roomMemberBinAttrInternalNum);
 		INFO_LOG(Log::sceNet, " - teamId:           %d", req->teamId);
-
+		bool found = false;
+		for (auto& pair : servers[tServer]->worlds) {
+			if (pair.second.worldId == req->worldId) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			ERROR_LOG(Log::sceNet, " - Invalid Room ID");
+			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
+		}
 		// FIXME: Populate all relevant data from req into memory as required
 		const RoomDataInternal* resp;
 
