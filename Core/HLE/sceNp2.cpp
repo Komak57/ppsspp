@@ -54,6 +54,17 @@ std::map<u16, std::future<int>> tasks;
 signaling_handler g_signaling;
 
 
+void __Np2Init() {
+	npMatching2Inited = false;
+}
+
+void __Np2Shutdown() {
+	if (tServer > 0 && servers[tServer]->IsConnected()) {
+		g_signaling.stop();
+		servers[tServer]->Disconnect();
+		tServer = 0;
+	}
+}
 /* Generate a Request Id for various callbacks
  * @param assignedReqIdPtr pointer to AppRequestID
  * @return u32 System RequestID

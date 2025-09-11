@@ -70,6 +70,7 @@
 #include "sceMpeg.h"
 #include "sceNet.h"
 #include "sceNp.h"
+#include "sceNp2.h"
 #include "sceNetAdhoc.h"
 #include "sceNetAdhocMatching.h"
 #include "scePower.h"
@@ -94,7 +95,6 @@
 #include "sceOpenPSID.h"
 #include "sceHttp.h"
 #include "Core/Util/PPGeDraw.h"
-#include "sceHttp.h"
 
 /*
 17: [MIPS32 R4K 00000000 ]: Loader: Type: 1 Vaddr: 00000000 Filesz: 2856816 Memsz: 2856816 
@@ -165,6 +165,7 @@ void __KernelInit()
 	__OpenPSIDInit();
 	__HttpInit();
 	__NpInit();
+	__Np2Init();
 	__RegInit();
 	
 	SaveState::Init();  // Must be after IO, as it may create a directory
@@ -224,6 +225,8 @@ void __KernelShutdown()
 	__InterruptsShutdown();
 	__CheatShutdown();
 	__KernelModuleShutdown();
+	__NpShutdown();
+	__Np2Shutdown();
 
 	CoreTiming::ClearPendingEvents();
 	CoreTiming::UnregisterAllEvents();

@@ -50,6 +50,7 @@ extern std::recursive_mutex npAuthEvtMtx;
 extern SceNpCommunicationId npTitleId;
 
 void __NpInit();
+void __NpShutdown();
 
 SceNpId* NpGetNpId();
 std::string* NpGetLogin();

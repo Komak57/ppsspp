@@ -47,4 +47,7 @@ int notifySignalingHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
 int abortNpMatching2Handlers();
 bool NpMatching2ProcessEvents();
 
+void __Np2Init();
+void __Np2Shutdown();
+
 void Register_sceNpMatching2();

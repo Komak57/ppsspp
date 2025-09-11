@@ -66,6 +66,10 @@ void __NpInit() {
 	npSigninTimestamp = {};
 	npTitleId = {};
 }
+void __NpShutdown() {
+	if (npAuthServer->IsConnected())
+		npAuthServer->Disconnect();
+}
 
 // Tickets data are in big-endian based on captured packets
 static int writeTicketParam(u8* buffer, const u16_be type, const char* data = nullptr, const u16_be size = 0) {
