@@ -1237,6 +1237,9 @@ static int sceUtilityNpSigninShutdownStart() {
 		return hleLogWarning(Log::sceUtility, SCE_ERROR_UTILITY_WRONG_TYPE, "wrong dialog type");
 	}
 
+	if (npSigninDialog->GetCommonParam()->result == SCE_UTILITY_DIALOG_RESULT_SUCCESS)
+		npAuthServer = npSigninDialog->GetServer();
+
 	DeactivateDialog();
 	return hleLogDebug(Log::sceUtility, npSigninDialog->Shutdown());
 }
@@ -1461,16 +1464,14 @@ static int sceUtilityPsnGetStatus()
 			break;
 		case 3: // SCE_UTILITY_STATUS_FINISHED
 			switch (npSigninDialog->GetCommonParam()->result) {
-			case 0: //SCE_UTILITY_DIALOG_RESULT_SUCCESS
+			case SCE_UTILITY_DIALOG_RESULT_SUCCESS:
 				psnStatus = pspUtilityPsnStatus::PSN_STATUS_AVAILABLE;
-				npAuthServer = npSigninDialog->GetServer();
 				sceUtilityNpSigninShutdownStart();
 				break;
-			case 1: //SCE_UTILITY_DIALOG_RESULT_CANCEL
-			case 2: //SCE_UTILITY_DIALOG_RESULT_ABORT
+			case SCE_UTILITY_DIALOG_RESULT_CANCEL:
+			case SCE_UTILITY_DIALOG_RESULT_ABORT:
 			default:
 				psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
-				sceUtilityNpSigninShutdownStart();
 				break;
 			}
 			break;
