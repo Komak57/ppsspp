@@ -127,11 +127,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				stage = SigninStage::AUTO_LOGIN;
 			break;
 		case SigninStage::AUTO_LOGIN:
-			DisplayMessage2(di->T("SigninPleaseWait", "Auto-Login in process...\nPlease wait."));
-			if (now - startTime > NP_RUNNING_DELAY_US) {
-				startTime = now;
 				stage = SigninStage::CONNECT_REQUEST;
-			}
 			break;
 		case SigninStage::MANUAL_LOGIN:
 			switch (selected) {
