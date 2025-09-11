@@ -199,8 +199,7 @@ static int sceNpGetOnlineId(u32 idPtr)
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_ARGUMENT, "invalid arg");
 
 	id.FillWithZero();
-	memcpy(id->data, npAuthServer->GetOnlineName().c_str(),
-		std::min<size_t>(16, npAuthServer->GetOnlineName().size()));
+	memcpy(id->data, &npId.handle, 16);
 	id.NotifyWrite("NpGetOnlineId");
 
 	return hleLogWarning(Log::sceNet, 0, "Online ID: %s", id->data);
@@ -235,18 +234,15 @@ static int sceNpGetNpId(u32 idPtr)
 	std::string stored_hex;
 	DataToHexString(npId.opt, sizeof(npId.opt), &stored_hex);
 	//if (!system_hex._Equal(stored_hex))
-	WARN_LOG(Log::sceNet, "%s(%08x) - %s - Online ID: %s  Options: %s", __FUNCTION__, idPtr, (system_hex._Equal(stored_hex)? "SAME" : "CHANGED"), npId.handle.data, system_hex.c_str());
+	WARN_LOG(Log::sceNet, "%s(%08x) - %s - NpId: %s  Options: %s", __FUNCTION__, idPtr, (system_hex._Equal(stored_hex)? "SAME" : "CHANGED"), npId.handle.data, system_hex.c_str());
 
-	// Save options
+	// Save options?
 	memcpy(&npId.opt, npid->opt, 8);
-	// Write npId into PSP Memory
-	//memcpy(npid, &npId, sizeof(SceNpId));
-	// Write Username to NpId
+	// Set all to 0?
 	memset(npid, 0, sizeof(SceNpId));
-	//memset(&npid->handle.data, 0, 16);
-	memcpy(&npid->handle.data, g_Config.sPSNNPID.c_str(),
-		std::min<size_t>(16, g_Config.sPSNNPID.length()));
-	// TODO: Should we save this pointer for future requests?
+	// Write npId to PSP Memory
+	memcpy(&npid->handle.data, npId.handle.data, 16);
+	// TODO: Should we save this pointer for future requests? It changes every request
 
 	npid.NotifyWrite("NpGetNpId");
 
