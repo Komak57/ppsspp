@@ -426,6 +426,7 @@ int sceNpAuthCreateStartRequest(u32 paramAddr)
 		// 1st Arg usually either an ID returned from Create/AddHandler function or an Event ID if the game is expecting a sequence of events.
 		// 2nd Arg seems to be used if not a negative number and exits the handler if it's negative (error code?)
 		// 3rd Arg seems to be a data (ie. 92 bytes of data?) pointer and tested for null within callback handler (optional callback args?)
+
 		u32 ticketLength = 248; // default ticket length? should be updated using the ticket length returned from login
 		notifyNpAuthHandlers(retval, ticketLength, (params.size >= 36) ? params.cbArgAddr : 0);
 	}
@@ -437,6 +438,9 @@ int sceNpAuthCreateStartRequest(u32 paramAddr)
 // Used within callback of sceNpAuthCreateStartRequest (arg1 = callback's args[0], arg2 = output structPtr?, arg3 = callback's args[1])
 // Is this using request id for Arg1 or cbId?
 // JPCSP is using length = 248 for dummy ticket
+// Returning an error here will flag any game that had a license (Patapon3 / Phantasy Star)
+// Patapon3 has a specific error message related
+// Phantasy Star Portable 2 / Infinity only rendered the PSN error code
 int sceNpAuthGetTicket(u32 requestId, u32 bufferAddr, u32 length) {
 	if (!Memory::IsValidAddress(bufferAddr)) {
 		return hleLogError(Log::sceNet, SCE_NP_AUTH_ERROR_INVALID_ARGUMENT, "invalid arg");
@@ -449,6 +453,8 @@ int sceNpAuthGetTicket(u32 requestId, u32 bufferAddr, u32 length) {
 		g_OSD.Show(OSDType::MESSAGE_ERROR, n->T("To play in Infrastructure Mode, you must enter a username"), 5.0f);
 		return hleLogError(Log::sceNet, SCE_NP_AUTH_ERROR_UNKNOWN, "Missing npOnlineId");
 	}
+	// Forced Ticket Failure for testing purposes
+	//return hleLogError(Log::sceNet, SCE_NP_AUTH_ERROR_INVALID_TICKET_VERSION);
 
 	int result = length;
 	Memory::Memset(bufferAddr, 0, length, "NpAuthGetTicket");
