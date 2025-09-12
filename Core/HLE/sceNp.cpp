@@ -68,7 +68,7 @@ void __NpInit() {
 	npTitleId = {};
 }
 void __NpShutdown() {
-	if (npAuthServer->IsConnected())
+	if (npAuthServer && npAuthServer->IsConnected())
 		npAuthServer->Disconnect();
 }
 
