@@ -400,7 +400,9 @@ enum
 	SCE_NP_COMMERCE2_SYM_POS_PRE = 0,
 	SCE_NP_COMMERCE2_SYM_POS_POST = 1,
 };
+#pragma pack(pop)
 
+#pragma pack(push,1)
 typedef u16 SceNpMatching2ServerId;
 typedef u32 SceNpMatching2WorldId;
 typedef u16 SceNpMatching2WorldNumber;
@@ -431,6 +433,7 @@ typedef u64 SceNpMatching2RoomJoinedSlotMask;
 typedef u16 SceNpMatching2Event;
 typedef u32 SceNpMatching2EventKey;
 typedef u32 SceNpMatching2SignalingRequestId;
+#pragma pack(pop)
 
 // Request callback function
 using SceNpMatching2RequestCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey, s32 errorCode, u32 dataSize, PSPPointer<u8> arg); // PSPPointer<void> arg
@@ -709,6 +712,7 @@ struct NpMatching2Args {
 
 };
 
+#pragma pack(push,1)
 struct SceNpMatching2ServerInfo {
 	SceNpMatching2ServerId id;
 	SceNpMatching2ServerStatus status;
