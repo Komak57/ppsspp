@@ -139,6 +139,7 @@ namespace net {
 				if (packet.Length() < RPCN_HEADER_SIZE + 1) {
 					ERROR_LOG(Log::sceNet, "RPCN Malformed Packet Length (%d)", packet.Length());
 					running = false;
+					Disconnect();
 					return;
 				}
 				buf.error = buf.stream->get<u8>();
