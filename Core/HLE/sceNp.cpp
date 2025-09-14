@@ -189,17 +189,18 @@ static int sceNpGetChatRestrictionFlag(u32 flagAddr)
 
 	return hleLogWarning(Log::sceNet, 0, "Chat restriction: %d", npChatRestriction);
 }
-
+// FIXME: Patapon3 triggers a read error after this, before SceNpMatching2CreateJoinRoom
+// Said error is related to the WorldID
 static int sceNpGetOnlineId(u32 idPtr)
 {
-	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x)", __FUNCTION__, idPtr);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x) at %08x", __FUNCTION__, idPtr, currentMIPS->pc);
 
 	auto id = PSPPointer<SceNpOnlineId>::Create(idPtr);
 	if (!id.IsValid())
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_ARGUMENT, "invalid arg");
 
 	id.FillWithZero();
-	memcpy(id->data, &npId.handle, 16);
+	memcpy(id->data, g_Config.sPSNNPID.c_str(), std::min<size_t>(16, g_Config.sPSNNPID.length()));
 	id.NotifyWrite("NpGetOnlineId");
 
 	return hleLogWarning(Log::sceNet, 0, "Online ID: %s", id->data);
