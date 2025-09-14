@@ -806,8 +806,8 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 		INFO_LOG(Log::sceNet, " - binFilterNum: %d", req->binFilterNum);
 		INFO_LOG(Log::sceNet, " - attrIdNum:    %d", req->attrIdNum);
 		bool found = false;
-		for (auto& pair : servers[tServer]->worlds) {
-			if (pair.second.worldId == req->worldId) {
+		for (auto& world : servers[tServer]->worlds) {
+			if (world.worldId == req->worldId) {
 				found = true;
 				break;
 			}
@@ -912,8 +912,8 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		//if (req->worldId == 0)
 			//req->worldId = servers[tServer]->worlds.begin()->first;
 		bool found = false;
-		for (auto& pair : servers[tServer]->worlds) {
-			if (pair.second.worldId == req->worldId) {
+		for (auto& world : servers[tServer]->worlds) {
+			if (world.worldId == req->worldId) {
 				found = true;
 				break;
 			}
