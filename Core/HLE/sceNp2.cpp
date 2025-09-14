@@ -698,15 +698,15 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 	// ThreadStart
 	std::future<int> task = std::async(std::launch::async, [=]() -> int {
 		if (!npMatching2Inited)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
 		if (!Memory::IsValidAddress(serverIdPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
 		// Server ID is a 16-bit variable according to JPCSP
 		u16 serverId;
 		if ((serverId = Memory::Read_U16(serverIdPtr)) == 0)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
 
 		tServer = serverId;
 
@@ -714,7 +714,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		bool connected = servers[tServer]->Connect();
 		if (!connected) {
 			ERROR_LOG(Log::sceNet, "Could not connect.");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		int ret;
@@ -785,13 +785,13 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 	// ThreadStart
 	std::future<int> task = std::async(std::launch::async, [=]() -> int {
 		if (!npMatching2Inited)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
 		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
 		if (tServer == 0)
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		const PSPPointer<SceNpMatching2SearchRoomRequest> req = PSPPointer<SceNpMatching2SearchRoomRequest>::Create(reqParamPtr);
 
@@ -814,7 +814,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 		}
 		if (!found) {
 			ERROR_LOG(Log::sceNet, " - Invalid Room ID");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
 		}
 			
 		// FIXME: Populate all relevant data from req into memory as required
@@ -826,7 +826,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 
 		if (ret != 0) {
 			ERROR_LOG(Log::sceNet, "Unable to retrieve Room Info");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, ret), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, ret), 0);
 		}
 
 		// Minimal processing example
@@ -869,13 +869,13 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	// ThreadStart
 	std::future<int> task = std::async(std::launch::async, [=]() -> int {
 		if (!npMatching2Inited)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
 		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
 		if (tServer == 0)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		if (Memory::IsValidAddress(roomEventCbPtr)) {
 			u32 roomEventCb = Memory::Read_U32(roomEventCbPtr);
@@ -920,7 +920,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		}
 		if (!found) {
 			ERROR_LOG(Log::sceNet, " - Invalid worldId");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ROOM_ID), 0);
 		}
 		// FIXME: Populate all relevant data from req into memory as required
 		const RoomDataInternal* resp;
@@ -929,7 +929,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		int ret = servers[tServer]->CreateJoinRoom(req, resp);
 		if (ret != 0) {
 			ERROR_LOG(Log::sceNet, "Unable to Create Room: %08X", ret);
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, ret), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, ret), 0);
 		}
 
 		u32 infoSize = sizeof(SceNpMatching2RoomDataInternal);
@@ -937,7 +937,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 
 		if (!Memory::IsValidAddress(roomDataPtr)) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataExternal");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
 		SceNpId* npId = NpGetNpId();
@@ -953,7 +953,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 
 		if (!Memory::IsValidAddress(respPtr)) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
 		}
 		Memory::Write_Struct(respData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
 
