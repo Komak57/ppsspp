@@ -853,9 +853,9 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 /* Incomplete - Hosts a Lobby/Party
  * @param reqParamPtr SceNpMatching2CreateJoinRoomRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param unknown1 ?
- * @param unkonwn2 ?
- * @param assignedReqIdPtr Pointer to the index of a unique callback
+ * @param roomEventCbPtr Pointer to Callback Address for future Room Events (optional)
+ * @param roomMessageCbPtr Pointer to Callback Address for future Room Messages (optional) 
+ * @param assignedReqIdPtr Pointer to a pre-specified request id
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
