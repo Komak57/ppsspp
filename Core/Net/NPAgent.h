@@ -498,7 +498,7 @@ namespace net {
 		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
 
 		// NPAgent Functions
-		virtual int GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::map<u32, SceNpMatching2World>* worldInfoOut) = 0;
+		virtual int GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) = 0;
 		virtual int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp) = 0;
 		virtual int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) = 0;
 		virtual int JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut) = 0;
@@ -528,7 +528,7 @@ namespace net {
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
 
 		u32 worldInfoPtr;
-		std::map<u32, SceNpMatching2World> worlds;
+		std::vector<SceNpMatching2World> worlds;
 		u32 roomDataPtr;
 		std::map<u32, SceNpMatching2RoomDataInternal> rooms;
 	protected:
@@ -560,7 +560,7 @@ namespace net {
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
-		int GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::map<u32, SceNpMatching2World>* worldInfoOut);
+		int GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp);
 		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
 		int JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut);
@@ -584,7 +584,7 @@ namespace net {
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 
-		int GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::map<u32, SceNpMatching2World>* worldInfoOut);
+		int GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut);
 		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp);
 		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
 		int JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut);

@@ -440,7 +440,7 @@ namespace net {
 		return true;
 	}
 
-	int RPCNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::map<u32, SceNpMatching2World>* worldInfoOut) {
+	int RPCNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) {
 		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 
 		Packet packet = Packet();
@@ -474,12 +474,12 @@ namespace net {
 			//memcpy(&world.worldId, resp.data.data() + offset, sizeof(world.worldId));
 			world.worldId = resp.stream->get<SceNpMatching2WorldId>();
 
-			worldInfoOut->emplace(world.worldId, world);
+			worldInfoOut->push_back(world);
 			//offset += 4;
 		}
 
 		//worldInfoOut->emplace(worldInfo.worldId, worldInfo);
-		return 0;
+		return num_worlds;
 	}
 
 	int RPCNAgent::SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const SearchRoomResponse*& roomResp) {

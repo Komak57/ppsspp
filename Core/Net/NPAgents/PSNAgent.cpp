@@ -171,7 +171,7 @@ namespace net {
 		return false;
 	}
 
-	int PSNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npCommId, std::map<u32, SceNpMatching2World>* worldInfoOut) {
+	int PSNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npCommId, std::vector<SceNpMatching2World>* worldInfoOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npCommId.data);
 #ifndef AGENT_TESTING
 		if (sock_ <= 0) {
@@ -251,18 +251,7 @@ namespace net {
 		SceNpMatching2World worldInfo = SceNpMatching2World();
 		worldInfo.worldId = 1;
 
-		worldInfo.numOfLobby = 2;
-		worldInfo.curNumOfTotalLobbyMember = 0;
-		worldInfo.maxNumOfTotalLobbyMember = 12;
-
-		worldInfo.curNumOfRoom = 0;
-		worldInfo.curNumOfTotalRoomMember = 0;
-
-		worldInfo.withEntitlementId = 0;
-		for (i = 0; i < 32; i++)
-			worldInfo.entitlementId.data[i] = 0;
-
-		worldInfoOut->emplace(worldInfo.worldId, worldInfo);
+		worldInfoOut->push_back(worldInfo);
 
 		return 0;
 	}
