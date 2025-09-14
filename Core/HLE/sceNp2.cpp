@@ -728,58 +728,41 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		ret = servers[tServer]->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
 		if (ret != 0) {
 			ERROR_LOG(Log::sceNet, "Unable to Log In");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, ret), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, ret), 0);
 		}
 
 		// FIXME: Get worldInfo from PSN
-		ret = servers[tServer]->GetWorldInfo(tServer, npTitleId, &servers[tServer]->worlds);
-		if (ret != 0) {
-			ERROR_LOG(Log::sceNet, "Error requesting WorldInfo: %08X", ret);
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+		int worldNum = servers[tServer]->GetWorldInfo(tServer, npTitleId, &servers[tServer]->worlds);
+		if (worldNum < 0) {
+			ERROR_LOG(Log::sceNet, "Error requesting WorldInfo: %08X", worldNum);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 		}
 		// First attempts for new games won't contain a world.
-		if (servers[tServer]->worlds.size() == 0) {
-			ERROR_LOG(Log::sceNet, "Error requesting WorldInfo: %08X", ret);
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND), 0);
+		if (worldNum == 0) {
+			ERROR_LOG(Log::sceNet, "No Worlds Returned");
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD), 0);
 		}
 
-		NOTICE_LOG(Log::sceNet, "Received %d worlds", servers[tServer]->worlds.size());
-		for (auto& pair : servers[tServer]->worlds) {
-			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d", pair.first, pair.second.worldId);
+		// Allocate space for all worlds
+		u32 worldsSize = sizeof(SceNpMatching2World) * worldNum;
+		// We have a maximum size
+		if (worldsSize > SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList)
+			worldsSize = SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList;
+		auto worlds = PSPPointer<SceNpMatching2World>::Create(np_memory.Alloc(worldsSize));
+		// Transfer WorldID
+		NOTICE_LOG(Log::sceNet, "Received %d worlds", worldNum);
+		for (int i = 0; i < worldNum; i++)
+		{
+			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d", i, servers[tServer]->worlds[i].worldId);
+			worlds[i].worldId = servers[tServer]->worlds[i].worldId;
 		}
 
+		u32 alloc = sizeof(SceNpMatching2GetWorldInfoListResponse);
+		auto resp = PSPPointer<SceNpMatching2GetWorldInfoListResponse>::Create(np_memory.Alloc(alloc));
+		resp->worldNum = worldNum;
+		resp->world = worlds;
 
-		// First, allocate the Response. Then allocate and write worlds, then write the response
-		SceNpMatching2GetWorldInfoListResponse resp{};
-		resp.worldNum = servers[tServer]->worlds.size();
-
-		u32 infoSize = sizeof(SceNpMatching2GetWorldInfoListResponse);
-		// Allocate space, and write value into the pool
-		u32 worldInfoResponsePtr = np_memory.Alloc(infoSize);
-		if (!Memory::IsValidAddress(worldInfoResponsePtr) || worldInfoResponsePtr == 0) {
-			ERROR_LOG(Log::sceNet, "Unable to allocate memory for WorldInfo");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
-		}
-
-		u32 worldInfoSize = sizeof(SceNpMatching2World) * servers[tServer]->worlds.size();
-		if (worldInfoSize > SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList)
-			worldInfoSize = SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList;
-		// Allocate space, and write value into the pool
-		u32 worldInfoPtr = np_memory.Alloc(worldInfoSize);
-		if (!Memory::IsValidAddress(worldInfoPtr) || worldInfoPtr == 0) {
-			ERROR_LOG(Log::sceNet, "Unable to allocate memory for WorldInfo");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
-		}
-		resp.world = worldInfoPtr; // may need world.ptr?
-		
-		int i = 0;
-		for (const auto& [worldId, world] : servers[tServer]->worlds) {
-			Memory::Write_Struct(world, worldInfoPtr + (i * sizeof(SceNpMatching2World)), "world%i", 8);
-			i++;
-		}
-		Memory::Write_Struct(resp, worldInfoResponsePtr, "SceNpMatching2World", 20);
-
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_OKAY, worldInfoResponsePtr);
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_OKAY, resp.ptr);
 	}); // ThreadEnd
 	tasks.emplace(request_id, std::move(task));
 	return 0;
