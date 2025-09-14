@@ -21,6 +21,7 @@ namespace net {
 
 	RPCNAgent::~RPCNAgent() {
 		NOTICE_LOG(Log::sceNet, "~NPAgent");
+		if (connected)
 		Disconnect();
 	}
 
