@@ -136,7 +136,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_CRTDBG_MAP_ALLOC;USING_WIN_UI;GLEW_STATIC;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_ARCH_32=1;_CONSOLE;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>../ffmpeg/Windows/x86/include;../Common;..;../Core;../ext/glew;../ext/libpng17;../ext/mbedtls/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../ffmpeg/Windows/x86/include;../Common;..;../Core;../ext/glew;../ext/libpng17;../ext/mbedtls/include;../ext/flatbuffers/include</AdditionalIncludeDirectories>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <FloatingPointModel>Precise</FloatingPointModel>
