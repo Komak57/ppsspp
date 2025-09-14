@@ -605,7 +605,7 @@ namespace net {
 			// Format directly into buffer: 9-char ID + "_%02d"
 			snprintf(buffer.data(), buffer.size(), "%.9s_%02d", commId.data, commId.num);
 			//std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
-			return std::vector<u8>(buffer.begin(), buffer.end());
+			return std::vector<u8>(buffer.begin(), buffer.end()-1);
 		}
 		// Waits for a response matching request_id
 		// Blocks until the full packet for that request is ready
@@ -706,7 +706,7 @@ namespace net {
 			// Format directly into buffer: 9-char ID + "_%02d"
 			snprintf(buffer.data(), buffer.size(), "%.9s_%02d", commId.data, commId.num);
 			//std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
-			return std::vector<u8>(buffer.begin(), buffer.end());
+			return std::vector<u8>(buffer.begin(), buffer.end() - 1);
 		}
 		// Waits for a response matching request_id
 		// Blocks until the full packet for that request is ready
