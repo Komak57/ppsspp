@@ -926,8 +926,8 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternalNum: %d", req->roomMemberBinAttrInternalNum);
 		INFO_LOG(Log::sceNet, " - teamId:           %d", req->teamId);
 		// Patapon 3 requests WorldID 0. Is this suppose to be the first available world?
-		if (req->worldId == 0)
-			req->worldId = servers[tServer]->worlds.begin()->first;
+		//if (req->worldId == 0)
+			//req->worldId = servers[tServer]->worlds.begin()->first;
 		bool found = false;
 		for (auto& pair : servers[tServer]->worlds) {
 			if (pair.second.worldId == req->worldId) {
@@ -936,8 +936,8 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 			}
 		}
 		if (!found) {
-			ERROR_LOG(Log::sceNet, " - Invalid Room ID");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
+			ERROR_LOG(Log::sceNet, " - Invalid worldId");
+			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD), 0);
 		}
 		// FIXME: Populate all relevant data from req into memory as required
 		const RoomDataInternal* resp;
