@@ -227,6 +227,9 @@ namespace net {
 		}
 
 
+		auto start_time = std::chrono::high_resolution_clock::now();
+		auto end_time = std::chrono::high_resolution_clock::now();
+		long long duration_ms = 0;
 		for (int tries = maxTries; tries > 0; --tries) {
 			mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig);
 			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
@@ -272,6 +275,7 @@ namespace net {
 				 */
 				NOTICE_LOG(Log::sceNet, "Connect - Performing the SSL/TLS handshake...");
 
+				start_time = std::chrono::high_resolution_clock::now();
 				while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
 					if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
 						char errbuf[128];
@@ -280,6 +284,14 @@ namespace net {
 						goto sslretry;
 					}
 				}
+				end_time = std::chrono::high_resolution_clock::now();
+				duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+				if (duration_ms > 100)
+					ERROR_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+				else if (duration_ms > 60)
+					WARN_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+				else
+					NOTICE_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
 
 				/*
 				 * 5. Verify the server certificate
@@ -300,7 +312,7 @@ namespace net {
 
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful. TLS: %s, Cipher: %s", mbedtls_ssl_get_version(&tls.sslCtx), mbedtls_ssl_get_ciphersuite(&tls.sslCtx));
 				connected = true;
-
+				conn = std::move(possible);
 				// Start reading data
 				start_read_thread();
 
