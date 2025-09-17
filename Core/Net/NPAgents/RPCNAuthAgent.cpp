@@ -2,6 +2,7 @@
 #include <Core/HLE/HLE.h>
 #include <Common/File/FileDescriptor.h>
 #include <TimeUtil.h>
+#include <chrono>
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN
 	RPCNAuthAgent::RPCNAuthAgent(std::string host, int port) {

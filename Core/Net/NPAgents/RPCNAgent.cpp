@@ -2,6 +2,7 @@
 #include <Core/HLE/HLE.h>
 #include <Common/File/FileDescriptor.h>
 #include <TimeUtil.h>
+#include <chrono>
 #include "Core/MemMapHelpers.h"
 #include <Core/Net/SignalingHandler.h>
 
