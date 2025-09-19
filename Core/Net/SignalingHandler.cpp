@@ -306,7 +306,7 @@ void signaling_handler::recv_loop() {
 	running_ = true;
 	while (running_) {
 		if (!inetSocket) {
-			Sleep(100);
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
 			continue;
 		}
@@ -317,7 +317,7 @@ void signaling_handler::recv_loop() {
 			reinterpret_cast<sockaddr*>(&src), &slen);
 		if (n < 0) {
 			ERROR_LOG(Log::sceNet, "Error recvfrom on IPv4 P2P socket: %d", n);
-			Sleep(100);
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			continue;
 		}
 		if (n < static_cast<s32>(sizeof(u16))) {
