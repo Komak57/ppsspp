@@ -16,19 +16,12 @@
 #include "Common/Net/SocketCompat.h"
 #include <Core/Util/BlockAllocator.h>
 
-constexpr size_t VPORT_0_HEADER_SIZE = 3; // u16 vport(LE) + u8 subset
-constexpr u8 SUBSET_SIGNALING = -1;     // set to your value
+constexpr s32 VPORT_0_HEADER_SIZE = sizeof(u16) + sizeof(u8); // u16 vport(LE) + u8 subset
 
-// wire-level command ids. ensure these match your protocol.
-enum class SigCmd : u8 {
-	Ping = 0x01,
-	Pong = 0x02,
-	Info = 0x03,
-	Connect = 0x04,
-	ConnectAck = 0x05,
-	Confirm = 0x06,
-	Finished = 0x07,
-	FinishedAck = 0x08,
+enum VPORT_0_SUBSET : u8
+{
+	SUBSET_RPCN = 0,
+	SUBSET_SIGNALING = 1,
 };
 
 enum SignalingCommand : u32 {
@@ -46,9 +39,10 @@ static constexpr auto REPEAT_CONNECT_DELAY = std::chrono::milliseconds(200);
 static constexpr auto REPEAT_PING_DELAY = std::chrono::milliseconds(500);
 static constexpr auto REPEAT_FINISHED_DELAY = std::chrono::milliseconds(500);
 static constexpr auto REPEAT_INFO_DELAY = std::chrono::milliseconds(200);
-static constexpr u32 SIGNALING_SIGNATURE = (static_cast<u32>('S') << 24 | static_cast<u32>('I') << 16 | static_cast<u32>('G') << 8 | static_cast<u32>('N'));
-static constexpr u32 SIGNALING_VERSION = 3;
-#pragma pack(push, 1)
+//static constexpr be_t<u32> SIGNALING_SIGNATURE = (static_cast<u32>('S') << 24 | static_cast<u32>('I') << 16 | static_cast<u32>('G') << 8 | static_cast<u32>('N'));
+static constexpr u32 SIGNALING_SIGNATURE = (static_cast<u32>('N') << 24 | static_cast<u32>('G') << 16 | static_cast<u32>('I') << 8 | static_cast<u32>('S'));
+static constexpr u32_le SIGNALING_VERSION = 3;
+
 struct signaling_info
 {
 	s32 conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
@@ -92,12 +86,19 @@ struct signaling_packet {
 	SceNpId npid;
 };
 
+struct signaling_message
+{
+	u32 src_addr = 0;
+	u16 src_port = 0;
+
+	std::vector<u8> data;
+};
+
 struct queued_packet
 {
 	signaling_packet packet{};
 	std::shared_ptr<signaling_info> sig_info;
 };
-#pragma pack(pop)
 
 // user callback signature
 // invoked on any packet that belongs to a context
