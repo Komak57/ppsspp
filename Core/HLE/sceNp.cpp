@@ -158,7 +158,9 @@ bool NpAuthProcessEvents() {
 static int sceNpInit()
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s()", __FUNCTION__);
-	// NOTE: Checking validity and returning -1 here doesn't seem to work. Instead, we will fail to generate a ticket.
+
+	// Instantiate NPID, Online_Name, and Avatar URL
+	std::memset(&npId, 0, sizeof(npId));
 	std::memset(&online_name, 0, sizeof(online_name));
 	std::memset(&avatar_url, 0, sizeof(avatar_url));
 
