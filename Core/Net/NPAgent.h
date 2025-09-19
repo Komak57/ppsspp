@@ -536,6 +536,7 @@ namespace net {
 		std::vector<SceNpMatching2World> worlds;
 		u32 roomDataPtr;
 		std::map<u32, SceNpMatching2RoomDataInternal> rooms;
+
 	protected:
 		u16 ID;
 		uintptr_t sock_ = -1;
@@ -553,6 +554,9 @@ namespace net {
 		std::string online_name;
 		std::string avatar_url;
 		s64 user_id;
+
+		std::chrono::steady_clock::time_point last_ping_time_ipv4{}, last_pong_time_ipv4{};
+		std::chrono::steady_clock::time_point last_ping_time_ipv6{}, last_pong_time_ipv6{};
 	};
 
 	class PSNAgent : public NPAgent {
@@ -604,6 +608,8 @@ namespace net {
 		void start_read_thread();
 		void stop_read_thread();
 
+		void signaling_loop();
+
 		u64 generate_request_id();
 		std::vector<u8> GetCommHeader() {
 			std::array<char, COMMUNICATION_ID_SIZE+1> buffer{};
@@ -620,6 +626,14 @@ namespace net {
 
 		std::thread read_thread;
 		bool running = false;
+
+		std::mutex sig_mutex;
+		std::condition_variable sigv;
+		std::thread signal_thread;
+		std::atomic<s64> user_id;
+		std::atomic<u32> addr_sig;
+		std::atomic<u32> port_sig;
+		std::atomic<u32> local_addr_sig = 0;
 
 		std::mutex buffer_mutex;
 		std::condition_variable buffer_cv;

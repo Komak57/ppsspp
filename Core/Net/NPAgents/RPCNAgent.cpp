@@ -6,6 +6,8 @@
 #include "Core/MemMapHelpers.h"
 #include <Core/Net/SignalingHandler.h>
 
+using namespace std::literals::chrono_literals;
+
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN
 	RPCNAgent::RPCNAgent(int serverId, std::string host, int port, u8 status) {
@@ -70,10 +72,11 @@ namespace net {
 
 	void RPCNAgent::stop_read_thread() {
 		running = false;
-		if (read_thread.joinable()) {
+		if (read_thread.joinable())
 			read_thread.join();
+		if (signal_thread.joinable())
+			signal_thread.join();
 		}
-	}
 
 	namespace np {
 		bool is_valid_npid(const SceNpId& npid)
@@ -104,6 +107,139 @@ namespace net {
 		auto data = std::move(responses[request_id]);
 		responses.erase(request_id);
 		return data;
+	}
+
+	template <typename T, typename U>
+	constexpr void write_to_ptr(U&& array, int pos, const T& value)
+	{
+		static_assert(sizeof(T) % sizeof(array[0]) == 0);
+		std::memcpy(static_cast<void*>(&array[pos]), &value, sizeof(value));
+	}
+
+	void RPCNAgent::signaling_loop() {
+
+		while (running)
+		{
+			if (cancelled)
+				return;
+			const auto now = std::chrono::steady_clock::now();
+			const auto rpcn_msgs = g_signaling.get_rpcn_msgs();
+
+			for (const auto& msg : rpcn_msgs)
+			{
+				if (cancelled)
+					return;
+				if (msg.size() == 6)
+				{
+					const u32 new_addr_sig = read_from_ptr<u32_le>(&msg[0]);
+					const u16 new_port_sig = read_from_ptr<u16_le>(&msg[4]);
+					const u32 old_addr_sig = addr_sig;
+					const u32 old_port_sig = port_sig;
+
+					if (new_addr_sig != old_addr_sig)
+					{
+						addr_sig = new_addr_sig;
+						NOTICE_LOG(Log::sceNet, "New P2P IP: %d.%d.%d.%d", (new_addr_sig) & 0xFF, (new_addr_sig >> 8) & 0xFF, (new_addr_sig >> 16) & 0xFF, (new_addr_sig >> 24) & 0xFF);
+						if (old_addr_sig == 0)
+						{
+							// wake thread
+							sigv.notify_one();
+						}
+					}
+
+					if (new_port_sig != old_port_sig)
+					{
+						port_sig = new_port_sig;
+						NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", new_port_sig);
+						if (old_port_sig == 0)
+						{
+							// wake thread
+							sigv.notify_one();
+						}
+					}
+
+					last_pong_time_ipv4 = now;
+				}
+				else if (msg.size() == 18)
+				{
+					// We don't really need ipv6 info stored so we just update the pong data
+					// std::array<u8, 16> new_ipv6_addr;
+					// std::memcpy(new_ipv6_addr.data(), &msg[3], 16);
+					// const u32 new_ipv6_port = read_from_ptr<be_t<u16>>(&msg[16]);
+
+					//last_pong_time_ipv6 = now;
+				}
+				else
+				{
+					ERROR_LOG(Log::sceNet, "Received faulty RPCN UDP message!");
+				}
+			}
+
+			const std::chrono::nanoseconds time_since_last_ipv4_ping = now - last_ping_time_ipv4;
+			const std::chrono::nanoseconds time_since_last_ipv4_pong = now - last_pong_time_ipv4;
+			auto forge_ping_packet = [&]() -> std::vector<u8>
+			{
+				std::vector<u8> ping(13);
+				ping[0] = 1;
+				//ping.emplace(ping.begin() + 1, _user_id);
+				//ping.emplace(ping.begin() + 9, +local_addr);
+				s64 _user_id = user_id;
+				write_to_ptr<s64_le>(ping, 1, user_id.load());
+				write_to_ptr<u32_be>(ping, 9, addr_sig.load());
+				return ping;
+			};
+
+			// Send a packet every 5 seconds and then every 500 ms until reply is received
+			if (time_since_last_ipv4_pong >= 5s && time_since_last_ipv4_ping > 500ms)
+			{
+				const auto ping = forge_ping_packet();
+
+				struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(conn->ai_addr);
+
+				if (!g_signaling.send_packet_ipv4(ping, GetConnAddr(), SCE_RPCN_PORT))
+					ERROR_LOG(Log::sceNet, "Failed to send IPv4 PING to RPCN");
+
+				last_ping_time_ipv4 = now;
+				continue;
+			}
+
+			/*if (np::is_ipv6_supported() && time_since_last_ipv6_pong >= 5s && time_since_last_ipv6_ping > 500ms)
+			{
+				const auto ping = forge_ping_packet();
+
+				if (!send_packet_from_p2p_port_ipv6(ping, addr_rpcn_udp_ipv6))
+					rpcn_log.error("Failed to send IPv6 ping to RPCN!");
+
+				last_ping_time_ipv6 = now;
+				continue;
+			}*/
+
+			auto min_duration_for = [&](const auto last_ping_time, const auto last_pong_time) -> std::chrono::nanoseconds
+			{
+				if ((now - last_pong_time) < 5s)
+				{
+					return (5s - (now - last_pong_time));
+				}
+				else
+				{
+					return (500ms - (now - last_ping_time));
+				}
+			};
+
+			auto duration = min_duration_for(last_ping_time_ipv4, last_pong_time_ipv4);
+
+			/*if (np::is_ipv6_supported())
+			{
+				const auto duration_ipv6 = min_duration_for(last_ping_time_ipv6, last_pong_time_ipv6);
+				duration = std::min(duration, duration_ipv6);
+			}*/
+
+			// Expected to fail unless rpcn is terminated
+			// The check is there to nuke a msvc warning
+			/*if (!sem_rpcn.try_acquire_for(duration))
+			{
+			}*/
+		}
 	}
 
 	void RPCNAgent::read_loop() {
@@ -337,6 +473,7 @@ namespace net {
 
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful. TLS: %s, Cipher: %s", mbedtls_ssl_get_version(&tls.sslCtx), mbedtls_ssl_get_ciphersuite(&tls.sslCtx));
 				connected = true;
+				conn = std::move(possible);
 
 				// Start reading data
 				start_read_thread();
@@ -405,6 +542,10 @@ namespace net {
 		avatar_url = resp.stream->get_string(false);
 		user_id = resp.stream->get<s64>();
 
+		if (g_signaling.create_connection())
+			signal_thread = std::thread(&RPCNAgent::signaling_loop, this);
+		else
+			ERROR_LOG(Log::sceNet, "Signaling Loop could not be started.");
 		return 0;
 	}
 
