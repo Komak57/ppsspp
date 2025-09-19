@@ -268,7 +268,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				stage = SigninStage::CANCELLED;
 				break;
 			}
-			if (now - startTime > NP_RUNNING_DELAY_US) {
+			if (now - startTime > NP_RUNNING_DELAY_US*2) {
 				startTime = now;
 				if (!server->Resolve()) {
 					stage = SigninStage::SHUTDOWN;
@@ -292,7 +292,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				stage = SigninStage::CANCELLED;
 				break;
 			}
-			if (now - startTime > NP_RUNNING_DELAY_US) {
+			if (now - startTime > NP_RUNNING_DELAY_US*2) {
 				startTime = now;
 				std::string* creds = NpGetLogin();
 				if (server->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str()) != 0) {
