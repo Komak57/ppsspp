@@ -55,6 +55,7 @@
 #include "Core/Dialog/PSPNetconfDialog.h"
 #include "Core/Dialog/PSPNpSigninDialog.h"
 #include "Core/Dialog/PSPScreenshotDialog.h"
+#include <Core\Dialog\PSPHtmlViewer.h>
 
 #define PSP_AV_MODULE_AVCODEC     0
 #define PSP_AV_MODULE_SASCORE     1
@@ -159,6 +160,7 @@ static PSPNetconfDialog *netDialog;
 static PSPScreenshotDialog *screenshotDialog;
 static PSPGamedataInstallDialog *gamedataInstallDialog;
 static PSPNpSigninDialog *npSigninDialog;
+static PSPHtmlViewer* htmlViewerDialog;
 
 // A lot of state seems to be shared between the various dialog types.
 static int oldStatus = -1;
@@ -227,6 +229,8 @@ static PSPDialog *CurrentDialog(UtilityDialogType type) {
 		return gamedataInstallDialog;
 	case UtilityDialogType::NPSIGNIN:
 		return npSigninDialog;
+	case UtilityDialogType::HTMLVIEWER:
+		return htmlViewerDialog;
 	}
 	return nullptr;
 }
