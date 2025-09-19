@@ -76,13 +76,13 @@ struct signaling_info
 };
 
 struct signaling_packet {
-	u32 signature = SIGNALING_SIGNATURE;
-	u32 version = SIGNALING_VERSION;
-	u64 timestamp_sender;
-	u64 timestamp_receiver;
+	u32_le signature = SIGNALING_SIGNATURE;
+	u32_le version = SIGNALING_VERSION;
+	u64_le timestamp_sender;
+	u64_le timestamp_receiver;
 	SignalingCommand command;
-	u32 sent_addr;
-	u16 sent_port;
+	u32_le sent_addr;
+	u16_le sent_port;
 	SceNpId npid;
 };
 
