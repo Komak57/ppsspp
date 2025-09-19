@@ -323,17 +323,17 @@ void signaling_handler::recv_loop() {
 		if (n < static_cast<s32>(sizeof(u16))) {
 			ERROR_LOG(Log::sceNet, "Malformed packet on P2P port (no vport)");
 			continue;
-	}
+		}
 		if (n < VPORT_0_HEADER_SIZE) {
 			ERROR_LOG(Log::sceNet, "Bad vport 0 packet (no subset)");
 			return;
-}
+		}
 
 		HEX_LOG(Log::sceNet, "signaling_handler::dispatch_packet", reinterpret_cast<const char*>(buf), n);
 
-	// vport + subset
+		// vport + subset
 		const u16 vport_le = *reinterpret_cast<const u16_le*>(&buf[0]);
-	const u8 subset = buf[2];
+		const u8 subset = buf[2];
 		const auto data_size = n - VPORT_0_HEADER_SIZE;
 		std::vector<u8> vport_0_data;
 		std::copy(std::begin(buf) + VPORT_0_HEADER_SIZE, std::begin(buf) + VPORT_0_HEADER_SIZE + data_size, std::back_inserter(vport_0_data));
@@ -462,7 +462,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 
 		const u32 addr_p2p = result_ip; // register_ip()
 		const u16 port_p2p = signaling_info->port();
-
+		
 		const u16 member_id = notif_data->roomMemberDataInternal->memberId;
 		const SceNpId& npid = notif_data->roomMemberDataInternal->userInfo.npId;
 

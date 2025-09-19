@@ -1358,7 +1358,7 @@ static int sceUtilityHtmlViewerShutdownStart() {
 	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerShutdownStart()");
 	browser_State = PSP_UTILITY_DIALOG_QUIT;
 	return 0;
-}
+	}
 
 static int sceUtilityHtmlViewerUpdate(int n) {
 	ERROR_LOG(Log::sceUtility, "UNIMPL sceUtilityHtmlViewerUpdate(%i)", n);

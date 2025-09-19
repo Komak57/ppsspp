@@ -120,7 +120,7 @@ InetSocket* SocketManager::FindSocketByPort(int target_port) {
 		}
 	}
 
-	ERROR_LOG(Log::sceNet, "FindSocketByPort(%d) No matching Socket", target_port);
+	DEBUG_LOG(Log::sceNet, "FindSocketByPort(%d) No matching Socket", target_port);
 	// If no socket was found, return nullptr.
 	return nullptr;
 }

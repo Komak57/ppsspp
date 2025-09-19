@@ -1,8 +1,8 @@
 #include "Core/Net/NPAgent.h"
-#include <Core/HLE/HLE.h>
-#include <Common/File/FileDescriptor.h>
 #include <TimeUtil.h>
 #include <chrono>
+#include <Core/HLE/HLE.h>
+#include <Common/File/FileDescriptor.h>
 #include "Core/MemMapHelpers.h"
 #include <Core/Net/SignalingHandler.h>
 
@@ -76,7 +76,7 @@ namespace net {
 			read_thread.join();
 		if (signal_thread.joinable())
 			signal_thread.join();
-		}
+	}
 
 	namespace np {
 		bool is_valid_npid(const SceNpId& npid)

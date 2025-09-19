@@ -155,7 +155,7 @@ public:
 	void RoomOwnerChangedGUI(net::RPCNResponse resp);
 	void UserKickedGUI(net::RPCNResponse resp);
 	void QuickMatchCompleteGUI(net::RPCNResponse resp);
-	
+
 	std::vector<std::vector<u8>> get_rpcn_msgs() {
 		std::vector<std::vector<u8>> msgs;
 		{
@@ -187,7 +187,7 @@ private:
 	//void add_match2_ctx(ContextState context);
 	//void remove_match2_ctx(ContextState context);
 	void queue_signaling_packet(signaling_packet& sp, std::shared_ptr<signaling_info> si, std::chrono::steady_clock::time_point wakeup_time);
-
+	
 private:
 	std::atomic<bool> running_{ false };
 	std::thread recv_thread_;
