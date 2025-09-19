@@ -53,6 +53,7 @@ std::string npServiceId = ""; // UNO game uses EP2006-NPEH00020_00
 //std::string npAvatarUrl = "http://DummyAvatarUrl"; // SceNpAvatarUrl struct?
 SceNpId npId;
 SceNpOnlineName online_name;
+SceNpAvatarUrl avatar_url;
 
 // Game-specific ID, I guess we can use this to auto-choose DNS?
 SceNpCommunicationId npTitleId;
@@ -67,7 +68,9 @@ void __NpInit() {
 	npAuthMemStat = {};
 	npSigninTimestamp = {};
 	npTitleId = {};
+
 	memcpy(&online_name.data, "DummyOnlineId", 14);
+	memcpy(&avatar_url.data, "http://DummyAvatarUrl", 22);
 }
 void __NpShutdown() {
 	if (npAuthServer && npAuthServer->IsConnected())
@@ -157,9 +160,16 @@ static int sceNpInit()
 	ERROR_LOG(Log::sceNet, "UNIMPL %s()", __FUNCTION__);
 	// NOTE: Checking validity and returning -1 here doesn't seem to work. Instead, we will fail to generate a ticket.
 	std::memset(&online_name, 0, sizeof(online_name));
+	std::memset(&avatar_url, 0, sizeof(avatar_url));
+
+	NpGetNpId();
 	if (npAuthServer && npAuthServer->IsConnected()) {
 		memcpy(&online_name.data, npAuthServer->GetOnlineName().c_str(),
 			std::min<size_t>(49, npAuthServer->GetOnlineName().length()));
+		memcpy(&avatar_url.data, npAuthServer->GetAvatarURL().c_str(),
+			std::min<size_t>(127, npAuthServer->GetAvatarURL().length()));
+	}
+
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 
