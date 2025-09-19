@@ -154,6 +154,7 @@ static int sceNpInit()
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s()", __FUNCTION__);
 	// NOTE: Checking validity and returning -1 here doesn't seem to work. Instead, we will fail to generate a ticket.
+	if (npAuthServer && npAuthServer->IsConnected()) {
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 
@@ -586,7 +587,7 @@ void Register_sceNpAuth()
 
 static int sceNpServiceTerm()
 {
-	if (npAuthServer->IsConnected())
+	if (npAuthServer && npAuthServer->IsConnected())
 		npAuthServer->Disconnect();
 	// No parameters
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
