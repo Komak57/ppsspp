@@ -523,6 +523,10 @@ namespace net {
 		s64 GetUserID() {
 			return user_id;
 		}
+		u32 GetConnAddr() {
+			struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(conn->ai_addr);
+			return htonl(addr->sin_addr.s_addr);
+		}
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
@@ -655,6 +659,11 @@ namespace net {
 		s64 GetUserID() {
 			return user_id;
 		}
+		u32 GetConnAddr() {
+			struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(conn->ai_addr);
+			return htonl(addr->sin_addr.s_addr);
+		}
+		int GetConnPort() { return port_; }
 
 	protected:
 		u16 ID;
