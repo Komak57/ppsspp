@@ -5,6 +5,7 @@
 #include <condition_variable>
 #include <unordered_map>
 #include <thread>   // For std::thread
+#include <atomic>
 
 #include "Common/CommonTypes.h"
 #include "Common/Net/Resolve.h"
