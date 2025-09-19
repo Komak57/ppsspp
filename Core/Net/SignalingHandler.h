@@ -31,6 +31,17 @@ enum class SigCmd : u8 {
 	FinishedAck = 0x08,
 };
 
+enum SignalingCommand : u32 {
+	Ping,
+	Pong,
+	Connect,
+	ConnectAck,
+	Confirm,
+	Finished,
+	FinishedAck,
+	Info,
+};
+
 static constexpr auto REPEAT_CONNECT_DELAY = std::chrono::milliseconds(200);
 static constexpr auto REPEAT_PING_DELAY = std::chrono::milliseconds(500);
 static constexpr auto REPEAT_FINISHED_DELAY = std::chrono::milliseconds(500);
@@ -75,7 +86,7 @@ struct signaling_packet {
 	u32 version = SIGNALING_VERSION;
 	u64 timestamp_sender;
 	u64 timestamp_receiver;
-	SigCmd command;
+	SignalingCommand command;
 	u32 sent_addr;
 	u16 sent_port;
 	SceNpId npid;
@@ -100,7 +111,7 @@ struct ContextState {
 
 	std::chrono::steady_clock::time_point last_activity{};
 	// optionally track expected next step for sanity/timeouts
-	std::optional<SigCmd> expected_next{};
+	std::optional<SignalingCommand> expected_next{};
 };
 
 class signaling_handler {

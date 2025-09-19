@@ -21,7 +21,7 @@ void signaling_handler::start(u32 conn_id, u32 addr, u16 port) {
 	std::scoped_lock lk(mtx_);
 	// Send Connect?
 	auto& sent_packet = sig_packet;
-	sent_packet.command = SigCmd::Connect;
+	sent_packet.command = SignalingCommand::Connect;
 	sent_packet.timestamp_sender = get_micro_timestamp(std::chrono::steady_clock::now());
 
 	std::shared_ptr<signaling_info> si = sig_peers.at(conn_id);
@@ -244,15 +244,17 @@ void signaling_handler::dispatch_packet(const u8* buf, size_t len, const sockadd
 
 	//switch (cmd) {
 	//case SigCmd::Ping:        handle_ping(*sp, src); break;
-	//case SigCmd::Pong:        handle_pong(*sp); break;
-	//case SigCmd::Info:        handle_info(*sp, src); break;
-	//case SigCmd::Connect:     handle_connect(*sp, src); break;
-	//case SigCmd::ConnectAck:  handle_connect_ack(*sp); break;
-	//case SigCmd::Confirm:     handle_confirm(*sp, src); break;
-	//case SigCmd::Finished:    handle_finished(*sp, src); break;
-	//case SigCmd::FinishedAck: handle_finished_ack(*sp); break;
-	//default: break;
-	//}
+	switch (sp->command) {
+	case SignalingCommand::Ping:        handle_ping(sp, msg.src_addr, msg.src_port); break;
+	case SignalingCommand::Pong:        handle_pong(sp); break;
+	case SignalingCommand::Connect:     handle_connect(sp, msg.src_addr, msg.src_port); break;
+	case SignalingCommand::ConnectAck:  handle_connect_ack(sp, msg.src_addr, msg.src_port); break;
+	case SignalingCommand::Confirm:     handle_confirm(sp, msg.src_addr, msg.src_port); break;
+	case SignalingCommand::Finished:    handle_finished(sp, msg.src_addr, msg.src_port); break;
+	case SignalingCommand::FinishedAck: handle_finished_ack(sp); break;
+	case SignalingCommand::Info:        handle_info(sp, msg.src_addr, msg.src_port); break;
+	default: break;
+	}
 }
 
 void signaling_handler::handle_ping(const signaling_packet* sp, u32 op_addr, u32 op_port) {
@@ -260,7 +262,7 @@ void signaling_handler::handle_ping(const signaling_packet* sp, u32 op_addr, u32
 	//touch_ctx(in.context_id);
 
 	//signaling_packet out = in;
-	//out.command = static_cast<u8>(SigCmd::Pong);
+	//out.command = static_cast<u8>(SignalingCommand::Pong);
 	//send_signaling_packet(out, src.sin_addr.s_addr, _byteswap_ushort(src.sin_port));
 	//// optionally callback
 	//u32_le args[NpMatching2Args::MAX_ARGS];
@@ -270,7 +272,7 @@ void signaling_handler::handle_ping(const signaling_packet* sp, u32 op_addr, u32
 	// Get signaling info for user to know if we should even bother looking further
 	auto si = get_signaling_ptr(sp);
 
-	sent_packet.command = SigCmd::Pong;
+	sent_packet.command = SignalingCommand::Pong;
 	sent_packet.timestamp_sender = sp->timestamp_sender;
 
 	send_signaling_packet(sent_packet, op_addr, op_port);
@@ -281,7 +283,7 @@ void signaling_handler::handle_pong(const signaling_packet* sp) {
 	//update_rtt(sp->timestamp_sender);
 	const auto now = std::chrono::steady_clock::now();
 	auto si = get_signaling_ptr(sp);
-	//reschedule_packet(si, SigCmd::Ping, now + 10s);
+	//reschedule_packet(si, SignalingCommand::Ping, now + 10s);
 }
 
 void signaling_handler::handle_info(const signaling_packet* in, u32 op_addr, u32 op_port) {
