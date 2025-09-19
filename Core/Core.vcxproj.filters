@@ -1429,6 +1429,9 @@
     <ClCompile Include="Net\Buffer.cpp">
       <Filter>Net</Filter>
     </ClCompile>
+    <ClCompile Include="Dialog\PSPHtmlViewer.cpp">
+      <Filter>Dialog</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ELF\ElfReader.h">
@@ -2313,6 +2316,9 @@
     </ClInclude>
     <ClInclude Include="HLE\HttpTypes.h">
       <Filter>HLE</Filter>
+    </ClInclude>
+    <ClInclude Include="Dialog\PSPHtmlViewer.h">
+      <Filter>Dialog</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
