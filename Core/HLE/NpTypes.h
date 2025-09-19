@@ -15,6 +15,8 @@
 #pragma pack(push,1)
 #define SCE_NP_DEFINED
 
+const u32 SCE_NP_PORT = 3658;
+
 // Based on https://playstationdev.wiki/psvitadevwiki/index.php?title=Error_Codes
 #define	SCE_NP_ERROR_ALREADY_INITIALIZED				0x80550001
 #define	SCE_NP_ERROR_NOT_INITIALIZED					0x80550002

@@ -22,6 +22,7 @@
 //	std::string Host;
 //	u32_le IPAddr = 910526074; // 910526074 || 0x3645867a || 54.69.134.122 || elb001-mtc-ag09.mtc.usw2.np.cy.s0.playstation.net
 //};
+const u32 SCE_RPCN_PORT = 3657;
 constexpr int RPCN_HEADER_SIZE = 15;
 //constexpr int COMMUNICATION_ID_SIZE = (9 + 3);
 
