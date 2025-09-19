@@ -56,6 +56,8 @@
 #include "Core/Dialog/PSPNpSigninDialog.h"
 #include "Core/Dialog/PSPScreenshotDialog.h"
 #include <Core\Dialog\PSPHtmlViewer.h>
+#include <Core\Net\SignalingHandler.h>
+#include "sceNp.h"
 
 #define PSP_AV_MODULE_AVCODEC     0
 #define PSP_AV_MODULE_SASCORE     1

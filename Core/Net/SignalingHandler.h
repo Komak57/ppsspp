@@ -14,6 +14,7 @@
 #include <Core/Net/NPAgent.h>
 
 #include "Common/Net/SocketCompat.h"
+#include "Core/HLE/SocketManager.h"
 #include <Core/Util/BlockAllocator.h>
 
 constexpr s32 VPORT_0_HEADER_SIZE = sizeof(u16) + sizeof(u8); // u16 vport(LE) + u8 subset
@@ -123,8 +124,8 @@ public:
 	static void print_interfaces();
 	static u64 get_micro_timestamp(const std::chrono::steady_clock::time_point& time_point);
 	// DEBUGGING
-	bool connect();
-	bool connect(const std::string& host, u16 port, u64 scope);
+	bool create_connection();
+	bool destroy_connection();
 	void connect(u32 conn_id, u32 addr, u16 port);
 	void stop();
 
@@ -137,6 +138,7 @@ public:
 
 	// send helpers (you already have an implementation; we call into it)
 	void send_signaling_packet(signaling_packet& sp, u32 addr, u16 port) const;
+	bool send_packet_ipv4(const std::vector<u8>& data, u32 addr, u16 port) const;
 
 	// Signal Triggers
 	void UserJoinedRoom(net::RPCNResponse resp);
@@ -154,9 +156,19 @@ public:
 	void UserKickedGUI(net::RPCNResponse resp);
 	void QuickMatchCompleteGUI(net::RPCNResponse resp);
 	
+	std::vector<std::vector<u8>> get_rpcn_msgs() {
+		std::vector<std::vector<u8>> msgs;
+		{
+			std::lock_guard lock(mtx_);
+			msgs = std::move(rpcn_msgs);
+			rpcn_msgs.clear();
+		}
+		return msgs;
+	}
 private:
 	void recv_loop();
-	void dispatch_packet(const u8* buf, size_t len, const sockaddr_in& src);
+	void ping_loop(s64* user_id, u32* local_addr);
+	void dispatch_packet(signaling_message msg);
 
 	void handle_ping(const signaling_packet* sp, u32 op_addr, u32 op_port);
 	void handle_pong(const signaling_packet* sp);
@@ -179,12 +191,12 @@ private:
 private:
 	std::atomic<bool> running_{ false };
 	std::thread recv_thread_;
+	std::thread ping_thread_;
 
-	SOCKET sock_{ 0 };
-	sockaddr_in6 remote_addr;
 	u64 scope;
 
 	mutable std::mutex mtx_;
+	std::vector<std::vector<u8>> rpcn_msgs{};
 	std::unordered_map<u32, ContextState> contexts_;
 	std::map<std::chrono::steady_clock::time_point, queued_packet> qpackets; // (wakeup time, packet)
 	std::atomic<u32> next_ctx_{ 1 }; // simple monotonic id

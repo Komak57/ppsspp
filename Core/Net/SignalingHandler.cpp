@@ -5,7 +5,9 @@
 #include <Core/Util/PortManager.h>
 #include "Core/HLE/sceNp.h"
 #include "Core/HLE/sceNp2.h"
-#include "Core/HLE/SocketManager.h"
+#include <Core/HLE/proAdhoc.h>
+#include <Core/HLE/NetInetConstants.h>
+#include <Core/HLE/sceNetInet.cpp>
 
 signaling_handler::signaling_handler() {}
 signaling_handler::~signaling_handler() { stop(); }
@@ -42,19 +44,90 @@ void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
 void signaling_handler::stop() {
 	if (!running_.exchange(false)) return;
 
-	// IMPORTANT: close socket first → unblock recvfrom → join
-	if (sock_ != INVALID_SOCKET) {
-		//freeaddrinfo(res);
-		::closesocket(sock_);
-		sock_ = INVALID_SOCKET;
-	}
-
 	if (recv_thread_.joinable())
 		recv_thread_.join();
 
+	destroy_connection();
 	// optional: clear contexts after all callbacks are done
 	std::scoped_lock lk(mtx_);
 	contexts_.clear();
+}
+
+bool signaling_handler::create_connection() {
+	// Get the InetSocket object from the socket manager
+	auto inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
+	if (inetSocket == nullptr) {
+		WARN_LOG(Log::sceNet, "Creating new socket for port %d", SCE_NP_PORT);
+		//return;
+
+		int socket;
+		int hostErrno = 0;
+		// PSP_NET_INET_AF_INET = 2
+		// PSP_NET_INET_SOCK_CONN_DGRAM = 6
+		// PSP_NET_INET_IPPROTO_UNSPEC = 0
+		// PSP_NET_INET_IPPROTO_UDP = 17
+		inetSocket = g_socketManager.CreateSocket(&socket, &hostErrno, SocketState::UsedNetInet, 2, 6, 0);
+		if (!inetSocket) {
+			ERROR_LOG(Log::sceNet, "Unable to create new socket");
+			return false;
+		}
+
+		// Ignore SIGPIPE when supported (ie. BSD/MacOS)
+		//setSockNoSIGPIPE(inetSocket->sock, 1);
+		// TODO: We should always use non-blocking mode and simulate blocking mode
+		//changeBlockingMode(inetSocket->sock, 1);
+		// Enable Port Re-use, required for multiple-instance
+		//setSockReuseAddrPort(inetSocket->sock);
+		// Disable Connection Reset error on UDP to avoid strange behavior
+		//setUDPConnReset(inetSocket->sock, false);
+
+		inetSocket->state = SocketState::UsedNetInet;
+		inetSocket->port = SCE_NP_PORT;
+
+		bool ok = g_PortManager.Add("UDP", SCE_NP_PORT, SCE_NP_PORT);
+	}
+	// If not running, spin up the recv thread
+	if (!running_.exchange(false))
+		recv_thread_ = std::thread(&signaling_handler::recv_loop, this);
+	return true;
+}
+
+bool signaling_handler::destroy_connection() {
+	auto inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
+	if (inetSocket == nullptr)
+		return true;
+	g_socketManager.Close(inetSocket);
+	g_PortManager.Remove("UDP", SCE_NP_PORT);
+	return true;
+}
+
+bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, u32 addr, u16 port) const {
+	sockaddr_in dest;
+	memset(&dest, 0, sizeof(sockaddr_in));
+	dest.sin_family = AF_INET;
+	dest.sin_addr.s_addr = htonl(addr);
+	dest.sin_port = htons(port);
+
+	char dest_ip_str[16];
+	inet_ntop(AF_INET, &dest.sin_addr, dest_ip_str, sizeof(dest_ip_str));
+
+	INFO_LOG(Log::sceNet, "Sending packet to %s:%d", dest_ip_str, port);
+
+	std::string datahex;
+	HEX_LOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size());
+	auto inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
+	if (!inetSocket) {
+		ERROR_LOG(Log::sceNet, "Socket not found");
+		return false;
+	}
+	int ret = sendto(inetSocket->sock, reinterpret_cast<const char*>(data.data()), data.size(), 0, reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+	int err = errno;
+	if (ret == -1)
+	{
+		return false;
+	}
+	INFO_LOG(Log::sceNet, "Sent %i bytes", ret);
+	return true;
 }
 
 std::shared_ptr<signaling_info> signaling_handler::get_signaling_ptr(const signaling_packet* sp)
@@ -174,6 +247,30 @@ u32 signaling_handler::init_sig2(const SceNpId& npid, u64 room_id, u16 member_id
 	return conn_id;
 }
 
+/*
+	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000000: 00 00 01 53 49 47 4E 03 00 00 00 9A F6 3F B0 00  ...SIGN......?..
+	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000010: 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 47  ...............G
+	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000020: 87 4D CD 0E 49 46 6F 78 4C 6F 76 65 73 59 6F 75  .M..IFoxLovesYou
+	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000030: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000040: 00 00 00 00 00 00 00 00 00 00 00                 ...........
+*/
+// NOTE: this calls your existing send implementation. keep the logging/IPv6 path you showed.
+void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u16 port) const {
+	INFO_LOG(Log::sceNet, "send_signaling_packet(__, %08x, %04x)", addr, port);
+	std::vector<u8> packet(sizeof(signaling_packet) + VPORT_0_HEADER_SIZE);
+	reinterpret_cast<u16_le&>(packet[0]) = 0; // VPort 0 (LE)
+	packet[2] = SUBSET_SIGNALING;
+	//sockaddr_in local_ip;
+	//getLocalIp(&local_ip);
+	sp.sent_addr = addr;
+	sp.sent_port = port;
+	std::memcpy(packet.data() + VPORT_0_HEADER_SIZE, &sp, sizeof(signaling_packet));
+
+	if (!send_packet_ipv4(packet, addr, port)) {
+		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %d.%d.%d.%d:%d", (addr >> 24) & 0xFF, (addr >> 16) & 0xFF, (addr >> 8) & 0xFF, (addr) & 0xFF, port);
+	}
+}
+
 void signaling_handler::sig2_callback(u64 room_id, u16 member_id, SceNpMatching2Event event, s32 error_code) const
 {
 	if (room_id)
@@ -201,49 +298,74 @@ void signaling_handler::sig2_callback(u64 room_id, u16 member_id, SceNpMatching2
 		}
 	}
 }
+
 void signaling_handler::recv_loop() {
 	// single-threaded receive path; no busy wait
+	InetSocket* inetSocket = nullptr;
+	running_ = true;
 	while (running_) {
+		if (!inetSocket) {
+			Sleep(100);
+			inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
+			continue;
+		}
 		u8 buf[1500];
 		sockaddr_in src{};
 		socklen_t slen = sizeof(src);
-		int n = ::recvfrom(sock_, reinterpret_cast<char*>(buf), sizeof(buf), 0,
+		int n = recvfrom(inetSocket->sock, reinterpret_cast<char*>(buf), sizeof(buf), 0,
 			reinterpret_cast<sockaddr*>(&src), &slen);
-		if (n <= 0) {
-			if (!running_) break;
-			// EWOULDBLOCK/WSAEINTR can happen; continue
+		if (n < 0) {
+			ERROR_LOG(Log::sceNet, "Error recvfrom on IPv4 P2P socket: %d", n);
+			Sleep(100);
 			continue;
 		}
-		dispatch_packet(buf, static_cast<size_t>(n), src);
+		if (n < static_cast<s32>(sizeof(u16))) {
+			ERROR_LOG(Log::sceNet, "Malformed packet on P2P port (no vport)");
+			continue;
+	}
+		if (n < VPORT_0_HEADER_SIZE) {
+			ERROR_LOG(Log::sceNet, "Bad vport 0 packet (no subset)");
+			return;
+}
+
+		HEX_LOG(Log::sceNet, "signaling_handler::dispatch_packet", reinterpret_cast<const char*>(buf), n);
+
+	// vport + subset
+		const u16 vport_le = *reinterpret_cast<const u16_le*>(&buf[0]);
+	const u8 subset = buf[2];
+		const auto data_size = n - VPORT_0_HEADER_SIZE;
+		std::vector<u8> vport_0_data;
+		std::copy(std::begin(buf) + VPORT_0_HEADER_SIZE, std::begin(buf) + VPORT_0_HEADER_SIZE + data_size, std::back_inserter(vport_0_data));
+
+		if (vport_le == 0) {
+			switch (subset) {
+			case SUBSET_RPCN:
+				{
+					// push_back to rpcn_msgs
+					std::lock_guard lock(mtx_);
+					rpcn_msgs.push_back(std::move(vport_0_data));
+				}	
+				break;
+			case SUBSET_SIGNALING:
+				{
+					signaling_message msg;
+					msg.src_addr = src.sin_addr.s_addr;
+					msg.src_port = htons(src.sin_port);
+					msg.data = std::move(vport_0_data);
+
+					dispatch_packet(msg);
+				}
+				break;
+			default:
+				ERROR_LOG(Log::sceNet, "Invalid vport 0 subset (%d)", subset);
+				return;
+			}
+		}
 	}
 }
 
-void signaling_handler::dispatch_packet(const u8* buf, size_t len, const sockaddr_in& src) {
-	if (len < VPORT_0_HEADER_SIZE + sizeof(signaling_packet)) return;
-
-	char const hex_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
-	int i;
-	std::string hexdata = "";
-	for (i = 0; i < len; i++) {
-		char const c = buf[i];
-		hexdata += hex_chars[(c & 0xF0) >> 4];
-		hexdata += hex_chars[(c & 0x0F) >> 0];
-	}
-	INFO_LOG(Log::sceNet, "SIGSERV: %s", hexdata.c_str());
-
-	// vport + subset
-	const u16 vport_le = *reinterpret_cast<const u16*>(&buf[0]);
-	const u8 subset = buf[2];
-	if (subset != SUBSET_SIGNALING || vport_le != 0) return;
-
-	const auto* sp = reinterpret_cast<const signaling_packet*>(buf + VPORT_0_HEADER_SIZE);
-	const auto cmd = static_cast<SigCmd>(sp->command);
-
-	//auto op_addr = msg.src_addr;
-	//auto op_port = msg.src_port;
-
-	//switch (cmd) {
-	//case SigCmd::Ping:        handle_ping(*sp, src); break;
+void signaling_handler::dispatch_packet(signaling_message msg) {
+	const auto* sp = reinterpret_cast<const signaling_packet*>(msg.data.data());
 	switch (sp->command) {
 	case SignalingCommand::Ping:        handle_ping(sp, msg.src_addr, msg.src_port); break;
 	case SignalingCommand::Pong:        handle_pong(sp); break;
@@ -310,53 +432,6 @@ void signaling_handler::handle_finished_ack(const signaling_packet* in) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Finished ACK");
 }
 
-// NOTE: this calls your existing send implementation. keep the logging/IPv6 path you showed.
-void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u16 port) const {
-	std::vector<u8> packet(sizeof(signaling_packet) + VPORT_0_HEADER_SIZE);
-	reinterpret_cast<u16&>(packet[0]) = 0; // VPort 0 (LE)
-	packet[2] = SUBSET_SIGNALING;
-	sp.sent_addr = addr;
-	sp.sent_port = port;
-	std::memcpy(packet.data() + VPORT_0_HEADER_SIZE, &sp, sizeof(signaling_packet));
-
-	sockaddr_in dest;
-	memset(&dest, 0, sizeof(sockaddr_in));
-	dest.sin_family = AF_INET;
-	dest.sin_addr.s_addr = addr;
-	dest.sin_port = port;
-
-	char ip_str[16];
-	inet_ntop(AF_INET, &dest.sin_addr, ip_str, sizeof(ip_str));
-
-	DEBUG_LOG(Log::sceNet, "Sending %s packet to %s:%d", sp.command, ip_str, port);
-
-	// Get the InetSocket object from the socket manager
-	int conn_id = 12;
-	InetSocket* inetSocket = g_socketManager.FindSocketByPort(3568);
-	if (inetSocket == nullptr) {
-		ERROR_LOG(Log::sceNet, "Failed to get InetSocket for socket ID %d", conn_id);
-		return;
-	}
-
-	if (::sendto(inetSocket->sock, reinterpret_cast<const char*>(packet.data()), packet.size(), 0, reinterpret_cast<const sockaddr*>(&addr), sizeof(sockaddr_in)) == -1)
-	{
-		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip_str, port);
-		return;
-	}
-	/*if (np::is_ipv6_supported() && np::ip_address_translator::is_ipv6(dest.sin_addr.s_addr))
-	{
-		auto& translator = g_fxo->get<np::ip_address_translator>();
-		const auto addr6 = translator.get_ipv6_sockaddr(dest.sin_addr.s_addr, dest.sin_port);
-
-		if (!send_packet_from_p2p_port_ipv6(packet, addr6))
-			sign_log.error("Failed to send signaling packet to %s:%d", ip_str, port);
-	}
-	else if (!send_packet_from_p2p_port_ipv4(packet, dest))
-	{
-		sign_log.error("Failed to send signaling packet to %s:%d", ip_str, port);
-	}*/
-}
-
 void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	auto notification = resp.stream->get_flatbuffer<NotificationUserJoinedRoom>();
 	if (resp.stream->is_error()) {
@@ -394,7 +469,8 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 
 		// Attempt Signaling
 		//auto& sigh = g_fxo->get<named_thread<signaling_handler>>();
-		const u32 conn_id = init_sig2(npid, room_id, member_id);
+		//const u32 conn_id = init_sig2(npid, room_id, member_id);
+		auto connId = g_signaling.get_always_conn_id(*NpGetNpId());
 		// TODO: Connect to Signaling Server
 		//start(conn_id, addr_p2p, port_p2p);
 		g_signaling.connect(connId, addr_p2p, port_p2p);
