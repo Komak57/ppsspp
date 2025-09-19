@@ -16,7 +16,7 @@ u64 signaling_handler::get_micro_timestamp(const std::chrono::steady_clock::time
 	return std::chrono::duration_cast<std::chrono::microseconds>(time_point.time_since_epoch()).count();
 }
 
-void signaling_handler::start(u32 conn_id, u32 addr, u16 port) {
+void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
 
 	std::scoped_lock lk(mtx_);
 	// Send Connect?
@@ -396,8 +396,8 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		//auto& sigh = g_fxo->get<named_thread<signaling_handler>>();
 		const u32 conn_id = init_sig2(npid, room_id, member_id);
 		// TODO: Connect to Signaling Server
-		start(conn_id, addr_p2p, port_p2p);
-		notifySignalingHandler(room_id, member_id, 0, 0, SCE_NP_MATCHING2_OKAY, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, 0);
+		//start(conn_id, addr_p2p, port_p2p);
+		g_signaling.connect(connId, addr_p2p, port_p2p);
 	}
 	//auto ctx = get_ctx(resp.header.reqId);
 	const u32 event_key = 0;// get_event_key();
@@ -590,6 +590,7 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomMessageReceived notification");
 		return;
 	}
+	//g_signaling.start(connId, (u32)0x0202A8C0, 3657);
 
 	const u32 event_key = 0; //get_event_key();
 	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);

@@ -125,7 +125,7 @@ public:
 	// DEBUGGING
 	bool connect();
 	bool connect(const std::string& host, u16 port, u64 scope);
-	void start(u32 conn_id, u32 addr, u16 port);
+	void connect(u32 conn_id, u32 addr, u16 port);
 	void stop();
 
 	std::shared_ptr<signaling_info> get_signaling_ptr(const signaling_packet* sp);
