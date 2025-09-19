@@ -148,7 +148,7 @@ static void HEX_LOG(Log level, const char* source, const char* data, size_t len,
 		return;
 	}
 
-	INFO_LOG(level, "%s: ==Hex Data==", source);
+	DEBUG_LOG(level, "%s: ==Hex Data==", source);
 
 	for (size_t i = 0; i < len; i += 16) {
 		if ((int)i > limit)
@@ -178,7 +178,7 @@ static void HEX_LOG(Log level, const char* source, const char* data, size_t len,
 		line[offset] = '\0';
 
 		// Log the full line
-		INFO_LOG(level, "%s", line);
+		DEBUG_LOG(level, "%s", line);
 	}
 }
 
