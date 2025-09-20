@@ -766,3 +766,4 @@ namespace net {
 }
 
 extern std::unique_ptr<net::NPAuthAgent> npAuthServer;
+extern net::NPAgent* npServer;
