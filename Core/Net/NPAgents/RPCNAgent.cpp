@@ -183,8 +183,7 @@ namespace net {
 				ping[0] = 1;
 				//ping.emplace(ping.begin() + 1, _user_id);
 				//ping.emplace(ping.begin() + 9, +local_addr);
-				s64 _user_id = user_id;
-				write_to_ptr<s64_le>(ping, 1, user_id.load());
+				write_to_ptr<s64_le>(ping, 1, id_sig.load());
 				write_to_ptr<u32_be>(ping, 9, addr_sig.load());
 				return ping;
 			};
