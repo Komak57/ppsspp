@@ -26,6 +26,7 @@
 #include <Core/Util/BlockAllocator.h>
 
 extern std::recursive_mutex npMatching2EvtMtx;
+extern net::NPAgent* npServer;
 extern BlockAllocator np_memory;
 
 /*sceNpMatching2RequestCallback = (
