@@ -25,14 +25,14 @@
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/ErrorCodes.h"
 #include "Core/HLE/FunctionWrappers.h"
+#include "Core/HLE/sceNp.h"
 #include "Core/HLE/sceNp2.h"
+#include "Core/HLE/sceNetResolver.h"
 #include <Core/Net/NPAgent.h>
-#include "sceNetResolver.h"
 #include "Core/Net/SignalingHandler.h"
-#include "sceNp.h"
-#include "sceKernelMemory.h"
+#include "Core/HLE/sceKernelMemory.h"
 #include "Core/Net/fb_helpers.h"
-#include "proAdhoc.h"
+#include "Core/HLE/proAdhoc.h"
 //#include "NpMatchingContext.h"
 //#include "Np2SignalingHandler.h"
 
