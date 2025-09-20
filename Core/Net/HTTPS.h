@@ -32,7 +32,12 @@ public:
 	mbedtls_x509_crt caCert;
 	// For UDP retransmissions
 	mbedtls_timing_delay_context timerCtx;
-	//mbedtls_ssl_session session;
+	mbedtls_ssl_session session;
+};
+class HTTPS_Session {
+public:
+	bool hasSession = false;
+	mbedtls_ssl_session* session;
 };
 
 class HTTPS {

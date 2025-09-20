@@ -249,6 +249,7 @@ static int sceHttpDeleteConnection(int connectionID) {
 	const auto& conn = (HTTPConnection*)httpObjects.find(connectionID)->second.get();
 
 	conn->Disconnect();
+	conn->DestroySession(connectionID);
 	//httpObjects.erase(httpObjects.begin() + connectionID - 1);
 	httpObjects.erase(connectionID);
 	return 0;
@@ -469,6 +470,7 @@ static int sceHttpCreateConnection(int templateID, const char *hostString, const
 	//conn->InitializeSSL();
 	//conn->Connect();
 	httpObjects[objId] = conn;
+	conn->InitSession(objId);
 	return hleLogDebug(Log::sceNet, objId);
 }
 

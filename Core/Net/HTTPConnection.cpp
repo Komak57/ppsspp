@@ -14,8 +14,7 @@
 #include "Common/Net/URL.h"
 #include "Common/File/FileDescriptor.h"
 
-bool hasSession = false;
-mbedtls_ssl_session session;
+std::map<int, HTTPS_Session> sessions;
 
 HTTPTemplate::HTTPTemplate(const char* userAgent, int httpVer, int autoProxyConf) {
 	this->userAgent = userAgent ? userAgent : "";
@@ -71,6 +70,13 @@ HTTPConnection::HTTPConnection(int templateID, const char* hostString, const cha
 	}
 }
 
+void HTTPConnection::InitSession(int connectionID) {
+	sessions[connectionID].session = &tls.session;
+}
+void HTTPConnection::DestroySession(int connectionID) {
+	sessions.erase(connectionID);
+}
+
 HTTPConnection::~HTTPConnection() {
 	WARN_LOG(Log::sceNet, "HTTPConnection::~HTTPConnection(templateID: %i)", this->templateID);
 	// NOTE: Do not clean up and free SSL resources here. The entire parent collapses on destruction.
@@ -79,7 +85,6 @@ HTTPConnection::~HTTPConnection() {
 
 void HTTPConnection::Disconnect() {
 	if (tls.enabled) {
-		hasSession = false;
 	}
 }
 
@@ -110,15 +115,15 @@ bool HTTPConnection::Resolve(const char* host, int port, net::DNSType type) {
 	return true;
 }
 
-bool HTTPConnection::Connect(int maxTries, double timeout, bool* cancelConnect) {
+bool HTTPConnection::Connect(int connectionID, int maxTries, double timeout, bool* cancelConnect) {
 	if (tls.enabled)
-		return SSLConnect(maxTries, timeout, cancelConnect);
+		return SSLConnect(connectionID, maxTries, timeout, cancelConnect);
 	WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 	_dbg_assert_(!tls.enabled);
 	return hleLogError(Log::sceNet, false, "HTTP Not Supported Yet");
 }
 
-bool HTTPConnection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
+bool HTTPConnection::SSLConnect(int connectionID, int maxTries, double timeout, bool* cancelConnect) {
 	WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 	if (port <= 0) {
 		ERROR_LOG(Log::IO, "SSLConnect - Bad port");
@@ -180,9 +185,9 @@ bool HTTPConnection::SSLConnect(int maxTries, double timeout, bool* cancelConnec
 			mbedtls_ssl_set_bio(&tls.sslCtx, &tls.netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
 
 			// Reload Session
-			if (hasSession) {
+			if (sessions.find(connectionID) != sessions.end() && sessions[connectionID].hasSession) {
 				NOTICE_LOG(Log::HTTP, "HTTPRequest::HTTPRequest() - Re-Enabling TLS Session");
-				mbedtls_ssl_set_session(&tls.sslCtx, &session);
+				mbedtls_ssl_set_session(&tls.sslCtx, sessions[connectionID].session);
 			}
 
 			/*
@@ -229,8 +234,11 @@ bool HTTPConnection::SSLConnect(int maxTries, double timeout, bool* cancelConnec
 			INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
 			connected = true;
 			// Save session for recycle
-			mbedtls_ssl_get_session(&tls.sslCtx, &session);
-			hasSession = true;
+			if (sessions.find(connectionID) != sessions.end()) {
+				mbedtls_ssl_get_session(&tls.sslCtx, sessions[connectionID].session);
+				sessions[connectionID].hasSession = true;
+			}
+
 			return true;
 		retry:
 			INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
@@ -426,7 +434,7 @@ int HTTPRequest::readData(u32 destDataPtr, u32 size) {
 }
 
 int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
-	SSLConnect();
+	SSLConnect(connectionID);
 	// FIXME: Probably doesn't adhere to the new requestHeaders format
 	if (postDataSize > 0)
 		requestHeaders["Content-Length"] = std::to_string(postDataSize);

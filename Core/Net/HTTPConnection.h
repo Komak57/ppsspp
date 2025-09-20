@@ -88,6 +88,7 @@ protected:
 	bool connected = false;
 	u32 lastError = 0;
 	addrinfo* resolved_ = nullptr;
+
 public:
 	HTTPConnection() {}
 	HTTPConnection(int templateID, const char* hostString, const char* scheme, u32 port, int enableKeepalive);
@@ -95,9 +96,11 @@ public:
 
 	virtual const char* className() override { return name_HTTPConnection; }
 	bool Resolve(const char* host, int port, net::DNSType type);
-	bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
-	bool SSLConnect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
+	bool Connect(int connectionID, int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
+	bool SSLConnect(int connectionID, int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 	void Disconnect();
+	void InitSession(int connectionID);
+	void DestroySession(int connectionID);
 
 	int getTemplateID() { return templateID; }
 	const std::string getHost() { return hostString; }
