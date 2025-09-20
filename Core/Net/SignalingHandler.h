@@ -193,8 +193,6 @@ private:
 	std::thread recv_thread_;
 	std::thread ping_thread_;
 
-	u64 scope;
-
 	mutable std::mutex mtx_;
 	std::vector<std::vector<u8>> rpcn_msgs{};
 	std::unordered_map<u32, ContextState> contexts_;
