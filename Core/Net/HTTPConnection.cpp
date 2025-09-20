@@ -14,6 +14,9 @@
 #include "Common/Net/URL.h"
 #include "Common/File/FileDescriptor.h"
 
+bool hasSession = false;
+mbedtls_ssl_session session;
+
 HTTPTemplate::HTTPTemplate(const char* userAgent, int httpVer, int autoProxyConf) {
 	this->userAgent = userAgent ? userAgent : "";
 	this->httpVer = (SceHttpVersion)httpVer;
@@ -76,6 +79,7 @@ HTTPConnection::~HTTPConnection() {
 
 void HTTPConnection::Disconnect() {
 	if (tls.enabled) {
+		hasSession = false;
 	}
 }
 
@@ -125,10 +129,8 @@ bool HTTPConnection::SSLConnect(int maxTries, double timeout, bool* cancelConnec
 	// Currently doesn't function as desired.
 	if (connected) {
 		ResetSSL();
-		mbedtls_ssl_set_session(&tls.sslCtx, &tls.session);
 		connected = false;
 	}
-
 
 	auto start_time = std::chrono::high_resolution_clock::now();
 	auto end_time = std::chrono::high_resolution_clock::now();
@@ -177,6 +179,12 @@ bool HTTPConnection::SSLConnect(int maxTries, double timeout, bool* cancelConnec
 
 			mbedtls_ssl_set_bio(&tls.sslCtx, &tls.netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
 
+			// Reload Session
+			if (hasSession) {
+				NOTICE_LOG(Log::HTTP, "HTTPRequest::HTTPRequest() - Re-Enabling TLS Session");
+				mbedtls_ssl_set_session(&tls.sslCtx, &session);
+			}
+
 			/*
 			 * 4. Handshake
 			 */
@@ -221,7 +229,8 @@ bool HTTPConnection::SSLConnect(int maxTries, double timeout, bool* cancelConnec
 			INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
 			connected = true;
 			// Save session for recycle
-			mbedtls_ssl_get_session(&tls.sslCtx, &tls.session);
+			mbedtls_ssl_get_session(&tls.sslCtx, &session);
+			hasSession = true;
 			return true;
 		retry:
 			INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
@@ -244,8 +253,8 @@ HTTPRequest::HTTPRequest(int connectionID, int method, const char* url, u64 cont
 	this->contentLength = contentLength;
 
 	if (tls.enabled) {
-		NOTICE_LOG(Log::HTTP, "HTTPRequest::HTTPRequest() - Re-Enabling TLS Session");
-		mbedtls_ssl_set_session(&this->tls.sslCtx, &this->tls.session);
+		//NOTICE_LOG(Log::HTTP, "HTTPRequest::HTTPRequest() - Re-Enabling TLS Session");
+		//mbedtls_ssl_set_session(&this->tls.sslCtx, &this->tls.session);
 	}
 
 	// Note: LittleBigPlanet onlu passed the path (ie. /LITTLEBIGPLANETPSP_XML/login?) during sceHttpCreateRequest without the host domain, thus will need to be construced into a valid URI using the data from sceHttpCreateConnection upon validating/parsing the URL.
