@@ -74,3 +74,6 @@
 [submodule "ext/flatbuffers"]
 	path = ext/flatbuffers
 	url = https://github.com/google/flatbuffers.git
+[submodule "Windows/wolfssl"]
+	path = Windows/wolfssl
+	url = https://github.com/wolfSSL/wolfssl.git
