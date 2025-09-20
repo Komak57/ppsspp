@@ -240,13 +240,20 @@ jobs:
           cxx: clang++
           args: ./b-ios.sh
           id: ios
-
+          
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-
+        
+    - name: Build mbedTLS
+      run:
+        git clone https://github.com/Mbed-TLS/mbedtls.git
+        cd mbedtls
+        mkdir build && cd build
+        cmake -DENABLE_TESTING=OFF -DENABLE_PROGRAMS=OFF --build .
+        
     - name: Fetch tags for macOS releases
       if: runner.os == 'macOS'
       # This is required for git describe --always to work for git-version.cpp.
