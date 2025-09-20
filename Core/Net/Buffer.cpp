@@ -8,6 +8,7 @@
 #endif
 
 #include "Common/File/FileDescriptor.h"
+#include "Core/HLE/sceKernel.h"
 #include "Common/Log.h"
 #include "Core/Net/Buffer.h"
 #include "Common/TimeUtil.h"
@@ -29,7 +30,7 @@ namespace core {
 		}
 	}
 
-	bool Buffer::FlushSocketSSL(HTTPS_Config* tls, double timeout, bool* cancelled) {
+	bool Buffer::FlushSocketSSL(HTTPS_Config2* tls, double timeout, bool* cancelled) {
 		static constexpr float CANCEL_INTERVAL = 0.25f;
 
 		data_.iterate_blocks([&](const char* data, size_t size) {
@@ -39,13 +40,13 @@ namespace core {
 				while (!ready) {
 					if (cancelled && *cancelled)
 						return false;
-					ready = fd_util::WaitUntilReady(tls->netCtx.fd, CANCEL_INTERVAL, true);
+					ready = fd_util::WaitUntilReady(tls->sockfd, CANCEL_INTERVAL, true);
 					if (!ready && time_now_d() > endTimeout) {
 						ERROR_LOG(Log::IO, "FlushSocket timed out");
 						return false;
 					}
 				}
-				int sent = mbedtls_ssl_write(&tls->sslCtx, (const unsigned char*)data + pos, end - pos);
+				int sent = wolfSSL_write(tls->sslCtx, data + pos, end - pos);
 				//int sent = send(sock, &data[pos], end - pos, MSG_NOSIGNAL);
 				// TODO: Do we need some retry logic here, instead of just giving up?
 				if (sent <= 0) {
@@ -179,7 +180,7 @@ namespace core {
 	//	return ret;
 	//}
 
-	int Buffer::Read(int fd, size_t sz, HTTPS_Config* tls) {
+	int Buffer::Read(int fd, size_t sz, HTTPS_Config2* tls) {
 		static constexpr float CANCEL_INTERVAL = 0.25f;
 		//char buf[4096];
 		char* buf = new char[sz];
@@ -190,7 +191,7 @@ namespace core {
 			int toRead = (int)std::min(sz, sizeof(buf));
 			if (tls != nullptr) {
 				DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
-				retval = mbedtls_ssl_read(&tls->sslCtx, (unsigned char*)buf, toRead);
+				retval = wolfSSL_read(tls->sslCtx, buf, toRead);
 				int ready = 0;
 				if (retval < 0) {
 					switch (retval) {

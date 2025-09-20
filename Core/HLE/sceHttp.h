@@ -21,7 +21,10 @@
 #include <condition_variable>
 #include "Core/HLE/HttpTypes.h"
 
+class PointerWrap;
+
 void __HttpInit();
 void __HttpShutdown();
+void __httpsDoState(PointerWrap &p);
 
 void Register_sceHttp();

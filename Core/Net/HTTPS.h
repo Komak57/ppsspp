@@ -12,6 +12,8 @@
 #include <mbedtls/timing.h>
 #include <mbedtls/debug.h>
 #include <mbedtls/error.h>
+#include <wolfssl/options.h>
+#include <wolfssl/ssl.h>
 
 const int legacy_ciphersuites_array[] = {
 MBEDTLS_TLS_RSA_WITH_3DES_EDE_CBC_SHA,  // DES-CBC3-SHA
@@ -35,10 +37,30 @@ public:
 	mbedtls_ssl_session session;
 };
 
+class HTTPS_Config2 {
+public:
+	bool enabled = false;
+
+	int sockfd = -1;                 // TCP socket (like mbedtls_net_context)
+
+	WOLFSSL_CTX* sslConfig = nullptr; // global SSL/TLS configuration
+	WOLFSSL* sslCtx = nullptr;       // per-connection SSL/TLS state
+
+	WC_RNG rng;                      // RNG (replaces ctr_drbg + entropy)
+
+	WOLFSSL_SESSION* session = nullptr; // optional, for session resumption
+};
+
+
+class https_sesh {
+public:
+	mbedtls_ssl_session sesh;
+};
 class HTTPS {
 public:
 	int InitializeSSL(std::string certPEM = "");
 	void ResetSSL();
+	void ResetSession();
 
 	bool GetOption(int id) {
 		auto it = this->httpsOptions.find(id);
@@ -47,8 +69,8 @@ public:
 		return it->second;
 	}
 public:
-	HTTPS_Config tls;
-
+	//HTTPS_Config tls;
+	HTTPS_Config2 tls;
 	std::unordered_map<int, bool> httpsOptions;
 
 	int useCookie = 0;

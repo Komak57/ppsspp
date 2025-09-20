@@ -5,6 +5,7 @@
 #include <Common/CommonTypes.h>
 #include <Common/Net/Resolve.h>
 #include <Common/Net/SocketCompat.h>
+#include<future>
 
 // Just a holder for class names
 static const char* name_HTTPTemplate = "HTTPTemplate";
@@ -15,6 +16,11 @@ static const char* name_HTTPRequest = "HTTPRequest";
 constexpr const char* DEFAULT_USERAGENT = "PPSSPP";
 constexpr const char* HTTP_VERSION = "1.1";
 struct addrinfo;
+
+class test : public HTTPS {
+public:
+	static mbedtls_ssl_session savedsesh;
+};
 
 class HTTPTemplate : public HTTPS {
 protected:
@@ -98,6 +104,8 @@ public:
 	bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 	bool SSLConnect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 	void Disconnect();
+
+	bool handshake_async(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 
 	int getTemplateID() { return templateID; }
 	const std::string getHost() { return hostString; }

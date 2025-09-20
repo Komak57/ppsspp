@@ -541,6 +541,8 @@ void __RegDoState(PointerWrap &p) {
 	Do(p, g_openCategories);
 }
 
+
+
 // Registry level (it seems only /system can exist, so kinda pointless)
 int sceRegOpenRegistry(u32 regParamAddr, int mode, u32 regHandleAddr) {
 	// There's only one registry and its handle is 0.

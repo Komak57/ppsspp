@@ -1,0 +1,12 @@
+^C:\USERS\ZMBKILLA\SOURCE\REPOS\PPSSPP-\EXT\WOLFCRYPT\SRC\AES_ASM.ASM
+ml64.exe /c /Zi /Fo"C:\Users\zmbkilla\source\repos\ppsspp-\Windows\..\ext\wolfssl\lib\x64_Debug\aes_asm.obj" wolfcrypt\src\aes_asm.asm
+^C:\USERS\ZMBKILLA\SOURCE\REPOS\PPSSPP-\EXT\WOLFCRYPT\SRC\AES_GCM_ASM.ASM
+ml64.exe /c /Zi /Fo"C:\Users\zmbkilla\source\repos\ppsspp-\Windows\..\ext\wolfssl\lib\x64_Debug\aes_gcm_asm.obj" wolfcrypt\src\aes_gcm_asm.asm
+^C:\USERS\ZMBKILLA\SOURCE\REPOS\PPSSPP-\EXT\WOLFCRYPT\SRC\AES_XTS_ASM.ASM
+ml64.exe /c /Zi /Fo"C:\Users\zmbkilla\source\repos\ppsspp-\Windows\..\ext\wolfssl\lib\x64_Debug\aes_xts_asm.obj" wolfcrypt\src\aes_xts_asm.asm
+^C:\USERS\ZMBKILLA\SOURCE\REPOS\PPSSPP-\EXT\WOLFCRYPT\SRC\CHACHA_ASM.ASM
+ml64.exe /c /Zi /Fo"C:\Users\zmbkilla\source\repos\ppsspp-\Windows\..\ext\wolfssl\lib\x64_Debug\chacha_asm.obj" wolfcrypt\src\chacha_asm.asm
+^C:\USERS\ZMBKILLA\SOURCE\REPOS\PPSSPP-\EXT\WOLFCRYPT\SRC\POLY1305_ASM.ASM
+ml64.exe /c /Zi /Fo"C:\Users\zmbkilla\source\repos\ppsspp-\Windows\..\ext\wolfssl\lib\x64_Debug\poly1305_asm.obj" wolfcrypt\src\poly1305_asm.asm
+^C:\USERS\ZMBKILLA\SOURCE\REPOS\PPSSPP-\EXT\WOLFCRYPT\SRC\SP_X86_64_ASM.ASM
+ml64.exe /c /Zi /Fo"C:\Users\zmbkilla\source\repos\ppsspp-\Windows\..\ext\wolfssl\lib\x64_Debug\sp_x86_64_asm.obj" wolfcrypt\src\sp_x86_64_asm.asm

@@ -525,7 +525,7 @@ namespace net {
 		}
 
 		// Only to be used for bring-up and debugging.
-		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
+		uintptr_t sock() const { if (tls.enabled) return tls.sockfd; else return sock_; }
 
 		u32 worldInfoPtr;
 		std::vector<SceNpMatching2World> worlds;
@@ -644,7 +644,7 @@ namespace net {
 		virtual int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) = 0;
 
 		// Only to be used for bring-up and debugging.
-		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
+		uintptr_t sock() const { if (tls.enabled) return tls.sockfd; else return sock_; }
 		bool IsConnected() { return connected; }
 		std::string GetOnlineName() {
 			return online_name;

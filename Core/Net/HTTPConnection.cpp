@@ -6,13 +6,23 @@
 #include <chrono>
 #include <thread>
 #include <sstream>
+#include<future>
 
 #include "Core/HLE/HLE.h"
+#include "Core/Core.h"
+#include "Core/HLE/sceKernel.h"
+#include"Core/HLE/sceKernelThread.h"
 #include "Core/MemMap.h"
 #include "Core/HLE/sceKernelMemory.h"
 #include "Core/Debugger/MemBlockInfo.h"
 #include "Common/Net/URL.h"
 #include "Common/File/FileDescriptor.h"
+#include <wolfssl/options.h>
+#include <wolfssl/ssl.h>
+
+int doneload = 0;
+test testsesh;
+mbedtls_ssl_session test::savedsesh= { 0 };
 
 HTTPTemplate::HTTPTemplate(const char* userAgent, int httpVer, int autoProxyConf) {
 	this->userAgent = userAgent ? userAgent : "";
@@ -61,10 +71,10 @@ HTTPConnection::HTTPConnection(int templateID, const char* hostString, const cha
 	this->port = port;
 	this->enableKeepalive = enableKeepalive;
 	if (strcmp(scheme, "https") == 0) {
-		this->tls = HTTPS_Config();
+		this->tls = HTTPS_Config2();
 		Resolve(hostString, port, net::DNSType::IPV4);
 		InitializeSSL();
-		mbedtls_ssl_conf_ciphersuites(&tls.sslConfig, legacy_ciphersuites_array);
+		wolfSSL_CTX_set_cipher_list(tls.sslConfig, "DES-CBC3-SHA:RC4-MD5:RC4-SHA");
 	}
 }
 
@@ -114,124 +124,190 @@ bool HTTPConnection::Connect(int maxTries, double timeout, bool* cancelConnect) 
 	return hleLogError(Log::sceNet, false, "HTTP Not Supported Yet");
 }
 
+//bool HTTPConnection::handshake_async(int maxTries, double timeout, bool* cancelConnect) {
+//	auto start_time = std::chrono::high_resolution_clock::now();
+//	auto end_time = std::chrono::high_resolution_clock::now();
+//	long long duration_ms = 0;
+//	int ret;
+//	NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
+//	start_time = std::chrono::high_resolution_clock::now();
+//	while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
+//		if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
+//			char errbuf[128];
+//			mbedtls_strerror(ret, errbuf, sizeof(errbuf));
+//			ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
+//			//goto retry;
+//			return false;
+//		}
+//		std::this_thread::sleep_for(std::chrono::seconds(1));
+//	}
+//	end_time = std::chrono::high_resolution_clock::now();
+//	duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+//	if (duration_ms > 100)
+//		ERROR_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+//	else if (duration_ms > 60)
+//		WARN_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+//	else
+//		NOTICE_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+//	return true;
+//}
+
+std::future<int> connection_result_future;
+
 bool HTTPConnection::SSLConnect(int maxTries, double timeout, bool* cancelConnect) {
-	WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+	WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::SSLConnect(%i, %f, %p)", maxTries, timeout, cancelConnect);
+
 	if (port <= 0) {
 		ERROR_LOG(Log::IO, "SSLConnect - Bad port");
 		lastError = SCE_HTTP_ERROR_NETWORK;
 		return false;
 	}
-	// This will only occur if we pass the tls pointer correctly
-	// Currently doesn't function as desired.
-	if (connected) {
-		ResetSSL();
-		mbedtls_ssl_set_session(&tls.sslCtx, &tls.session);
-		connected = false;
-	}
 
-
-	auto start_time = std::chrono::high_resolution_clock::now();
-	auto end_time = std::chrono::high_resolution_clock::now();
-	long long duration_ms = 0;
 	for (int tries = maxTries; tries > 0; --tries) {
-		mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig);
 		for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
 			if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
 				continue;
 
-			int ret;
-			/*
-			 * 1. Start the connection
-			 */
 			char addrStr[128]{};
-			memset(addrStr, 0, 128);
 			FormatAddr(addrStr, sizeof(addrStr), possible);
 			if (strncmp(addrStr, "0.0.0.0", 8) == 0) {
 				ERROR_LOG(Log::sceNet, "SSLConnect - Cannot connect to loopback.");
 				return false;
 			}
+
 			char portStr[8]{};
-			memset(portStr, 0, 8);
-			memcpy(portStr, std::to_string(port).c_str(), std::to_string(port).length());
-			if ((ret = mbedtls_net_connect(&tls.netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
-				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", addrStr, portStr, (unsigned int)-ret);
-				goto retry;
-			}
-			// Set NonBlocking
-			fd_util::SetNonBlocking(tls.netCtx.fd, true);
-			/*
-			 * 2. Setup stuff
-			 */
-			if ((ret = mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig)) != 0) {
-				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_setup returned 0x%04x", ret);
-				goto retry;
+			snprintf(portStr, sizeof(portStr), "%d", port);
+
+			// 1. Connect TCP socket
+			int sockfd = socket(possible->ai_family, possible->ai_socktype, possible->ai_protocol);
+			if (sockfd < 0) {
+				ERROR_LOG(Log::sceNet, "SSLConnect - socket() failed");
+				continue;
 			}
 
-			//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
-			if ((ret = mbedtls_ssl_set_hostname(&tls.sslCtx, host.c_str())) != 0) {
-				char errbuf[128];
-				mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
-				goto retry;
+			if (connect(sockfd, possible->ai_addr, possible->ai_addrlen) < 0) {
+				ERROR_LOG(Log::sceNet, "SSLConnect - connect() failed");
+				close(sockfd);
+				continue;
 			}
 
-			mbedtls_ssl_set_bio(&tls.sslCtx, &tls.netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
+			// Set nonblocking if needed
+			fd_util::SetNonBlocking(sockfd, true);
 
-			/*
-			 * 4. Handshake
-			 */
+			// 2. Create SSL object
+			tls.sslCtx = wolfSSL_new(tls.sslConfig);
+			if (!tls.sslCtx) {
+				ERROR_LOG(Log::sceNet, "SSLConnect - wolfSSL_new() failed");
+				close(sockfd);
+				continue;
+			}
+
+			wolfSSL_set_fd(tls.sslCtx, sockfd);
+
+			// 3. Hostname verification (SNI)
+			if (wolfSSL_check_domain_name(tls.sslCtx, host.c_str()) != SSL_SUCCESS) {
+				WARN_LOG(Log::sceNet, "SSLConnect - could not set SNI/hostname");
+			}
+#ifdef WOLFSSL_DES3
+			printf("DES3 enabled in this build\n");
+#else
+			printf("DES3 NOT enabled\n");
+#endif
+
+#ifdef WOLFSSL_RC4
+			printf("RC4 is enabled in this build\n");
+#else
+			printf("RC4 is NOT enabled\n");
+#endif
+
+#ifdef WOLFSSL_ENCRYPT_THEN_MAC
+			printf("eh");
+#else
+			printf("he");
+#endif
+
+			wolfSSL_CTX_SetMinVersion(tls.sslConfig, WOLFSSL_TLSV1);
+			INFO_LOG(Log::sceNet, "Ciphers: \n %i", wolfSSL_get_ciphers);
+			
+			// Force legacy cipher suites
+			char* legacyCipherstest = "DES-CBC3-SHA:RC4-SHA:RC4-MD5";
+			char test = wolfSSL_get_ciphers(legacyCipherstest, strlen(legacyCipherstest));
+			const char* legacyCiphers = "DES-CBC3-SHA";
+			if (wolfSSL_CTX_set_cipher_list(tls.sslConfig, legacyCiphers) != WOLFSSL_SUCCESS) {
+				return hleLogError(Log::sceNet, -1, "Failed to set legacy cipher list");
+			}
+
+			// 4. Resume session if available
+			if (tls.session) {
+				if (wolfSSL_set_session(tls.sslCtx, tls.session) != SSL_SUCCESS) {
+					WARN_LOG(Log::sceNet, "SSLConnect - Failed to resume session, continuing");
+				}
+			}
+
+			
+
+			// 5. TLS Handshake
 			NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
-			start_time = std::chrono::high_resolution_clock::now();
-			while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
-				if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-					char errbuf[128];
-					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
+			auto start_time = std::chrono::high_resolution_clock::now();
+
+			int ret;
+			while ((ret = wolfSSL_connect(tls.sslCtx)) != SSL_SUCCESS) {
+				int err = wolfSSL_get_error(tls.sslCtx, ret);
+				if (err != SSL_ERROR_WANT_READ && err != SSL_ERROR_WANT_WRITE) {
+					ERROR_LOG(Log::sceNet, "SSLConnect - wolfSSL_connect failed: %d", err);
+					wolfSSL_free(tls.sslCtx);
+					tls.sslCtx = nullptr;
+					close(sockfd);
 					goto retry;
 				}
+				// yield thread if needed
+				SceUID thread = __KernelGetCurThread();
+				if (!KernelIsThreadWaiting(thread)) {
+					__KernelResumeThreadFromWait(thread, 0);
+				}
 			}
-			end_time = std::chrono::high_resolution_clock::now();
-			duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+
+			auto end_time = std::chrono::high_resolution_clock::now();
+			long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 			if (duration_ms > 100)
-				ERROR_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+				ERROR_LOG(Log::sceNet, "SSLConnect - Handshake took %lldms", duration_ms);
 			else if (duration_ms > 60)
-				WARN_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+				WARN_LOG(Log::sceNet, "SSLConnect - Handshake took %lldms", duration_ms);
 			else
-				NOTICE_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
-			// Fake latency
-			//std::this_thread::sleep_for(std::chrono::milliseconds(60 - duration_ms));
-			/*
-			 * 5. Verify the server certificate
-			 */
-			 // HTTPS Option 28 may relate to disabling this check
+				NOTICE_LOG(Log::sceNet, "SSLConnect - Handshake took %lldms", duration_ms);
+
+			// 6. Verify certificate
 			if (GetOption(28)) {
-				NOTICE_LOG(Log::sceNet, "SSLConnect - Verifying peer X.509 certificate...");
-
-				/* In real life, we probably want to bail out when ret != 0 */
-				u32 flags;
-				if ((flags = mbedtls_ssl_get_verify_result(&tls.sslCtx)) != 0) {
-					char vrfy_buf[512];
-
-					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
-
-					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
-					goto retry;
+				const WOLFSSL_X509* cert = wolfSSL_get_peer_certificate(tls.sslCtx);
+				if (cert != nullptr) {
+					// Peer certificate exists
+					INFO_LOG(Log::sceNet, "SSLConnect - Peer certificate received");
+				}
+				else {
+					WARN_LOG(Log::sceNet, "SSLConnect - No peer certificate received");
 				}
 			}
+
+
+			// 7. Save session
+			tls.session = wolfSSL_get_session(tls.sslCtx);
+
 			INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
 			connected = true;
-			// Save session for recycle
-			mbedtls_ssl_get_session(&tls.sslCtx, &tls.session);
+			doneload = 1;
 			return true;
+
 		retry:
 			INFO_LOG(Log::sceNet, "SSLConnect - Connection Failed, retrying");
 			ResetSSL();
 			continue;
 		}
 	}
+
 	lastError = SCE_HTTP_ERROR_PARSE_HTTP_NOT_FOUND;
 	return false;
 }
+
 
 HTTPRequest::HTTPRequest(int connectionID, int method, const char* url, u64 contentLength) : progress(&cancelled) {
 	// Copy base data as initial base value for this
@@ -245,7 +321,8 @@ HTTPRequest::HTTPRequest(int connectionID, int method, const char* url, u64 cont
 
 	if (tls.enabled) {
 		NOTICE_LOG(Log::HTTP, "HTTPRequest::HTTPRequest() - Re-Enabling TLS Session");
-		mbedtls_ssl_set_session(&this->tls.sslCtx, &this->tls.session);
+		//this->tls.session = test::savedsesh;
+		wolfSSL_set_session(this->tls.sslCtx, this->tls.session);
 	}
 
 	// Note: LittleBigPlanet onlu passed the path (ie. /LITTLEBIGPLANETPSP_XML/login?) during sceHttpCreateRequest without the host domain, thus will need to be construced into a valid URI using the data from sceHttpCreateConnection upon validating/parsing the URL.
@@ -388,7 +465,7 @@ int HTTPRequest::readData(u32 destDataPtr, u32 size) {
 		INFO_LOG(Log::sceNet, "ReadResponseEntity - Reading %i bytes of the %i bytes remaining", pack, remainingLength);
 		int ret;
 		if (tls.enabled)
-			ret = readbuf.Read(tls.netCtx.fd, pack, &tls);
+			ret = readbuf.Read(tls.sockfd, sizeof(pack), &tls);
 		else
 			ret = readbuf.Read(fd, pack, nullptr);
 		if (ret < 0) {
@@ -416,16 +493,32 @@ int HTTPRequest::readData(u32 destDataPtr, u32 size) {
 	return sz;
 }
 
+std::map<u32, std::shared_ptr<HTTPConnection>> conn;
+
 int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
+	//auto request_ptr = std::static_pointer_cast<HTTPConnection>(httpObjects.find(templateID)->second);
+	//std::future<bool> async_result = std::async(std::launch::async, [&]() {
+	//	return request_ptr->SSLConnect();
+	//	if (async_result.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+	//	}
+	//	
+	//	});
+
 	SSLConnect();
+	while (!connected) {
+
+	}
+	//std::thread worker([&]() {return SSLConnect(); });
+	//worker.detach();
+
 	// FIXME: Probably doesn't adhere to the new requestHeaders format
 	if (postDataSize > 0)
 		requestHeaders["Content-Length"] = std::to_string(postDataSize);
 	const std::string delimiter = "\r\n";
 	const std::string extraHeaders = std::accumulate(requestHeaders.begin(), requestHeaders.end(), std::string(),
 		[delimiter](const std::string& s, const std::pair<const std::string, std::string>& p) {
-		return s + p.first + ": " + p.second + delimiter;
-	});
+			return s + p.first + ": " + p.second + delimiter;
+		});
 
 	Url fileUrl(this->fullURL);
 	if (!fileUrl.Valid()) {
@@ -501,7 +594,7 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 	int content_length = 0;
 	int eoh;
 	while (true) {
-		int retval = readbuf.Read(tls.netCtx.fd, toRead, &tls);
+		int retval = readbuf.Read(tls.sockfd, toRead, &tls);
 		if (cancelled)
 			return SCE_HTTP_ERROR_ABORTED;
 		if (retval < 0)

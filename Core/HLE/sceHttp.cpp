@@ -21,6 +21,7 @@
 #include <mutex>
 #include <algorithm>
 #include <cctype> // for std::tolower
+#include<future>
 
 #include "Core/HLE/sceHttp.h"
 #include "Core/Net/HTTPConnection.h"
@@ -34,13 +35,19 @@
 #include "Common/LogReporting.h"
 #include "Common/Net/URL.h"
 #include <Common/File/FileDescriptor.h>
+#include "Common/Serialize/Serializer.h"
+#include "Common/Serialize/SerializeMap.h"
 
 std::map<u32, std::shared_ptr<HTTPTemplate>> httpObjects;
+std::map<u32, std::shared_ptr<HTTPRequest>> httpreq;
 static std::mutex httpLock;
 
 bool httpInited = false;
 bool httpsInited = false;
 bool httpCacheInited = false;
+
+int test1;
+int test2;
 
 u32 NextObjectID() {
 	if (httpObjects.empty())
@@ -65,6 +72,14 @@ void __HttpShutdown() {
 			(static_cast<HTTPRequest*>(it.second.get()))->abortRequest();
 	}
 	httpObjects.clear();
+}
+
+void __httpsDoState(PointerWrap& p) {
+	auto s = p.Section("sceReg", 0, 1);
+	if (!s)
+		return;
+	Do(p, test1);
+	Do(p, test2);
 }
 
 // id: ID of the template or connection
@@ -169,7 +184,13 @@ static int sceHttpReadData(int requestID, u32 dataPtr, u32 dataSize) {
 	//DEBUG_LOG(Log::HTTP, "Entity remaining: size = %d / %d", req->getResponseRemainingContentLength(), req->getResponseContentLength());
 	//if (req->getResponseContentLength()) == 0)
 	//	return hleLogError(SCENET, SCE_HTTP_ERROR_NO_CONTENT_LENGTH, "no content length");
-	int retval = req->readData(dataPtr, dataSize);
+	int retval;
+	//retval = req->readData(dataPtr, dataSize);
+	std::thread worker([&]() {retval = req->readData(dataPtr, dataSize); });
+	while (retval<1 && retval>-1) {
+		//i hope this doesnt cause issues
+	}
+	worker.join();
 	if (retval < 0)
 		return hleLogError(Log::sceNet, retval, "Invalid Data Response");
 
@@ -183,9 +204,9 @@ static int sceHttpReadData(int requestID, u32 dataPtr, u32 dataSize) {
 		DataToHexString(10, 0, data, retval, &datahex);
 		DEBUG_LOG(Log::HTTP, "Data Dump (%d bytes):\n%s", retval, datahex.c_str());*/
 	}
-
+	test1 = retval;
 	// Faking latency to slow down download progressbar, since we currently downloading the full content at once instead of in chunk per sceHttpReadData's dataSize
-	return hleDelayResult(hleLogDebug(Log::sceNet, retval), "fake read data latency", 5000);
+	return hleDelayResult(hleLogDebug(Log::sceNet, retval), "fake read data latency", 1);
 }
 
 // FIXME: JPCSP didn't do anything other than appending the data into internal buffer, does sceHttpSendRequest can be called multiple times before using sceHttpGetStatusCode or sceHttpReadData? any game do this?
@@ -208,6 +229,24 @@ static int sceHttpSendRequest(int requestID, u32 dataPtr, u32 dataSize) {
 		retval = req->sendSSLRequest(dataPtr, dataSize);
 	else*/
 		retval = req->sendRequest(dataPtr, dataSize);
+	//const auto& request_template = (HTTPRequest*)httpreq.find(requestID)->second.get();
+	//u32 postDataPtr = dataPtr;
+	//u32 postDataSize = dataSize;
+	//auto request_ptr = std::static_pointer_cast<HTTPRequest>(httpObjects.find(requestID)->second);
+	//std::future<int> async_result = std::async(std::launch::async, [&]() {
+	//	// This code runs on the new thread
+	//	return request_ptr->sendRequest(dataPtr, dataSize);
+	//
+	//	//std::thread worker([&]() {retval = req->sendRequest(dataPtr, dataSize); });
+	//	//worker.detach();
+	//	test2 = retval;
+	//	if (async_result.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+	//		// Get the result. This will not block because the future is ready.
+	//		retval = async_result.get();
+	//	}
+	//	
+	//	});
+		test2 = retval;
 	return hleLogDebug(Log::sceNet, retval);
 }
 

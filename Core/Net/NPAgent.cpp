@@ -251,7 +251,7 @@ namespace net {
 			}
 			int sent;
 			if (tls.enabled) {
-				sent = mbedtls_ssl_write(&tls.sslCtx, packet->Data() + pos, end - pos);
+				int sent = wolfSSL_write(tls.sslCtx, packet->Data() + pos, end - pos);
 				// TODO: Do we need some retry logic here, instead of just giving up?
 				if (sent <= 0) {
 					switch (sent) {
@@ -329,7 +329,7 @@ namespace net {
 			}
 			if (tls.enabled) {
 				DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
-				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
+				int retval = wolfSSL_read(tls.sslCtx, buf, toRead);
 
 				if (*cancelled) {
 					WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");
@@ -424,7 +424,7 @@ namespace net {
 			}
 			int sent;
 			if (tls.enabled) {
-				sent = mbedtls_ssl_write(&tls.sslCtx, packet->Data() + pos, end - pos);
+				int sent = wolfSSL_write(tls.sslCtx, packet->Data() + pos, end - pos);
 				// TODO: Do we need some retry logic here, instead of just giving up?
 				if (sent <= 0) {
 					switch (sent) {
@@ -496,7 +496,7 @@ namespace net {
 			}
 			if (tls.enabled) {
 				DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
-				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
+				int retval = wolfSSL_read(tls.sslCtx, buf, toRead);
 
 				if (*cancelled) {
 					WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");

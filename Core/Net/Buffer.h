@@ -25,13 +25,13 @@ namespace core {
 
 	class Buffer : public net::Buffer {
 	public:
-		bool FlushSocketSSL(HTTPS_Config* tls, double timeout, bool* cancelled = nullptr);
+		bool FlushSocketSSL(HTTPS_Config2* tls, double timeout, bool* cancelled = nullptr);
 
 		int ReadAllWithProgress(int fd, int knownSize, RequestProgress* progress, HTTPS_Config* tls);
 
 		// < 0: error
 		// >= 0: number of bytes read
-		int Read(int fd, size_t sz, HTTPS_Config* tls);
+		int Read(int fd, size_t sz, HTTPS_Config2* tls);
 		int ReadHTML(int fd, HTTPS_Config* tls);
 	};
 

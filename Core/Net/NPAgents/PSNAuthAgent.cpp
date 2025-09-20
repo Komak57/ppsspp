@@ -45,11 +45,13 @@ namespace net {
 
 
 	bool PSNAuthAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
-		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %f, %p)", maxTries, timeout, cancelConnect);
+
 		std::string certPem = "-----BEGIN CERTIFICATE-----\n"
 			"\n"
 			"-----END CERTIFICATE-----\n";
-		InitializeSSL(certPem);
+		//InitializeSSL(certPem);
+		InitializeSSL();
 
 		if (port_ <= 0) {
 			ERROR_LOG(Log::IO, "Connect - Bad port");
@@ -57,103 +59,95 @@ namespace net {
 		}
 		if (connected) {
 			return true;
-			/*mbedtls_ssl_session_reset(&tls.sslCtx);
-			mbedtls_ssl_config_free(&tls.sslConfig);
-
-			mbedtls_ssl_free(&tls.sslCtx);
-			mbedtls_net_free(&tls.netCtx);
-			tls.connected = false;*/
 		}
 
-
 		for (int tries = maxTries; tries > 0; --tries) {
-			mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig);
 			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
 				if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
 					continue;
 
-				int ret;
-				/*
-				 * 1. Start the connection
-				 */
-				char* ip_address = new char[128];
-				inet_ntop(possible->ai_family, &((sockaddr_in*)possible->ai_addr)->sin_addr, ip_address, 128);
-				char portStr[8]{};
-				memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
-				if ((ret = mbedtls_net_connect(&tls.netCtx, ip_address, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
-					char errbuf[128];
-					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call failed with -0x%04x (%s))", ip_address, portStr, ret, errbuf);
-					goto sslretry;
-				}
-				// Set NonBlocking
-				fd_util::SetNonBlocking(tls.netCtx.fd, true);
-				/*
-				 * 2. Setup stuff
-				 */
-				if ((ret = mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig)) != 0) {
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_setup returned 0x%04x", ret);
-					goto sslretry;
+				int sockfd = socket(possible->ai_family, possible->ai_socktype, possible->ai_protocol);
+				if (sockfd < 0) {
+					ERROR_LOG(Log::sceNet, "Connect - socket() failed");
+					continue;
 				}
 
-				//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
-				if ((ret = mbedtls_ssl_set_hostname(&tls.sslCtx, host_.c_str())) != 0) {
-					char errbuf[128];
-					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
-					goto sslretry;
+				char ip_address[128]{};
+				inet_ntop(possible->ai_family, &((sockaddr_in*)possible->ai_addr)->sin_addr, ip_address, sizeof(ip_address));
+
+				sockaddr* addr = possible->ai_addr;
+				socklen_t addrlen = possible->ai_addrlen;
+				if (connect(sockfd, addr, addrlen) < 0) {
+					ERROR_LOG(Log::sceNet, "Connect - connect() failed");
+					close(sockfd);
+					continue;
 				}
 
-				mbedtls_ssl_set_bio(&tls.sslCtx, &tls.netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
+				fd_util::SetNonBlocking(sockfd, true);
 
-				/*
-				 * 4. Handshake
-				 */
+				// Create SSL object
+				tls.sslCtx = wolfSSL_new(tls.sslConfig);
+				if (!tls.sslCtx) {
+					ERROR_LOG(Log::sceNet, "Connect - wolfSSL_new() failed");
+					close(sockfd);
+					continue;
+				}
+
+				tls.sockfd = sockfd;
+				wolfSSL_set_fd(tls.sslCtx, sockfd);
+
+				// SNI / hostname
+				if (wolfSSL_check_domain_name(tls.sslCtx, host_.c_str()) != SSL_SUCCESS) {
+					WARN_LOG(Log::sceNet, "Connect - could not set SNI/hostname");
+				}
+
+				// TLS Handshake
 				NOTICE_LOG(Log::sceNet, "Connect - Performing the SSL/TLS handshake...");
-
-				while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
-					if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-						char errbuf[128];
-						mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
+				int ret;
+				while ((ret = wolfSSL_connect(tls.sslCtx)) != SSL_SUCCESS) {
+					int err = wolfSSL_get_error(tls.sslCtx, ret);
+					if (err != SSL_ERROR_WANT_READ && err != SSL_ERROR_WANT_WRITE) {
+						ERROR_LOG(Log::sceNet, "Connect - wolfSSL_connect failed: %d", err);
+						wolfSSL_free(tls.sslCtx);
+						tls.sslCtx = nullptr;
+						close(sockfd);
 						goto sslretry;
 					}
 				}
 
-				/*
-				 * 5. Verify the server certificate
-				 */
-				 // HTTPS Option 28 may relate to disabling this check
-				NOTICE_LOG(Log::sceNet, "Connect - Verifying peer X.509 certificate...");
-
-				/* In real life, we probably want to bail out when ret != 0 */
-				u32 flags;
-				if ((flags = mbedtls_ssl_get_verify_result(&tls.sslCtx)) != 0) {
-					char vrfy_buf[512];
-
-					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
-
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
-					goto sslretry;
+				// Verify certificate
+				if (GetOption(28)) {
+					const WOLFSSL_X509* cert = wolfSSL_get_peer_certificate(tls.sslCtx);
+					if (cert != nullptr) {
+						INFO_LOG(Log::sceNet, "Connect - Peer certificate received");
+					}
+					else {
+						WARN_LOG(Log::sceNet, "Connect - No peer certificate received");
+					}
 				}
+
+				// Save session
+				tls.session = wolfSSL_get_session(tls.sslCtx);
 
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful");
 				connected = true;
 				return true;
+
 			sslretry:
 				INFO_LOG(Log::sceNet, "Connect - Connection Failed, retrying");
-				mbedtls_ssl_session_reset(&tls.sslCtx);
-				mbedtls_ssl_config_free(&tls.sslConfig);
-
-				mbedtls_ssl_free(&tls.sslCtx);
-				mbedtls_net_free(&tls.netCtx);
-
+				if (tls.sslCtx) {
+					wolfSSL_free(tls.sslCtx);
+					tls.sslCtx = nullptr;
+				}
+				if (sockfd >= 0) close(sockfd);
 				continue;
 			}
 			sleep_ms(1, "connect");
 		}
+
 		return false;
 	}
+
 	/*
 		22:37:312 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:185 net::PSNAuthAgent::GetServers - Title ID: NPWR01446_00
 		22:37:312 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:206 net::PSNAuthAgent::GetServers - Agent-FQDN#1 ID: 1

@@ -106,7 +106,7 @@
       <PreprocessorDefinitions>_CRTDBG_MAP_ALLOC;USING_WIN_UI;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;WIN32;_ARCH_32=1;_M_IX86=1;_DEBUG;_LIB;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ForcedIncludeFiles>Common/DbgNew.h</ForcedIncludeFiles>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>../ext/OpenXR-SDK/include;../ext/glew;../ext/snappy;../ext/glslang;../ext/libpng17;../ext;../ext/zlib;..;../ext/zstd/lib;../ext/mbedtls/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../ext/OpenXR-SDK/include;../ext/glew;../ext/snappy;../ext/glslang;../ext/libpng17;../ext;../ext/zlib;..;../ext/zstd/lib;../ext/mbedtls/include;../ext/wolfssl;../ext/wolfssl/wolfcrypt/src</AdditionalIncludeDirectories>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <FloatingPointModel>Precise</FloatingPointModel>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -1006,6 +1006,9 @@
     </ProjectReference>
     <ProjectReference Include="..\ext\mbedtls.vcxproj">
       <Project>{bdc4a507-b7c8-4fdf-acd4-608656e37445}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\ext\wolfssl.vcxproj">
+      <Project>{73973223-5ee8-41ca-8e88-1d60e89a237b}</Project>
     </ProjectReference>
     <ProjectReference Include="..\ext\zlib\zlib.vcxproj">
       <Project>{f761046e-6c38-4428-a5f1-38391a37bb34}</Project>

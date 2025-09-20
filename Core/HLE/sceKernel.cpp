@@ -310,6 +310,7 @@ void __KernelDoState(PointerWrap &p)
 		__UsbMicDoState(p);
 		__RegDoState(p);
 
+		__httpsDoState(p);
 		// IMPORTANT! Add new sections last!
 	}
 

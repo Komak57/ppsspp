@@ -238,10 +238,9 @@ namespace net {
 			"J0bA8B9r2b16KdmcSov97fDQbBgmL+EEaRFfDQq+4WGkWJ+ppw==\n"
 			"-----END CERTIFICATE-----\n";
 		InitializeSSL(certPem);
-		mbedtls_ssl_conf_ciphersuites(&tls.sslConfig, forceCiphers);
-		mbedtls_ssl_conf_max_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
-		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, %p)", maxTries, timeout, cancelConnect);
 		cancelled = false;
+
 		if (port_ <= 0) {
 			ERROR_LOG(Log::IO, "Connect - Bad port");
 			return false;
@@ -251,101 +250,101 @@ namespace net {
 			connected = false;
 		}
 
-
 		auto start_time = std::chrono::high_resolution_clock::now();
 		auto end_time = std::chrono::high_resolution_clock::now();
 		long long duration_ms = 0;
+
 		for (int tries = maxTries; tries > 0; --tries) {
-			mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig);
 			for (addrinfo* possible = resolved_; possible != nullptr; possible = possible->ai_next) {
 				if (possible->ai_family != AF_INET && possible->ai_family != AF_INET6)
 					continue;
 
-				Packet packet = Packet();
+				Packet packet;
 				int ret;
-				/*
-				 * 1. Start the connection
-				 */
-				char* ip_address = new char[128];
-				inet_ntop(possible->ai_family, &((sockaddr_in*)possible->ai_addr)->sin_addr, ip_address, 128);
-				char portStr[8]{};
-				memcpy(portStr, std::to_string(port_).c_str(), std::to_string(port_).length());
-				if ((ret = mbedtls_net_connect(&tls.netCtx, ip_address, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
-					char errbuf[128];
-					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call failed with -0x%04x (%s))", ip_address, portStr, ret, errbuf);
-					goto sslretry;
+
+				// 1. Start TCP connection
+				char ip_address[128]{};
+				inet_ntop(possible->ai_family, &((sockaddr_in*)possible->ai_addr)->sin_addr, ip_address, sizeof(ip_address));
+
+				int sockfd = socket(possible->ai_family, possible->ai_socktype, possible->ai_protocol);
+				if (sockfd < 0) {
+					ERROR_LOG(Log::sceNet, "Connect - socket() failed");
+					continue;
 				}
-				// Set NonBlocking
-				fd_util::SetNonBlocking(tls.netCtx.fd, true);
-				/*
-				 * 2. Setup stuff
-				 */
-				if ((ret = mbedtls_ssl_setup(&tls.sslCtx, &tls.sslConfig)) != 0) {
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_setup returned 0x%04x", ret);
-					goto sslretry;
+				if (connect(sockfd, possible->ai_addr, possible->ai_addrlen) < 0) {
+					ERROR_LOG(Log::sceNet, "Connect - connect() failed");
+					close(sockfd);
+					continue;
 				}
 
-				//if ((ret = mbedtls_ssl_set_hostname(&sslCtx, possible->ai_addr->sa_data)) != 0) {
-				if ((ret = mbedtls_ssl_set_hostname(&tls.sslCtx, host_.c_str())) != 0) {
-					char errbuf[128];
-					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_set_hostname returned -0x%04x (%s)", (unsigned int)-ret, errbuf);
-					goto sslretry;
+				fd_util::SetNonBlocking(sockfd, true);
+
+				// 2. Create SSL object
+				tls.sslCtx = wolfSSL_new(tls.sslConfig);
+				if (!tls.sslCtx) {
+					ERROR_LOG(Log::sceNet, "Connect - wolfSSL_new() failed");
+					close(sockfd);
+					continue;
 				}
 
-				mbedtls_ssl_set_bio(&tls.sslCtx, &tls.netCtx, mbedtls_net_send, mbedtls_net_recv, NULL);
+				wolfSSL_set_fd(tls.sslCtx, sockfd);
 
-				/*
-				 * 4. Handshake
-				 */
+				// 3. Hostname verification (SNI)
+				if (wolfSSL_check_domain_name(tls.sslCtx, host_.c_str()) != SSL_SUCCESS) {
+					WARN_LOG(Log::sceNet, "Connect - could not set SNI/hostname");
+				}
+
+				// 4. Resume session if available
+				if (tls.session) {
+					if (wolfSSL_set_session(tls.sslCtx, tls.session) != SSL_SUCCESS) {
+						WARN_LOG(Log::sceNet, "Connect - Failed to resume session, continuing");
+					}
+				}
+
+				// 5. TLS Handshake
 				NOTICE_LOG(Log::sceNet, "Connect - Performing the SSL/TLS handshake...");
-
 				start_time = std::chrono::high_resolution_clock::now();
-				while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
-					if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-						char errbuf[128];
-						mbedtls_strerror(ret, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
+
+				while ((ret = wolfSSL_connect(tls.sslCtx)) != SSL_SUCCESS) {
+					int err = wolfSSL_get_error(tls.sslCtx, ret);
+					if (err != SSL_ERROR_WANT_READ && err != SSL_ERROR_WANT_WRITE) {
+						ERROR_LOG(Log::sceNet, "Connect - wolfSSL_connect failed: %d", err);
+						wolfSSL_free(tls.sslCtx);
+						tls.sslCtx = nullptr;
+						close(sockfd);
 						goto sslretry;
 					}
 				}
+
 				end_time = std::chrono::high_resolution_clock::now();
 				duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 				if (duration_ms > 100)
-					ERROR_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+					ERROR_LOG(Log::sceNet, "Connect - Handshake took %lldms", duration_ms);
 				else if (duration_ms > 60)
-					WARN_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+					WARN_LOG(Log::sceNet, "Connect - Handshake took %lldms", duration_ms);
 				else
-					NOTICE_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
-				/*
-				 * 5. Verify the server certificate
-				 */
-				 // HTTPS Option 28 may relate to disabling this check
-				NOTICE_LOG(Log::sceNet, "Connect - Verifying peer X.509 certificate...");
+					NOTICE_LOG(Log::sceNet, "Connect - Handshake took %lldms", duration_ms);
 
-				/* In real life, we probably want to bail out when ret != 0 */
-				u32 flags;
-				if ((flags = mbedtls_ssl_get_verify_result(&tls.sslCtx)) != 0) {
-					char vrfy_buf[512];
-
-					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
-
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
-					goto sslretry;
+				// 6. Certificate check (if any)
+				const WOLFSSL_X509* cert = wolfSSL_get_peer_certificate(tls.sslCtx);
+				if (cert) {
+					INFO_LOG(Log::sceNet, "Connect - Peer certificate received");
+				}
+				else {
+					WARN_LOG(Log::sceNet, "Connect - No peer certificate received");
 				}
 
-				INFO_LOG(Log::sceNet, "Connect - Connection Successful. TLS: %s, Cipher: %s", mbedtls_ssl_get_version(&tls.sslCtx), mbedtls_ssl_get_ciphersuite(&tls.sslCtx));
+				// 7. Save session
+				tls.session = wolfSSL_get_session(tls.sslCtx);
+
+				INFO_LOG(Log::sceNet, "Connect - Connection Successful");
 				connected = true;
 
 				// Start reading data
 				start_read_thread();
-				// Get Version Info
-				/*ret = Recv(&packet);
-				if (ret < 0) {
-					ERROR_LOG(Log::sceNet, "Unable to retrieve Version info.");
-				}*/
+
 				return true;
+
 			sslretry:
 				INFO_LOG(Log::sceNet, "Connect - Connection Failed, retrying");
 				ResetSSL();
@@ -353,7 +352,9 @@ namespace net {
 			}
 			sleep_ms(1, "connect");
 		}
+
 		return false;
+
 	}
 
 	int RPCNAgent::Login(const char* npid, const char* token, const char* password) {
