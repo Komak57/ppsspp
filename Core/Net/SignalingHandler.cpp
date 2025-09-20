@@ -475,7 +475,8 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		// TODO: Connect to Signaling Server
 		//start(conn_id, addr_p2p, port_p2p);
 		g_signaling.connect(connId, addr_p2p, port_p2p);
-		notifySignalingHandler(room_id, 0, member_id, 0, SCE_NP_MATCHING2_OKAY, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, 0);
+		
+		notifySignalingHandler(room_id, npServer->GetUserID(), member_id, 0, SCE_NP_MATCHING2_OKAY, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, 0);
 	}
 	//auto ctx = get_ctx(resp.header.reqId);
 	const u32 event_key = 0;// get_event_key();
