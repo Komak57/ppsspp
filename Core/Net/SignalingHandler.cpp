@@ -233,7 +233,7 @@ u32 signaling_handler::init_sig(const SceNpId& npid)
 
 		// Request peer infos from RPCN
 		std::string npid_str(reinterpret_cast<const char*>(npid.handle.data));
-		//req_sign_infos(npid_str, conn_id);
+		npServer->RequestSignalingInfo(npid_str, conn_id);
 	}
 
 	return conn_id;
