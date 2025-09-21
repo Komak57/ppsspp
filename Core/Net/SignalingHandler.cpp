@@ -108,7 +108,7 @@ bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, u32 addr, 
 	dest.sin_addr.s_addr = htonl(addr);
 	dest.sin_port = htons(port);
 
-	INFO_LOG(Log::sceNet, "Sending packet to %s:%d", ip2str(dest.sin_addr).c_str(), port);
+	DEBUG_LOG(Log::sceNet, "Sending packet(%d bytes) to %s:%d", data.size(), ip2str(dest.sin_addr).c_str(), port);
 
 	std::string datahex;
 	HEX_LOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size());
@@ -123,7 +123,7 @@ bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, u32 addr, 
 	{
 		return false;
 	}
-	INFO_LOG(Log::sceNet, "Sent %i bytes", ret);
+	DEBUG_LOG(Log::sceNet, "Sent %i bytes", ret);
 	return true;
 }
 
