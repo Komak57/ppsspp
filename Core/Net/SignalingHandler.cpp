@@ -221,7 +221,7 @@ std::optional<signaling_info> signaling_handler::get_sig_infos(u32 conn_id)
 	return std::nullopt;
 }
 
-u32 signaling_handler::init_sig1(const SceNpId& npid)
+u32 signaling_handler::init_sig(const SceNpId& npid)
 {
 	std::lock_guard lock(mtx_);
 
@@ -240,7 +240,7 @@ u32 signaling_handler::init_sig1(const SceNpId& npid)
 	return conn_id;
 }
 
-u32 signaling_handler::init_sig2(const SceNpId& npid, u64 room_id, u16 member_id)
+u32 signaling_handler::init_sig(const SceNpId& npid, u64 room_id, u16 member_id)
 {
 	std::lock_guard lock(mtx_);
 	u32 conn_id = get_always_conn_id(npid);
