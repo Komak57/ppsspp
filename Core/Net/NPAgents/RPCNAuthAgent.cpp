@@ -450,6 +450,34 @@ namespace net {
 		DEBUG_LOG(Log::sceNet, "Password reset token has successfully been sent!");
 		return 0;
 	}
+
+	int RPCNAuthAgent::ResetPassword(const char* npid, const char* token, const char* password) {
+		Packet packet = Packet();
+		packet.Write(npid);
+		packet.Write((u8)0);
+		packet.Write(token);
+		packet.Write((u8)0);
+		packet.Write(password);
+		packet.Write((u8)0);
+
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::ResetPassword, reqId);
+
+		INFO_LOG(Log::sceNet, "Sending Login Request");
+
+		bool flushed = Send(&packet, 5.0, &cancelled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return false;
+		}
+
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return ErrorToPSPError[resp.error];
+		//resp.stream = new vec_stream(resp.data, 1);
+		DEBUG_LOG(Log::sceNet, "Password has successfully been reset!");
+		return 0;
+	}
 	int RPCNAuthAgent::GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
 		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 

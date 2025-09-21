@@ -33,6 +33,10 @@ namespace net {
 	int PSNAuthAgent::SendResetToken(const char* npid, const char* email) {
 		return 0;
 	}
+
+	int PSNAuthAgent::ResetPassword(const char* npid, const char* token, const char* password) {
+		return 0;
+	}
 	void PSNAuthAgent::Disconnect() {
 		NOTICE_LOG(Log::sceNet, "NPAuthAgent::Disconnect()");
 		cancelled = true;
