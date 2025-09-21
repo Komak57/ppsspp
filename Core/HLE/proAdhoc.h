@@ -856,6 +856,7 @@ bool isPTPPortInUse(uint16_t port, bool forListen, SceNetEtherAddr* dstmac = nul
 
 // Convert IPv4 address to string (Replacement for inet_ntoa since it's getting deprecated)
 std::string ip2str(in_addr in, bool maskPublicIP = true);
+std::string ip2str(u32 addr, bool maskPublicIP = true);
 
 // Convert MAC address to string
 std::string mac2str(const SceNetEtherAddr *mac);

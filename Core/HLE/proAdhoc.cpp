@@ -177,6 +177,18 @@ std::string ip2str(in_addr in, bool maskPublicIP) {
 	return std::string(str);
 }
 
+std::string ip2str(u32 addr, bool maskPublicIP) {
+	char buffer[16];
+#ifdef _DEBUG
+	maskPublicIP = false;
+#endif
+	if (maskPublicIP && !isPrivateIP(addr))
+		sprintf(buffer, "%u.%u.xx.%u", (addr >> 24) & 0xFF, (addr >> 16) & 0xFF, addr & 0xFF);
+	else
+		sprintf(buffer, "%u.%u.%u.%u", (addr >> 24) & 0xFF, (addr >> 16) & 0xFF, (addr >> 8) & 0xFF, addr & 0xFF);
+	return std::string(buffer);
+}
+
 std::string mac2str(const SceNetEtherAddr *mac) {
 	char str[18] = ":::::";
 
