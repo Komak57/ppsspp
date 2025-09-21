@@ -479,7 +479,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		// Attempt Signaling
 		//auto& sigh = g_fxo->get<named_thread<signaling_handler>>();
 		//const u32 conn_id = init_sig2(npid, room_id, member_id);
-		auto connId = g_signaling.get_always_conn_id(*NpGetNpId());
+		auto connId = init_sig(npid, room_id, member_id);
 		// TODO: Connect to Signaling Server
 		//start(conn_id, addr_p2p, port_p2p);
 		g_signaling.connect(connId, addr_p2p, port_p2p);
