@@ -606,13 +606,13 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 roomId, u32
 	}
 	
 	// Write Connection Status to connStatus
-	Memory::WriteUnchecked_U32(SCE_NP_SIGNALING_CONN_STATUS_ACTIVE, connStatus);
+	Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_ACTIVE, connStatus);
 	// Write IPAddress to peerAddr
-
+	auto peerAddr = PSPPointer<np_in_addr>::Create(peerAddrPtr);
+	peerAddr->np_s_addr = si->addr;
 	//Memory::WriteUnchecked_U32(npServer->GetConnAddr(), peerAddr);
-	Memory::WriteUnchecked_U32(npServer->GetSigAddr(), peerAddr);
 	// Write Port to peerPort
-	Memory::WriteUnchecked_U32(npServer->GetSigPort(), peerPort);
+	Memory::Write_U16(si->port, peerPortPtr);
 
 	return 0;
 }
