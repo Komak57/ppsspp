@@ -5,6 +5,7 @@
 #include <Common/File/FileDescriptor.h>
 #include "Core/MemMapHelpers.h"
 #include <Core/Net/SignalingHandler.h>
+#include <Core\HLE\proAdhoc.h>
 
 using namespace std::literals::chrono_literals;
 
@@ -541,6 +542,10 @@ namespace net {
 		avatar_url = resp.stream->get_string(false);
 		user_id = resp.stream->get<s64>();
 
+		// FIXME: May need to be moved to a standalone thread
+		// RPCS3 has only 1 connection perpetually active
+		// As such, it has additional functions in sceNp that
+		//  trigger signaling to start
 		if (g_signaling.create_connection())
 			signal_thread = std::thread(&RPCNAgent::signaling_loop, this);
 		else
