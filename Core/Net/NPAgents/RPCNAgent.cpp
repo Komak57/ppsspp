@@ -5,7 +5,7 @@
 #include <Common/File/FileDescriptor.h>
 #include "Core/MemMapHelpers.h"
 #include <Core/Net/SignalingHandler.h>
-#include <Core\HLE\proAdhoc.h>
+#include <Core/HLE/proAdhoc.h>
 
 using namespace std::literals::chrono_literals;
 
