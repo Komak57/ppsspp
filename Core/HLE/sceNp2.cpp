@@ -1034,6 +1034,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 		SceNpId* npId = NpGetNpId();
 		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp->room_data(), room_info, npId, false, false);
 		// TODO: cache room_info
+		npServer->rooms[room_info->roomId] = *room_info;
 		// TODO: execute signaling callback to update ip/port
 		// TODO: Connect to Signaling Server
 
