@@ -132,6 +132,7 @@ namespace net {
 					return;
 				if (msg.size() == 6)
 				{
+					DEBUG_LOG(Log::sceNet, "RPCN Signal Pong Received");
 					const u32 new_addr_sig = read_from_ptr<u32_le>(&msg[0]);
 					const u16 new_port_sig = read_from_ptr<u16_le>(&msg[4]);
 					const u32 old_addr_sig = addr_sig;
@@ -140,7 +141,7 @@ namespace net {
 					if (new_addr_sig != old_addr_sig)
 					{
 						addr_sig = new_addr_sig;
-						NOTICE_LOG(Log::sceNet, "New P2P IP: %d.%d.%d.%d", (new_addr_sig) & 0xFF, (new_addr_sig >> 8) & 0xFF, (new_addr_sig >> 16) & 0xFF, (new_addr_sig >> 24) & 0xFF);
+						NOTICE_LOG(Log::sceNet, "New P2P IP: %s", ip2str(htonl(new_addr_sig)).c_str());
 						if (old_addr_sig == 0)
 						{
 							// wake thread
@@ -151,7 +152,7 @@ namespace net {
 					if (new_port_sig != old_port_sig)
 					{
 						port_sig = new_port_sig;
-						NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", new_port_sig);
+						NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", htons(new_port_sig));
 						if (old_port_sig == 0)
 						{
 							// wake thread
