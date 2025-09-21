@@ -19,7 +19,7 @@ u64 signaling_handler::get_micro_timestamp(const std::chrono::steady_clock::time
 }
 
 void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
-
+	NOTICE_LOG(Log::sceNet, "Connecting to %d.%d.%d.%d:%d", (addr >> 24) & 0xFF, (addr >> 16) & 0xFF, (addr >> 8) & 0xFF, (addr) & 0xFF, port);
 	std::scoped_lock lk(mtx_);
 	// Send Connect?
 	auto& sent_packet = sig_packet;
