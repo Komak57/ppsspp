@@ -539,6 +539,7 @@ namespace net {
 			return port_sig.load();
 		}
 		std::pair<int, std::optional<SceNpMatching2RoomMemberDataInternal>> GetMember(u32 roomId, u32 memberId);
+		std::pair<int, std::optional<SceNpMatching2RoomMemberDataInternal>> GetSelf(u32 roomId);
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
 
