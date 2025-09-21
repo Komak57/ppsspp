@@ -1037,6 +1037,36 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 		// TODO: execute signaling callback to update ip/port
 		// TODO: Connect to Signaling Server
 
+		// We initiate signaling if necessary
+		if (const auto* signaling_data = resp->signaling_data())
+		{
+			const u64 room_id = resp->room_data()->roomId();
+
+			for (unsigned int i = 0; i < signaling_data->size(); i++)
+			{
+				const auto* signaling_info = signaling_data->Get(i);
+				//ensure(signaling_info->addr());
+
+				const u32 sig_ip = static_cast<u32>(signaling_info->addr()->ip()->Get(0)) << 24 | static_cast<u32>(signaling_info->addr()->ip()->Get(1)) << 16 |
+					static_cast<u32>(signaling_info->addr()->ip()->Get(2)) << 8 | static_cast<u32>(signaling_info->addr()->ip()->Get(3));
+
+				const u32 addr_p2p = htonl(sig_ip);
+				const u16 port_p2p = signaling_info->addr()->port();
+
+				const u16 member_id = signaling_info->member_id();
+				auto [res, member] = npServer->GetMember(room_id, member_id);
+
+				if (res != SCE_NP_MATCHING2_OKAY)
+					continue;
+
+				NOTICE_LOG(Log::sceNet, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(member->userInfo.npId.handle.data), room_id, ip2str(addr_p2p), port_p2p);
+
+				// Attempt Signaling
+				const u32 conn_id = g_signaling.init_sig(member->userInfo.npId, room_id, member_id);
+				g_signaling.connect(conn_id, addr_p2p, port_p2p);
+			}
+		}
+
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, SCE_NP_MATCHING2_OKAY, roomRespPtr);
 	});
 	tasks.emplace(request_id, std::move(task));
