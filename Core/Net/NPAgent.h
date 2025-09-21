@@ -537,7 +537,7 @@ namespace net {
 			std::lock_guard<std::mutex> lock(sig_mutex);
 			return port_sig.load();
 		}
-
+		std::pair<int, std::optional<SceNpMatching2RoomMemberDataInternal>> GetMember(u32 roomId, u32 memberId);
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
 
