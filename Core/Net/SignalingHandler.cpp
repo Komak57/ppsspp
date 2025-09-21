@@ -19,7 +19,7 @@ u64 signaling_handler::get_micro_timestamp(const std::chrono::steady_clock::time
 }
 
 void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
-	NOTICE_LOG(Log::sceNet, "Signaling Connecting to %s:%d", ip2str(addr), port);
+	NOTICE_LOG(Log::sceNet, "Signaling Connecting to %s:%d", ip2str(addr).c_str(), port);
 	std::scoped_lock lk(mtx_);
 	// Send Connect?
 	auto& sent_packet = sig_packet;
@@ -108,7 +108,7 @@ bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, u32 addr, 
 	dest.sin_addr.s_addr = htonl(addr);
 	dest.sin_port = htons(port);
 
-	INFO_LOG(Log::sceNet, "Sending packet to %s:%d", ip2str(dest.sin_addr), port);
+	INFO_LOG(Log::sceNet, "Sending packet to %s:%d", ip2str(dest.sin_addr).c_str(), port);
 
 	std::string datahex;
 	HEX_LOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size());
@@ -312,7 +312,7 @@ void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u1
 	std::memcpy(packet.data() + VPORT_0_HEADER_SIZE, &sp, sizeof(signaling_packet));
 
 	if (!send_packet_ipv4(packet, addr, port)) {
-		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip2str(addr), port);
+		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip2str(addr).c_str(), port);
 	}
 }
 

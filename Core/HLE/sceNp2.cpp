@@ -1058,7 +1058,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 				if (res != SCE_NP_MATCHING2_OKAY)
 					continue;
 
-				NOTICE_LOG(Log::sceNet, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(member->userInfo.npId.handle.data), room_id, ip2str(addr_p2p), port_p2p);
+				NOTICE_LOG(Log::sceNet, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(member->userInfo.npId.handle.data), room_id, ip2str(addr_p2p).c_str(), port_p2p);
 
 				// Attempt Signaling
 				const u32 conn_id = g_signaling.init_sig(member->userInfo.npId, room_id, member_id);
