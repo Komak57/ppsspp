@@ -26,6 +26,9 @@ namespace net {
 		return false;
 	}
 
+	int PSNAuthAgent::ResendToken(const char* npid, const char* password) {
+		return 0;
+	}
 	void PSNAuthAgent::Disconnect() {
 		NOTICE_LOG(Log::sceNet, "NPAuthAgent::Disconnect()");
 		cancelled = true;

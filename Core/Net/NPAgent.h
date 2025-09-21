@@ -673,6 +673,7 @@ namespace net {
 
 		virtual int Login(const char* npid, const char* token, const char* password) = 0;
 		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
+		virtual int ResendToken(const char* npid, const char* password) = 0;
 		virtual int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) = 0;
 
 		// Only to be used for bring-up and debugging.
@@ -720,6 +721,7 @@ namespace net {
 		int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		int ResendToken(const char* npid, const char* password);
 		NPAgentType GetAuthType() const override { return NPAgentType::PSN; }
 	};
 	class RPCNAuthAgent : public NPAuthAgent {
@@ -732,6 +734,7 @@ namespace net {
 		static std::string generate_npid();
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		int ResendToken(const char* npid, const char* password);
 
 		NPAgentType GetAuthType() const override { return NPAgentType::RPCN; }
 		void start_read_thread();
