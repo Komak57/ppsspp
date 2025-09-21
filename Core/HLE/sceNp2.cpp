@@ -1101,7 +1101,7 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		auto req = PSPPointer<SceNpMatching2LeaveRoomRequest>::Create(reqParamPtr);
-		u64 roomId = 0;
+		u64 roomId = req->roomId;
 		int ret = npServer->LeaveRoom(req, &roomId);
 
 		// TODO: execute signaling callback to update users
