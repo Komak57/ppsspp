@@ -1212,10 +1212,15 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 		auto req = PSPPointer<SceNpMatching2SetRoomDataInternalRequest>::Create(reqParamPtr);
 
 		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
+		
 
 		int ret;
 		if ((ret = npServer->SetRoomDataInternal(req)) != 0)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, ret), 0);
+
+		auto [r, self] = npServer->GetSelf(req->roomId);
+		if (r == 0)
+			g_signaling.init_sig(self->userInfo.npId);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, SCE_NP_MATCHING2_OKAY, 0);
 	});
