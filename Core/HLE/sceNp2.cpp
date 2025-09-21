@@ -1033,10 +1033,8 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 
 		SceNpId* npId = NpGetNpId();
 		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp->room_data(), room_info, npId, false, false);
-		// TODO: cache room_info
+		// Cache room_info
 		npServer->rooms[room_info->roomId] = *room_info;
-		// TODO: execute signaling callback to update ip/port
-		// TODO: Connect to Signaling Server
 
 		// We initiate signaling if necessary
 		if (const auto* signaling_data = resp->signaling_data())
@@ -1104,7 +1102,7 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32
 		u64 roomId = req->roomId;
 		int ret = npServer->LeaveRoom(req, &roomId);
 
-		// TODO: execute signaling callback to update users
+		// Execute signaling callback to update users
 		g_signaling.DisconnectUsers(roomId);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);
@@ -1181,7 +1179,7 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 }
 
 /* Incomplete - Unconfirmed. Similar to sceNpMatching2SetRoomDataInternal
- * @param reqParamPtr ?
+ * @param reqParamPtr SceNpMatching2SetRoomDataExternalRequest containing External room information?
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
@@ -1244,7 +1242,6 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 
 		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 		
-
 		int ret;
 		if ((ret = npServer->SetRoomDataInternal(req)) != 0)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, ret), 0);
