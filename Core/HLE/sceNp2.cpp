@@ -579,14 +579,32 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 	return 0; // error returns 0x80550004
 }
 
-static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 roomId, u32 memberId, u32 connStatus, u32 peerAddr, u32 peerPort) {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08X, %08X, %08X, %08X, %08X) at %08x", __FUNCTION__, ctxId, roomId, memberId, connStatus, peerAddr, peerPort, currentMIPS->pc);
+static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 roomId, u32 memberId, u32 connStatus, u32 peerAddrPtr, u32 peerPortPtr) {
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08X, %08X, %08X, %08X, %08X) at %08x", __FUNCTION__, ctxId, roomId, memberId, connStatus, peerAddrPtr, peerPortPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
 	if (connStatus == 0 || !Memory::IsValidAddress(connStatus))
 		return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
 
+	auto [ret, member] = npServer->GetMember(roomId, memberId);
+	if (ret < 0) {
+		Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connStatus);
+		return hleLogError(Log::sceNet, ret, "Member not found");
+	}
+
+	if (strncmp(NpGetNpId()->handle.data, member->userInfo.npId.handle.data, 16) == 0) {
+		Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connStatus);
+		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_OWN_NP_ID, "Member is Self");
+	}
+	auto connID = g_signaling.get_always_conn_id(member->userInfo.npId);
+
+	auto si = g_signaling.get_sig_infos(connID);
+	if (!si) {
+		Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connStatus);
+		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
+	}
+	
 	// Write Connection Status to connStatus
 	Memory::WriteUnchecked_U32(SCE_NP_SIGNALING_CONN_STATUS_ACTIVE, connStatus);
 	// Write IPAddress to peerAddr
