@@ -1105,7 +1105,7 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32
 		int ret = npServer->LeaveRoom(req, &roomId);
 
 		// TODO: execute signaling callback to update users
-		//g_signaling.disconnect_sig2_users(room_id);
+		g_signaling.DisconnectUsers(roomId);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);
 	});
