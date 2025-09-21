@@ -771,7 +771,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		auto worlds = PSPPointer<SceNpMatching2World>::Create(np_memory.Alloc(worldsSize));
 		// Transfer WorldID
 		NOTICE_LOG(Log::sceNet, "Received %d worlds", worldNum);
-		for (int i = 0; i < worldNum; i++)
+		for (int i = 0; i < worldsSize / sizeof(SceNpMatching2World); i++)
 		{
 			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d", i, npServer->worlds[i].worldId);
 			worlds[i].worldId = npServer->worlds[i].worldId;
