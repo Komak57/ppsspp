@@ -137,11 +137,14 @@ public:
 	u32 init_sig(const SceNpId& npid);
 	// Create connection to P2P
 	u32 init_sig(const SceNpId& npid, u64 room_id, u16 member_id);
+	void DisconnectUsers(u64 room_id);
+	void stop_sig_nl(u32 conn_id, bool forceful);
 	void sig2_callback(u64 room_id, u16 member_id, SceNpMatching2Event event, s32 error_code) const;
 
 	// send helpers (you already have an implementation; we call into it)
 	void send_signaling_packet(signaling_packet& sp, u32 addr, u16 port) const;
 	bool send_packet_ipv4(const std::vector<u8>& data, u32 addr, u16 port) const;
+	void retire_all_packets(std::shared_ptr<signaling_info>& si);
 
 	// Signal Triggers
 	void UserJoinedRoom(net::RPCNResponse resp);

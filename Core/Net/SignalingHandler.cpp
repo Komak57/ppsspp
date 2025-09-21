@@ -256,6 +256,45 @@ u32 signaling_handler::init_sig(const SceNpId& npid, u64 room_id, u16 member_id)
 	return conn_id;
 }
 
+void signaling_handler::DisconnectUsers(u64 room_id)
+{
+	std::lock_guard lock(mtx_);
+
+	for (auto& [conn_id, si] : sig_peers)
+	{
+		if (si->room_id == room_id)
+		{
+			stop_sig_nl(conn_id, false);
+		}
+	}
+}
+
+void signaling_handler::stop_sig_nl(u32 conn_id, bool forceful)
+{
+	if (sig_peers.find(conn_id) == sig_peers.end())
+		return;
+
+	std::shared_ptr<signaling_info> si = sig_peers.at(conn_id);
+
+	retire_all_packets(si);
+
+	// If forceful we don't go through any transition and don't call any CB
+	if (forceful)
+	{
+		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
+		si->op_activated = false;
+	}
+
+	// Do not queue packets for an already dead connection
+	if (si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_INACTIVE)
+		return;
+
+	auto& sent_packet = sig_packet;
+	sent_packet.command = SignalingCommand::Finished;
+
+	send_signaling_packet(sent_packet, si->addr, si->port);
+	queue_signaling_packet(sent_packet, std::move(si), std::chrono::steady_clock::now() + REPEAT_FINISHED_DELAY);
+}
 /*
 	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000000: 00 00 01 53 49 47 4E 03 00 00 00 9A F6 3F B0 00  ...SIGN......?..
 	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000010: 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 47  ...............G
@@ -276,7 +315,18 @@ void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u1
 	std::memcpy(packet.data() + VPORT_0_HEADER_SIZE, &sp, sizeof(signaling_packet));
 
 	if (!send_packet_ipv4(packet, addr, port)) {
-		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %d.%d.%d.%d:%d", (addr >> 24) & 0xFF, (addr >> 16) & 0xFF, (addr >> 8) & 0xFF, (addr) & 0xFF, port);
+		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip2str(addr), port);
+	}
+}
+
+void signaling_handler::retire_all_packets(std::shared_ptr<signaling_info>& si)
+{
+	for (auto it = qpackets.begin(); it != qpackets.end();)
+	{
+		if (it->second.sig_info == si)
+			it = qpackets.erase(it);
+		else
+			it++;
 	}
 }
 
