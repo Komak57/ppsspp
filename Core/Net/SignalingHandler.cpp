@@ -25,7 +25,6 @@ void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
 	auto& sent_packet = sig_packet;
 	sent_packet.command = SignalingCommand::Connect;
 	sent_packet.timestamp_sender = get_micro_timestamp(std::chrono::steady_clock::now());
-	sent_packet.npid = *NpGetNpId();
 
 	std::shared_ptr<signaling_info> si = sig_peers.at(conn_id);
 	const auto now = std::chrono::steady_clock::now();
