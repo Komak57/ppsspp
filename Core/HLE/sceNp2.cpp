@@ -1498,33 +1498,40 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 roomId, u32 m
 
 	auto connInfo = PSPPointer<SceNpSignalingConnectionInfo>::Create(connInfoPtr);
 
-	// if member NPID == self NPID
-	// return SCE_NP_SIGNALING_ERROR_OWN_NP_ID;
+	auto [res, member] = npServer->GetMember(roomId, memberId);
 
-	// if no connID exists for NPID
-	// return SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND;
+	if (res != 0)
+		return hleLogError(Log::sceNet, res, "Member Not Found");
 
-	// if no signaling_info exists for connID
-	// return SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND;
+	if (strncmp(NpGetNpId()->handle.data, member->userInfo.npId.handle.data, 16) == 0) {
+		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_OWN_NP_ID, "Member is Self");
+	}
+
+	auto conn_id = g_signaling.get_always_conn_id(member->userInfo.npId);
+
+	auto si = g_signaling.get_sig_infos(conn_id);
+	if (!si) {
+		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
+	}
 
 	switch (code) {
 	case SCE_NP_SIGNALING_CONN_INFO_RTT:
-		connInfo->rtt = 0; // si->rtt;
+		connInfo->rtt = si->rtt;
 		WARN_LOG(Log::sceNet, "Returning a RTT of %d microseconds", connInfo->rtt);
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_BANDWIDTH:
 		connInfo->bandwidth = 100'000'000; // 100 MBPS HACK
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_PEER_NPID:
-		//connInfo->npId = si->npid;
+		connInfo->npId = si->npid;
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_PEER_ADDRESS:
-		connInfo->address.port = (u16)0;// (si->port);
-		connInfo->address.addr.np_s_addr = 0;// si->addr;
+		connInfo->address.port = (u16)si->port;
+		connInfo->address.addr.np_s_addr = si->addr;
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_MAPPED_ADDRESS:
-		connInfo->address.port = (u16)0;// (si->mapped_port);
-		connInfo->address.addr.np_s_addr = 0;// si->mapped_addr;
+		connInfo->address.port = (u16)si->mapped_port;
+		connInfo->address.addr.np_s_addr = si->mapped_addr;
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_PACKET_LOSS:
 		connInfo->packet_loss = 0; // HACK
@@ -1533,7 +1540,7 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 roomId, u32 m
 		return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
 	}
 
-	return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT; // Should be 0, but this function isn't implemented completely enough
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 
