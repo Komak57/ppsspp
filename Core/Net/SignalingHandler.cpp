@@ -212,6 +212,15 @@ u32 signaling_handler::get_always_conn_id(const SceNpId& npid)
 	return conn_id;
 }
 
+std::optional<signaling_info> signaling_handler::get_sig_infos(u32 conn_id)
+{
+	std::lock_guard lock(mtx_);
+	if (sig_peers.find(conn_id) != sig_peers.end())
+		return *sig_peers.at(conn_id);
+
+	return std::nullopt;
+}
+
 u32 signaling_handler::init_sig1(const SceNpId& npid)
 {
 	std::lock_guard lock(mtx_);

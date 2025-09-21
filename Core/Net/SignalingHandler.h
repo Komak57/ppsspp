@@ -132,6 +132,7 @@ public:
 	std::shared_ptr<signaling_info> get_signaling_ptr(const signaling_packet* sp);
 
 	u32 get_always_conn_id(const SceNpId& npid);
+	std::optional<signaling_info> get_sig_infos(u32 conn_id);
 	u32 init_sig1(const SceNpId& npid);
 	u32 init_sig2(const SceNpId& npid, u64 room_id, u16 member_id);
 	void sig2_callback(u64 room_id, u16 member_id, SceNpMatching2Event event, s32 error_code) const;
