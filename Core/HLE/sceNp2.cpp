@@ -61,7 +61,7 @@ void __Np2Init() {
 }
 
 void __Np2Shutdown() {
-	if (npServer > 0 && npServer->IsConnected()) {
+	if (npServer && npServer->IsConnected()) {
 		g_signaling.stop();
 		npServer->Disconnect();
 	}
@@ -635,7 +635,7 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 	if (servers.size() == 0)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND);
 
-	if (npServer > 0 && npServer->IsConnected()) {
+	if (npServer && npServer->IsConnected()) {
 		g_signaling.stop();
 		npServer->Disconnect();
 	}
