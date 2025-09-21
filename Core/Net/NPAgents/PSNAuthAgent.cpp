@@ -37,6 +37,11 @@ namespace net {
 	int PSNAuthAgent::ResetPassword(const char* npid, const char* token, const char* password) {
 		return 0;
 	}
+
+	u64 PSNAuthAgent::GetNetworkTime(u32 req_id) {
+		return 0;
+	}
+
 	void PSNAuthAgent::Disconnect() {
 		NOTICE_LOG(Log::sceNet, "NPAuthAgent::Disconnect()");
 		cancelled = true;

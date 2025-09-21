@@ -676,6 +676,7 @@ namespace net {
 		virtual int ResendToken(const char* npid, const char* password) = 0;
 		virtual int SendResetToken(const char* npid, const char* email) = 0;
 		virtual int ResetPassword(const char* npid, const char* token, const char* password) = 0;
+		virtual u64 GetNetworkTime(u32 req_id) = 0;
 		virtual int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) = 0;
 
 		// Only to be used for bring-up and debugging.
@@ -726,6 +727,7 @@ namespace net {
 		int ResendToken(const char* npid, const char* password);
 		int SendResetToken(const char* npid, const char* email);
 		int ResetPassword(const char* npid, const char* token, const char* password);
+		u64 GetNetworkTime(u32 req_id);
 		NPAgentType GetAuthType() const override { return NPAgentType::PSN; }
 	};
 	class RPCNAuthAgent : public NPAuthAgent {
@@ -741,6 +743,7 @@ namespace net {
 		int ResendToken(const char* npid, const char* password);
 		int SendResetToken(const char* npid, const char* email);
 		int ResetPassword(const char* npid, const char* token, const char* password);
+		u64 GetNetworkTime(u32 req_id);
 
 		NPAgentType GetAuthType() const override { return NPAgentType::RPCN; }
 		void start_read_thread();

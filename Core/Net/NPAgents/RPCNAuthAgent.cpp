@@ -478,6 +478,34 @@ namespace net {
 		DEBUG_LOG(Log::sceNet, "Password has successfully been reset!");
 		return 0;
 	}
+
+	u64 RPCNAuthAgent::GetNetworkTime(u32 req_id) {
+		Packet packet = Packet();
+
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::GetNetworkTime, reqId);
+
+		INFO_LOG(Log::sceNet, "Sending Login Request");
+
+		bool flushed = Send(&packet, 5.0, &cancelled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return 0;
+		}
+
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return 0;
+		resp.stream = new vec_stream(resp.data, 1);
+
+		u64 network_time = resp.stream->get<u64>();
+		if (resp.stream->is_error()) {
+			ERROR_LOG(Log::sceNet, "Malformed reply to GetNetworkTime");
+			return 0;
+		}
+		return network_time;
+	}
+
 	int RPCNAuthAgent::GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
 		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 
