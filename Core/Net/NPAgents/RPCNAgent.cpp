@@ -634,6 +634,53 @@ namespace net {
 		return num_worlds;
 	}
 
+	int RPCNAgent::RequestSignalingInfo(std::string npid, u32 conn_id) {
+		Packet packet = Packet();
+		packet.Write(npid);
+		packet.Write((u8)0);
+
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::RequestSignalingInfos, reqId);
+
+		bool flushed = Send(&packet, 5.0, &cancelled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
+		}
+
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError) {
+
+			switch ((ErrorType)resp.error)
+			{
+			case ErrorType::NotFound:
+			{
+				ERROR_LOG(Log::sceNet, "Signaling information was requested for a user that doesn't exist or is not online");
+				break;
+			}
+			default:
+				ERROR_LOG(Log::sceNet, "Unexpected error in reply to RequestSignalingInfos: %d", resp.error);
+				break;
+			}
+			return ErrorToPSPError[resp.error];
+		}
+		resp.stream = new vec_stream(resp.data, 1);
+
+
+		const auto* sigAddr = resp.stream->get_flatbuffer<SignalingAddr>();
+		if (resp.stream->is_error() || !sigAddr->ip()) {
+			ERROR_LOG(Log::sceNet, "Malformed reply to RequestSignalingInfos command");
+			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
+		}
+		const u32 ip = static_cast<u32>(sigAddr->ip()->Get(0)) << 24 | static_cast<u32>(sigAddr->ip()->Get(1)) << 16 |
+			static_cast<u32>(sigAddr->ip()->Get(2)) << 8 | static_cast<u32>(sigAddr->ip()->Get(3));
+		u32 addr = htonl(ip);
+		if (addr == 0)
+			addr = htonl(getLocalIp(tls.netCtx.fd));
+		g_signaling.connect(conn_id, addr, sigAddr->port());
+		return 0;
+	}
+
 	int RPCNAgent::SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const SearchRoomResponse*& roomResp) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);

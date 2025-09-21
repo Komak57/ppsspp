@@ -256,6 +256,10 @@ namespace net {
 		return 0;
 	}
 
+	int PSNAgent::RequestSignalingInfo(std::string npid, u32 conn_id) {
+		return 0;
+	}
+
 	int PSNAgent::SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::SearchRoom()");
 		if (sock() <= 0) {
