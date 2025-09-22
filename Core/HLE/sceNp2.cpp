@@ -205,17 +205,16 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemb
 int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
-	u32 args[8];
+	u32 args[7];
 	//args[0] = ctxId	// ContextID
 	args[1] = roomId;	// RoomID
 	args[2] = 2;		// ConnectionID?
-	args[3] = 3;		// param_4 - EventKey?
-	args[4] = memberId;	// MemberID
-	args[5] = event;	// Event
-	args[6] = dataPtr;	// Message
-	//args[7] = argsPtr	// Request Arguments
+	args[3] = memberId;	// MemberID?
+	args[4] = event;	// Event
+	args[5] = dataPtr;	// ErrorCode
+	//args[6] = argsPtr	// Request Arguments
 
-	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_ROOM_EVENT, 8, args));
+	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_ROOM_EVENT, 7, args));
 
 	return 0;
 }
@@ -289,10 +288,10 @@ bool NpMatching2ProcessEvents() {
 				break;
 			case SCE_NP_MATCHING2_ROOM_EVENT:
 				event.args[0] = it->second.ctx_id;
-				event.args[7] = it->second.cb_arg.ptr;
+				event.args[6] = it->second.cb_arg.ptr;
 
-				NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomEventCallback - FUN_%08x(ctxId: %d, roomId: %d, param_3: %08x, param_4: %08x, memberId: %d, event: %08x, dataPtr: %08x, argPtr: %08x)", it->second.cb.ptr,
-					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
+				NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomEventCallback - FUN_%08x(ctxId: %d, roomId: %d, param_3: %08x, memberId: %d, event: %08x, dataPtr: %08x, argPtr: %08x)", it->second.cb.ptr,
+					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6]);
 				break;
 			case SCE_NP_MATCHING2_ROOM_MSG_EVENT:
 				event.args[0] = it->second.ctx_id;
