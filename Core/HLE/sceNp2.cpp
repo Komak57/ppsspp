@@ -849,7 +849,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 		INFO_LOG(Log::sceNet, " - binFilterNum: %d", req->binFilterNum);
 		INFO_LOG(Log::sceNet, " - attrIdNum:    %d", req->attrIdNum);
 		if (!npServer->cache.GetWorld(req->worldId)) {
-			ERROR_LOG(Log::sceNet, " - Invalid Room ID");
+			ERROR_LOG(Log::sceNet, " - Invalid World ID");
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
 		}
 			
