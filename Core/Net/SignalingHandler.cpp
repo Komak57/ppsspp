@@ -257,7 +257,7 @@ u32 signaling_handler::init_sig(const SceNpId& npid, u64 room_id, u16 member_id)
 
 	// If connection exists from prior state notify
 	if (si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE)
-		sig2_callback(si->room_id, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
+		notifySignalingHandler(room_id, member_id, npServer->GetUserID(), 0, SCE_NP_MATCHING2_OKAY, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, 0);
 	else
 		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_PENDING;
 
@@ -337,34 +337,34 @@ void signaling_handler::retire_all_packets(std::shared_ptr<signaling_info>& si)
 			it++;
 	}
 }
-
-void signaling_handler::sig2_callback(u64 room_id, u16 member_id, SceNpMatching2Event event, s32 error_code) const
-{
-	if (room_id)
-	{
-		for (const auto [ctx_id, ctx] : contexts_)
-		{
-			//auto ctx = get_ctx(ctx_id);
-
-			if (ctx.cb)
-			{
-				/*sysutil_register_cb([sig2_cb = ctx->signaling_cb, sig2_cb_ctx = ctx_id, room_id, member_id, event, error_code, sig2_cb_arg = ctx->signaling_cb_arg](ppu_thread& cb_ppu) -> s32
-				{
-					sig2_cb(cb_ppu, sig2_cb_ctx, room_id, member_id, event, error_code, sig2_cb_arg);
-					return 0;
-				});*/
-				u32_le args[NpMatching2Args::MAX_ARGS];
-				args[0] = ctx_id;						// ContextID
-				args[1] = room_id;						// RoomId
-				args[2] = event;						// Event
-				args[3] = error_code;					// Error Code
-				args[4] = ctx.cb_arg.ptr;				// cb_args
-				hleEnqueueCall(ctx.cb.ptr, 5, args);
-				NOTICE_LOG(Log::sceNet, "Called sig2 CB: 0x%x (room_id: %d, member_id: %d)", event, room_id, member_id);
-			}
-		}
-	}
-}
+//
+//void signaling_handler::sig2_callback(u64 room_id, u16 member_id, SceNpMatching2Event event, s32 error_code) const
+//{
+//	if (room_id)
+//	{
+//		for (const auto [ctx_id, ctx] : contexts_)
+//		{
+//			//auto ctx = get_ctx(ctx_id);
+//
+//			if (ctx.cb)
+//			{
+//				/*sysutil_register_cb([sig2_cb = ctx->signaling_cb, sig2_cb_ctx = ctx_id, room_id, member_id, event, error_code, sig2_cb_arg = ctx->signaling_cb_arg](ppu_thread& cb_ppu) -> s32
+//				{
+//					sig2_cb(cb_ppu, sig2_cb_ctx, room_id, member_id, event, error_code, sig2_cb_arg);
+//					return 0;
+//				});*/
+//				u32_le args[NpMatching2Args::MAX_ARGS];
+//				args[0] = ctx_id;						// ContextID
+//				args[1] = room_id;						// RoomId
+//				args[2] = event;						// Event
+//				args[3] = error_code;					// Error Code
+//				args[4] = ctx.cb_arg.ptr;				// cb_args
+//				hleEnqueueCall(ctx.cb.ptr, 5, args);
+//				NOTICE_LOG(Log::sceNet, "Called sig2 CB: 0x%x (room_id: %d, member_id: %d)", event, room_id, member_id);
+//			}
+//		}
+//	}
+//}
 
 void signaling_handler::recv_loop() {
 	// single-threaded receive path; no busy wait
