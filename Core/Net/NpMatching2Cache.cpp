@@ -24,10 +24,16 @@ std::optional<SceNpMatching2World> Cache::GetWorld(SceNpMatching2WorldId worldId
 	}
 	return std::nullopt;
 }
-// Update or Insert new RoomDataInternal
+// Update or Insert new RoomDataInternal, and extract members
 void Cache::AddRoom(SceNpMatching2RoomDataInternal room) {
+	for (int i = 0; i < room.memberList.membersNum; i++) {
+		AddMember(room.memberList.members[i]);
+	}
 	for (auto& r : rooms) {
 		if (r.roomId == room.roomId) {
+			for (int i = 0; i < r.memberList.membersNum; i++) {
+				AddMember(r.memberList.members[i]);
+			}
 			r = room;
 			return;
 		}
