@@ -184,9 +184,9 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemb
 	u32 args[8];
 	//args[0] = ctxId	// ContextID
 	args[1] = roomId;	// RoomID
-	args[2] = memberId;	// MemberID
-	args[3] = 0;		// param_4 - EventKey?
-	args[4] = 0;		// (u16)param_5 - LobbyNumber? LobbyMemberId?
+	args[2] = 2;		// ConnId?
+	args[3] = 3;		// param_4 - EventKey?
+	args[4] = memberId;	// MemberID
 	args[5] = event;	// Event
 	args[6] = dataPtr;	// Message
 	//args[7] = argsPtr	// Request Arguments
@@ -208,9 +208,9 @@ int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
 	u32 args[8];
 	//args[0] = ctxId	// ContextID
 	args[1] = roomId;	// RoomID
-	args[2] = 1;		// ConnectionID?
-	args[3] = 2;		// param_4 - EventKey?
-	args[4] = memberId;	// (u16)param_5 - LobbyNumber? LobbyMemberId?
+	args[2] = 2;		// ConnectionID?
+	args[3] = 3;		// param_4 - EventKey?
+	args[4] = memberId;	// MemberID
 	args[5] = event;	// Event
 	args[6] = dataPtr;	// Message
 	//args[7] = argsPtr	// Request Arguments
@@ -226,24 +226,42 @@ int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
  * @param args Variable length of arguments, MAX_ARGS = 11
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
-int notifySignalingHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId peerMemberId, SceNpMatching2RoomMemberId roomMemberId, u32 unknown, s32 errorCode, SceNpMatching2Event event, u32 dataPtr) {
+int notifySignalingHandler(u32 room_id, u32 conn_id, u32 unknown, u32 roomMemberId, u32 eventCode, u32 errorCode) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
-	u32 args[9];
-	//args[0] = ctxId	// ContextID
-	args[1] = roomId;	// RoomID
-	args[2] = peerMemberId;	// peerMemberID
-	args[3] = unknown;	// param_4 - ignored
-	args[4] = errorCode;// ErrorCode - ignored
-	args[5] = roomMemberId;	// roomMemberID
-	args[6] = event;	// Event
-	args[7] = dataPtr;	// dataPtr
-	//args[8] = argsPtr	// Request Arguments
+	// FIXME: Need confirmation on arguments for conn_id, room_id
+	u32 args[8];
+	//args[0] = ctxId;		// ContextID
+	args[1] = room_id;		// room_id?
+	args[2] = conn_id;		// conn_id?
+	args[3] = unknown;		// unknown?
+	args[4] = roomMemberId;	// roomMemberId
+	args[5] = eventCode;	// EventCode
+	args[6] = errorCode;	// ErrorCode
+	//args[7] = 0;			// cbArgs
 
-	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_SIGNALING_EVENT, 9, args));
+	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_SIGNALING_EVENT, 8, args));
 
 	return 0;
 }
+
+//int trynotifySignalingHandler() {
+//	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
+//
+//	u32 args[8];
+//	//args[0] = 1;	// ContextID
+//	args[1] = 2;	// param_2
+//	args[2] = 3;	// param_3
+//	args[3] = 4;	// param_4
+//	args[4] = 5;	// roomMemberId
+//	args[5] = SCE_NP_MATCHING2_SIGNALING_EVENT_Established;	// event
+//	args[6] = 7;	// errorCode
+//	//args[7] = 0;	// cbArgs
+//
+//	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_SIGNALING_EVENT, 8, args));
+//
+//	return 0;
+//}
 /* Event Processor
  * @note The arguments are suppose to be combined here?
  */
@@ -271,16 +289,16 @@ bool NpMatching2ProcessEvents() {
 				break;
 			case SCE_NP_MATCHING2_ROOM_EVENT:
 				event.args[0] = it->second.ctx_id;
-				event.args[6] = it->second.cb_arg.ptr;
+				event.args[7] = it->second.cb_arg.ptr;
 
-				NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomEventCallback - FUN_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %08x, param_5: %08x, event: %08x, argPtr: %08x)", it->second.cb.ptr,
-					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6]);
+				NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomEventCallback - FUN_%08x(ctxId: %d, roomId: %d, param_3: %08x, param_4: %08x, memberId: %d, event: %08x, dataPtr: %08x, argPtr: %08x)", it->second.cb.ptr,
+					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
 				break;
 			case SCE_NP_MATCHING2_ROOM_MSG_EVENT:
 				event.args[0] = it->second.ctx_id;
 				event.args[7] = it->second.cb_arg.ptr;
 
-				NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomMessageCallback - FUN_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %08x, param_5: %08x, event: %08x, param_7: %08x, argPtr: %08x)", it->second.cb.ptr,
+				NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomMessageCallback - FUN_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %08x, param_5: %08x, event: %08x, dataPtr: %08x, argPtr: %08x)", it->second.cb.ptr,
 					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
 				break;
 			case SCE_NP_MATCHING2_LOBBY_EVENT:
@@ -295,10 +313,10 @@ bool NpMatching2ProcessEvents() {
 				return false;
 			case SCE_NP_MATCHING2_SIGNALING_EVENT:
 				event.args[0] = it->second.ctx_id;
-				event.args[8] = it->second.cb_arg.ptr;
+				event.args[7] = it->second.cb_arg.ptr;
 
-				NOTICE_LOG(Log::sceNet, "SceNpMatching2SignalingCallback - FUN_%08x(ctxId: %d, roomId: %d, peerMemberId: %d, param_4: %08x, param_5: %08x, roomMemberId: %d, event: %08x, dataPtr: %08x, argPtr: %08x)", it->second.cb.ptr,
-					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7], event.args[8]);
+				NOTICE_LOG(Log::sceNet, "SceNpMatching2SignalingCallback - FUN_%08x(param_1: %d, param_2: %d, param_3: %d, param_4: %d, param_5: %d, param_6: %d, param_7: %d, param_8: %08x)", it->second.cb.ptr,
+					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
 				break;
 			default:
 				NOTICE_LOG(Log::sceNet, "UNHANDLED Callback Type %d - FUN_%08x(ctxId: %d)", event.event_code, it->second.cb.ptr, event.args[0]);
@@ -546,6 +564,8 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 
 	RegisterNpMatching2Handler(ctxId, callbackFunctionAddr, callbackArgument, SCE_NP_MATCHING2_SIGNALING_EVENT);
 
+	//notifySignalingHandler(0, 0, 0, 0, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_SIGNALING_EVENT);
+
 	/*ContextState ctx = {
 		(u32)ctxId,
 		callbackFunctionAddr,
@@ -739,11 +759,6 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		}
 
 		int ret;
-		/*ret = servers[tServer]->CreateAccount(npid.c_str(), "password", "online_id", "http://DummyAvatarUrl", "email@email.com");
-		if (ret != 0) {
-			ERROR_LOG(Log::sceNet, "Unable to Register");
-			return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, ret));
-		}*/
 
 		std::string* creds = NpGetLogin();
 		ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
@@ -752,7 +767,6 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, ret), 0);
 		}
 
-		// FIXME: Get worldInfo from PSN
 		int worldNum = npServer->GetWorldInfo(serverId, npTitleId, &npServer->worlds);
 		if (worldNum < 0) {
 			ERROR_LOG(Log::sceNet, "Error requesting WorldInfo: %08X", worldNum);
@@ -838,11 +852,9 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
 		}
 			
-		// FIXME: Populate all relevant data from req into memory as required
 		// WARNING! This is a constant, and thus read-only
 		const SearchRoomResponse* roomResp;
 
-		// FIXME: We want SearchRoomResponse so we can manipulate the PSP memory for it's handling. PPSSPP will crash here!
 		int ret = npServer->SearchRoom(req, roomResp);
 
 		if (ret != 0) {
@@ -850,7 +862,6 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, ret), 0);
 		}
 
-		// Minimal processing example
 		uint32_t room_count = roomResp->rooms() ? roomResp->rooms()->size() : 0;
 		uint32_t start_index = roomResp->startIndex();
 		uint32_t total_rooms = roomResp->total();

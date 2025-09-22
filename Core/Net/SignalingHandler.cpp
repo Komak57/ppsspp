@@ -228,6 +228,7 @@ std::optional<signaling_info> signaling_handler::get_sig_infos(u32 conn_id)
 	return std::nullopt;
 }
 
+// Creates Signaling connection to RPCN
 u32 signaling_handler::init_sig(const SceNpId& npid)
 {
 	std::lock_guard lock(mtx_);
@@ -247,6 +248,7 @@ u32 signaling_handler::init_sig(const SceNpId& npid)
 	return conn_id;
 }
 
+// Creates P2P Signaling connection
 u32 signaling_handler::init_sig(const SceNpId& npid, u64 room_id, u16 member_id)
 {
 	std::lock_guard lock(mtx_);
@@ -257,7 +259,7 @@ u32 signaling_handler::init_sig(const SceNpId& npid, u64 room_id, u16 member_id)
 
 	// If connection exists from prior state notify
 	if (si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE)
-		notifySignalingHandler(room_id, member_id, npServer->GetUserID(), 0, SCE_NP_MATCHING2_OKAY, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, 0);
+		notifySignalingHandler(room_id, conn_id, 0, member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
 	else
 		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_PENDING;
 
@@ -505,6 +507,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		ERROR_LOG(Log::sceNet, "NOTI Malformed UserJoinedRoom notification");
 		return;
 	}
+
 	const auto room_id = notification->room_id();
 
 	u32 _size = sizeof(SceNpMatching2RoomMemberUpdateInfo);
@@ -535,14 +538,9 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		//rpcn_log.notice("Join notification told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(npid.handle.data), room_id, ip_to_string(addr_p2p), port_p2p);
 
 		// Attempt Signaling
-		//auto& sigh = g_fxo->get<named_thread<signaling_handler>>();
-		//const u32 conn_id = init_sig2(npid, room_id, member_id);
 		auto connId = init_sig(npid, room_id, member_id);
-		// TODO: Connect to Signaling Server
-		//start(conn_id, addr_p2p, port_p2p);
+		// Connect to Signaling Server
 		g_signaling.connect(connId, addr_p2p, port_p2p);
-		
-		notifySignalingHandler(room_id, member_id, npServer->GetUserID(), 0, SCE_NP_MATCHING2_OKAY, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, 0);
 	}
 	//auto ctx = get_ctx(resp.header.reqId);
 	const u32 event_key = 0;// get_event_key();
