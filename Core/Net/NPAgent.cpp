@@ -140,13 +140,8 @@ void Packet::AddCommId(flatbuffers::FlatBufferBuilder* builder, uint8_t* commId)
 
 namespace net {
 	bool NPAuthAgent::Resolve(DNSType type) {
-		if (status == SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE) {
-			ERROR_LOG(Log::IO, "Resolve: Server not available");
-			return false;
-		}
 		if (!host_.c_str() || port_ < 1 || port_ > 65535) {
 			ERROR_LOG(Log::IO, "Resolve: Unable to resolve %s:%d", host_.c_str(), port_);
-			status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
 			return false;
 		}
 
@@ -168,18 +163,12 @@ namespace net {
 				WARN_LOG(Log::IO, "Failed to resolve host '%s': '%s' (N/A)", host_.c_str(), err.c_str());
 				break;
 			}
-			status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
 			return false;
 		}
-		status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
 		return true;
 	}
 
 	bool NPAgent::Resolve(DNSType type) {
-		if (status == SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE) {
-			ERROR_LOG(Log::IO, "Resolve: Server not available");
-			return false;
-		}
 		if (!host_.c_str() || port_ < 1 || port_ > 65535) {
 			ERROR_LOG(Log::IO, "Resolve: Unable to resolve %s:%d", host_.c_str(), port_);
 			return false;
@@ -203,7 +192,6 @@ namespace net {
 				WARN_LOG(Log::IO, "Failed to resolve host '%s': '%s' (N/A)", host_.c_str(), err.c_str());
 				break;
 			}
-			status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
 			return false;
 		}
 		return true;
@@ -393,9 +381,9 @@ namespace net {
 		return received;  // Return HTML Status Code or Error Code
 	}
 
-	u8 NPAgent::GetStatus() {
+	/*u8 NPAgent::GetStatus() {
 		return status;
-	}
+	}*/
 
 
 	bool NPAgent::Send(Packet* packet, double timeout, bool* cancelled) {

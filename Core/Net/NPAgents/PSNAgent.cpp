@@ -40,11 +40,9 @@
 */
 
 namespace net {
-	PSNAgent::PSNAgent(int serverId, std::string host, int port, u8 status) {
-		this->ID = serverId;
+	PSNAgent::PSNAgent(std::string host, int port) {
 		this->host_ = host;
 		this->port_ = port;
-		this->status = status;
 
 		this->worlds.clear();
 		this->rooms.clear();

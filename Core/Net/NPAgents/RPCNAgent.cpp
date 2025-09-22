@@ -11,11 +11,9 @@ using namespace std::literals::chrono_literals;
 
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN
-	RPCNAgent::RPCNAgent(int serverId, std::string host, int port, u8 status) {
-		this->ID = serverId;
+	RPCNAgent::RPCNAgent(std::string host, int port) {
 		this->host_ = host;
 		this->port_ = port;
-		this->status = status;
 
 		this->worlds.clear();
 		this->rooms.clear();
@@ -603,7 +601,7 @@ namespace net {
 
 		Packet packet = Packet();
 		packet.Write(this->GetCommHeader());
-		packet.Write((u16)this->ID);
+		packet.Write((u16)this->selected->id);
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::GetWorldList, reqId);
@@ -673,7 +671,6 @@ namespace net {
 			return ErrorToPSPError[resp.error];
 		}
 		resp.stream = new vec_stream(resp.data, 1);
-
 
 		const auto* sigAddr = resp.stream->get_flatbuffer<SignalingAddr>();
 		if (resp.stream->is_error() || !sigAddr->ip()) {

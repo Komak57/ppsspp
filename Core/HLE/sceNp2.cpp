@@ -50,8 +50,9 @@ std::map<u32, NpMatching2Handler> npMatching2Handlers;
 //std::unordered_map<u32, NpMatching2Handler> npSignalingHandlers;
 //std::map<int, NpMatching2Context> npMatching2Contexts;
 //u16 tServer;
-std::map<u16, std::unique_ptr<net::NPAgent>> servers;
-net::NPAgent* npServer = nullptr;
+
+//std::map<u16, std::unique_ptr<net::NPAgent>> servers;
+std::unique_ptr<net::NPAgent> npServer = nullptr;
 std::map<u16, std::future<int>> tasks;
 signaling_handler g_signaling;
 
@@ -443,12 +444,30 @@ static int sceNpMatching2ContextStart(int ctxId)
 	// TODO: use sceNpGetUserProfile and check server availability using sceNpService_76867C01
 	//npMatching2Ctx.started = true;
 	npServer = nullptr;
-	servers.clear();
 	//net::PSNAuthAgent::GetServers(&ProcessHostnameWithInfraDNS, npTitleId, &servers);
 	//net::RPCNAuthAgent::GetServers(npTitleId, &servers);
-	npAuthServer->GetServers(npTitleId, &servers);
+	npAuthServer->GetServers(npTitleId);
 	// We don't need the auth agent after this.
 	npAuthServer->Disconnect();
+
+	// Just in case the NPAgent is hosted on a different physical server
+	npServer->Resolve();
+	std::string npid = net::RPCNAuthAgent::generate_npid();
+	bool connected = npServer->Connect();
+	if (!connected) {
+		ERROR_LOG(Log::sceNet, "Could not connect.");
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
+	}
+
+	int ret;
+
+	std::string* creds = NpGetLogin();
+	ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
+	if (ret != 0) {
+		ERROR_LOG(Log::sceNet, "Unable to Log In");
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, ret), 0);
+	}
+
 	////signaling_handler::print_interfaces();
 	//if (g_signaling.connect("fe80::be24:11ff:fed8:39c4", 3657, 21)) {
 	//	NOTICE_LOG(Log::sceNet, "Connected to Signaling Server!");
@@ -599,8 +618,8 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 }
 
 // roomId may be a struct containing room info?
-static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 roomId, u32 unknown, u32 unknown1, u32 memberId, u32 connInfoPtr) {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(ctx: %d, roomId: %d, %08X, %08X, memberId: %d, connInfoPtr: 0x%08X) at %08x", __FUNCTION__, ctxId, roomId, unknown, unknown1, memberId, connInfoPtr, currentMIPS->pc);
+static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u32 roomId, u32 unknown1, u32 memberId, u32 connInfoPtr) {
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(ctx: %d, %08X, roomId: %d, %08X, memberId: %d, connInfoPtr: 0x%08X) at %08x", __FUNCTION__, ctxId, unknown, roomId, unknown1, memberId, connInfoPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -653,16 +672,11 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 	if (!Memory::IsValidAddress(serverIdsPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	if (servers.size() == 0)
+	if (npServer->servers.size() == 0)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND);
 
-	if (npServer && npServer->IsConnected()) {
-		g_signaling.stop();
-		npServer->Disconnect();
-	}
-
 	std::vector<u16> server_list;
-	for (auto it = servers.begin(); it != servers.end() && server_list.size() < maxServerIds; ++it) {
+	for (auto it = npServer->servers.begin(); it != npServer->servers.end() && server_list.size() < maxServerIds; ++it) {
 		server_list.push_back(it->first);
 	}
 
@@ -707,10 +721,10 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
 
 		// Check server status
-		servers[serverId]->Resolve();
+		//servers[serverId]->Resolve();
 
 		u32 infoSize = sizeof(SceNpMatching2ServerInfo);
-		SceNpMatching2ServerInfo serverInfo = servers[serverId]->GetServerInfo();
+		SceNpMatching2ServerInfo serverInfo = npServer->GetServerInfo(serverId);
 
 		// Allocate space, and write value into the pool
 		u32 serverInfoPtr = np_memory.Alloc(infoSize);
@@ -749,23 +763,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		if ((serverId = Memory::Read_U16(serverIdPtr)) == 0)
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
 
-		npServer = servers[serverId].get();
-
-		std::string npid = net::RPCNAuthAgent::generate_npid();
-		bool connected = npServer->Connect();
-		if (!connected) {
-			ERROR_LOG(Log::sceNet, "Could not connect.");
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
-		}
-
-		int ret;
-
-		std::string* creds = NpGetLogin();
-		ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
-		if (ret != 0) {
-			ERROR_LOG(Log::sceNet, "Unable to Log In");
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, ret), 0);
-		}
+		npServer->SelectServer(serverId);
 
 		int worldNum = npServer->GetWorldInfo(serverId, npTitleId, &npServer->worlds);
 		if (worldNum < 0) {

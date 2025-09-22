@@ -476,6 +476,16 @@ namespace net {
 		0
 	};
 
+	enum class NPAgentType { PSN, RPCN };
+
+	struct NPServerInfo {
+		NPAgentType nptype;
+		SceNpMatching2ServerId id;
+		std::string host = "";
+		np_in_port_t port;
+		SceNpMatching2ServerStatus status;
+	};
+
 	struct RPCNResponse {
 		PacketHeader header;
 		u8 error;
@@ -483,7 +493,6 @@ namespace net {
 		vec_stream* stream;
 	};
 
-	enum class NPAgentType { PSN, RPCN };
 	class NPAgent : public HTTPS {
 	public:
 		virtual ~NPAgent() = default;
@@ -494,6 +503,10 @@ namespace net {
 		bool Send(Packet* packet, double timeout, bool* cancelled);
 		int Recv(Packet* packet, bool* cancelled);
 		
+		void SelectServer(u16 ServerID) {
+			selected = servers[ServerID].get();
+		}
+
 		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) = 0;
 		// NPAuthAgent Functions
 		virtual int Login(const char* npid, const char* token, const char* password) = 0;
@@ -514,9 +527,9 @@ namespace net {
 		virtual int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse* respData) = 0;
 
 		bool IsConnected() { return connected; }
-		u8 GetStatus();
+		//u8 GetStatus();
 		//int GetID() { return ID; }
-		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
+		SceNpMatching2ServerInfo GetServerInfo(u16 ServerID) { return { servers[ServerID]->id, servers[ServerID]->status}; };
 		std::string GetOnlineName() {
 			return online_name;
 		}
@@ -538,24 +551,29 @@ namespace net {
 			std::lock_guard<std::mutex> lock(sig_mutex);
 			return port_sig.load();
 		}
+	public:
+		// Holds all servers provided by GetServers
+		std::map<u16, std::unique_ptr<NPServerInfo>> servers;
+		// Pointer to the selected server
+		NPServerInfo* selected = nullptr;
+
 		std::pair<int, std::optional<SceNpMatching2RoomMemberDataInternal>> GetMember(u32 roomId, u32 memberId);
 		std::pair<int, std::optional<SceNpMatching2RoomMemberDataInternal>> GetSelf(u32 roomId);
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
 
+		// FIXME: Restructure to be offline-friendly cache of worlds, rooms, and members
 		u32 worldInfoPtr;
 		std::vector<SceNpMatching2World> worlds;
 		u32 roomDataPtr;
 		std::map<u32, SceNpMatching2RoomDataInternal> rooms;
 
 	protected:
-		u16 ID;
 		uintptr_t sock_ = -1;
 		bool cancelled = false;
 
 		std::string host_;
 		int port_ = -1;
-		u8 status;
 		addrinfo* resolved_ = nullptr;
 		addrinfo* conn = nullptr;
 
@@ -581,7 +599,7 @@ namespace net {
 	class PSNAgent : public NPAgent {
 	public:
 		~PSNAgent();
-		PSNAgent(int serverId, std::string host, int port, u8 status = 2);
+		PSNAgent(std::string host, int port);
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
 		void Disconnect();
@@ -606,7 +624,7 @@ namespace net {
 	public:
 		static const u32 PROTOCOL_VERSION = 26;
 		~RPCNAgent();
-		RPCNAgent(int serverId, std::string host, int port, u8 status = 2);
+		RPCNAgent(std::string host, int port);
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
 		void Disconnect();
@@ -669,7 +687,7 @@ namespace net {
 		int Recv(Packet* packet, bool* cancelled);
 
 		//int GetID() { return ID; }
-		SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
+		//SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
 
 		virtual int Login(const char* npid, const char* token, const char* password) = 0;
 		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
@@ -677,7 +695,7 @@ namespace net {
 		virtual int SendResetToken(const char* npid, const char* email) = 0;
 		virtual int ResetPassword(const char* npid, const char* token, const char* password) = 0;
 		virtual u64 GetNetworkTime(u32 req_id) = 0;
-		virtual int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) = 0;
+		virtual int GetServers(SceNpCommunicationId npTitleId) = 0;
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
@@ -698,13 +716,11 @@ namespace net {
 		int GetConnPort() { return port_; }
 
 	protected:
-		u16 ID;
 		uintptr_t sock_ = -1;
 		bool cancelled = false;
 
 		std::string host_;
 		int port_ = -1;
-		u8 status;
 		addrinfo* resolved_ = nullptr;
 		addrinfo* conn = nullptr;
 
@@ -721,7 +737,7 @@ namespace net {
 		PSNAuthAgent(std::string host, int port);
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 		void Disconnect();
-		int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
+		int GetServers(SceNpCommunicationId npTitleId);
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 		int ResendToken(const char* npid, const char* password);
@@ -736,7 +752,7 @@ namespace net {
 		RPCNAuthAgent(std::string host, int port);
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 		void Disconnect();
-		int GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr);
+		int GetServers(SceNpCommunicationId npTitleId);
 		static std::string generate_npid();
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
@@ -780,14 +796,14 @@ namespace net {
 		}
 		return nullptr;
 	}
-	inline std::unique_ptr<NPAgent> CreateNPAgent(NPAgentType type, int serverId, std::string host = "", int port = 0, u8 status = 2) {
+	inline std::unique_ptr<NPAgent> CreateNPAgent(NPAgentType type, std::string host = "", int port = 0) {
 		switch (type) {
-		case NPAgentType::PSN: return std::make_unique<PSNAgent>(serverId, host, port, status);
-		case NPAgentType::RPCN: return std::make_unique<RPCNAgent>(serverId, host, port, status);
+		case NPAgentType::PSN: return std::make_unique<PSNAgent>(host, port);
+		case NPAgentType::RPCN: return std::make_unique<RPCNAgent>(host, port);
 		}
 		return nullptr;
 	}
 }
 
 extern std::unique_ptr<net::NPAuthAgent> npAuthServer;
-extern net::NPAgent* npServer;
+extern std::unique_ptr<net::NPAgent> npServer;

@@ -182,7 +182,7 @@ namespace net {
 		22:37:313 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:229 net::PSNAuthAgent::GetServers - Agent-FQDN#2 Status: alive
 		22:37:313 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:238 net::PSNAuthAgent::GetServers - Agent-FQDN#2 Host: agent-20901.ww.np.matching.playstation.net
 	*/
-	int PSNAuthAgent::GetServers(SceNpCommunicationId npTitleId, std::map<u16, std::unique_ptr<net::NPAgent>>* serversPtr) {
+	int PSNAuthAgent::GetServers(SceNpCommunicationId npTitleId) {
 		Url url("http://static-resource.np.community.playstation.net/np/resource/psp-title/" + std::string(npTitleId.data) + "_00/matching/" + std::string(npTitleId.data) + "_00-matching.xml");
 		http::Client client(&ProcessHostnameWithInfraDNS);
 		bool cancelled = false;
@@ -234,6 +234,9 @@ namespace net {
 
 			int i = 1;
 			while (true) {
+				NPServerInfo server{};
+				server.nptype = NPAgentType::PSN;
+
 				ofs = entity.find("<agent-fqdn", ++ofs2);
 				if (ofs == std::string::npos) {
 					if (i == 1)
@@ -250,7 +253,7 @@ namespace net {
 				ofs += 4;
 				ofs2 = entity.find('"', ofs);
 				text = entity.substr(ofs, ofs2 - ofs);
-				int server_id = std::stoi(text.c_str());
+				server.id = std::stoi(text.c_str());
 				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d ID: %s", __FUNCTION__, i, text.c_str());
 
 				ofs = entity.find("port=", frontPos);
@@ -260,7 +263,7 @@ namespace net {
 				ofs += 6;
 				ofs2 = entity.find('"', ofs);
 				text = entity.substr(ofs, ofs2 - ofs);
-				int server_port = std::stoi(text.c_str());
+				server.port = std::stoi(text.c_str());
 				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Port: %s", __FUNCTION__, i, text.c_str());
 
 				ofs = entity.find("status=", frontPos);
@@ -271,9 +274,9 @@ namespace net {
 				ofs2 = entity.find('"', ofs);
 				text = entity.substr(ofs, ofs2 - ofs);
 				std::string alive = { 'a','l','i','v','e' };
-				int server_status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
+				server.status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
 				if (text == alive)
-					server_status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
+					server.status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
 				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Status: %s", __FUNCTION__, i, text.c_str());
 
 				ofs = entity.find('>', ++ofs2);
@@ -282,10 +285,13 @@ namespace net {
 
 				ofs2 = entity.find("</agent-fqdn", ++ofs);
 				text = entity.substr(ofs, ofs2 - ofs);
-				std::string server_host = text;
+				server.host = text;
 				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Host: %s", __FUNCTION__, i, text.c_str());
 
-				serversPtr->emplace(server_id, net::CreateNPAgent(net::NPAgentType::PSN, server_id, server_host, server_port, server_status));
+				if (!npServer)
+					npServer = net::CreateNPAgent(NPAgentType::PSN, server.host, server.port);
+				npServer->servers.emplace(server.id, std::make_unique<NPServerInfo>(server));
+				//serversPtr->emplace(server_id, net::CreateNPAgent(net::NPAgentType::PSN, server_id, server_host, server_port, server_status));
 				i++;
 			}
 		}
