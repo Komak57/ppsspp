@@ -511,7 +511,7 @@ namespace net {
 		// NPAuthAgent Functions
 		virtual int Login(const char* npid, const char* token, const char* password) = 0;
 		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
-
+		virtual int StartSignalingThread() = 0;
 		// NPAgent Functions
 		virtual int GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) = 0;
 		virtual int RequestSignalingInfo(std::string npid, u32 conn_id) = 0;
@@ -605,6 +605,7 @@ namespace net {
 		void Disconnect();
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		int StartSignalingThread();
 
 		int GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut);
 		int RequestSignalingInfo(std::string npid, u32 conn_id);
@@ -630,6 +631,7 @@ namespace net {
 		void Disconnect();
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		int StartSignalingThread();
 
 		int GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut);
 		int RequestSignalingInfo(std::string npid, u32 conn_id);

@@ -541,14 +541,6 @@ namespace net {
 		avatar_url = resp.stream->get_string(false);
 		user_id = resp.stream->get<s64>();
 
-		// FIXME: May need to be moved to a standalone thread
-		// RPCS3 has only 1 connection perpetually active
-		// As such, it has additional functions in sceNp that
-		//  trigger signaling to start
-		if (g_signaling.create_connection())
-			signal_thread = std::thread(&RPCNAgent::signaling_loop, this);
-		else
-			ERROR_LOG(Log::sceNet, "Signaling Loop could not be started.");
 		return 0;
 	}
 
@@ -594,6 +586,11 @@ namespace net {
 		}
 		INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());*/
 		return true;
+	}
+
+	int RPCNAgent::StartSignalingThread() {
+		signal_thread = std::thread(&RPCNAgent::signaling_loop, this);
+		return 0;
 	}
 
 	int RPCNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) {

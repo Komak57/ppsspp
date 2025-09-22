@@ -169,6 +169,11 @@ namespace net {
 		return false;
 	}
 
+	int PSNAgent::StartSignalingThread() {
+		//signal_thread = std::thread(&RPCNAgent::signaling_loop, this);
+		return 0;
+	}
+
 	int PSNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npCommId, std::vector<SceNpMatching2World>* worldInfoOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npCommId.data);
 #ifndef AGENT_TESTING

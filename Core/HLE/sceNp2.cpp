@@ -582,6 +582,15 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 
 	RegisterNpMatching2Handler(ctxId, callbackFunctionAddr, callbackArgument, SCE_NP_MATCHING2_SIGNALING_EVENT);
 
+	// FIXME: This thread runs even when you trigger break
+	// RPCS3 has only 1 connection perpetually active
+	// As such, it has additional functions in sceNp that
+	//  trigger signaling to start, and P2P connect requests
+	if (g_signaling.create_connection())
+		npServer->StartSignalingThread();
+	else
+		ERROR_LOG(Log::sceNet, "Signaling Loop could not be started.");
+
 	//notifySignalingHandler(0, 0, 0, 0, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_SIGNALING_EVENT);
 
 	/*ContextState ctx = {
