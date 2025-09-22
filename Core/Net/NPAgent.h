@@ -14,6 +14,7 @@
 #include "Core/HLE/Np2Types.h"
 #include "Core/np2_structs_generated.h"
 #include "Core/Net/HTTPS.h"
+#include "NpMatching2Cache.h"
 
 // 0x88 bytes
 //struct RoomInfo {
@@ -563,10 +564,11 @@ namespace net {
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
 
 		// FIXME: Restructure to be offline-friendly cache of worlds, rooms, and members
-		u32 worldInfoPtr;
+		/*u32 worldInfoPtr;
 		std::vector<SceNpMatching2World> worlds;
 		u32 roomDataPtr;
-		std::map<u32, SceNpMatching2RoomDataInternal> rooms;
+		std::map<u32, SceNpMatching2RoomDataInternal> rooms;*/
+		Cache cache;
 
 	protected:
 		uintptr_t sock_ = -1;
