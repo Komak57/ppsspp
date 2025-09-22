@@ -208,6 +208,17 @@ u32 signaling_handler::get_always_conn_id(const SceNpId& npid)
 	return conn_id;
 }
 
+std::optional<u32> signaling_handler::get_conn_id_from_npid(const SceNpId& npid)
+{
+	std::lock_guard lock(mtx_);
+
+	std::string npid_str(reinterpret_cast<const char*>(npid.handle.data));
+	if (npid_to_conn_id.find(npid_str) != npid_to_conn_id.end())
+		return npid_to_conn_id.at(npid_str);
+
+	return std::nullopt;
+}
+
 std::optional<signaling_info> signaling_handler::get_sig_infos(u32 conn_id)
 {
 	std::lock_guard lock(mtx_);

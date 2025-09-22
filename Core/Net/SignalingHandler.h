@@ -132,6 +132,7 @@ public:
 	std::shared_ptr<signaling_info> get_signaling_ptr(const signaling_packet* sp);
 
 	u32 get_always_conn_id(const SceNpId& npid);
+	std::optional<u32> get_conn_id_from_npid(const SceNpId& npid);
 	std::optional<signaling_info> get_sig_infos(u32 conn_id);
 	// Create connection to RPCN
 	u32 init_sig(const SceNpId& npid);
