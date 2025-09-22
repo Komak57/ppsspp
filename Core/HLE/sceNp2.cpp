@@ -1641,7 +1641,9 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 	INFO_LOG(Log::sceNet, " - castType:   %d", req->castType);
 	INFO_LOG(Log::sceNet, " - msgLen:     %d", req->msgLen);
 
-	auto roomData = &npServer->rooms[req->roomId];
+	auto roomData = &npServer->cache.GetRoom(req->roomId);
+	if (!roomData)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM);
 
 	int ret;
 	if ((ret = npServer->SendRoomMessage(req)) != 0)
