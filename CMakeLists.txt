@@ -2483,6 +2483,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/Net/HTTPS.cpp
 	Core/Net/HTTPConnection.h
 	Core/Net/HTTPConnection.cpp
+	Core/Net/NpMatching2Cache.h
+	Core/Net/NpMatching2Cache.cpp
 	${GPU_SOURCES}
 	ext/disarm.cpp
 	ext/disarm.h

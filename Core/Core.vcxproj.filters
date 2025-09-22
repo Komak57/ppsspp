@@ -1432,6 +1432,9 @@
     <ClCompile Include="Dialog\PSPHtmlViewer.cpp">
       <Filter>Dialog</Filter>
     </ClCompile>
+    <ClCompile Include="Net\NpMatching2Cache.cpp">
+      <Filter>Net</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ELF\ElfReader.h">
@@ -2319,6 +2322,9 @@
     </ClInclude>
     <ClInclude Include="Dialog\PSPHtmlViewer.h">
       <Filter>Dialog</Filter>
+    </ClInclude>
+    <ClInclude Include="Net\NpMatching2Cache.h">
+      <Filter>Net</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
