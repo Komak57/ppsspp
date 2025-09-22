@@ -73,13 +73,13 @@ bool signaling_handler::create_connection() {
 		}
 
 		// Ignore SIGPIPE when supported (ie. BSD/MacOS)
-		//setSockNoSIGPIPE(inetSocket->sock, 1);
+		setSockNoSIGPIPE(inetSocket->sock, 1);
 		// TODO: We should always use non-blocking mode and simulate blocking mode
-		//changeBlockingMode(inetSocket->sock, 1);
+		changeBlockingMode(inetSocket->sock, 1);
 		// Enable Port Re-use, required for multiple-instance
-		//setSockReuseAddrPort(inetSocket->sock);
+		setSockReuseAddrPort(inetSocket->sock);
 		// Disable Connection Reset error on UDP to avoid strange behavior
-		//setUDPConnReset(inetSocket->sock, false);
+		setUDPConnReset(inetSocket->sock, false);
 
 		inetSocket->state = SocketState::UsedNetInet;
 		inetSocket->port = SCE_NP_PORT;
@@ -539,7 +539,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 
 	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
 	// TODO: check cache for member
-
+	
 	NOTICE_LOG(Log::sceNet, "User %s(%d) joined the room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
 
 	// We initiate signaling if necessary
