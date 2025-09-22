@@ -384,7 +384,29 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 		int n = recvfrom(inetSocket->sock, reinterpret_cast<char*>(buf), sizeof(buf), 0,
 			reinterpret_cast<sockaddr*>(&src), &slen);
 		if (n < 0) {
-			ERROR_LOG(Log::sceNet, "Error recvfrom on IPv4 P2P socket: %d", n);
+			int errorCode = 0;
+			fd_set readfds;
+			FD_ZERO(&readfds);
+			FD_SET(inetSocket->sock, &readfds);
+			timeval tv{};
+			tv.tv_sec = 1;      // timeout 1s
+			tv.tv_usec = 0;
+#if PPSSPP_PLATFORM(WINDOWS)
+			errorCode = WSAGetLastError();
+			if (errorCode == WSAEWOULDBLOCK) {
+				// Nothing wrong here, just check again after a short recess
+				int ready = select(inetSocket->sock, &readfds, nullptr, nullptr, &tv);
+				continue;
+			}
+#else
+			errorCode = errno;
+			if (errorCode == EAGAIN || errorCode == EWOULDBLOCK) {
+				// Nothing wrong here, just check again after a short recess
+				int ready = select(inetSocket->sock, &readfds, nullptr, nullptr, &tv);
+				continue;
+			}
+#endif
+			ERROR_LOG(Log::sceNet, "Error recvfrom on IPv4 P2P socket: returned %d, error code %d", n, errorCode);
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			continue;
 		}
