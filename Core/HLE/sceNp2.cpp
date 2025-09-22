@@ -847,14 +847,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 		INFO_LOG(Log::sceNet, " - intFilterNum: %d", req->intFilterNum);
 		INFO_LOG(Log::sceNet, " - binFilterNum: %d", req->binFilterNum);
 		INFO_LOG(Log::sceNet, " - attrIdNum:    %d", req->attrIdNum);
-		bool found = false;
-		for (auto& world : npServer->worlds) {
-			if (world.worldId == req->worldId) {
-				found = true;
-				break;
-			}
-		}
-		if (!found) {
+		if (!npServer->cache.GetWorld(req->worldId)) {
 			ERROR_LOG(Log::sceNet, " - Invalid Room ID");
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
 		}
@@ -950,14 +943,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		// Patapon 3 requests WorldID 0. Is this suppose to be the first available world?
 		//if (req->worldId == 0)
 			//req->worldId = servers[tServer]->worlds.begin()->first;
-		bool found = false;
-		for (auto& world : npServer->worlds) {
-			if (world.worldId == req->worldId) {
-				found = true;
-				break;
-			}
-		}
-		if (!found) {
+		if (!npServer->cache.GetWorld(req->worldId)) {
 			ERROR_LOG(Log::sceNet, " - Invalid worldId");
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ROOM_ID), 0);
 		}
