@@ -637,10 +637,10 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u3
 
 	auto connInfo = PSPPointer<ScenpMatching2SignalingInfo>::Create(connInfoPtr);
 
-	auto [ret, member] = npServer->GetMember(roomId, memberId);
-	if (ret < 0) {
+	auto member = npServer->cache.GetMember(memberId);
+	if (!member) {
 		connInfo->status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
-		return hleLogError(Log::sceNet, ret, "Member not found");
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
 	}
 
 	if (strncmp(NpGetNpId()->handle.data, member->userInfo.npId.handle.data, 16) == 0) {
@@ -1059,9 +1059,10 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 				const u16 port_p2p = signaling_info->addr()->port();
 
 				const u16 member_id = signaling_info->member_id();
-				auto [res, member] = npServer->GetMember(room_id, member_id);
 
-				if (res != SCE_NP_MATCHING2_OKAY)
+				auto member = npServer->cache.GetMember(member_id);
+
+				if (!member)
 					continue;
 
 				NOTICE_LOG(Log::sceNet, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(member->userInfo.npId.handle.data), room_id, ip2str(addr_p2p).c_str(), port_p2p);
@@ -1505,10 +1506,10 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 roomId, u32 m
 
 	auto connInfo = PSPPointer<SceNpSignalingConnectionInfo>::Create(connInfoPtr);
 
-	auto [res, member] = npServer->GetMember(roomId, memberId);
+	auto member = npServer->cache.GetMember(memberId);
 
-	if (res != 0)
-		return hleLogError(Log::sceNet, res, "Member Not Found");
+	if (!member)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
 
 	if (strncmp(NpGetNpId()->handle.data, member->userInfo.npId.handle.data, 16) == 0) {
 		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_OWN_NP_ID, "Member is Self");

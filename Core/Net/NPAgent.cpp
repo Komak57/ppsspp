@@ -548,21 +548,4 @@ namespace net {
 		return received;  // Return HTML Status Code or Error Code
 	}
 
-	std::pair<int, std::optional<SceNpMatching2RoomMemberDataInternal>> NPAgent::GetMember(u32 roomId, u32 memberId) {
-		if (rooms.find(roomId) == rooms.end())
-			return { SCE_NP_MATCHING2_ERROR_INVALID_ROOM_ID, std::nullopt };
-		SceNpMatching2RoomDataInternal room = rooms[roomId];
-		for (int i = 0; i < room.memberList.membersNum; i++) {
-			if (room.memberList.members[i].memberId == memberId)
-				return { 0, room.memberList.members[i] };
-		}
-		return { SCE_NP_MATCHING2_ERROR_INVALID_MEMBER_ID, std::nullopt };
-	}
-
-	std::pair<int, std::optional<SceNpMatching2RoomMemberDataInternal>> NPAgent::GetSelf(u32 roomId) {
-		if (rooms.find(roomId) == rooms.end())
-			return { SCE_NP_MATCHING2_ERROR_INVALID_ROOM_ID, std::nullopt };
-		SceNpMatching2RoomDataInternal room = rooms[roomId];
-		return { 0, *room.memberList.me };
-	}
 }
