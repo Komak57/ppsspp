@@ -599,8 +599,8 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 }
 
 // roomId may be a struct containing room info?
-static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 memberId, u32 roomId, u32 unknown1, u32 hostMemberId, u32 connInfoPtr) {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08X, %08X, %08X, %08X, %08X) at %08x", __FUNCTION__, ctxId, roomId, memberId, unknown1, hostMemberId, connInfoPtr, currentMIPS->pc);
+static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 roomId, u32 unknown, u32 unknown1, u32 memberId, u32 connInfoPtr) {
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(ctx: %d, roomId: %d, %08X, %08X, memberId: %d, connInfoPtr: 0x%08X) at %08x", __FUNCTION__, ctxId, roomId, unknown, unknown1, memberId, connInfoPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
