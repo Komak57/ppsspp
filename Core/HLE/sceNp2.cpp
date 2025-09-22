@@ -773,8 +773,8 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
 
 		npServer->SelectServer(serverId);
-
-		int worldNum = npServer->GetWorldInfo(serverId, npTitleId, &npServer->worlds);
+		std::vector<SceNpMatching2World> worldArray;
+		int worldNum = npServer->GetWorldInfo(serverId, npTitleId, &worldArray);
 		if (worldNum < 0) {
 			ERROR_LOG(Log::sceNet, "Error requesting WorldInfo: %08X", worldNum);
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
@@ -795,8 +795,9 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		NOTICE_LOG(Log::sceNet, "Received %d worlds", worldNum);
 		for (int i = 0; i < worldsSize / sizeof(SceNpMatching2World); i++)
 		{
-			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d", i, npServer->worlds[i].worldId);
-			worlds[i].worldId = npServer->worlds[i].worldId;
+			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d", i, worldArray[i].worldId);
+			worlds[i].worldId = worldArray[i].worldId;
+			npServer->cache.AddWorld(worldArray[i]);
 		}
 
 		u32 alloc = sizeof(SceNpMatching2GetWorldInfoListResponse);
