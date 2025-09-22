@@ -648,6 +648,8 @@ namespace net {
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::RequestSignalingInfos, reqId);
 
+		INFO_LOG(Log::sceNet, "Requesting Signaling Info for %s", npid.c_str());
+
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
