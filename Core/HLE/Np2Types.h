@@ -713,6 +713,13 @@ struct NpMatching2Args {
 };
 
 #pragma pack(push,1)
+struct ScenpMatching2SignalingInfo {
+	SceNpMatching2ServerStatus status;
+	np_in_addr ipaddr;
+	np_in_port_t port;
+	u8 padding[2];
+};
+
 struct SceNpMatching2ServerInfo {
 	SceNpMatching2ServerId id;
 	SceNpMatching2ServerStatus status;
@@ -806,14 +813,6 @@ struct SceNpMatching2UserInfo
 	u32 userBinAttrNum;
 	SceNpMatching2JoinedSessionInfo joinedSessionInfo;
 	u32 joinedSessionInfoNum;
-};
-
-// Server
-struct SceNpMatching2Server
-{
-	SceNpMatching2ServerId serverId;
-	SceNpMatching2ServerStatus status;
-	u8 padding[1];
 };
 
 // World
@@ -1118,7 +1117,7 @@ struct SceNpMatching2GetServerInfoRequest
 // Server data request response data
 struct SceNpMatching2GetServerInfoResponse
 {
-	SceNpMatching2Server server;
+	SceNpMatching2ServerInfo server;
 };
 
 // Request parameter for creating a server context
