@@ -63,6 +63,10 @@ std::optional<SceNpMatching2RoomDataInternal> Cache::GetRoom(SceNpMatching2RoomI
 void Cache::RemoveRoom(SceNpMatching2RoomId roomId) {
 	for (auto it = rooms.begin(); it != rooms.end();) {
 		if (it->roomId == roomId) {
+			// Remove all related members from cache
+			for (int i = 0; i < it->memberList.membersNum; i++) {
+				RemoveMember(it->memberList.members[i].memberId);
+			}
 			rooms.erase(it);
 			return;
 		}
