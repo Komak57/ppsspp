@@ -659,6 +659,7 @@ void signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 	np::RoomDataInternalUpdateInfo_to_SceNpMatching2RoomDataInternalUpdateInfo(np_memory, update_info, notif_data, npId, include_onlinename, include_avatarurl);
 
 	//np_cache.insert_room(notif_data->newRoomDataInternal.get_ptr());
+	npServer->cache.AddRoom(*notif_data->newRoomDataInternal);
 
 	//extra_nps::print_SceNpMatching2RoomDataInternal(notif_data->newRoomDataInternal.get_ptr());
 
