@@ -538,7 +538,13 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, notification->update_info(), notif_data, false, false);
 
 	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
-	// TODO: check cache for member
+	auto member = npServer->cache.GetMember(notif_data->roomMemberDataInternal->memberId);
+	if (member) {
+		//get_match2_event(event_key, 0, 0);
+		return;
+	}
+	// Cache new Room Member
+	npServer->cache.AddMember(*notif_data->roomMemberDataInternal);
 	
 	NOTICE_LOG(Log::sceNet, "User %s(%d) joined the room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
 
