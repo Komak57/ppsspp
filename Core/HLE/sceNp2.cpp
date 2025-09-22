@@ -1039,7 +1039,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 		SceNpId* npId = NpGetNpId();
 		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp->room_data(), room_info, npId, false, false);
 		// Cache room_info
-		npServer->rooms[room_info->roomId] = *room_info;
+		npServer->cache.AddRoom(*room_info);
 
 		// We initiate signaling if necessary
 		if (const auto* signaling_data = resp->signaling_data())
