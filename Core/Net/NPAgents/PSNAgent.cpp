@@ -389,7 +389,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
+	int PSNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal* resp) {
 		return 0;
 	}
 

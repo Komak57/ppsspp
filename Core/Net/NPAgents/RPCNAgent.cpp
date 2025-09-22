@@ -1052,7 +1052,7 @@ namespace net {
 		return 0;
 	}
 
-	int RPCNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, SceNpMatching2RoomDataInternal* roomDataOut) {
+	int RPCNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal* resp) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 
 		flatbuffers::Offset<flatbuffers::Vector<u16>> final_attr_ids_vec;
@@ -1085,10 +1085,14 @@ namespace net {
 			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
 		}
 
-		auto resp = take_pending_request(reqId);
-		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
-		resp.stream = new vec_stream(resp.data, 1);
+		auto response = take_pending_request(reqId);
+		if (response.error != (u8)ErrorType::NoError)
+			return ErrorToPSPError[response.error];
+		response.stream = new vec_stream(response.data, 1);
+
+		resp = response.stream->get_flatbuffer<RoomDataInternal>();
+		if (response.stream->is_error())
+			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
 
 		return 0;
 	}
