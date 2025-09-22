@@ -607,32 +607,33 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 memberId, u
 	if (connInfoPtr == 0 || !Memory::IsValidAddress(connInfoPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "unkPtr is an invalid pointer");
 
+	auto connInfo = PSPPointer<ScenpMatching2SignalingInfo>::Create(connInfoPtr);
+
 	auto [ret, member] = npServer->GetMember(roomId, memberId);
 	if (ret < 0) {
-		Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connInfoPtr);
+		connInfo->status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 		return hleLogError(Log::sceNet, ret, "Member not found");
 	}
 
 	if (strncmp(NpGetNpId()->handle.data, member->userInfo.npId.handle.data, 16) == 0) {
-		Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connInfoPtr);
+		connInfo->status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_OWN_NP_ID, "Member is Self");
 	}
 	auto connID = g_signaling.get_conn_id_from_npid(member->userInfo.npId);
 
+
 	auto si = g_signaling.get_sig_infos(*connID);
 	if (!si) {
-		Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connInfoPtr);
+		connInfo->status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
 	}
 	
-	// Write Connection Status to connStatus
-	Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_ACTIVE, connInfoPtr);
-	// Write IPAddress to peerAddr
-	//auto peerAddr = PSPPointer<np_in_addr>::Create(peerAddrPtr);
-	//peerAddr->np_s_addr = si->addr;
-	////Memory::WriteUnchecked_U32(npServer->GetConnAddr(), peerAddr);
-	//// Write Port to peerPort
-	//Memory::Write_U16(si->port, peerPortPtr);
+	// Write Connection Status
+	connInfo->status = SCE_NP_SIGNALING_CONN_STATUS_ACTIVE;
+	// Write IPAddress
+	connInfo->ipaddr.np_s_addr = si->addr;
+	// Write Port
+	connInfo->port = si->port;
 
 	return hleLogError(Log::sceNet, SCE_NP_MATCHING2_OKAY, "Assigned Address for %s to %s:%d", member->userInfo.npId.handle.data, ip2str(si->addr).c_str(), si->port);
 }
