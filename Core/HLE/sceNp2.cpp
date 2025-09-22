@@ -1111,6 +1111,8 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32
 
 		// Execute signaling callback to update users
 		g_signaling.DisconnectUsers(roomId);
+		// Remove room from cache
+		npServer->cache.RemoveRoom(roomId);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);
 	});
