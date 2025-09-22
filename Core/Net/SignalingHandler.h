@@ -173,7 +173,7 @@ public:
 		return msgs;
 	}
 private:
-	void recv_loop();
+	void recv_loop(InetSocket* inetSocket);
 	void ping_loop(s64* user_id, u32* local_addr);
 	void dispatch_packet(signaling_message msg);
 

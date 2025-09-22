@@ -88,7 +88,7 @@ bool signaling_handler::create_connection() {
 	}
 	// If not running, spin up the recv thread
 	if (!running_.exchange(false))
-		recv_thread_ = std::thread(&signaling_handler::recv_loop, this);
+		recv_thread_ = std::thread(&signaling_handler::recv_loop, this, inetSocket);
 	return true;
 }
 
@@ -368,12 +368,12 @@ void signaling_handler::retire_all_packets(std::shared_ptr<signaling_info>& si)
 //	}
 //}
 
-void signaling_handler::recv_loop() {
+void signaling_handler::recv_loop(InetSocket* inetSocket) {
 	// single-threaded receive path; no busy wait
-	InetSocket* inetSocket = nullptr;
 	running_ = true;
 	while (running_) {
 		if (!inetSocket) {
+			// Socket lost. Try to find it again!
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
 			continue;
