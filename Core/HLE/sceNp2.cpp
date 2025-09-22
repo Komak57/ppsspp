@@ -208,9 +208,9 @@ int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
 	u32 args[8];
 	//args[0] = ctxId	// ContextID
 	args[1] = roomId;	// RoomID
-	args[2] = memberId;	// MemberID
-	args[3] = 0;		// param_4 - EventKey?
-	args[4] = 0;		// (u16)param_5 - LobbyNumber? LobbyMemberId?
+	args[2] = 1;		// ConnectionID?
+	args[3] = 2;		// param_4 - EventKey?
+	args[4] = memberId;	// (u16)param_5 - LobbyNumber? LobbyMemberId?
 	args[5] = event;	// Event
 	args[6] = dataPtr;	// Message
 	//args[7] = argsPtr	// Request Arguments
@@ -614,7 +614,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 roomId, u32
 	// Write Port to peerPort
 	Memory::Write_U16(si->port, peerPortPtr);
 
-	return 0;
+	return hleLogError(Log::sceNet, SCE_NP_MATCHING2_OKAY, "Assigned Address %s:%p", ip2str(si->addr), si->port);
 }
 
 /* Allocates the list of server Id's to memory
