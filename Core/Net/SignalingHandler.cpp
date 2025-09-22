@@ -698,11 +698,12 @@ void signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberDataInternalUpdateInfo>::Create(ptr);
 	np::RoomMemberDataInternalUpdateInfo_to_SceNpMatching2RoomMemberDataInternalUpdateInfo(np_memory, update_info, notif_data, include_onlinename, include_avatarurl);
 
-	/*if (!np_cache.add_member(room_id, notif_data->newRoomMemberDataInternal.get_ptr()))
-	{
-		get_match2_event(event_key, 0, 0);
+	auto member = npServer->cache.GetMember(notif_data->newRoomMemberDataInternal->memberId);
+	if (member) {
+		//get_match2_event(event_key, 0, 0);
 		return;
-	}*/
+	}
+	npServer->cache.AddMember(*notif_data->newRoomMemberDataInternal);
 
 	NOTICE_LOG(Log::sceNet, "NOTI RoomDestroyed User's %s(%d) room (%d) data was updated", notif_data->newRoomMemberDataInternal->userInfo.npId.handle.data, notif_data->newRoomMemberDataInternal->memberId, room_id);
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());
