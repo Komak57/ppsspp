@@ -339,34 +339,6 @@ void signaling_handler::retire_all_packets(std::shared_ptr<signaling_info>& si)
 			it++;
 	}
 }
-//
-//void signaling_handler::sig2_callback(u64 room_id, u16 member_id, SceNpMatching2Event event, s32 error_code) const
-//{
-//	if (room_id)
-//	{
-//		for (const auto [ctx_id, ctx] : contexts_)
-//		{
-//			//auto ctx = get_ctx(ctx_id);
-//
-//			if (ctx.cb)
-//			{
-//				/*sysutil_register_cb([sig2_cb = ctx->signaling_cb, sig2_cb_ctx = ctx_id, room_id, member_id, event, error_code, sig2_cb_arg = ctx->signaling_cb_arg](ppu_thread& cb_ppu) -> s32
-//				{
-//					sig2_cb(cb_ppu, sig2_cb_ctx, room_id, member_id, event, error_code, sig2_cb_arg);
-//					return 0;
-//				});*/
-//				u32_le args[NpMatching2Args::MAX_ARGS];
-//				args[0] = ctx_id;						// ContextID
-//				args[1] = room_id;						// RoomId
-//				args[2] = event;						// Event
-//				args[3] = error_code;					// Error Code
-//				args[4] = ctx.cb_arg.ptr;				// cb_args
-//				hleEnqueueCall(ctx.cb.ptr, 5, args);
-//				NOTICE_LOG(Log::sceNet, "Called sig2 CB: 0x%x (room_id: %d, member_id: %d)", event, room_id, member_id);
-//			}
-//		}
-//	}
-//}
 
 void signaling_handler::recv_loop(InetSocket* inetSocket) {
 	// single-threaded receive path; no busy wait
@@ -562,8 +534,6 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		
 		const u16 member_id = notif_data->roomMemberDataInternal->memberId;
 		const SceNpId& npid = notif_data->roomMemberDataInternal->userInfo.npId;
-
-		//rpcn_log.notice("Join notification told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(npid.handle.data), room_id, ip_to_string(addr_p2p), port_p2p);
 
 		// Attempt Signaling
 		auto connId = init_sig(npid, room_id, member_id);
