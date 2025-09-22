@@ -605,12 +605,13 @@ void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberUpdateInfo>::Create(ptr);
 	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, update_info, notif_data, include_onlinename, include_avatarurl);
 
-	// FIXME: Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
-	/*if (!np_cache.del_member(room_id, notif_data->roomMemberDataInternal->memberId))
-	{
-		get_match2_event(event_key, 0, 0);
+	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
+	auto member = npServer->cache.GetMember(notif_data->roomMemberDataInternal->memberId);
+	if (!member) {
+		//get_match2_event(event_key, 0, 0);
 		return;
-	}*/
+	}
+	npServer->cache.RemoveMember(notif_data->roomMemberDataInternal->memberId);
 
 	NOTICE_LOG(Log::sceNet, "NOTI UserLeftRoom User %s(%d) left room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
