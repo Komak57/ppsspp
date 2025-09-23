@@ -711,7 +711,7 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
  * @note PSP2i calls this once witha reqId 0, and then once for each server allocated in sceNpMatching2GetServerIdListLocal
  */
 static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam, u32 assignedReqIdPtr) {
-	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
@@ -1110,11 +1110,13 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32
 		auto req = PSPPointer<SceNpMatching2LeaveRoomRequest>::Create(reqParamPtr);
 		u64 roomId = req->roomId;
 		int ret = npServer->LeaveRoom(req, &roomId);
+		if (ret < 0)
+			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, ret, "NPAgent Bad Response"), 0);
 
 		// Execute signaling callback to update users
 		g_signaling.DisconnectUsers(roomId);
 		// Remove room from cache
-		npServer->cache.RemoveRoom(roomId);
+		//npServer->cache.RemoveRoom(roomId);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);
 	});
