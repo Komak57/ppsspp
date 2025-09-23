@@ -971,6 +971,8 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 
 		// Cache Rooms
 		//rooms.push_back(roomData);
+		npServer->cache.AddRoom(*room_info);
+
 		SceNpMatching2CreateJoinRoomResponse respData{};
 		respData.roomDataInternal = room_info;
 
