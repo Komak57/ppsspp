@@ -86,7 +86,10 @@ enum class StringRestriction {
 	AlphaNumDashUnderscore,  // Used for infrastructure usernames
 	NoLineBreaksOrSpecials,  // Used for savedata UI. Removes line breaks, backslashes and similar.
 	ConvertToUnixEndings,
+	EmailSanity,			 // Used for email addresses
 };
+
+bool IsValidEmail(const std::string email);
 
 std::string SanitizeString(std::string_view username, StringRestriction restriction, int minLength = 0, int maxLength = -1);
 

@@ -105,6 +105,49 @@ int CountChar(std::string_view haystack, char needle) {
 	return count;
 }
 
+bool IsValidEmail(const std::string email) {
+	// RFC-ish practical limits
+	if (email.empty() || email.size() > 254)
+		return false;
+
+	// Must contain exactly one @
+	auto atPos = email.find('@');
+	if (atPos == std::string::npos || email.find('@', atPos + 1) != std::string::npos)
+		return false;
+
+	std::string local = email.substr(0, atPos);
+	std::string domain = email.substr(atPos + 1);
+
+	// Local part must be 1–64 chars
+	if (local.empty() || local.size() > 64)
+		return false;
+
+	// Domain must be 1–255 chars
+	if (domain.empty() || domain.size() > 255)
+		return false;
+
+	// Domain must contain at least one dot
+	auto dotPos = domain.find('.');
+	if (dotPos == std::string::npos || dotPos == 0 || dotPos == domain.size() - 1)
+		return false;
+
+	// Each domain label ≤ 63 chars, must not start/end with hyphen
+	size_t start = 0;
+	while (start < domain.size()) {
+		size_t end = domain.find('.', start);
+		if (end == std::string::npos)
+			end = domain.size();
+		size_t len = end - start;
+		if (len == 0 || len > 63)
+			return false;
+		if (domain[start] == '-' || domain[end - 1] == '-')
+			return false;
+		start = end + 1;
+	}
+
+	return true;
+}
+
 std::string SanitizeString(std::string_view input, StringRestriction restriction, int minLength, int maxLength) {
 	if (restriction == StringRestriction::None) {
 		return std::string(input);
@@ -148,6 +191,14 @@ std::string SanitizeString(std::string_view input, StringRestriction restriction
 			break;
 		case StringRestriction::ConvertToUnixEndings:  // Strips off carriage returns, keeps line feeds.
 			if (c != '\r') {
+				sanitized.push_back(c);
+			}
+			break;
+		case StringRestriction::EmailSanity:
+			if ((c >= 'A' && c <= 'Z') ||
+				(c >= 'a' && c <= 'z') ||
+				(c >= '0' && c <= '9') ||
+				c == '_' || c == '.' || c == '-' || c == '+' || c == '@') {
 				sanitized.push_back(c);
 			}
 			break;
