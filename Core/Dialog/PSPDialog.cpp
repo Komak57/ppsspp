@@ -496,7 +496,7 @@ void PSPDialog::DisplayMessage2(std::string_view text1, std::string_view text2a,
 	PPGeDrawRect(60.0f, ey, 420.0f, ey + 1.0f, CalcFadedColor(0xFFFFFFFF));
 }
 
-void PSPDialog::DisplayInputBox(std::string& input, float x, float y, float x2, float y2, u32 color, PPGeStyle &style, bool mask, bool showCaret) {
+void PSPDialog::DrawInputBox(std::string& input, float x, float y, float x2, float y2, u32 color, PPGeStyle &style, bool mask, bool showCaret) {
 	auto di = GetI18NCategory(I18NCat::DIALOG);
 
 	// Draw background box (black with border)

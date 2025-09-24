@@ -106,7 +106,7 @@ protected:
 	// The caption override is assumed to have a size of 64 bytes.
 	void DisplayButtons(int flags, std::string_view caption = "");
 	void DisplayMessage2(std::string_view text1, std::string_view text2a = "", std::string_view text2b = "", std::string_view text3a = "", std::string_view text3b = "", bool hasYesNo = false, bool hasOK = false);
-	void DisplayInputBox(std::string& input, float x, float y, float x2, float y2, u32 color, PPGeStyle& style, bool mask = false, bool showCaret = false);
+	void DrawInputBox(std::string& input, float x, float y, float x2, float y2, u32 color, PPGeStyle& style, bool mask = false, bool showCaret = false);
 	void ChangeStatus(DialogStatus newStatus, int delayUs);
 	void ChangeStatusInit(int delayUs);
 	void ChangeStatusShutdown(int delayUs);
