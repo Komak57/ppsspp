@@ -411,7 +411,7 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 	INFO_LOG(Log::sceNet, "%s - Title NUM: %d", __FUNCTION__, npTitleId.num);
 	//INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npid->handle.data);
 	INFO_LOG(Log::sceNet, "%s - User ID: %d", __FUNCTION__, npAuthServer->GetUserID());
-	INFO_LOG(Log::sceNet, "%s - Login ID: %s", __FUNCTION__, g_Config.sPSNNPID.c_str());
+	INFO_LOG(Log::sceNet, "%s - Login ID: %s", __FUNCTION__, g_Config.infraNpId.c_str());
 	INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npAuthServer->GetOnlineName().c_str());
 	INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, npAuthServer->GetAvatarURL().c_str());
 	std::string datahex;

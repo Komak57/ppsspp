@@ -133,7 +133,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		switch (stage) {
 		case SigninStage::INIT:
 			// Check Flags for AutoLogin
-			if (g_Config.sPSNNPID.empty() || g_Config.sPSNPassword.empty() || g_Config.sPSNToken.empty() || !g_Config.sPSNAutoSignIn)
+			if (g_Config.infraNpId.empty() || g_Config.infraPassword.empty() || g_Config.infraToken.empty() || !g_Config.infraAutoSignIn)
 				stage = SigninStage::LOGIN_FORM;
 			else
 				stage = SigninStage::AUTO_LOGIN;
@@ -194,7 +194,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				startTime = now;
 				std::string* creds = NpGetLogin();
 				if (server->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str()) != 0) {
-					g_Config.sPSNToken = ""; // Reset the Token to force re-entry
+					g_Config.infraToken = ""; // Reset the Token to force re-entry
 					stage = SigninStage::FAIL;
 					break;
 				}
@@ -285,10 +285,10 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 			std::string LoginType = "Username";
 			if (server->GetAuthType() == net::NPAgentType::PSN)
 				LoginType = "E-mail Address";
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, LoginType, g_Config.sPSNNPID, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, LoginType, g_Config.infraNpId, false,
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
-				g_Config.sPSNNPID = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
+				g_Config.infraNpId = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 			},
 				[&]() {
 				// Failure callback
@@ -303,10 +303,10 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 		if (IsButtonPressed(downButtonFlag))
 			selected[(u8)stage] = (u8)SigninSelected::AUTOLOGIN;
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", g_Config.sPSNPassword, true,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", g_Config.infraPassword, true,
 				[&](const std::string& value, int) {
 				// Success callback
-				g_Config.sPSNPassword = value;
+				g_Config.infraPassword = value;
 			},
 				[&]() {
 				// Failure callback
@@ -321,9 +321,9 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 		if (IsButtonPressed(downButtonFlag))
 			selected[(u8)stage] = (u8)SigninSelected::REMEMBERME;
 		if (IsButtonPressed(okButtonFlag)) {
-			g_Config.sPSNAutoSignIn = !g_Config.sPSNAutoSignIn;
-			if (g_Config.sPSNAutoSignIn)
-				g_Config.sPSNRememberPwd = true;
+			g_Config.infraAutoSignIn = !g_Config.infraAutoSignIn;
+			if (g_Config.infraAutoSignIn)
+				g_Config.infraRememberPwd = true;
 		}
 		break;
 	case SigninSelected::REMEMBERME:
@@ -333,9 +333,9 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 		if (IsButtonPressed(downButtonFlag))
 			selected[(u8)stage] = (u8)SigninSelected::SIGNIN;
 		if (IsButtonPressed(okButtonFlag)) {
-			g_Config.sPSNRememberPwd = !g_Config.sPSNRememberPwd;
-			if (!g_Config.sPSNRememberPwd)
-				g_Config.sPSNAutoSignIn = false;
+			g_Config.infraRememberPwd = !g_Config.infraRememberPwd;
+			if (!g_Config.infraRememberPwd)
+				g_Config.infraAutoSignIn = false;
 		}
 		break;
 	case SigninSelected::SIGNIN:
@@ -346,13 +346,13 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 			selected[(u8)stage] = (u8)SigninSelected::FORGOTPSWD;
 		if (IsButtonPressed(okButtonFlag)) {
 			// Sanity Check
-			if (g_Config.sPSNNPID.empty() || g_Config.sPSNPassword.empty())
+			if (g_Config.infraNpId.empty() || g_Config.infraPassword.empty())
 				break;
-			if (g_Config.sPSNToken.empty()) {
-				System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Token", g_Config.sPSNToken, true,
+			if (g_Config.infraToken.empty()) {
+				System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Token", g_Config.infraToken, true,
 					[&](const std::string& value, int) {
 					// Success callback
-					g_Config.sPSNToken = value;
+					g_Config.infraToken = value;
 					startTime = now;
 					stage = SigninStage::CONNECT_REQUEST;
 				},
@@ -383,16 +383,16 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 		PPGeDrawText(di->T("PSN"), 240, 5, centerAligned);
 		PPGeDrawText(di->T("Sign-In ID (E-mail Address)"), 70, 50, leftAligned);
 	}
-	DrawInputBox(g_Config.sPSNNPID, 70, 70, 405, 90, CalcFadedColor(0x40000000), leftAligned);
+	DrawInputBox(g_Config.infraNpId, 70, 70, 405, 90, CalcFadedColor(0x40000000), leftAligned);
 	PPGeDrawText(di->T("Password"), 70, 95, leftAligned);
-	DrawInputBox(g_Config.sPSNPassword, 70, 115, 405, 135, CalcFadedColor(0x40000000), leftAligned, true);
+	DrawInputBox(g_Config.infraPassword, 70, 115, 405, 135, CalcFadedColor(0x40000000), leftAligned, true);
 	{
-		ImageID autoSignInChkBox = g_Config.sPSNAutoSignIn ? ImageID("I_CROSS") : ImageID("I_SQUARE");
+		ImageID autoSignInChkBox = g_Config.infraAutoSignIn ? ImageID("I_CROSS") : ImageID("I_SQUARE");
 		PPGeDrawImage(autoSignInChkBox, 70, 145, 20, 20, leftAligned);
 	}
 	PPGeDrawText(di->T("Sign In Automatically (Auto Sign-In)"), 90, 145, leftAligned);
 	{
-		ImageID savePswdChkBox = g_Config.sPSNRememberPwd ? ImageID("I_CROSS") : ImageID("I_SQUARE");
+		ImageID savePswdChkBox = g_Config.infraRememberPwd ? ImageID("I_CROSS") : ImageID("I_SQUARE");
 		PPGeDrawImage(savePswdChkBox, 70, 170, 20, 20, leftAligned);
 	}
 	PPGeDrawText(di->T("Save Password"), 90, 170, leftAligned);
@@ -428,10 +428,10 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 		if (IsButtonPressed(downButtonFlag))
 			selected[(u8)stage] = (u8)RegisterSelected::EMAIL;
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Login ID", login, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Login ID", npid, false,
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
-				login = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
+				npid = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 			},
 				[&]() {
 				// Failure callback
@@ -489,7 +489,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 		if (IsButtonPressed(rightButtonFlag))
 			selected[(u8)stage] = (u8)PasswordSelected::REGISTER;
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::PASSWORD_TOKEN_FORM;
+			stage = SigninStage::PASSWORD_TOKEN_REQUEST;
 		break;
 	case PasswordSelected::REGISTER:
 		if (IsButtonPressed(upButtonFlag))
@@ -514,7 +514,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 	PPGeDrawText(di->T("Enter the following information."), 65, 54, FadedStyle(PPGeAlign::BOX_LEFT, 0.6f));
 
 	PPGeDrawText(di->T("Login ID"), 235, 115, formText);
-	DrawInputBox(login, 243, 115, 413, 132, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f));
+	DrawInputBox(npid, 243, 115, 413, 132, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f));
 
 	PPGeDrawText(di->T("Sign-In ID"), 235, 141, formText);
 	PPGeDrawText(di->T("(E-mail Address)"), 235, 151, formText);

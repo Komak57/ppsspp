@@ -493,11 +493,11 @@ public:
 	bool bAllowSpeedControlWhileConnected;  // Useful in some games but not recommended.
 
 	// PSN revival servers (actual code in development by FoxLovesYou from Discord)
-	std::string sPSNNPID;
-	std::string sPSNPassword;
-	std::string sPSNToken;  // This will be set by a login mechanism
-	bool sPSNRememberPwd;
-	bool sPSNAutoSignIn;
+	std::string infraNpId;
+	std::string infraPassword;
+	std::string infraToken;  // This will be set by a login mechanism
+	bool infraRememberPwd;
+	bool infraAutoSignIn;
 
 	bool bEnableWlan;
 	std::map<std::string, std::string> mHostToAlias;  // Local DNS database stored in ini file

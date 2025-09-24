@@ -218,7 +218,7 @@ static int sceNpGetOnlineId(u32 idPtr)
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_ARGUMENT, "invalid arg");
 
 	id.FillWithZero();
-	memcpy(id->data, g_Config.sPSNNPID.c_str(), std::min<size_t>(16, g_Config.sPSNNPID.length()));
+	memcpy(id->data, g_Config.infraNpId.c_str(), std::min<size_t>(16, g_Config.infraNpId.length()));
 	id.NotifyWrite("NpGetOnlineId");
 
 	return hleLogWarning(Log::sceNet, 0, "Online ID: %s", id->data);
@@ -228,17 +228,17 @@ SceNpId* NpGetNpId() {
 	if (npId.handle.data[0] == 0) {
 		WARN_LOG(Log::sceNet, "NpGetNpId() First Call");
 		memset(&npId, 0, sizeof(npId));
-		memcpy(&npId.handle.data, g_Config.sPSNNPID.c_str(),
-			std::min<size_t>(16, g_Config.sPSNNPID.length()));
+		memcpy(&npId.handle.data, g_Config.infraNpId.c_str(),
+			std::min<size_t>(16, g_Config.infraNpId.length()));
 	}
 	return &npId;
 }
 
 std::string* NpGetLogin() {
 	std::string* creds = new std::string[3];
-	creds[0] = g_Config.sPSNNPID;
-	creds[1] = g_Config.sPSNPassword;
-	creds[2] = g_Config.sPSNToken;
+	creds[0] = g_Config.infraNpId;
+	creds[1] = g_Config.infraPassword;
+	creds[2] = g_Config.infraToken;
 	return creds;
 }
 
@@ -319,7 +319,7 @@ static int sceNpGetUserProfile(u32 profilePtr)
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_ARGUMENT, "invalid arg");
 
 	profile.FillWithZero();
-	strncpy(profile->npId.handle.data, g_Config.sPSNNPID.c_str(), std::min<size_t>(16, g_Config.sPSNNPID.length()));
+	strncpy(profile->npId.handle.data, g_Config.infraNpId.c_str(), std::min<size_t>(16, g_Config.infraNpId.length()));
 	strncpy(profile->onlineName->data, npAuthServer->GetOnlineName().c_str(), std::min<size_t>(16, npAuthServer->GetOnlineName().length()));
 	truncate_cpy(profile->avatarUrl->data, sizeof(profile->avatarUrl), npAuthServer->GetAvatarURL());
 
@@ -466,7 +466,7 @@ int sceNpAuthGetTicket(u32 requestId, u32 bufferAddr, u32 length) {
 	}
 
 	// We have validated, and this will be empty if the ID is bad.
-	if (g_Config.sPSNNPID.empty() || g_Config.sPSNNPID != SanitizeString(g_Config.sPSNNPID, StringRestriction::AlphaNumUnderscore, 3, 16)) {
+	if (g_Config.infraNpId.empty() || g_Config.infraNpId != SanitizeString(g_Config.infraNpId, StringRestriction::AlphaNumUnderscore, 3, 16)) {
 		auto n = GetI18NCategory(I18NCat::NETWORKING);
 		// Temporary message.
 		g_OSD.Show(OSDType::MESSAGE_ERROR, n->T("To play in Infrastructure Mode, you must enter a username"), 5.0f);
@@ -491,7 +491,7 @@ int sceNpAuthGetTicket(u32 requestId, u32 bufferAddr, u32 length) {
 	ofs += writeTicketU64Param(buf + ofs, PARAM_TYPE_DATE, now);
 	ofs += writeTicketU64Param(buf + ofs, PARAM_TYPE_DATE, now + 10 * 60 * 1000); // now + 10 minutes, expired time?
 	ofs += writeTicketU64Param(buf + ofs, PARAM_TYPE_LONG, 0x592e71c546e86859); // seems to be consistent, 8-bytes password hash may be? or related to entitlement? or console id?
-	ofs += writeTicketStringParam(buf + ofs, PARAM_TYPE_STRING, g_Config.sPSNNPID.c_str(), 32); // username (pre-cut to 16 chars)
+	ofs += writeTicketStringParam(buf + ofs, PARAM_TYPE_STRING, g_Config.infraNpId.c_str(), 32); // username (pre-cut to 16 chars)
 	ofs += writeTicketParam(buf + ofs, PARAM_TYPE_STRING_ASCII, npCountryCode, 4); // SceNpCountryCode ? ie. "fr" + 00 02
 	ofs += writeTicketStringParam(buf + ofs, PARAM_TYPE_STRING, npRegionCode, 4); // 2-char code? related to country/lang code? ie. "c9" + 00 00
 	ofs += writeTicketParam(buf + ofs, PARAM_TYPE_STRING_ASCII, npServiceId.c_str(), 24);

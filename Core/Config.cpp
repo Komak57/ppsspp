@@ -633,10 +633,10 @@ static std::string DefaultInfrastructureUsername() {
 	// If the user has already picked a Nickname that satisfies the rules and is not "PPSSPP",
 	// let's use that.
 	// NOTE: This type of dependency means that network settings must be AFTER system settings in sections[].
-	if (g_Config.sPSNNPID != "PPSSPP" &&
-		!g_Config.sPSNNPID.empty() &&
-		g_Config.sPSNNPID == SanitizeString(g_Config.sPSNNPID, StringRestriction::AlphaNumUnderscore, 3, 16)) {
-		return g_Config.sPSNNPID;
+	if (g_Config.infraNpId != "PPSSPP" &&
+		!g_Config.infraNpId.empty() &&
+		g_Config.infraNpId == SanitizeString(g_Config.infraNpId, StringRestriction::AlphaNumUnderscore, 3, 16)) {
+		return g_Config.infraNpId;
 	}
 
 	// Otherwise let's leave it empty, which will result in login failure and a warning.
@@ -980,11 +980,11 @@ static const ConfigSetting networkSettings[] = {
 	ConfigSetting("DontDownloadInfraJson", &g_Config.bDontDownloadInfraJson, false, CfgFlag::DONT_SAVE),
 
 	// See comment in header
-	ConfigSetting("PSNNPID", &g_Config.sPSNNPID, &DefaultInfrastructureUsername, CfgFlag::PER_GAME),
-	ConfigSetting("PSNPassword", &g_Config.sPSNPassword, "", CfgFlag::PER_GAME),
-	ConfigSetting("PSNToken", &g_Config.sPSNToken, "", CfgFlag::PER_GAME),
-	ConfigSetting("PSNAutoSignIn", &g_Config.sPSNAutoSignIn, false, CfgFlag::PER_GAME),
-	ConfigSetting("PSNRememberPwd", &g_Config.sPSNRememberPwd, false, CfgFlag::PER_GAME),
+	ConfigSetting("PSNNPID", &g_Config.infraNpId, &DefaultInfrastructureUsername, CfgFlag::PER_GAME),
+	ConfigSetting("PSNPassword", &g_Config.infraPassword, "", CfgFlag::PER_GAME),
+	ConfigSetting("PSNToken", &g_Config.infraToken, "", CfgFlag::PER_GAME),
+	ConfigSetting("PSNAutoSignIn", &g_Config.infraAutoSignIn, false, CfgFlag::PER_GAME),
+	ConfigSetting("PSNRememberPwd", &g_Config.infraRememberPwd, false, CfgFlag::PER_GAME),
 
 	ConfigSetting("EnableNetworkChat", &g_Config.bEnableNetworkChat, false, CfgFlag::PER_GAME),
 	ConfigSetting("ChatButtonPosition", &g_Config.iChatButtonPosition, (int)ScreenEdgePosition::BOTTOM_LEFT, CfgFlag::PER_GAME),
