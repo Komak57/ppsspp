@@ -537,3 +537,43 @@ void PSPDialog::DrawInputBox(std::string& input, float x, float y, float x2, flo
 		}
 	}
 }
+
+uint32_t ToFocusColor(uint32_t color, float factor) {
+	// Extract channels
+	uint8_t r = (color >> 24) & 0xFF;
+	uint8_t g = (color >> 16) & 0xFF;
+	uint8_t b = (color >> 8) & 0xFF;
+	uint8_t a = color & 0xFF;
+
+	// Scale and clamp
+	r = std::min(255, int(r * factor));
+	g = std::min(255, int(g * factor));
+	b = std::min(255, int(b * factor));
+
+	// Repack into RGBA
+	return (uint32_t(r) << 24) | (uint32_t(g) << 16) |
+		(uint32_t(b) << 8) | a;
+}
+
+void PSPDialog::DrawButton(std::string_view text1, float x, float y, float x2, float y2, u32 color, float fontSize, bool focus) {
+	if (focus)
+		PPGeDrawRect(x, y, x2, y2, ToFocusColor(color, 1.7f));
+	else
+		PPGeDrawRect(x, y, x2, y2, color);
+
+	// Prepare displayed text (masked if requested)
+	std::string display = text1.data();
+
+	// Clip text so it fits inside the box
+	float maxWidth = (x2 - x - 16.0f);
+	while (!display.empty()) {
+		float textW = 0.0f, textH = 0.0f;
+		PPGeMeasureText(&textW, &textH, display, fontSize, PPGE_LINE_USE_ELLIPSIS, maxWidth);
+		if (textW <= maxWidth) break;
+		display.erase(display.begin());  // drop leading chars until it fits
+	}
+
+	PPGeStyle centerAligned = FadedStyle(PPGeAlign::BOX_HCENTER, fontSize);
+	// Draw the current text inside the box
+	PPGeDrawText(display, (x + x2) / 2.0f, (y + y2) / 2.0f - 8.0f, centerAligned);
+}
