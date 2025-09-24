@@ -35,9 +35,12 @@ enum class SigninStage {
 	AUTO_LOGIN,     // if saved credentials + auto-login flag
 	LOGIN_FORM,   // show input fields for NP ID + password
 	PASSWORD_FORM,
+	PASSWORD_TOKEN_REQUEST,
 	PASSWORD_TOKEN_FORM,
+	PASSWORD_REQUEST,
 	REGISTRATION_FORM,
 	REGISTRATION_INFO_FORM,
+	REGISTRATION_REQUEST,
 	CONNECT_REQUEST,// "Signing in... Please wait"
 	AUTH_REQUEST,   // talk to RPCNAuthAgent/PSNAuthAgent
 	SUCCESS,        // finished, result OK
@@ -97,6 +100,7 @@ public:
 	PSPNpSigninDialog(UtilityDialogType type) : PSPDialog(type) {}
 
 	int Init(u32 paramAddr);
+	void InitForms();
 	int Update(int animSpeed) override;
 	int Shutdown(bool force = false) override;
 	void DoState(PointerWrap &p) override;
@@ -129,7 +133,6 @@ private:
 
 	u64 startTime = 0;
 	SigninStage stage = SigninStage::INIT;
-	std::map<u8, u8> selected;
 	//SigninSelected selected = SigninSelected::SIGNIN;
 
 	std::unique_ptr<net::NPAuthAgent> server;

@@ -39,7 +39,8 @@ const static int NP_INIT_DELAY_US = 200000;
 const static int NP_SHUTDOWN_DELAY_US = 501000; 
 const static int NP_RUNNING_DELAY_US = 1000000; // faked delay to simulate signin process to give chance for players to read the text on the dialog
 
-std::string login = "";
+std::map<u8, u8> selected;
+std::string npid = "";
 std::string email = "";
 bool validEmail = false;
 std::string online_name = "";
@@ -48,6 +49,24 @@ std::string password = "";
 std::string password_confirm = "";
 std::string token = "";
 
+std::string failMessage = "";
+
+void PSPNpSigninDialog::InitForms() {
+	npid = "";
+	email = "";
+	bool validEmail = false;
+	online_name = "";
+	avatar_url = "";
+	password = "";
+	password_confirm = "";
+	token = "";
+
+	selected[(u8)SigninStage::LOGIN_FORM] = (u8)SigninSelected::SIGNIN;
+	selected[(u8)SigninStage::PASSWORD_FORM] = (u8)PasswordSelected::LOGIN;
+	selected[(u8)SigninStage::PASSWORD_TOKEN_FORM] = (u8)PasswordTokenSelected::TOKEN;
+	selected[(u8)SigninStage::REGISTRATION_FORM] = (u8)RegisterSelected::LOGIN;
+	selected[(u8)SigninStage::REGISTRATION_INFO_FORM] = (u8)RegisterInfoSelected::ONLINE_NAME;
+}
 int PSPNpSigninDialog::Init(u32 paramAddr) {
 	// Already running
 	if (ReadStatus() != SCE_UTILITY_STATUS_NONE)
@@ -71,11 +90,7 @@ int PSPNpSigninDialog::Init(u32 paramAddr) {
 	startTime = (u64)(time_now_d() * 1000000.0);
 	stage = SigninStage::INIT;
 	// Initialize default selection pointers
-	selected[(u8)SigninStage::LOGIN_FORM] = (u8)SigninSelected::SIGNIN;
-	selected[(u8)SigninStage::PASSWORD_FORM] = (u8)PasswordSelected::LOGIN;
-	selected[(u8)SigninStage::PASSWORD_TOKEN_FORM] = (u8)PasswordTokenSelected::TOKEN;
-	selected[(u8)SigninStage::REGISTRATION_FORM] = (u8)RegisterSelected::LOGIN;
-	selected[(u8)SigninStage::REGISTRATION_INFO_FORM] = (u8)RegisterInfoSelected::ONLINE_NAME;
+	InitForms();
 	server = net::CreateNPAuthAgent(net::NPAgentType::RPCN, "rpcn.revurb.us", 31313);
 	StartFade(true);
 	return 0;
@@ -147,14 +162,161 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		case SigninStage::PASSWORD_FORM:
 			UpdatePasswordRecoveryForm(animSpeed);
 			break;
+		case SigninStage::PASSWORD_TOKEN_REQUEST:
+			PPGeDrawRect(0, 0, 480, 272, CalcFadedColor(0xC0C8B2AC));
+			DrawBanner();
+			DrawIndicator();
+			DisplayMessage2(di->T("SigninPleaseWait", "Requesting Verification."));
+			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
+			if (IsButtonPressed(cancelButtonFlag)) {
+				stage = SigninStage::CANCELLED;
+				break;
+			}
+			if (now - startTime > NP_RUNNING_DELAY_US * 2) {
+				startTime = now;
+				if (!server->Resolve()) {
+					failMessage = "Unable to find server. Retry?";
+					stage = SigninStage::FAIL;
+					break;
+				}
+				if (!server->Connect()) {
+					failMessage = "Connection Failed. Retry?";
+					stage = SigninStage::FAIL;
+					break;
+				}
+				int ret = server->SendResetToken(npid.c_str(), email.c_str());
+				if (ret != 0) {
+					switch ((ErrorType)ret) {
+					case ErrorType::Invalid:
+						failMessage = "The server has no email verification and doesn't need a token!";
+						break;
+					case ErrorType::DbFail:
+						failMessage = "A database related error happened on the server!";
+						break;
+					case ErrorType::TooSoon:
+						failMessage = "You can only ask for a token mail once every 24 hours!";
+						break;
+					case ErrorType::EmailFail:
+						failMessage = "The mail couldn't be sent successfully!";
+						break;
+					case ErrorType::LoginError:
+						failMessage = "The username/email pair is invalid!";
+						break;
+					default:
+						failMessage = "Unknown error sending the token. ("+ std::to_string(ret)+")";
+						break;
+					}
+					stage = SigninStage::FAIL;
+					break;
+				}
+				stage = SigninStage::PASSWORD_TOKEN_FORM;
+			}
+			break;
 		case SigninStage::PASSWORD_TOKEN_FORM:
 			UpdatePasswordRecoveryTokenForm(animSpeed);
+			break;
+		case SigninStage::PASSWORD_REQUEST:
+			PPGeDrawRect(0, 0, 480, 272, CalcFadedColor(0xC0C8B2AC));
+			DrawBanner();
+			DrawIndicator();
+			DisplayMessage2(di->T("SigninPleaseWait", "Requesting Password Reset."));
+			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
+			if (IsButtonPressed(cancelButtonFlag)) {
+				stage = SigninStage::CANCELLED;
+				break;
+			}
+			if (now - startTime > NP_RUNNING_DELAY_US * 2) {
+				startTime = now;
+				if (!server->Resolve()) {
+					failMessage = "Unable to find server. Retry?";
+					stage = SigninStage::FAIL;
+					break;
+				}
+				if (!server->Connect()) {
+					failMessage = "Connection Failed. Retry?";
+					stage = SigninStage::FAIL;
+					break;
+				}
+				int ret = server->ResetPassword(npid.c_str(), token.c_str(), password.c_str());
+				if (ret != 0) {
+					switch ((ErrorType)ret) {
+					case ErrorType::Invalid:
+						failMessage = "The server has no email verification and doesn't support password changes!";
+						break;
+					case ErrorType::DbFail:
+						failMessage = "A database related error happened on the server!";
+						break;
+					case ErrorType::TooSoon:
+						failMessage = "You can only ask for a reset password token once every 24 hours!";
+						break;
+					case ErrorType::EmailFail:
+						failMessage = "The mail couldn't be sent successfully!";
+						break;
+					case ErrorType::LoginError:
+						failMessage = "The username/password pair is invalid!";
+						break;
+					default:
+						failMessage = "Failed to reset the password. (" + std::to_string(ret) + ")";
+						break;
+					}
+					stage = SigninStage::FAIL;
+					break;
+				}
+				stage = SigninStage::LOGIN_FORM;
+			}
 			break;
 		case SigninStage::REGISTRATION_FORM:
 			UpdateRegistrationForm(animSpeed);
 			break;
 		case SigninStage::REGISTRATION_INFO_FORM:
 			UpdateRegistrationInfoForm(animSpeed);
+			break;
+		case SigninStage::REGISTRATION_REQUEST:
+			PPGeDrawRect(0, 0, 480, 272, CalcFadedColor(0xC0C8B2AC));
+			DrawBanner();
+			DrawIndicator();
+			DisplayMessage2(di->T("SigninPleaseWait", "You are currently signing in.\nPlease wait for a moment."));
+			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
+			if (IsButtonPressed(cancelButtonFlag)) {
+				stage = SigninStage::CANCELLED;
+				break;
+			}
+			if (now - startTime > NP_RUNNING_DELAY_US * 2) {
+				startTime = now;
+				if (!server->Resolve()) {
+					failMessage = "Unable to find server. Retry?";
+					stage = SigninStage::FAIL;
+					break;
+				}
+				if (!server->Connect()) {
+					failMessage = "Connection Failed. Retry?";
+					stage = SigninStage::FAIL;
+					break;
+				}
+				int ret = server->CreateAccount(npid.c_str(), password.c_str(), online_name.c_str(), avatar_url.c_str(), email.c_str());
+				if (ret != 0) {
+					switch ((ErrorType)ret) {
+					case ErrorType::CreationExistingUsername:
+						failMessage = "An account with that username already exists!";
+						break;
+					case ErrorType::CreationBannedEmailProvider:
+						failMessage = "This email provider is unsupported!";
+						break;
+					case ErrorType::CreationExistingEmail:
+						failMessage = "An account with that email already exists!";
+						break;
+					case ErrorType::CreationError:
+						failMessage = "Could not Create Account.";
+						break;
+					default:
+						failMessage = "Could not Create Account. (" + std::to_string(ret) + ")";
+						break;
+					}
+					stage = SigninStage::FAIL;
+					break;
+				}
+				stage = SigninStage::LOGIN_FORM;
+			}
 			break;
 		case SigninStage::CONNECT_REQUEST:
 			PPGeDrawRect(0, 0, 480, 272, CalcFadedColor(0xC0C8B2AC));
@@ -169,11 +331,13 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			if (now - startTime > NP_RUNNING_DELAY_US * 2) {
 				startTime = now;
 				if (!server->Resolve()) {
-					stage = SigninStage::SHUTDOWN;
+					failMessage = "Unable to find server. Retry?";
+					stage = SigninStage::FAIL;
 					break;
 				}
 				if (!server->Connect()) {
-					stage = SigninStage::SHUTDOWN;
+					failMessage = "Connection Failed. Retry?";
+					stage = SigninStage::FAIL;
 					break;
 				}
 				stage = SigninStage::AUTH_REQUEST;
@@ -195,6 +359,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 				std::string* creds = NpGetLogin();
 				if (server->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str()) != 0) {
 					g_Config.infraToken = ""; // Reset the Token to force re-entry
+					failMessage = "Authentication Failed. Retry?";
 					stage = SigninStage::FAIL;
 					break;
 				}
@@ -212,9 +377,11 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			break;
 		case SigninStage::FAIL:
 			// Disable Token to force re-aquire ?
-			//g_Config.sPSNToken = "";
+			//g_Config.infraToken = "";
+			// Reset all forms
+			InitForms();
 			DrawLogo();
-			DisplayMessage2(di->T("PleaseWait", "Authentication Failed. Retry?"));
+			DisplayMessage2(di->T("PleaseWait", failMessage));
 			DisplayButtons(DS_BUTTON_OK, di->T("Confirm"));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
 			if (server->IsConnected()) {
@@ -618,7 +785,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 		if (IsButtonPressed(leftButtonFlag))
 			selected[(u8)stage] = (u8)PasswordTokenSelected::CANCEL;
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::LOGIN_FORM;
+			stage = SigninStage::PASSWORD_REQUEST;
 		break;
 	}
 	// Draw window
@@ -666,10 +833,10 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 		if (IsButtonPressed(downButtonFlag))
 			selected[(u8)stage] = (u8)RegisterSelected::EMAIL;
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Login ID", login, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Login ID", npid, false,
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
-				login = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
+				npid = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 			},
 				[&]() {
 				// Failure callback
@@ -724,7 +891,7 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 		if (IsButtonPressed(upButtonFlag))
 			selected[(u8)stage] = (u8)RegisterSelected::PASSWORD;
 		if (IsButtonPressed(downButtonFlag)) {
-			if (!login.empty() && (!email.empty() && IsValidEmail(email)) && !password.empty() && !password_confirm.empty() && password == password_confirm)
+			if (!npid.empty() && (!email.empty() && IsValidEmail(email)) && !password.empty() && !password_confirm.empty() && password == password_confirm)
 				selected[(u8)stage] = (u8)RegisterSelected::CONTINUE;
 			else
 				selected[(u8)stage] = (u8)RegisterSelected::CANCEL;
@@ -746,7 +913,7 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 			selected[(u8)stage] = (u8)RegisterSelected::PASSCONFIRM;
 		if (IsButtonPressed(rightButtonFlag)) {
 			// Skip Continue if email is empty
-			if (!login.empty() && (!email.empty() && IsValidEmail(email)) && !password.empty() && !password_confirm.empty() && password == password_confirm)
+			if (!npid.empty() && (!email.empty() && IsValidEmail(email)) && !password.empty() && !password_confirm.empty() && password == password_confirm)
 				selected[(u8)stage] = (u8)RegisterSelected::CONTINUE;
 		}
 		if (IsButtonPressed(okButtonFlag))
@@ -770,7 +937,7 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 	PPGeDrawText(di->T("Enter the following information."), 65, 54, FadedStyle(PPGeAlign::BOX_LEFT, 0.6f));
 
 	PPGeDrawText(di->T("Login ID"), 235, 115, formText);
-	DrawInputBox(login, 243, 115, 413, 132, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f));
+	DrawInputBox(npid, 243, 115, 413, 132, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f));
 
 	PPGeDrawText(di->T("E-mail"), 235, 135, formText);
 	DrawInputBox(email, 243, 135, 413, 152, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f));
@@ -857,7 +1024,7 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 		if (IsButtonPressed(leftButtonFlag))
 			selected[(u8)stage] = (u8)RegisterInfoSelected::CANCEL;
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::LOGIN_FORM;
+			stage = SigninStage::REGISTRATION_REQUEST;
 		break;
 	}
 	// Draw window
