@@ -533,7 +533,7 @@ namespace net {
 		}*/
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
 
 		online_name = resp.stream->get_string(false);
@@ -574,7 +574,7 @@ namespace net {
 		}*/
 		auto response = take_pending_request(reqId);
 		if (response.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[response.error];
+			return response.error;
 
 		/*int i;
 		std::string hexdata = "";
@@ -611,7 +611,7 @@ namespace net {
 		}
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
 		worldInfoOut->clear();
 
@@ -664,7 +664,7 @@ namespace net {
 				ERROR_LOG(Log::sceNet, "Unexpected error in reply to RequestSignalingInfos: %d", resp.error);
 				break;
 			}
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
@@ -757,7 +757,7 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
 		//                                                     20       12       0        8        6        1    
 		// NPAgent::Recv('01 1000 28000000 0100000000000000 00 14000000 0C000000 00000600 08000400 06000000 01000000')
@@ -950,7 +950,7 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
 
 		// 01 0D00 84010000 0100000000000000 00 700100002000000000001A00280026002000000018000000140010000E000000080004001A000000240000000000008400001000780000000C00000008000000000000000100000000000001020000003800000004000000DAFFFFFF000010000C000000E9118EA058FCE20068FFFFFF00005800040000000000000000000A0014000C00060008000A000000000010000C000000E9118EA058FCE20098FFFFFF000057000400000000000000010000001800000014001C000800140006000000000005000C001000140000000002100058000000000000800C000000FC118EA058FCE200010000000C00000008001000080004000800000014000000FC118EA058FCE20008000C00060008000800000000005900040000000000000000000A001000040008000C000A00000030000000240000000400000015000000687474703A2F2F44756D6D7941766174617255726C00000003000000666F78001000000052504353335F5A53675363633444377800000000
@@ -1006,7 +1006,7 @@ namespace net {
 
 		auto _resp = take_pending_request(reqId);
 		if (_resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[_resp.error];
+			return _resp.error;
 		_resp.stream = new vec_stream(_resp.data, 1);
 
 		//auto stream = new vec_stream(_resp.data);
@@ -1042,7 +1042,7 @@ namespace net {
 
 		auto _resp = take_pending_request(reqId);
 		if (_resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[_resp.error];
+			return _resp.error;
 		_resp.stream = new vec_stream(_resp.data, 1);
 
 		//memcpy(resp, &_resp.data, sizeof(u64));
@@ -1086,7 +1086,7 @@ namespace net {
 
 		auto response = take_pending_request(reqId);
 		if (response.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[response.error];
+			return response.error;
 		response.stream = new vec_stream(response.data, 1);
 
 		resp = response.stream->get_flatbuffer<RoomDataInternal>();
@@ -1144,7 +1144,7 @@ namespace net {
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError) {
 			ERROR_LOG(Log::sceNet, "Response Error: %s", PacketTypeNames[resp.error]);
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 		return 0;
@@ -1211,7 +1211,7 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
 
 		return 0;
@@ -1299,7 +1299,7 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
 
 		return 0;
@@ -1340,7 +1340,7 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
 
 		return 0;
@@ -1381,7 +1381,7 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
 
 		respData = resp.stream->get_flatbuffer<GetRoomDataExternalListResponse>();
