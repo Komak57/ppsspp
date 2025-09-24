@@ -33,8 +33,12 @@ struct SceUtilityNpSigninParam {
 enum class SigninStage {
 	INIT,           // param copied, heap allocated
 	AUTO_LOGIN,     // if saved credentials + auto-login flag
-	MANUAL_LOGIN,   // show input fields for NP ID + password
-	CONNECT_REQUEST,           // "Signing in... Please wait"
+	LOGIN_FORM,   // show input fields for NP ID + password
+	PASSWORD_FORM,
+	PASSWORD_TOKEN_FORM,
+	REGISTRATION_FORM,
+	REGISTRATION_INFO_FORM,
+	CONNECT_REQUEST,// "Signing in... Please wait"
 	AUTH_REQUEST,   // talk to RPCNAuthAgent/PSNAuthAgent
 	SUCCESS,        // finished, result OK
 	FAIL,           // failed, show error + retry option
@@ -51,6 +55,43 @@ enum class SigninSelected {
 	FORGOTPSWD
 };
 
+enum class PasswordSelected {
+	LOGIN,
+	EMAIL,
+
+	CANCEL,
+	CONTINUE,
+	REGISTER
+};
+
+enum class PasswordTokenSelected {
+	TOKEN,
+	PASSWORD,
+	PASSCONFIRM,
+
+	CANCEL,
+	CONTINUE,
+	REGISTER
+};
+
+enum class RegisterSelected {
+	LOGIN,
+	EMAIL,
+	PASSWORD,
+	PASSCONFIRM,
+
+	CANCEL,
+	CONTINUE
+};
+
+enum class RegisterInfoSelected {
+	ONLINE_NAME,
+	AVATAR_URL,
+
+	CANCEL,
+	CONTINUE
+};
+
 class PSPNpSigninDialog : public PSPDialog {
 public:
 	PSPNpSigninDialog(UtilityDialogType type) : PSPDialog(type) {}
@@ -64,6 +105,7 @@ public:
 	std::unique_ptr<net::NPAuthAgent> GetServer() {
 		return std::move(server);
 	}
+
 protected:
 	bool UseAutoStatus() override {
 		return false;
@@ -73,14 +115,22 @@ private:
 	void DrawBanner();
 	void DrawIndicator();
 	void DrawLogo();
+	void DrawFormBG();
+
+	void UpdateSigninForm(int animSpeed);
+	void UpdatePasswordRecoveryForm(int animSpeed);
+	void UpdatePasswordRecoveryTokenForm(int animSpeed);
+	void UpdateRegistrationForm(int animSpeed);
+	void UpdateRegistrationInfoForm(int animSpeed);
 
 	SceUtilityNpSigninParam request = {};
 	u32 requestAddr = 0;
 	//int npSigninResult = -1;
 
 	u64 startTime = 0;
-	SigninStage stage;
-	SigninSelected selected;
+	SigninStage stage = SigninStage::INIT;
+	std::map<u8, u8> selected;
+	//SigninSelected selected = SigninSelected::SIGNIN;
 
 	std::unique_ptr<net::NPAuthAgent> server;
 };
