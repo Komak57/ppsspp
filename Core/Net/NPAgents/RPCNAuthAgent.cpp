@@ -356,7 +356,7 @@ namespace net {
 		}*/
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
 
 		online_name = resp.stream->get_string(false);
@@ -392,7 +392,7 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
 
 		return true;
@@ -418,7 +418,7 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		//resp.stream = new vec_stream(resp.data, 1);
 		DEBUG_LOG(Log::sceNet, "Token has successfully been resent!");
 		return 0;
@@ -444,7 +444,7 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		//resp.stream = new vec_stream(resp.data, 1);
 
 		DEBUG_LOG(Log::sceNet, "Password reset token has successfully been sent!");
@@ -473,7 +473,7 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		//resp.stream = new vec_stream(resp.data, 1);
 		DEBUG_LOG(Log::sceNet, "Password has successfully been reset!");
 		return 0;
@@ -525,7 +525,7 @@ namespace net {
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return ErrorToPSPError[resp.error];
+			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
 		
 		u16 num_servs = resp.stream->get<u16>();
