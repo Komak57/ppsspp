@@ -1737,18 +1737,22 @@ static int sceNetApctl_lib2_C20A144C(int connIndex, u32 ps3MacAddressPtr) {
 	return sceNetApctlConnect(connIndex);
 }
 
-static int sceNetUpnpInit(int unknown1,int unknown2) {
+// PSP2i			sceNetUpnpInit(0x3800, 0x28)
+// Fat Princess		sceNetUpnpInit(0x2000, 0x64)
+// Patapon3			sceNetUpnpInit(0x3800, 0x32)
+static int sceNetUpnpInit(int size,int offset) {
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(0x%04x, 0x%02x)", __FUNCTION__, size, offset);
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 
 static int sceNetUpnpStart() {
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
-
+// return usually ignored
 static int sceNetUpnpStop() {
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
-
+// return usually ignored
 static int sceNetUpnpTerm() {
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
