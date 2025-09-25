@@ -1759,6 +1759,11 @@ static int sceNetUpnpTerm() {
 
 static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%08x)", __FUNCTION__, unknownPtr);
+	char data[8];
+	for (int i = 0; i < 8; i++)
+		data[i] = Memory::Read_U8(unknownPtr + i);
+	WARN_HEXLOG(Log::sceNet, "sceNetUpnpGetNatInfo", data, 8, 8);
+
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 
