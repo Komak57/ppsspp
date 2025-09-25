@@ -142,45 +142,42 @@ static void ssl_debug(void* ctx, int level,
 	//mbedtls_fprintf((FILE*)ctx, "%s:%04d: %s", file, line, str);
 }
 
-static void HEX_LOG(Log level, const char* source, const char* data, size_t len, int limit = 386) {
-	if (!data) {
-		ERROR_LOG(level, "%s: Nothing to Print", source);
-		return;
-	}
+#define HEX_LOG(t, v, s, d, ln, lmt) \
+    if ((int)v <= MAX_LOGLEVEL && GenericLogEnabled(t, v)) { \
+        if (!(d)) { \
+            ERROR_LOG(t, "%s: Nothing to Print", s); \
+        } else { \
+			GENERIC_LOG(t, v, "%s: ==Hex Data==", s); \
+			for (size_t i = 0; i < (ln); i += 16) { \
+				if (i >= (lmt)) \
+					break; \
+				char line[256]; \
+				int offset = snprintf(line, sizeof(line), "%08zx:", i); \
+				int lineLen = std::min<size_t>(16, (ln) - i); \
+				for (int x = 0; x < lineLen; x++) { \
+					offset += snprintf(line + offset, sizeof(line) - offset, " %02X", \
+									   static_cast<unsigned char>((d)[i + x])); \
+				} \
+				for (int x = lineLen; x < 16; x++) { \
+					offset += snprintf(line + offset, sizeof(line) - offset, "   "); \
+				} \
+				offset += snprintf(line + offset, sizeof(line) - offset, "  "); \
+				for (int x = 0; x < lineLen; x++) { \
+					char b = static_cast<unsigned char>((d)[i + x]); \
+					line[offset++] = (b >= 32 && b <= 126) ? b : '.'; \
+				} \
+				line[offset] = '\0'; \
+				GENERIC_LOG(t, v, "%s", line); \
+			} \
+		} \
+    }
 
-	DEBUG_LOG(level, "%s: ==Hex Data==", source);
-
-	for (size_t i = 0; i < len; i += 16) {
-		if ((int)i > limit)
-			break;
-
-		// Print offset
-		char line[256];
-		int offset = snprintf(line, sizeof(line), "%08zx:", i);
-
-		// Print hex bytes
-		int lineLen = std::min<size_t>(16, len - i);
-		for (int x = 0; x < lineLen; x++) {
-			offset += snprintf(line + offset, sizeof(line) - offset, " %02X", static_cast<unsigned char>(data[i + x]));
-		}
-
-		// Pad to 16 bytes
-		for (int x = lineLen; x < 16; x++) {
-			offset += snprintf(line + offset, sizeof(line) - offset, "   ");
-		}
-
-		// Add ASCII section
-		offset += snprintf(line + offset, sizeof(line) - offset, "  ");
-		for (int x = 0; x < lineLen; x++) {
-			char b = static_cast<unsigned char>(data[i + x]);
-			line[offset++] = (b >= 32 && b <= 126) ? b : '.';
-		}
-		line[offset] = '\0';
-
-		// Log the full line
-		DEBUG_LOG(level, "%s", line);
-	}
-}
+#define ERROR_HEXLOG(t,s,d,ln,lmt)   do { HEX_LOG(t, LogLevel::LWARNING,	s, d, ln, lmt) } while (false)
+#define WARN_HEXLOG(t,s,d,ln,lmt)    do { HEX_LOG(t, LogLevel::LWARNING,	s, d, ln, lmt) } while (false)
+#define NOTICE_HEXLOG(t,s,d,ln,lmt)  do { HEX_LOG(t, LogLevel::LNOTICE,		s, d, ln, lmt) } while (false)
+#define INFO_HEXLOG(t,s,d,ln,lmt)    do { HEX_LOG(t, LogLevel::LINFO,		s, d, ln, lmt) } while (false)
+#define DEBUG_HEXLOG(t,s,d,ln,lmt)   do { HEX_LOG(t, LogLevel::LDEBUG,		s, d, ln, lmt) } while (false)
+#define VERBOSE_HEXLOG(t,s,d,ln,lmt) do { HEX_LOG(t, LogLevel::LVERBOSE,	s, d, ln, lmt) } while (false)
 
 // Currently only actually shows a dialog box on Windows.
 bool HandleAssert(const char *function, const char *file, int line, const char *expression, const char* format, ...)

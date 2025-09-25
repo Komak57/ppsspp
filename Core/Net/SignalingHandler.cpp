@@ -111,7 +111,7 @@ bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, u32 addr, 
 	DEBUG_LOG(Log::sceNet, "Sending packet(%d bytes) to %s:%d", data.size(), ip2str(dest.sin_addr).c_str(), port);
 
 	std::string datahex;
-	HEX_LOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size());
+	DEBUG_HEXLOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size(), 386);
 	auto inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
 	if (!inetSocket) {
 		ERROR_LOG(Log::sceNet, "Socket not found");
@@ -391,7 +391,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 			return;
 		}
 
-		HEX_LOG(Log::sceNet, "signaling_handler::dispatch_packet", reinterpret_cast<const char*>(buf), n);
+		DEBUG_HEXLOG(Log::sceNet, "signaling_handler::dispatch_packet", reinterpret_cast<const char*>(buf), n, 386);
 
 		// vport + subset
 		const u16 vport_le = *reinterpret_cast<const u16_le*>(&buf[0]);

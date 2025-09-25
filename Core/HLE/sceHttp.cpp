@@ -178,7 +178,7 @@ static int sceHttpReadData(int requestID, u32 dataPtr, u32 dataSize) {
 		u8* data = (u8*)Memory::GetPointerUnchecked(dataPtr);
 		char* strdata = new char[retval];
 		memcpy(strdata, data, retval);
-		HEX_LOG(Log::HTTP, "Data Dump:", strdata, retval);
+		DEBUG_HEXLOG(Log::HTTP, "Data Dump:", strdata, retval, 386);
 		/*std::string datahex;
 		DataToHexString(10, 0, data, retval, &datahex);
 		DEBUG_LOG(Log::HTTP, "Data Dump (%d bytes):\n%s", retval, datahex.c_str());*/

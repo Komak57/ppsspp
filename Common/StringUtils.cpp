@@ -350,7 +350,7 @@ void DataToHexString(const uint8_t *data, size_t size, std::string *output, bool
 	buffer.TakeAll(output);
 }
 
-// FIXME: Use HEX_LOG instead
+// FIXME: Use DEBUG_HEXLOG instead
 void DataToHexString(int indent, uint32_t startAddr, const uint8_t* data, size_t size, std::string* output) {
 	Buffer buffer;
 	size_t i = 0;
