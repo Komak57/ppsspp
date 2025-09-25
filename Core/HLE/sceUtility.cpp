@@ -1456,7 +1456,7 @@ static void sceUtilityPsnInitStart(u32 paramPtr)
 static int sceUtilityPsnGetStatus()
 {
 	u64 now = (u64)(time_now_d() * 1000000.0);
-	int i = sceUtilityNpSigninUpdate(now - last);
+	int i = sceUtilityNpSigninUpdate(2); // Simulate normal behavior
 	if (i == 0) {
 		switch (npSigninDialog->GetStatus()) {
 		case 0: // NP_SIGNIN_STATUS_NONE

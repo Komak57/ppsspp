@@ -38,7 +38,7 @@
 const static int NP_INIT_DELAY_US = 200000; 
 const static int NP_SHUTDOWN_DELAY_US = 501000; 
 const static int NP_RUNNING_DELAY_US = 1000000; // faked delay to simulate signin process to give chance for players to read the text on the dialog
-const static int NP_TRANSITION_SPEED = 2000;
+const static int NP_TRANSITION_SPEED = 500;
 
 std::map<u8, u8> selected;
 std::string npid = "";
@@ -51,6 +51,7 @@ std::string password_confirm = "";
 std::string token = "";
 
 std::string failMessage = "";
+double deltaTime = 0;
 
 void PSPNpSigninDialog::InitForms() {
 	npid = "";
@@ -91,6 +92,7 @@ int PSPNpSigninDialog::Init(u32 paramAddr) {
 	//npSigninResult = -1;
 	startTime = (u64)(time_now_d() * 1000000.0);
 	lastTime = startTime;
+	deltaTime = (startTime / 1000000.0f);
 	stage = SigninStage::INIT;
 	transitionStage = SigninStage::INIT;
 	// Initialize default selection pointers
@@ -143,7 +145,6 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 	if (ReadStatus() != SCE_UTILITY_STATUS_RUNNING) {
 		return SCE_ERROR_UTILITY_INVALID_STATUS;
 	}
-
 	UpdateButtons();
 	UpdateCommon();
 
@@ -152,6 +153,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 	if (request.npSigninStatus == NP_SIGNIN_STATUS_NONE) {
 
 		u64 now = (u64)(time_now_d() * 1000000.0);
+		deltaTime = (time_now_d() - deltaTime);
 		auto di = GetI18NCategory(I18NCat::DIALOG);
 		UpdateFade(animSpeed);
 		StartDraw();
@@ -160,9 +162,9 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		if (transitioning) {
 			if (stage != transitionStage) {
 				// Fade Out
-				fadeTimer += 1.0f / 60.0f * animSpeed; // Probably need a more real value of delta time
-				if (fadeTimer < NP_TRANSITION_SPEED) {
-					fadeValue = 255 - (u32)(fadeTimer / NP_TRANSITION_SPEED * 255);
+				fadeTimer += deltaTime * animSpeed; // Probably need a more real value of delta time
+				if (fadeTimer < NP_TRANSITION_SPEED / 2) {
+					fadeValue = 255 - (u32)(fadeTimer / (NP_TRANSITION_SPEED / 2) * 255);
 				}
 				else {
 					fadeValue = 0;
@@ -173,9 +175,9 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			}
 			else {
 				// Fade In
-				fadeTimer += 1.0f / 60.0f * animSpeed; // Probably need a more real value of delta time
-				if (fadeTimer < NP_TRANSITION_SPEED) {
-					fadeValue = (u32)(fadeTimer / NP_TRANSITION_SPEED * 255);
+				fadeTimer += deltaTime * animSpeed; // Probably need a more real value of delta time
+				if (fadeTimer < NP_TRANSITION_SPEED / 2) {
+					fadeValue = (u32)(fadeTimer / (NP_TRANSITION_SPEED / 2) * 255);
 				}
 				else {
 					fadeValue = 255;
