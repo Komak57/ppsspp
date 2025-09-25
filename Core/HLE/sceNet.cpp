@@ -1753,7 +1753,8 @@ static int sceNetUpnpTerm() {
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 
-static int sceNetUpnpGetNatInfo() {
+static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%08x)", __FUNCTION__, unknownPtr);
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 
@@ -1817,7 +1818,7 @@ const HLEFunction sceWlanDrv[] = {
 
 // see http://www.kingx.de/forum/showthread.php?tid=35164
 const HLEFunction sceNetUpnp[] = {
-	{0X27045362, &WrapI_V<sceNetUpnpGetNatInfo>,     "sceNetUpnpGetNatInfo",            'i', ""     },
+	{0X27045362, &WrapI_U<sceNetUpnpGetNatInfo>,     "sceNetUpnpGetNatInfo",            'i', "x"    },
 	{0X3432B2E5, &WrapI_V<sceNetUpnpStart>,          "sceNetUpnpStart",                 'i', ""     },
 	{0X3E32ED9E, &WrapI_V<sceNetUpnpStop>,           "sceNetUpnpStop",                  'i', ""     },
 	{0X540491EF, &WrapI_V<sceNetUpnpTerm>,           "sceNetUpnpTerm",                  'i', ""     },
