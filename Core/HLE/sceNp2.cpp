@@ -1674,7 +1674,8 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
 
 	sockaddr_in sockAddr{};
-	netInfo->localAddr = getLocalIp(&sockAddr);	// LocalIP
+	getLocalIp(&sockAddr);	// LocalIP
+	netInfo->localAddr = htonl(sockAddr.sin_addr.s_addr);
 	// FIXME: Get PublicIP from RPCN's Signaling server or PSN's STUN server
 	netInfo->mappedAddr = npServer->GetSigAddr();	// PublicIP
 	netInfo->natStatus = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
