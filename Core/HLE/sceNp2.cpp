@@ -662,7 +662,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u3
 	if (connInfoPtr == 0 || !Memory::IsValidAddress(connInfoPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "unkPtr is an invalid pointer");
 
-	auto connInfo = PSPPointer<ScenpMatching2SignalingInfo>::Create(connInfoPtr);
+	auto connInfo = PSPPointer<SceNpMatching2SignalingInfo>::Create(connInfoPtr);
 
 	auto member = npServer->cache.GetMember(memberId);
 	if (!member) {

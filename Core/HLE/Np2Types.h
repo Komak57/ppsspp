@@ -713,11 +713,11 @@ struct NpMatching2Args {
 };
 
 #pragma pack(push,1)
-struct ScenpMatching2SignalingInfo {
+struct SceNpMatching2SignalingInfo {
 	SceNpMatching2ServerStatus status;
 	np_in_addr ipaddr;
 	np_in_port_t port;
-	u8 padding[2];
+	u8 padding[1];
 };
 
 struct SceNpMatching2ServerInfo {
@@ -1730,7 +1730,12 @@ struct SceNpMatching2SignalingNetInfo
 	u32 size;
 	u32 localAddr;
 	u32 mappedAddr;
-	u32 natStatus;
+	s32 natStatus;
+	// Nemoumbra: sceNpMatching2SignalingGetLocalNetInfo internally calls a function sceNetUpnp_0x1038E77A that returns a bunch of network-related info
+	s32 UPnPStatus;
+	s32 portStatus;
+	u16 port;
+	u8 padding[2];
 };
 
 // Common structure used when receiving data
