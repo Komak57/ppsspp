@@ -713,6 +713,13 @@ struct NpMatching2Args {
 };
 
 #pragma pack(push,1)
+struct SceNpMatching2ConnectionInfo {
+	SceNpMatching2ServerStatus status1;
+	SceNpMatching2ServerStatus status2;
+	SceNpMatching2ServerStatus status3;
+	SceNpMatching2NatType NatType;
+};
+
 struct SceNpMatching2SignalingInfo {
 	SceNpMatching2ServerStatus status;
 	np_in_addr ipaddr;

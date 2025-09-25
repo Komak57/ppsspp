@@ -654,17 +654,27 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 }
 
 // roomId may be a struct containing room info?
-static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u32 roomId, u32 unknown1, u32 memberId, u32 connInfoPtr) {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(ctx: %d, %08X, roomId: %d, %08X, memberId: %d, connInfoPtr: 0x%08X) at %08x", __FUNCTION__, ctxId, unknown, roomId, unknown1, memberId, connInfoPtr, currentMIPS->pc);
+static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 memberId, u32 roomId, u32 status, u32 peerMemberId, u32 connInfoPtr) {
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(ctx: %d, memberId: %08X, roomId: %d, status: %08X, peerMemberId: %d, connInfoPtr: 0x%08X) at %08x", __FUNCTION__, ctxId, memberId, roomId, status, peerMemberId, connInfoPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
+	SceNpMatching2ConnectionInfo* statusInfo = (SceNpMatching2ConnectionInfo*)&status;
+	NOTICE_LOG(Log::sceNet, " - Service State: %d", statusInfo->status1);
+	NOTICE_LOG(Log::sceNet, " - NPPort Status: %d", statusInfo->status2);
+	NOTICE_LOG(Log::sceNet, " - UPnP State: %d", statusInfo->status3);
+	NOTICE_LOG(Log::sceNet, " - NAT Type: %d", statusInfo->NatType);
+	/*statusInfo->status1 = SCE_NP_SERVICE_STATE_UNKNOWN;
+	statusInfo->status2 = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
+	statusInfo->status3 = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_UNKNOWN;
+	statusInfo->NatType = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;*/
+
 	if (connInfoPtr == 0 || !Memory::IsValidAddress(connInfoPtr))
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "unkPtr is an invalid pointer");
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "connInfoPtr is an invalid pointer");
 
 	auto connInfo = PSPPointer<SceNpMatching2SignalingInfo>::Create(connInfoPtr);
 
-	auto member = npServer->cache.GetMember(memberId);
+	auto member = npServer->cache.GetMember(peerMemberId);
 	if (!member) {
 		connInfo->status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
