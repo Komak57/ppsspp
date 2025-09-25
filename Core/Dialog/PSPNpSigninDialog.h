@@ -101,6 +101,7 @@ public:
 
 	int Init(u32 paramAddr);
 	void InitForms();
+	void Transition(SigninStage next, bool forced = false);
 	int Update(int animSpeed) override;
 	int Shutdown(bool force = false) override;
 	void DoState(PointerWrap &p) override;
@@ -132,7 +133,10 @@ private:
 	//int npSigninResult = -1;
 
 	u64 startTime = 0;
+	u64 lastTime = 0;
+	bool transitioning = false;
 	SigninStage stage = SigninStage::INIT;
+	SigninStage transitionStage = SigninStage::INIT;
 	//SigninSelected selected = SigninSelected::SIGNIN;
 
 	std::unique_ptr<net::NPAuthAgent> server;

@@ -38,6 +38,7 @@
 const static int NP_INIT_DELAY_US = 200000; 
 const static int NP_SHUTDOWN_DELAY_US = 501000; 
 const static int NP_RUNNING_DELAY_US = 1000000; // faked delay to simulate signin process to give chance for players to read the text on the dialog
+const static int NP_TRANSITION_SPEED = 2000;
 
 std::map<u8, u8> selected;
 std::string npid = "";
@@ -67,6 +68,7 @@ void PSPNpSigninDialog::InitForms() {
 	selected[(u8)SigninStage::REGISTRATION_FORM] = (u8)RegisterSelected::LOGIN;
 	selected[(u8)SigninStage::REGISTRATION_INFO_FORM] = (u8)RegisterInfoSelected::ONLINE_NAME;
 }
+
 int PSPNpSigninDialog::Init(u32 paramAddr) {
 	// Already running
 	if (ReadStatus() != SCE_UTILITY_STATUS_NONE)
@@ -88,7 +90,9 @@ int PSPNpSigninDialog::Init(u32 paramAddr) {
 
 	//npSigninResult = -1;
 	startTime = (u64)(time_now_d() * 1000000.0);
+	lastTime = startTime;
 	stage = SigninStage::INIT;
+	transitionStage = SigninStage::INIT;
 	// Initialize default selection pointers
 	InitForms();
 	server = net::CreateNPAuthAgent(net::NPAgentType::RPCN, "rpcn.revurb.us", 31313);
@@ -122,6 +126,16 @@ void PSPNpSigninDialog::DrawFormBG() {
 	// TODO: Draw PSP wave background?
 	PPGeDrawRect(0, 0, 480, 272, CalcFadedColor(0xFF3D282C));
 }
+void PSPNpSigninDialog::Transition(SigninStage next, bool forced) {
+	lastTime = (u64)(time_now_d() * 1000000.0);
+	transitioning = true;
+	transitionStage = next;
+	fadeTimer = 0;
+	if (forced) {
+		transitioning = false;
+		stage = next;
+	}
+}
 
 int PSPNpSigninDialog::Update(int animSpeed) {
 	if (ReadStatus() != SCE_UTILITY_STATUS_RUNNING) {
@@ -140,21 +154,44 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		UpdateFade(animSpeed);
 		StartDraw();
 
-		//PPGeDrawImage(confirmBtnImage, 275, 240, 20, 20, buttonStyle);
-		//PPGeDrawImage(cancelBtnImage, 255, 240, 20, 20, buttonStyle);
-		//PPGeDrawText(di->T("Confirm"), 285, 243, buttonStyle);
-		//PPGeDrawText(di->T("Cancel"), 285, 243, buttonStyle);
+		// Transition between scenes
+		if (transitioning) {
+			if (stage != transitionStage) {
+				// Fade Out
+				fadeTimer += 1.0f / 60.0f * animSpeed; // Probably need a more real value of delta time
+				if (fadeTimer < NP_TRANSITION_SPEED) {
+					fadeValue = 255 - (u32)(fadeTimer / NP_TRANSITION_SPEED * 255);
+				}
+				else {
+					fadeValue = 0;
+					fadeTimer = 0;
+					// Transition to new stage
+					stage = transitionStage;
+				}
+			}
+			else {
+				// Fade In
+				fadeTimer += 1.0f / 60.0f * animSpeed; // Probably need a more real value of delta time
+				if (fadeTimer < NP_TRANSITION_SPEED) {
+					fadeValue = (u32)(fadeTimer / NP_TRANSITION_SPEED * 255);
+				}
+				else {
+					fadeValue = 255;
+					transitioning = false;
+				}
+			}
+		}
 
 		switch (stage) {
 		case SigninStage::INIT:
 			// Check Flags for AutoLogin
 			if (g_Config.infraNpId.empty() || g_Config.infraPassword.empty() || g_Config.infraToken.empty() || !g_Config.infraAutoSignIn)
-				stage = SigninStage::LOGIN_FORM;
+				Transition(SigninStage::LOGIN_FORM, true);
 			else
-				stage = SigninStage::AUTO_LOGIN;
+				Transition(SigninStage::AUTO_LOGIN, true);
 			break;
 		case SigninStage::AUTO_LOGIN:
-			stage = SigninStage::CONNECT_REQUEST;
+			Transition(SigninStage::CONNECT_REQUEST, true);
 			break;
 		case SigninStage::LOGIN_FORM:
 			UpdateSigninForm(animSpeed);
@@ -169,26 +206,28 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			DisplayMessage2(di->T("SigninPleaseWait", "Requesting Verification."));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
 			if (IsButtonPressed(cancelButtonFlag)) {
-				stage = SigninStage::CANCELLED;
+				Transition(SigninStage::CANCELLED);
 				break;
 			}
-			if (now - startTime > NP_RUNNING_DELAY_US * 2) {
-				startTime = now;
+			if (now - lastTime > NP_RUNNING_DELAY_US * 2) {
 				if (!server->Resolve()) {
 					failMessage = "Unable to find server. Retry?";
-					stage = SigninStage::FAIL;
+					Transition(SigninStage::FAIL);
 					break;
 				}
 				if (!server->Connect()) {
 					failMessage = "Connection Failed. Retry?";
-					stage = SigninStage::FAIL;
+					Transition(SigninStage::FAIL);
 					break;
 				}
 				int ret = server->SendResetToken(npid.c_str(), email.c_str());
 				if (ret != 0) {
 					switch ((ErrorType)ret) {
+					case ErrorType::Blocked:
+						failMessage = "Server Disconnected before request.";
+						break;
 					case ErrorType::Invalid:
-						failMessage = "The server has no email verification and doesn't need a token!";
+						failMessage = "The server has no email verification and doesn't support password changes!";
 						break;
 					case ErrorType::DbFail:
 						failMessage = "A database related error happened on the server!";
@@ -206,10 +245,13 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						failMessage = "Unknown error sending the token. ("+ std::to_string(ret)+")";
 						break;
 					}
-					stage = SigninStage::FAIL;
-					break;
+					// This specific error does not constitute a failure
+					if (ret != (u8)ErrorType::TooSoon) {
+						Transition(SigninStage::FAIL);
+						break;
+					}
 				}
-				stage = SigninStage::PASSWORD_TOKEN_FORM;
+				Transition(SigninStage::PASSWORD_TOKEN_FORM);
 			}
 			break;
 		case SigninStage::PASSWORD_TOKEN_FORM:
@@ -222,19 +264,18 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			DisplayMessage2(di->T("SigninPleaseWait", "Requesting Password Reset."));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
 			if (IsButtonPressed(cancelButtonFlag)) {
-				stage = SigninStage::CANCELLED;
+				Transition(SigninStage::CANCELLED);
 				break;
 			}
-			if (now - startTime > NP_RUNNING_DELAY_US * 2) {
-				startTime = now;
+			if (now - lastTime > NP_RUNNING_DELAY_US * 2) {
 				if (!server->Resolve()) {
 					failMessage = "Unable to find server. Retry?";
-					stage = SigninStage::FAIL;
+					Transition(SigninStage::FAIL);
 					break;
 				}
 				if (!server->Connect()) {
 					failMessage = "Connection Failed. Retry?";
-					stage = SigninStage::FAIL;
+					Transition(SigninStage::FAIL);
 					break;
 				}
 				int ret = server->ResetPassword(npid.c_str(), token.c_str(), password.c_str());
@@ -247,10 +288,10 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						failMessage = "A database related error happened on the server!";
 						break;
 					case ErrorType::TooSoon:
-						failMessage = "You can only ask for a reset password token once every 24 hours!";
+						failMessage = "You can only reset your password once every 24 hours!";
 						break;
 					case ErrorType::EmailFail:
-						failMessage = "The mail couldn't be sent successfully!";
+						failMessage = "The mail couldn't be sent!";
 						break;
 					case ErrorType::LoginError:
 						failMessage = "The username/password pair is invalid!";
@@ -259,10 +300,11 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						failMessage = "Failed to reset the password. (" + std::to_string(ret) + ")";
 						break;
 					}
-					stage = SigninStage::FAIL;
+					Transition(SigninStage::FAIL);
 					break;
 				}
 				stage = SigninStage::LOGIN_FORM;
+				Transition(SigninStage::LOGIN_FORM);
 			}
 			break;
 		case SigninStage::REGISTRATION_FORM:
@@ -278,19 +320,18 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			DisplayMessage2(di->T("SigninPleaseWait", "You are currently signing in.\nPlease wait for a moment."));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
 			if (IsButtonPressed(cancelButtonFlag)) {
-				stage = SigninStage::CANCELLED;
+				Transition(SigninStage::CANCELLED);
 				break;
 			}
-			if (now - startTime > NP_RUNNING_DELAY_US * 2) {
-				startTime = now;
+			if (now - lastTime > NP_RUNNING_DELAY_US * 2) {
 				if (!server->Resolve()) {
 					failMessage = "Unable to find server. Retry?";
-					stage = SigninStage::FAIL;
+					Transition(SigninStage::FAIL);
 					break;
 				}
 				if (!server->Connect()) {
 					failMessage = "Connection Failed. Retry?";
-					stage = SigninStage::FAIL;
+					Transition(SigninStage::FAIL);
 					break;
 				}
 				int ret = server->CreateAccount(npid.c_str(), password.c_str(), online_name.c_str(), avatar_url.c_str(), email.c_str());
@@ -312,10 +353,11 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						failMessage = "Could not Create Account. (" + std::to_string(ret) + ")";
 						break;
 					}
-					stage = SigninStage::FAIL;
+					Transition(SigninStage::FAIL);
 					break;
 				}
 				stage = SigninStage::LOGIN_FORM;
+				Transition(SigninStage::LOGIN_FORM);
 			}
 			break;
 		case SigninStage::CONNECT_REQUEST:
@@ -325,22 +367,21 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			DisplayMessage2(di->T("SigninPleaseWait", "You are currently signing in.\nPlease wait for a moment."));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
 			if (IsButtonPressed(cancelButtonFlag)) {
-				stage = SigninStage::CANCELLED;
+				Transition(SigninStage::CANCELLED);
 				break;
 			}
-			if (now - startTime > NP_RUNNING_DELAY_US * 2) {
-				startTime = now;
+			if (now - lastTime > NP_RUNNING_DELAY_US * 2) {
 				if (!server->Resolve()) {
 					failMessage = "Unable to find server. Retry?";
-					stage = SigninStage::FAIL;
+					Transition(SigninStage::FAIL);
 					break;
 				}
 				if (!server->Connect()) {
 					failMessage = "Connection Failed. Retry?";
-					stage = SigninStage::FAIL;
+					Transition(SigninStage::FAIL);
 					break;
 				}
-				stage = SigninStage::AUTH_REQUEST;
+				Transition(SigninStage::AUTH_REQUEST);
 			}
 			break;
 		case SigninStage::AUTH_REQUEST:
@@ -351,22 +392,20 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			DisplayMessage2(di->T("SigninPleaseWait", "Please wait for a moment."));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
 			if (IsButtonPressed(cancelButtonFlag)) {
-				stage = SigninStage::CANCELLED;
+				Transition(SigninStage::CANCELLED);
 				break;
 			}
-			if (now - startTime > NP_RUNNING_DELAY_US * 2) {
-				startTime = now;
+			if (now - lastTime > NP_RUNNING_DELAY_US * 2) {
 				std::string* creds = NpGetLogin();
 				if (server->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str()) != 0) {
 					g_Config.infraToken = ""; // Reset the Token to force re-entry
 					failMessage = "Authentication Failed. Retry?";
-					stage = SigninStage::FAIL;
+					Transition(SigninStage::FAIL);
 					break;
 				}
-				StartFade(true);
 
 				NOTICE_LOG(Log::sceNet, " - Login Successful");
-				stage = SigninStage::SUCCESS;
+				Transition(SigninStage::SUCCESS);
 			}
 			break;
 		case SigninStage::SUCCESS:
@@ -384,28 +423,19 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			DisplayMessage2(di->T("PleaseWait", failMessage));
 			DisplayButtons(DS_BUTTON_OK, di->T("Confirm"));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
-			if (server->IsConnected()) {
-				NOTICE_LOG(Log::sceNet, " - Login Failed");
-				server->Disconnect();
-			}
 			if (IsButtonPressed(okButtonFlag)) {
-				stage = SigninStage::LOGIN_FORM;
+				Transition(SigninStage::LOGIN_FORM);
 				break;
 			}
 			if (IsButtonPressed(cancelButtonFlag)) {
-				SigninStage::SHUTDOWN;
+				Transition(SigninStage::SHUTDOWN);
 				break;
 			}
 			break;
 		case SigninStage::CANCELLED:
 			DisplayMessage2(di->T("PleaseWait", "Cancelling..."));
-			if (server->IsConnected())
-				server->Disconnect();
-			if (now - startTime > NP_RUNNING_DELAY_US) {
-				startTime = now;
+			if (now - lastTime > NP_RUNNING_DELAY_US) {
 				StartFade(false);
-				//sceNpAuthAbortRequest(npAuthResult);
-				//sceNpAuthDestroyRequest(npAuthResult);
 				ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
 				request.common.result = SCE_UTILITY_DIALOG_RESULT_ABORT;
 				request.npSigninStatus = NP_SIGNIN_STATUS_CANCELED;
@@ -413,7 +443,6 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			break;
 		case SigninStage::SHUTDOWN:
 			DisplayMessage2(di->T("PleaseWait", "Exiting..."));
-			StartFade(false);
 			ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
 			request.common.result = SCE_UTILITY_DIALOG_RESULT_ABORT;
 			request.npSigninStatus = NP_SIGNIN_STATUS_FAILED;
@@ -521,7 +550,7 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 					// Success callback
 					g_Config.infraToken = value;
 					startTime = now;
-					stage = SigninStage::CONNECT_REQUEST;
+					Transition(SigninStage::CONNECT_REQUEST);
 				},
 					[&]() {
 					// Failure callback
@@ -530,7 +559,7 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 			}
 			else {
 				startTime = now;
-				stage = SigninStage::CONNECT_REQUEST;
+				Transition(SigninStage::CONNECT_REQUEST);
 			}
 		}
 		break;
@@ -539,7 +568,7 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 		if (IsButtonPressed(upButtonFlag))
 			selected[(u8)stage] = (u8)SigninSelected::SIGNIN;
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::PASSWORD_FORM;
+			Transition(SigninStage::PASSWORD_FORM);
 		break;
 	}
 	if (server->GetAuthType() == net::NPAgentType::RPCN) {
@@ -568,8 +597,9 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 	PPGeDrawText(di->T("Forgot Password"), 240, 230, centerAligned);
 	DisplayButtons(DS_BUTTON_OK, di->T("Confirm"));
 	DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
-	if (IsButtonPressed(cancelButtonFlag))
-		stage = SigninStage::CANCELLED;
+	if (IsButtonPressed(cancelButtonFlag)) {
+		Transition(SigninStage::CANCELLED);
+	}
 }
 
 void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
@@ -646,7 +676,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 				selected[(u8)stage] = (u8)PasswordSelected::REGISTER;
 		}
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::LOGIN_FORM;
+			Transition(SigninStage::LOGIN_FORM);
 		break;
 	case PasswordSelected::CONTINUE:
 		if (IsButtonPressed(upButtonFlag))
@@ -656,7 +686,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 		if (IsButtonPressed(rightButtonFlag))
 			selected[(u8)stage] = (u8)PasswordSelected::REGISTER;
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::PASSWORD_TOKEN_REQUEST;
+			Transition(SigninStage::PASSWORD_TOKEN_REQUEST, true);
 		break;
 	case PasswordSelected::REGISTER:
 		if (IsButtonPressed(upButtonFlag))
@@ -669,7 +699,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 				selected[(u8)stage] = (u8)PasswordSelected::CANCEL;
 		}
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::REGISTRATION_FORM;
+			Transition(SigninStage::REGISTRATION_FORM, true);
 		break;
 	}
 	// Draw window
@@ -777,7 +807,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 				selected[(u8)stage] = (u8)PasswordTokenSelected::CONTINUE;
 		}
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::LOGIN_FORM;
+			Transition(SigninStage::LOGIN_FORM);
 		break;
 	case PasswordTokenSelected::CONTINUE:
 		if (IsButtonPressed(upButtonFlag))
@@ -785,7 +815,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 		if (IsButtonPressed(leftButtonFlag))
 			selected[(u8)stage] = (u8)PasswordTokenSelected::CANCEL;
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::PASSWORD_REQUEST;
+			Transition(SigninStage::PASSWORD_REQUEST, true);
 		break;
 	}
 	// Draw window
@@ -917,7 +947,7 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 				selected[(u8)stage] = (u8)RegisterSelected::CONTINUE;
 		}
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::LOGIN_FORM;
+			Transition(SigninStage::LOGIN_FORM);
 		break;
 	case RegisterSelected::CONTINUE:
 		if (IsButtonPressed(upButtonFlag))
@@ -925,7 +955,7 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 		if (IsButtonPressed(leftButtonFlag))
 			selected[(u8)stage] = (u8)RegisterSelected::CANCEL;
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::REGISTRATION_INFO_FORM;
+			Transition(SigninStage::REGISTRATION_INFO_FORM, true);
 		break;
 	}
 	// Draw window
@@ -1016,7 +1046,7 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 				selected[(u8)stage] = (u8)RegisterInfoSelected::CONTINUE;
 		}
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::LOGIN_FORM;
+			Transition(SigninStage::LOGIN_FORM);
 		break;
 	case RegisterInfoSelected::CONTINUE:
 		if (IsButtonPressed(upButtonFlag))
@@ -1024,7 +1054,7 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 		if (IsButtonPressed(leftButtonFlag))
 			selected[(u8)stage] = (u8)RegisterInfoSelected::CANCEL;
 		if (IsButtonPressed(okButtonFlag))
-			stage = SigninStage::REGISTRATION_REQUEST;
+			Transition(SigninStage::REGISTRATION_REQUEST, true);
 		break;
 	}
 	// Draw window
