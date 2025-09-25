@@ -1477,6 +1477,7 @@ static int sceUtilityPsnGetStatus()
 			case SCE_UTILITY_DIALOG_RESULT_ABORT:
 			default:
 				psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
+				sceUtilityNpSigninShutdownStart();
 				break;
 			}
 			break;

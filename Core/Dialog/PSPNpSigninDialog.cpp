@@ -135,6 +135,8 @@ void PSPNpSigninDialog::Transition(SigninStage next, bool forced) {
 		transitioning = false;
 		stage = next;
 	}
+	if (next == SigninStage::FAIL || next == SigninStage::SHUTDOWN || next == SigninStage::CANCELLED)
+		server->Disconnect();
 }
 
 int PSPNpSigninDialog::Update(int animSpeed) {
@@ -409,10 +411,9 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			}
 			break;
 		case SigninStage::SUCCESS:
-			StartFade(false);
-			ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
 			request.common.result = SCE_UTILITY_DIALOG_RESULT_SUCCESS;
 			request.npSigninStatus = NP_SIGNIN_STATUS_SUCCESS;
+			ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
 			break;
 		case SigninStage::FAIL:
 			// Disable Token to force re-aquire ?
@@ -435,17 +436,16 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		case SigninStage::CANCELLED:
 			DisplayMessage2(di->T("PleaseWait", "Cancelling..."));
 			if (now - lastTime > NP_RUNNING_DELAY_US) {
-				StartFade(false);
-				ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
 				request.common.result = SCE_UTILITY_DIALOG_RESULT_ABORT;
 				request.npSigninStatus = NP_SIGNIN_STATUS_CANCELED;
+				ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
 			}
 			break;
 		case SigninStage::SHUTDOWN:
 			DisplayMessage2(di->T("PleaseWait", "Exiting..."));
-			ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
 			request.common.result = SCE_UTILITY_DIALOG_RESULT_ABORT;
 			request.npSigninStatus = NP_SIGNIN_STATUS_FAILED;
+			ChangeStatus(SCE_UTILITY_STATUS_FINISHED, NP_SHUTDOWN_DELAY_US);
 			break;
 		}
 
