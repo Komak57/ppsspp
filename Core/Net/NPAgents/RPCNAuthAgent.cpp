@@ -439,7 +439,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return false;
+			return (u8)ErrorType::Blocked;
 		}
 
 		auto resp = take_pending_request(reqId);
