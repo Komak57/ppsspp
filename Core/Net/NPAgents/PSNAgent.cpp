@@ -168,22 +168,21 @@ namespace net {
 		return false;
 	}
 
-	int PSNAgent::StartSignalingThread() {
+	void PSNAgent::StartSignalingThread() {
 		//signal_thread = std::thread(&RPCNAgent::signaling_loop, this);
-		return 0;
 	}
 
-	int PSNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npCommId, std::vector<SceNpMatching2World>* worldInfoOut) {
+	std::pair<int, int> PSNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npCommId, std::vector<SceNpMatching2World>* worldInfoOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npCommId.data);
 #ifndef AGENT_TESTING
 		if (sock_ <= 0) {
 			ERROR_LOG(Log::sceNet, "GetWorldInfo: Socket not connected");
-			return -1;
+			return { -1, 0 };
 		}
 #endif
 		if (cancelled) {
 			ERROR_LOG(Log::sceNet, "GetWorldInfo: Cancelled");
-			return -1;
+			return { -1, 0 };
 		}
 		// 1201 0036 10010000 01001000 00000000 e288f336a613981d1f8b0253f34d4028 1010 000c 4e50575230313434365f3030 4073 0002 0001
 		//
@@ -227,14 +226,14 @@ namespace net {
 		bool flushed = buffer.FlushSocketSSL(&tls, 60.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return -1;
+			return { -1, 0 };
 		}
 		core::Buffer readbuf;
 		// Read response
 		int ret;
 		if ((ret = readbuf.Read(sock(), 4096, &tls)) < 0) {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
-			return -1;
+			return { -1, 0 };
 		}
 
 		std::string response;
@@ -255,7 +254,7 @@ namespace net {
 
 		worldInfoOut->push_back(worldInfo);
 
-		return 0;
+		return { 0, 0 };
 	}
 
 	int PSNAgent::RequestSignalingInfo(std::string npid, u32 conn_id) {

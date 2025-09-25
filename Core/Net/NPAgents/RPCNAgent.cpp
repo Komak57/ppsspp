@@ -587,12 +587,11 @@ namespace net {
 		return true;
 	}
 
-	int RPCNAgent::StartSignalingThread() {
+	void RPCNAgent::StartSignalingThread() {
 		signal_thread = std::thread(&RPCNAgent::signaling_loop, this);
-		return 0;
 	}
 
-	int RPCNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) {
+	std::pair<int, int> RPCNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) {
 		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 
 		Packet packet = Packet();
@@ -607,11 +606,11 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
+			return { (u8)ErrorType::NotFound, 0 };
 		}
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return resp.error;
+			return { resp.error, 0 };
 		resp.stream = new vec_stream(resp.data, 1);
 		worldInfoOut->clear();
 
@@ -631,7 +630,7 @@ namespace net {
 		}
 
 		//worldInfoOut->emplace(worldInfo.worldId, worldInfo);
-		return num_worlds;
+		return { 0, num_worlds };
 	}
 
 	int RPCNAgent::RequestSignalingInfo(std::string npid, u32 conn_id) {
@@ -647,7 +646,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
+			return (u8)ErrorType::NotFound;
 		}
 
 		auto resp = take_pending_request(reqId);
@@ -671,7 +670,7 @@ namespace net {
 		const auto* sigAddr = resp.stream->get_flatbuffer<SignalingAddr>();
 		if (resp.stream->is_error() || !sigAddr->ip()) {
 			ERROR_LOG(Log::sceNet, "Malformed reply to RequestSignalingInfos command");
-			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
+			return (u8)ErrorType::Malformed;
 		}
 		const u32 ip = static_cast<u32>(sigAddr->ip()->Get(0)) << 24 | static_cast<u32>(sigAddr->ip()->Get(1)) << 16 |
 			static_cast<u32>(sigAddr->ip()->Get(2)) << 8 | static_cast<u32>(sigAddr->ip()->Get(3));
@@ -752,7 +751,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			return (u8)ErrorType::NotFound;
 		}
 
 		auto resp = take_pending_request(reqId);
@@ -765,7 +764,7 @@ namespace net {
 		//auto stream = new vec_stream(resp.data);
 		roomResp = resp.stream->get_flatbuffer<SearchRoomResponse>();
 		if (resp.stream->is_error()) {
-			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
+			return (u8)ErrorType::Malformed;
 		}
 		//roomResp = _resp;
 
@@ -945,7 +944,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			return (u8)ErrorType::NotFound;
 		}
 
 		auto resp = take_pending_request(reqId);
@@ -958,7 +957,7 @@ namespace net {
 		//auto stream = new vec_stream(resp.data);
 		roomDataOut = resp.stream->get_flatbuffer<RoomDataInternal>();
 		if (resp.stream->is_error()) {
-			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
+			return (u8)ErrorType::Malformed;
 		}
 
 		return 0;
@@ -1001,7 +1000,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			return (u8)ErrorType::NotFound;
 		}
 
 		auto _resp = take_pending_request(reqId);
@@ -1012,7 +1011,7 @@ namespace net {
 		//auto stream = new vec_stream(_resp.data);
 		resp = _resp.stream->get_flatbuffer<JoinRoomResponse>();
 		if (_resp.stream->is_error()) {
-			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
+			return (u8)ErrorType::Malformed;
 		}
 
 		return 0;
@@ -1037,7 +1036,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			return (u8)ErrorType::Invalid;
 		}
 
 		auto _resp = take_pending_request(reqId);
@@ -1081,7 +1080,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			return (u8)ErrorType::NotFound;
 		}
 
 		auto response = take_pending_request(reqId);
@@ -1091,7 +1090,7 @@ namespace net {
 
 		resp = response.stream->get_flatbuffer<RoomDataInternal>();
 		if (response.stream->is_error())
-			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
+			return (u8)ErrorType::Malformed;
 
 		return 0;
 	}
@@ -1138,7 +1137,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			return (u8)ErrorType::NotFound;
 		}
 
 		auto resp = take_pending_request(reqId);
@@ -1206,7 +1205,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			return (u8)ErrorType::NotFound;
 		}
 
 		auto resp = take_pending_request(reqId);
@@ -1294,7 +1293,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			return (u8)ErrorType::NotFound;
 		}
 
 		auto resp = take_pending_request(reqId);
@@ -1335,7 +1334,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			return (u8)ErrorType::NotFound;
 		}
 
 		auto resp = take_pending_request(reqId);
@@ -1376,7 +1375,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			return (u8)ErrorType::NotFound;
 		}
 
 		auto resp = take_pending_request(reqId);
@@ -1386,7 +1385,7 @@ namespace net {
 
 		respData = resp.stream->get_flatbuffer<GetRoomDataExternalListResponse>();
 		if (resp.stream->is_error()) {
-			return SCE_NP_MATCHING2_SIGNALING_ERROR_RESULT_NOT_FOUND;
+			return (u8)ErrorType::Malformed;
 		}
 
 		return 0;

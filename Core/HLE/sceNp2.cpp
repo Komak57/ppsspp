@@ -451,21 +451,48 @@ static int sceNpMatching2ContextStart(int ctxId)
 	npAuthServer->Disconnect();
 
 	// Just in case the NPAgent is hosted on a different physical server
-	npServer->Resolve();
+	if (!npServer->Resolve()) {
+		ERROR_LOG(Log::sceNet, "Unable to find Server.");
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_AVAILABLE), 0);
+	}
+
 	std::string npid = net::RPCNAuthAgent::generate_npid();
-	bool connected = npServer->Connect();
-	if (!connected) {
+	if (!npServer->Connect()) {
 		ERROR_LOG(Log::sceNet, "Could not connect.");
 		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 	}
 
-	int ret;
-
 	std::string* creds = NpGetLogin();
-	ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
+	int ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
 	if (ret != 0) {
-		ERROR_LOG(Log::sceNet, "Unable to Log In");
-		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, ret), 0);
+		int errorCode;
+		switch ((ErrorType)ret) {
+		case ErrorType::LoginError:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BUSY;
+			ERROR_LOG(Log::sceNet, "Login Error");
+			break;
+		case ErrorType::LoginAlreadyLoggedIn:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED;
+			ERROR_LOG(Log::sceNet, "User is already signed in");
+			break;
+		case ErrorType::LoginInvalidUsername:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER;
+			ERROR_LOG(Log::sceNet, "Invalid Login Credentials");
+			break;
+		case ErrorType::LoginInvalidPassword:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH;
+			ERROR_LOG(Log::sceNet, "Invalid Login Credentials");
+			break;
+		case ErrorType::LoginInvalidToken:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_INVALID_TICKET;
+			ERROR_LOG(Log::sceNet, "Invalid Token");
+			break;
+		default:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BUSY;
+			ERROR_LOG(Log::sceNet, "Unable to Log In (%d)", ret);
+			break;
+		}
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, errorCode), 0);
 	}
 
 	////signaling_handler::print_interfaces();
@@ -769,15 +796,28 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 
 		// Server ID is a 16-bit variable according to JPCSP
 		u16 serverId;
-		if ((serverId = Memory::Read_U16(serverIdPtr)) == 0)
+		if ((serverId = Memory::Read_U16(serverIdPtr)) == 0 || !npServer->SelectServer(serverId))
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
 
-		npServer->SelectServer(serverId);
 		std::vector<SceNpMatching2World> worldArray;
-		int worldNum = npServer->GetWorldInfo(serverId, npTitleId, &worldArray);
-		if (worldNum < 0) {
-			ERROR_LOG(Log::sceNet, "Error requesting WorldInfo: %08X", worldNum);
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+		auto [err, worldNum] = npServer->GetWorldInfo(serverId, npTitleId, &worldArray);
+		if (err != 0) {
+			int errorCode;
+			switch ((ErrorType)err) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			default:
+				errorCode = err;
+				ERROR_LOG(Log::sceNet, "Unknown Error requesting WorldInfo: %08X", err);
+				break;
+			}
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, errorCode), 0);
 		}
 		// First attempts for new games won't contain a world.
 		if (worldNum == 0) {
@@ -857,10 +897,23 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 		const SearchRoomResponse* roomResp;
 
 		int ret = npServer->SearchRoom(req, roomResp);
-
 		if (ret != 0) {
-			ERROR_LOG(Log::sceNet, "Unable to retrieve Room Info");
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, ret), 0);
+			int errorCode;
+			switch ((ErrorType)ret) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			default:
+				errorCode = ret;
+				ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", ret);
+				break;
+			}
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, errorCode), 0);
 		}
 
 		uint32_t room_count = roomResp->rooms() ? roomResp->rooms()->size() : 0;
@@ -954,6 +1007,33 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		// FIXME: Get roomData from PSN
 		int ret = npServer->CreateJoinRoom(req, resp);
 		if (ret != 0) {
+			int errorCode;
+			switch ((ErrorType)ret) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomGroupMaxSlotMismatch:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_INVALID_GROUP_SLOT_NUM;
+				ERROR_LOG(Log::sceNet, "Group Max Slot Mismatch");
+				break;
+			case ErrorType::RoomPasswordMissing:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_INVALID_PASSWORD_SLOT_MASK;
+				ERROR_LOG(Log::sceNet, "Password Slot Mask Missing");
+				break;
+			case ErrorType::RoomGroupNoJoinLabel:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL;
+				ERROR_LOG(Log::sceNet, "Group No Join Label");
+				break;
+			default:
+				errorCode = ret;
+				ERROR_LOG(Log::sceNet, "Unknown Error creating room: %08X", ret);
+				break;
+			}
 			ERROR_LOG(Log::sceNet, "Unable to Create Room: %08X", ret);
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, ret), 0);
 		}
@@ -1028,6 +1108,48 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 
 		// FIXME: Get roomData from PSN
 		int ret = npServer->JoinRoom(req, resp);
+		if (ret != 0) {
+			int errorCode;
+			switch ((ErrorType)ret) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomMissing:
+				errorCode = SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomAlreadyJoined:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomFull:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_ROOM_FULL;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomPasswordMismatch:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomGroupFull:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_GROUP_FULL;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomGroupJoinLabelNotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			default:
+				errorCode = ret;
+				ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", ret);
+				break;
+			}
+			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, errorCode), 0);
+		}
 
 		u32 sizeof_room_resp = sizeof(SceNpMatching2JoinRoomResponse);
 		u32 roomRespPtr = np_memory.Alloc(sizeof_room_resp);
@@ -1110,8 +1232,32 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32
 		auto req = PSPPointer<SceNpMatching2LeaveRoomRequest>::Create(reqParamPtr);
 		u64 roomId = req->roomId;
 		int ret = npServer->LeaveRoom(req, &roomId);
-		if (ret < 0)
+		if (ret != 0) {
+			int errorCode;
+			switch ((ErrorType)ret) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::Invalid:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+				ERROR_LOG(Log::sceNet, "User cannot leave a room they are not in");
+				break;
+			case ErrorType::RoomMissing:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+				ERROR_LOG(Log::sceNet, "User cannot leave a room that doesn't exist");
+				break;
+			default:
+				errorCode = ret;
+				ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", ret);
+				break;
+			}
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, ret, "NPAgent Bad Response"), 0);
+		}
 
 		// Execute signaling callback to update users
 		g_signaling.DisconnectUsers(roomId);
@@ -1159,14 +1305,30 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 		INFO_LOG(Log::sceNet, " - attrIdNum:  %d", req->attrIdNum);
 
-		/*auto roomData = &npServer->cache.GetRoom(req->roomId);
-		if (!roomData) {
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ROOM_ID), 0);
-		}*/
 		const RoomDataInternal* resp;
 		int ret;
-		if ((ret = npServer->GetRoomDataInternal(req, resp)) != 0)
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, ret), 0);
+		if ((ret = npServer->GetRoomDataInternal(req, resp)) != 0) {
+			int errorCode;
+			switch ((ErrorType)ret) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomMissing:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+				ERROR_LOG(Log::sceNet, "User cannot leave a room that doesn't exist");
+				break;
+			default:
+				errorCode = ret;
+				ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", ret);
+				break;
+			}
+			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, ret), 0);
+		}
 		
 		u32 alloc = sizeof(SceNpMatching2RoomDataInternal);
 		u32 roomInfoPtr = np_memory.Alloc(alloc);
@@ -1220,7 +1382,29 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 
 		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 
-		npServer->SetRoomDataExternal(req);
+		int ret = npServer->SetRoomDataExternal(req);
+		if (ret != 0) {
+			int errorCode;
+			switch ((ErrorType)ret) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomMissing:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+				ERROR_LOG(Log::sceNet, "Room doesn't exist");
+				break;
+			default:
+				errorCode = ret;
+				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
+				break;
+			}
+			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, errorCode), 0);
+		}
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, SCE_NP_MATCHING2_OKAY, 0);
 	});
@@ -1260,8 +1444,28 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 
 		int ret;
-		if ((ret = npServer->SetRoomDataInternal(req)) != 0)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, ret), 0);
+		if ((ret = npServer->SetRoomDataInternal(req)) != 0) {
+			int errorCode;
+			switch ((ErrorType)ret) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomMissing:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+				ERROR_LOG(Log::sceNet, "Room doesn't exist");
+				break;
+			default:
+				errorCode = ret;
+				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
+				break;
+			}
+			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, errorCode), 0);
+		}
 
 		/*auto [r, self] = npServer->GetSelf(req->roomId);
 		if (r == 0)
@@ -1344,6 +1548,24 @@ static int sceNpMatching2SetUserInfo(int ctxId, u32 reqParamPtr, u32 optParam, u
 		auto req = PSPPointer<SceNpMatching2SetUserInfoRequest>::Create(reqParamPtr);
 
 		int ret = npServer->SetUserInfo(req);
+		if (ret != 0) {
+			int errorCode;
+			switch ((ErrorType)ret) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			default:
+				errorCode = ret;
+				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
+				break;
+			}
+			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, errorCode), 0);
+		}
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, ret, 0);
 	});
@@ -1578,7 +1800,25 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
 
 		auto req = PSPPointer<SceNpMatching2GetRoomDataExternalListRequest>::Create(reqParamPtr);
 		const GetRoomDataExternalListResponse* resp;
-		npServer->GetRoomDataExternalList(req, resp);
+		int ret = npServer->GetRoomDataExternalList(req, resp);
+		if (ret != 0) {
+			int errorCode;
+			switch ((ErrorType)ret) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			default:
+				errorCode = ret;
+				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
+				break;
+			}
+			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, errorCode), 0);
+		}
 
 		bool include_onlinename = true, include_avatarurl = false;
 
@@ -1653,8 +1893,32 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM);
 
 	int ret;
-	if ((ret = npServer->SendRoomMessage(req)) != 0)
-		return hleLogError(Log::sceNet, ret);
+	if ((ret = npServer->SendRoomMessage(req)) != 0) {
+		int errorCode;
+		switch ((ErrorType)ret) {
+		case ErrorType::Malformed:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			ERROR_LOG(Log::sceNet, "Malformed Request");
+			break;
+		case ErrorType::NotFound:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+			ERROR_LOG(Log::sceNet, "Send Failed");
+			break;
+		case ErrorType::RoomMissing:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+			ERROR_LOG(Log::sceNet, "Room Missing");
+			break;
+		case ErrorType::Unauthorized:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_FORBIDDEN;
+			ERROR_LOG(Log::sceNet, "Unauthorized");
+			break;
+		default:
+			errorCode = ret;
+			ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
+			break;
+		}
+		return hleLogError(Log::sceNet, errorCode);
+	}
 
 	return 0;
 }
