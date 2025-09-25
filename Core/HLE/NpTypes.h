@@ -282,6 +282,13 @@ using SceNpScoreValue = s64;
 
 using SceNpTime = s64;
 
+struct SceNpUpnpInfo {
+	s32 uPnPStatus;
+	s32 STUNStatus;
+	s32 NATType;
+	u32 address;
+};
+
 struct SceNpCommunicationPassphrase
 {
 	u8 data[128];

@@ -1758,13 +1758,26 @@ static int sceNetUpnpTerm() {
 }
 
 static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%08x)", __FUNCTION__, unknownPtr);
-	char data[8];
-	for (int i = 0; i < 8; i++)
-		data[i] = Memory::Read_U8(unknownPtr + i);
-	WARN_HEXLOG(Log::sceNet, "sceNetUpnpGetNatInfo", data, 8, 8);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x)", __FUNCTION__, unknownPtr);
+	auto uPnPInfo = PSPPointer<SceNpUpnpInfo>::Create(unknownPtr);
+	if (!npServer) {
+		uPnPInfo->uPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
+		uPnPInfo->STUNStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
+		uPnPInfo->NATType = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
+		uPnPInfo->address = 0;
+	}
+	else {
+		uPnPInfo->uPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
+		uPnPInfo->STUNStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
+		uPnPInfo->NATType = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
+		uPnPInfo->address = (npServer ? htonl(npServer->GetSigAddr()) : 0);
+	}
+	NOTICE_LOG(Log::sceNet, " - uPnPStatus: %d", uPnPInfo->uPnPStatus);
+	NOTICE_LOG(Log::sceNet, " - STUNStatus: %d", uPnPInfo->STUNStatus);
+	NOTICE_LOG(Log::sceNet, " - NATType: %d", uPnPInfo->NATType);
+	NOTICE_LOG(Log::sceNet, " - IPAddress: %s", ip2str(uPnPInfo->address).c_str());
 
-	return hleLogError(Log::sceNet, 0, "UNIMPL");
+	return hleLogWarning(Log::sceNet, 0, "UNTESTED");
 }
 
 static int sceNetGetDropRate(u32 dropRateAddr, u32 dropDurationAddr) {
