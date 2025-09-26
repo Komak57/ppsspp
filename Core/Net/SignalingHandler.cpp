@@ -8,6 +8,8 @@
 #include <Core/HLE/proAdhoc.h>
 #include <Core/HLE/NetInetConstants.h>
 #include <Core/HLE/sceNetInet.cpp>
+// Used for things like 10s
+using namespace std::chrono_literals;
 
 signaling_handler::signaling_handler() {}
 signaling_handler::~signaling_handler() { stop(); }
@@ -266,6 +268,113 @@ u32 signaling_handler::init_sig(const SceNpId& npid, u64 room_id, u16 member_id)
 	return conn_id;
 }
 
+void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32 new_addr, u16 new_port)
+{
+	if (!si)
+		return;
+
+	if (si->addr != new_addr || si->port != new_port)
+	{
+		in_addr addr_old, addr_new;
+		addr_old.s_addr = si->addr;
+		addr_new.s_addr = new_addr;
+
+		char ip_str_old[16];
+		char ip_str_new[16];
+		inet_ntop(AF_INET, &addr_old, ip_str_old, sizeof(ip_str_old));
+		inet_ntop(AF_INET, &addr_new, ip_str_new, sizeof(ip_str_new));
+
+		NOTICE_LOG(Log::sceNet, "Updated Address from %s:%d to %s:%d", ip_str_old, si->port, ip_str_new, new_port);
+
+		si->addr = new_addr;
+		si->port = new_port;
+	}
+}
+
+void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& si, u32 new_addr, u16 new_port)
+{
+	if (!si)
+		return;
+
+	// If the address given to us by op is a translation IP, just replace it with our public ip(v4)
+	/*if (np::is_ipv6_supported() && np::ip_address_translator::is_ipv6(new_addr))
+	{
+		auto& nph = g_fxo->get<named_thread<np::np_handler>>();
+		new_addr = nph.get_public_ip_addr();
+	}*/
+
+	if (si->mapped_addr != new_addr || si->mapped_port != new_port)
+	{
+		in_addr addr_old, addr_new;
+		addr_old.s_addr = si->mapped_addr;
+		addr_new.s_addr = new_addr;
+
+		char ip_str_old[16];
+		char ip_str_new[16];
+		inet_ntop(AF_INET, &addr_old, ip_str_old, sizeof(ip_str_old));
+		inet_ntop(AF_INET, &addr_new, ip_str_new, sizeof(ip_str_new));
+
+		NOTICE_LOG(Log::sceNet, "Updated Mapped Address from %s:%d to %s:%d", ip_str_old, si->mapped_port, ip_str_new, new_port);
+
+		si->mapped_addr = new_addr;
+		si->mapped_port = new_port;
+	}
+}
+
+void signaling_handler::update_si_status(std::shared_ptr<signaling_info>& si, s32 new_status, s32 error_code)
+{
+	if (!si)
+		return;
+
+	if (si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_PENDING && new_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE)
+	{
+		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_ACTIVE;
+
+		//signal_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_ESTABLISHED, error_code);
+		notifySignalingHandler(si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_ESTABLISHED, error_code);
+		//signal_sig2_callback(si->room_id, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
+		notifySignalingHandler(si->room_id, si->conn_id, 0, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
+
+		if (si->op_activated)
+			//signal_ext_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED, CELL_OK);
+			notifySignalingHandler(si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED, error_code);
+	}
+	else if ((si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_PENDING || si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE) && new_status == SCE_NP_SIGNALING_CONN_STATUS_INACTIVE)
+	{
+		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
+		//signal_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_DEAD, error_code);
+		notifySignalingHandler(si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_DEAD, error_code);
+		//signal_sig2_callback(si->room_id, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, error_code);
+		notifySignalingHandler(si->room_id, si->conn_id, 0, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, error_code);
+		retire_all_packets(si);
+	}
+}
+
+void signaling_handler::update_ext_si_status(std::shared_ptr<signaling_info>& si, bool op_activated)
+{
+	if (!si)
+		return;
+
+	if (op_activated && !si->op_activated)
+	{
+		si->op_activated = true;
+
+		if (si->conn_status != SCE_NP_SIGNALING_CONN_STATUS_ACTIVE)
+			//signal_ext_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_EXT_PEER_ACTIVATED, CELL_OK);
+			notifySignalingHandler(si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_EXT_PEER_ACTIVATED, SCE_NP_MATCHING2_OKAY);
+		else
+			//signal_ext_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED, CELL_OK);
+			notifySignalingHandler(si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED, SCE_NP_MATCHING2_OKAY);
+	}
+	else if (!op_activated && si->op_activated)
+	{
+		si->op_activated = false;
+
+		//signal_ext_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_EXT_PEER_DEACTIVATED, CELL_OK);
+		notifySignalingHandler(si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_EXT_PEER_DEACTIVATED, SCE_NP_MATCHING2_OKAY);
+	}
+}
+
 void signaling_handler::DisconnectUsers(u64 room_id)
 {
 	std::lock_guard lock(mtx_);
@@ -326,6 +435,32 @@ void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u1
 
 	if (!send_packet_ipv4(packet, addr, port)) {
 		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip2str(addr).c_str(), port);
+	}
+}
+
+void signaling_handler::reschedule_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd, std::chrono::steady_clock::time_point new_timepoint)
+{
+	for (auto it = qpackets.begin(); it != qpackets.end(); it++)
+	{
+		if (it->second.packet.command == cmd && it->second.sig_info == si)
+		{
+			auto new_queue = qpackets.extract(it);
+			new_queue.key() = new_timepoint;
+			qpackets.insert(std::move(new_queue));
+			return;
+		}
+	}
+}
+
+void signaling_handler::retire_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd)
+{
+	for (auto it = qpackets.begin(); it != qpackets.end(); it++)
+	{
+		if (it->second.packet.command == cmd && it->second.sig_info == si)
+		{
+			qpackets.erase(it);
+			return;
+		}
 	}
 }
 
@@ -429,70 +564,206 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 
 void signaling_handler::dispatch_packet(signaling_message msg) {
 	const auto* sp = reinterpret_cast<const signaling_packet*>(msg.data.data());
-	switch (sp->command) {
-	case SignalingCommand::Ping:        handle_ping(sp, msg.src_addr, msg.src_port); break;
-	case SignalingCommand::Pong:        handle_pong(sp); break;
-	case SignalingCommand::Connect:     handle_connect(sp, msg.src_addr, msg.src_port); break;
-	case SignalingCommand::ConnectAck:  handle_connect_ack(sp, msg.src_addr, msg.src_port); break;
-	case SignalingCommand::Confirm:     handle_confirm(sp, msg.src_addr, msg.src_port); break;
-	case SignalingCommand::Finished:    handle_finished(sp, msg.src_addr, msg.src_port); break;
-	case SignalingCommand::FinishedAck: handle_finished_ack(sp); break;
-	case SignalingCommand::Info:        handle_info(sp, msg.src_addr, msg.src_port); break;
-	default: break;
+	auto& sent_packet = sig_packet;
+	auto si = get_signaling_ptr(sp);
+
+	if (sp->command == SignalingCommand::Connect || SignalingCommand::Info) {
+		const u32 conn_id = get_always_conn_id(sp->npid);
+		si = sig_peers.at(conn_id);
 	}
+	if (sp->command == SignalingCommand::Finished) {
+		// User is unknown to us or the connection is inactive
+		// Ignore packet unless it's a finished packet in case the finished_ack wasn't received by opponent
+		return;
+	}
+	const auto now = std::chrono::steady_clock::now();
+	if (si)
+		si->time_last_msg_recvd = now;
+
+	switch (sp->command) {
+	case SignalingCommand::Ping:        handle_ping(sp, sent_packet, msg.src_addr, msg.src_port); break;
+	case SignalingCommand::Pong:        handle_pong(sp, si); break;
+	case SignalingCommand::Connect:     handle_connect(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
+	case SignalingCommand::ConnectAck:  handle_connect_ack(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
+	case SignalingCommand::Confirm:     handle_confirm(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
+	case SignalingCommand::Finished:    handle_finished(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
+	case SignalingCommand::FinishedAck: handle_finished_ack(sp, si); break;
+	case SignalingCommand::Info:        handle_info(sp, si, msg.src_addr, msg.src_port); break;
+	default: ERROR_LOG(Log::sceNet, "Invalid signaling command received");  break;
+	}
+
+
 }
 
-void signaling_handler::handle_ping(const signaling_packet* sp, u32 op_addr, u32 op_port) {
+void signaling_handler::handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32 op_addr, u32 op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Ping");
-	//touch_ctx(in.context_id);
-
-	//signaling_packet out = in;
-	//out.command = static_cast<u8>(SignalingCommand::Pong);
-	//send_signaling_packet(out, src.sin_addr.s_addr, _byteswap_ushort(src.sin_port));
-	//// optionally callback
-	//u32_le args[NpMatching2Args::MAX_ARGS];
-	//if (auto ctx = get_ctx(in.context_id)) hleEnqueueCall(ctx->cb.ptr, 0, args);
-	auto& sent_packet = sig_packet;
-
-	// Get signaling info for user to know if we should even bother looking further
-	auto si = get_signaling_ptr(sp);
+	/*reply = true;
+	schedule_repeat = false;
+	sent_packet.command = signal_pong;
+	sent_packet.timestamp_sender = sp->timestamp_sender;*/
 
 	sent_packet.command = SignalingCommand::Pong;
 	sent_packet.timestamp_sender = sp->timestamp_sender;
-
+	// Reply
 	send_signaling_packet(sent_packet, op_addr, op_port);
+	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_pong(const signaling_packet* sp) {
+void signaling_handler::handle_pong(const signaling_packet* sp, std::shared_ptr<signaling_info> si) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Pong");
-	//update_rtt(sp->timestamp_sender);
-	const auto now = std::chrono::steady_clock::now();
-	auto si = get_signaling_ptr(sp);
-	//reschedule_packet(si, SignalingCommand::Ping, now + 10s);
+	/*update_rtt(sp->timestamp_sender);
+	reply = false;
+	schedule_repeat = false;
+	reschedule_packet(si, signal_ping, now + 10s);*/
+	const auto update_rtt = [&](u64 rtt_timestamp)
+	{
+		u64 timestamp_now = get_micro_timestamp(std::chrono::steady_clock::now());
+		u64 rtt = timestamp_now - rtt_timestamp;
+		si->last_rtts[(si->rtt_counters % 6)] = rtt;
+		si->rtt_counters++;
+
+		size_t num_rtts = std::min(static_cast<std::size_t>(6), si->rtt_counters);
+		u64 sum = 0;
+		for (size_t index = 0; index < num_rtts; index++)
+		{
+			sum += si->last_rtts[index];
+		}
+
+		si->rtt = (u32)(sum / num_rtts);
+	};
+
+	update_rtt(sp->timestamp_sender);
+	reschedule_packet(si, SignalingCommand::Ping, std::chrono::steady_clock::now() + 10s);
+	// Don't Reply
+	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_info(const signaling_packet* in, u32 op_addr, u32 op_port) {
+void signaling_handler::handle_info(const signaling_packet* sp, std::shared_ptr<signaling_info> si, u32 op_addr, u32 op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Info");
+	/*update_si_addr(si, op_addr, op_port);
+	reply = false;
+	schedule_repeat = false;*/
+	update_si_addr(si, op_addr, op_port);
+	// Don't Reply
+	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_connect(const signaling_packet* in, u32 op_addr, u32 op_port) {
+void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u32 op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Connect");
+	/*reply = true;
+	schedule_repeat = true;
+	sent_packet.command = signal_connect_ack;
+	sent_packet.timestamp_sender = sp->timestamp_sender;
+	sent_packet.timestamp_receiver = get_micro_timestamp(now);
+	update_si_addr(si, op_addr, op_port);*/
+	sent_packet.command = SignalingCommand::ConnectAck;
+	sent_packet.timestamp_sender = sp->timestamp_sender;
+	sent_packet.timestamp_receiver = get_micro_timestamp(std::chrono::steady_clock::now());
+	update_si_addr(si, op_addr, op_port);
+	// Reply
+	send_signaling_packet(sent_packet, op_addr, op_port);
+	// Schedule Repeat
+	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_CONNECT_DELAY);
 }
 
-void signaling_handler::handle_connect_ack(const signaling_packet* in, u32 op_addr, u32 op_port) {
+void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u32 op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Connect ACK");
+	/*update_rtt(sp->timestamp_sender);
+	reply = true;
+	schedule_repeat = false;
+	setup_ping();
+	sent_packet.command = signal_confirm;
+	sent_packet.timestamp_receiver = sp->timestamp_receiver;
+	retire_packet(si, signal_connect);
+	update_si_addr(si, op_addr, op_port);
+	update_si_mapped_addr(si, sp->sent_addr, sp->sent_port);
+	update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_ACTIVE, CELL_OK);*/
+	const auto setup_ping = [&]()
+	{
+		for (auto it = qpackets.begin(); it != qpackets.end(); it++)
+		{
+			if (it->second.packet.command == SignalingCommand::Ping && it->second.sig_info == si)
+			{
+				return;
+			}
+		}
+
+		sent_packet.command = SignalingCommand::Ping;
+		sent_packet.timestamp_sender = get_micro_timestamp(std::chrono::steady_clock::now());
+		send_signaling_packet(sent_packet, si->addr, si->port);
+		queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_PING_DELAY);
+	};
+	setup_ping();
+	sent_packet.command = SignalingCommand::Confirm;
+	sent_packet.timestamp_receiver = sp->timestamp_receiver;
+	retire_packet(si, SignalingCommand::Connect);
+	update_si_addr(si, op_addr, op_port);
+	update_si_mapped_addr(si, sp->sent_addr, sp->sent_port);
+	update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_ACTIVE, SCE_NP_MATCHING2_OKAY);
+	// Reply
+	send_signaling_packet(sent_packet, op_addr, op_port);
+	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_confirm(const signaling_packet* in, u32 op_addr, u32 op_port) {
+void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u32 op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Confirm");
+	/*update_rtt(sp->timestamp_receiver);
+	reply = false;
+	schedule_repeat = false;
+	setup_ping();
+	retire_packet(si, signal_connect_ack);
+	update_si_addr(si, op_addr, op_port);
+	update_si_mapped_addr(si, sp->sent_addr, sp->sent_port);
+	update_ext_si_status(si, true);*/
+	const auto setup_ping = [&]()
+	{
+		for (auto it = qpackets.begin(); it != qpackets.end(); it++)
+		{
+			if (it->second.packet.command == SignalingCommand::Ping && it->second.sig_info == si)
+			{
+				return;
+			}
+		}
+
+		sent_packet.command = SignalingCommand::Ping;
+		sent_packet.timestamp_sender = get_micro_timestamp(std::chrono::steady_clock::now());
+		send_signaling_packet(sent_packet, si->addr, si->port);
+		queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_PING_DELAY);
+	};
+	setup_ping();
+	retire_packet(si, SignalingCommand::ConnectAck);
+	update_si_addr(si, op_addr, op_port);
+	update_si_mapped_addr(si, sp->sent_addr, sp->sent_port);
+	update_ext_si_status(si, true);
+	// Don't Reply
+	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_finished(const signaling_packet* in, u32 op_addr, u32 op_port) {
+void signaling_handler::handle_finished(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u32 op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Finished");
+	/*reply = true;
+	schedule_repeat = false;
+	sent_packet.command = signal_finished_ack;
+	update_ext_si_status(si, false);
+	update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TERMINATED_BY_PEER);*/
+	sent_packet.command = SignalingCommand::FinishedAck;
+	update_ext_si_status(si, false);
+	update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TERMINATED_BY_PEER);
+	// Reply
+	send_signaling_packet(sent_packet, op_addr, op_port);
+	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_finished_ack(const signaling_packet* in) {
+void signaling_handler::handle_finished_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Finished ACK");
+	/*reply = false;
+	schedule_repeat = false;
+	update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TERMINATED_BY_MYSELF);
+	retire_packet(si, signal_finished);*/
+	update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TERMINATED_BY_MYSELF);
+	retire_packet(si, SignalingCommand::Finished);
+	// Don't Reply
+	// Don't Schedule Repeat
 }
 
 void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
