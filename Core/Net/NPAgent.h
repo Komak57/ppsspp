@@ -516,6 +516,8 @@ namespace net {
 		// NPAuthAgent Functions
 		virtual int Login(const char* npid, const char* token, const char* password) = 0;
 		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
+		virtual int GetServers(SceNpCommunicationId npTitleId) = 0;
+
 		virtual void StartSignalingThread() = 0;
 		// NPAgent Functions
 		virtual std::pair<int, int> GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) = 0;
@@ -609,6 +611,8 @@ namespace net {
 		void Disconnect();
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		int GetServers(SceNpCommunicationId npTitleId);
+
 		void StartSignalingThread();
 
 		std::pair<int, int> GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut);
@@ -635,6 +639,8 @@ namespace net {
 		void Disconnect();
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		int GetServers(SceNpCommunicationId npTitleId);
+
 		void StartSignalingThread();
 
 		std::pair<int, int> GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut);
@@ -702,7 +708,6 @@ namespace net {
 		virtual int SendResetToken(const char* npid, const char* email) = 0;
 		virtual int ResetPassword(const char* npid, const char* token, const char* password) = 0;
 		virtual u64 GetNetworkTime(u32 req_id) = 0;
-		virtual int GetServers(SceNpCommunicationId npTitleId) = 0;
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
@@ -745,7 +750,6 @@ namespace net {
 		std::unique_ptr<NPAgent> CreateAgent();
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 		void Disconnect();
-		int GetServers(SceNpCommunicationId npTitleId);
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 		int ResendToken(const char* npid, const char* password);
@@ -761,7 +765,6 @@ namespace net {
 		std::unique_ptr<NPAgent> CreateAgent();
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 		void Disconnect();
-		int GetServers(SceNpCommunicationId npTitleId);
 		static std::string generate_npid();
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
