@@ -75,6 +75,7 @@ void HTTPConnection::InitSession(int connectionID) {
 	sessions[connectionID].session = &tls.session;
 }
 void HTTPConnection::DestroySession(int connectionID) {
+	//__KernelWaitCurThread(WAITTYPE_ASYNCIO, ThreadID, 0, 0, false, "sceHttpSendRequest");
 	sessions.erase(connectionID);
 }
 
@@ -445,7 +446,6 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 	const std::string extraHeaders = std::accumulate(
 		requestHeaders.begin(), requestHeaders.end(), std::string(),
 		[this, delimiter](const std::string& s, const std::pair<const std::string, std::string>& p) {
-			this->done = true;  // capture `this` lets you set the member
 			return s + p.first + ": " + p.second + delimiter;
 		}
 	);
@@ -549,6 +549,5 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 		responseHeaders.push_back(line);
 		start = end + 2;  // Skip past the \r\n
 	}
-	this->done = true;
 	return ErrorCode;
 }

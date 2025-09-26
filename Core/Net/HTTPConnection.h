@@ -102,6 +102,8 @@ public:
 	void InitSession(int connectionID);
 	void DestroySession(int connectionID);
 
+	int ThreadID;
+
 	int getTemplateID() { return templateID; }
 	const std::string getHost() { return hostString; }
 	const std::string getScheme() { return scheme; }
@@ -153,7 +155,7 @@ public:
 	void setInternalHeaderAddr(u32 addr) { headerAddr_ = addr; }
 	int getConnectionID() { return connectionID; }
 
-	bool done = false;
+	
 	int getResponseContentLength();
 	int abortRequest();
 	int getStatusCode();
