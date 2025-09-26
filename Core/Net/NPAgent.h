@@ -592,12 +592,11 @@ namespace net {
 		SceNpCommunicationId commId;
 		std::string online_name;
 		std::string avatar_url;
-		s64 user_id;
+		std::atomic<s64> user_id;
 
 		std::mutex sig_mutex;
 		std::condition_variable sigv;
 		std::thread signal_thread;
-		std::atomic<s64> id_sig;
 		std::atomic<u32> addr_sig;
 		std::atomic<u32> port_sig;
 		std::atomic<u32> local_addr_sig = 0;
