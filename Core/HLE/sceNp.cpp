@@ -353,6 +353,8 @@ void Register_sceNp()
 
 static int sceNpAuthTerm()
 {
+	if (npAuthServer)
+		npAuthServer->Disconnect();
 	// No parameters
 	npAuthInited = false;
 	return hleLogWarning(Log::sceNet, 0, "UNIMPL");
