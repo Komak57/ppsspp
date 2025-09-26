@@ -153,6 +153,7 @@ public:
 	void setInternalHeaderAddr(u32 addr) { headerAddr_ = addr; }
 	int getConnectionID() { return connectionID; }
 
+	bool done = false;
 	int getResponseContentLength();
 	int abortRequest();
 	int getStatusCode();

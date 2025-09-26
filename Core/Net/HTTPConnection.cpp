@@ -13,6 +13,7 @@
 #include "Core/Debugger/MemBlockInfo.h"
 #include "Common/Net/URL.h"
 #include "Common/File/FileDescriptor.h"
+#include "Core/HLE/sceKernelThread.h"
 
 std::map<int, HTTPS_Session> sessions;
 
@@ -202,7 +203,9 @@ bool HTTPConnection::SSLConnect(int connectionID, int maxTries, double timeout, 
 					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
 					goto retry;
 				}
+
 			}
+
 			end_time = std::chrono::high_resolution_clock::now();
 			duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 			if (duration_ms > 100)
@@ -439,10 +442,13 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 	if (postDataSize > 0)
 		requestHeaders["Content-Length"] = std::to_string(postDataSize);
 	const std::string delimiter = "\r\n";
-	const std::string extraHeaders = std::accumulate(requestHeaders.begin(), requestHeaders.end(), std::string(),
-		[delimiter](const std::string& s, const std::pair<const std::string, std::string>& p) {
-		return s + p.first + ": " + p.second + delimiter;
-	});
+	const std::string extraHeaders = std::accumulate(
+		requestHeaders.begin(), requestHeaders.end(), std::string(),
+		[this, delimiter](const std::string& s, const std::pair<const std::string, std::string>& p) {
+			this->done = true;  // capture `this` lets you set the member
+			return s + p.first + ": " + p.second + delimiter;
+		}
+	);
 
 	Url fileUrl(this->fullURL);
 	if (!fileUrl.Valid()) {
@@ -543,6 +549,6 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 		responseHeaders.push_back(line);
 		start = end + 2;  // Skip past the \r\n
 	}
-
+	this->done = true;
 	return ErrorCode;
 }

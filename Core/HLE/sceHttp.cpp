@@ -42,6 +42,16 @@ bool httpInited = false;
 bool httpsInited = false;
 bool httpCacheInited = false;
 
+// Minimal struct to track PSP threads blocked on HTTP
+struct WaitHTTPInfo {
+	WaitHTTPInfo(SceUID tid) : threadID(tid) {}
+
+	SceUID threadID;    // The PSP thread that is blocked
+};
+
+// Vector to store all blocked HTTP threads
+std::vector<WaitHTTPInfo> httpWaitingThreads;
+
 u32 NextObjectID() {
 	if (httpObjects.empty())
 		return 0;
@@ -188,7 +198,6 @@ static int sceHttpReadData(int requestID, u32 dataPtr, u32 dataSize) {
 	return hleDelayResult(hleLogDebug(Log::sceNet, retval), "fake read data latency", 5000);
 }
 
-// FIXME: JPCSP didn't do anything other than appending the data into internal buffer, does sceHttpSendRequest can be called multiple times before using sceHttpGetStatusCode or sceHttpReadData? any game do this?
 static int sceHttpSendRequest(int requestID, u32 dataPtr, u32 dataSize) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpSendRequest(%d, %x, %d)", requestID, dataPtr, dataSize);
 	if (!httpInited)
@@ -200,14 +209,25 @@ static int sceHttpSendRequest(int requestID, u32 dataPtr, u32 dataSize) {
 	if (dataSize > 0 && !Memory::IsValidRange(dataPtr, dataSize))
 		return hleLogError(Log::sceNet, -1, "invalid arg"); // SCE_HTTP_ERROR_INVALID_VALUE
 
-	int objId = NextObjectID();
 	const auto& req = (HTTPRequest*)httpObjects.find(requestID)->second.get();
-	// Internally try to connect, and get response headers (at least the status code?)
 	int retval = -1;
-	/*if (req->isSSLEnabled())
-		retval = req->sendSSLRequest(dataPtr, dataSize);
-	else*/
-		retval = req->sendRequest(dataPtr, dataSize);
+
+	// Get current PSP thread
+	SceUID currThread = sceKernelGetThreadId();
+
+	// Run the actual sendRequest on the host asynchronously
+	std::thread([req, dataPtr, dataSize, currThread]() mutable {
+		int localRet = req->sendRequest(dataPtr, dataSize);
+
+		// Store the result and resume the PSP thread
+		__KernelResumeThreadFromWait(currThread, localRet);
+		}).detach();
+
+	// Put the PSP thread into a wait state until sendRequest finishes
+	__KernelWaitCurThread(WAITTYPE_ASYNCIO, currThread, 0, 0, false, "sceHttpSendRequest");
+
+
+
 	return hleLogDebug(Log::sceNet, retval);
 }
 
