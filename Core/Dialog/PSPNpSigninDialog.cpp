@@ -639,10 +639,11 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 	const ImageID confirmBtnImage = confirmBtn == CTRL_CROSS ? ImageID("I_CROSS") : ImageID("I_CIRCLE");
 	const ImageID cancelBtnImage = cancelBtn == CTRL_CIRCLE ? ImageID("I_CIRCLE") : ImageID("I_CROSS");
 
-	PPGeStyle header = FadedStyle(PPGeAlign::BOX_LEFT, 0.7f);
-	PPGeStyle leftAligned = FadedStyle(PPGeAlign::BOX_LEFT, 0.5f);
 	PPGeStyle centerAligned = FadedStyle(PPGeAlign::BOX_HCENTER, 0.6f);
 	PPGeStyle formText = FadedStyle(PPGeAlign::BOX_RIGHT, 0.5f);
+	PPGeStyle header = FadedStyle(PPGeAlign::BOX_LEFT, 0.7f);
+	PPGeStyle descText = FadedStyle(PPGeAlign::BOX_LEFT, 0.6f);
+	PPGeStyle inputBox = FadedStyle(PPGeAlign::BOX_LEFT, 0.58f);
 	// Window Color: 0x40000000
 	// Button Color: 0xFF884300
 
@@ -736,15 +737,15 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 	PPGeDrawRect(48, 46, 430, 82, CalcFadedColor(0x40000000));
 
 	PPGeDrawText(di->T("Forgot your password?"), 44, 20, header);
-	PPGeDrawText(di->T("Enter the following information."), 65, 54, FadedStyle(PPGeAlign::BOX_LEFT, 0.6f));
+	PPGeDrawText(di->T("Enter the following information."), 65, 54, descText);
 
 	PPGeDrawText(di->T("Login ID"), 235, 115, formText);
-	DrawInputBox(npid, 243, 115, 413, 132, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f));
+	DrawInputBox(npid, 243, 115, 413, 132, CalcFadedColor(0x40000000), inputBox);
 
 	PPGeDrawText(di->T("Sign-In ID"), 235, 141, formText);
 	PPGeDrawText(di->T("(E-mail Address)"), 235, 151, formText);
 
-	DrawInputBox(email, 243, 135, 413, 152, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f));
+	DrawInputBox(email, 243, 135, 413, 152, CalcFadedColor(0x40000000), inputBox);
 
 	DrawButton(di->T("Cancel"), 50, 210, 120, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)selected[(u8)stage] == PasswordSelected::CANCEL);
 	DrawButton(di->T("Continue"), 205, 210, 275, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)selected[(u8)stage] == PasswordSelected::CONTINUE);
@@ -760,10 +761,11 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 	const ImageID confirmBtnImage = confirmBtn == CTRL_CROSS ? ImageID("I_CROSS") : ImageID("I_CIRCLE");
 	const ImageID cancelBtnImage = cancelBtn == CTRL_CIRCLE ? ImageID("I_CIRCLE") : ImageID("I_CROSS");
 
-	PPGeStyle header = FadedStyle(PPGeAlign::BOX_LEFT, 0.7f);
-	PPGeStyle leftAligned = FadedStyle(PPGeAlign::BOX_LEFT, 0.5f);
 	PPGeStyle centerAligned = FadedStyle(PPGeAlign::BOX_HCENTER, 0.6f);
 	PPGeStyle formText = FadedStyle(PPGeAlign::BOX_RIGHT, 0.5f);
+	PPGeStyle header = FadedStyle(PPGeAlign::BOX_LEFT, 0.7f);
+	PPGeStyle descText = FadedStyle(PPGeAlign::BOX_LEFT, 0.6f);
+	PPGeStyle inputBox = FadedStyle(PPGeAlign::BOX_LEFT, 0.58f);
 	// Window Color: 0x40000000
 	// Button Color: 0xFF884300
 
@@ -852,17 +854,17 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 	PPGeDrawRect(48, 46, 430, 82, CalcFadedColor(0x40000000));
 
 	PPGeDrawText(di->T("Forgot your password?"), 44, 20, header);
-	PPGeDrawText(di->T("Enter the following information."), 65, 54, FadedStyle(PPGeAlign::BOX_LEFT, 0.6f));
+	PPGeDrawText(di->T("Enter the following information."), 65, 54, descText);
 
 	PPGeDrawText(di->T("Token"), 235, 111, formText);
 	PPGeDrawText(di->T("(Check your E-mail)"), 235, 122, formText);
-	DrawInputBox(token, 243, 115, 413, 132, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f));
+	DrawInputBox(token, 243, 115, 413, 132, CalcFadedColor(0x40000000), inputBox);
 
 	PPGeDrawText(di->T("New Password"), 235, 135, formText);
-	DrawInputBox(password, 243, 135, 413, 152, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f), true);
+	DrawInputBox(password, 243, 135, 413, 152, CalcFadedColor(0x40000000), inputBox, true);
 
 	PPGeDrawText(di->T("Confirm Password"), 235, 155, formText);
-	DrawInputBox(password_confirm, 243, 155, 413, 172, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f), true);
+	DrawInputBox(password_confirm, 243, 155, 413, 172, CalcFadedColor(0x40000000), inputBox, true);
 
 	DrawButton(di->T("Cancel"), 50, 210, 120, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordTokenSelected)selected[(u8)stage] == PasswordTokenSelected::CANCEL);
 	DrawButton(di->T("Continue"), 205, 210, 275, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordTokenSelected)selected[(u8)stage] == PasswordTokenSelected::CONTINUE);
@@ -877,10 +879,11 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 	const ImageID confirmBtnImage = confirmBtn == CTRL_CROSS ? ImageID("I_CROSS") : ImageID("I_CIRCLE");
 	const ImageID cancelBtnImage = cancelBtn == CTRL_CIRCLE ? ImageID("I_CIRCLE") : ImageID("I_CROSS");
 
-	PPGeStyle header = FadedStyle(PPGeAlign::BOX_LEFT, 0.7f);
-	PPGeStyle leftAligned = FadedStyle(PPGeAlign::BOX_LEFT, 0.5f);
 	PPGeStyle centerAligned = FadedStyle(PPGeAlign::BOX_HCENTER, 0.6f);
 	PPGeStyle formText = FadedStyle(PPGeAlign::BOX_RIGHT, 0.5f);
+	PPGeStyle header = FadedStyle(PPGeAlign::BOX_LEFT, 0.7f);
+	PPGeStyle descText = FadedStyle(PPGeAlign::BOX_LEFT, 0.6f);
+	PPGeStyle inputBox = FadedStyle(PPGeAlign::BOX_LEFT, 0.58f);
 	// Window Color: 0x40000000
 	// Button Color: 0xFF884300
 
@@ -992,19 +995,19 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 	PPGeDrawRect(48, 46, 430, 82, CalcFadedColor(0x40000000));
 
 	PPGeDrawText(di->T("Need a new account?"), 44, 20, header);
-	PPGeDrawText(di->T("Enter the following information."), 65, 54, FadedStyle(PPGeAlign::BOX_LEFT, 0.6f));
+	PPGeDrawText(di->T("Enter the following information."), 65, 54, descText);
 
 	PPGeDrawText(di->T("Login ID"), 235, 115, formText);
-	DrawInputBox(npid, 243, 115, 413, 132, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f));
+	DrawInputBox(npid, 243, 115, 413, 132, CalcFadedColor(0x40000000), inputBox);
 
 	PPGeDrawText(di->T("E-mail"), 235, 135, formText);
-	DrawInputBox(email, 243, 135, 413, 152, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f));
+	DrawInputBox(email, 243, 135, 413, 152, CalcFadedColor(0x40000000), inputBox);
 
 	PPGeDrawText(di->T("Password"), 235, 155, formText);
-	DrawInputBox(password, 243, 155, 413, 172, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f), true);
+	DrawInputBox(password, 243, 155, 413, 172, CalcFadedColor(0x40000000), inputBox, true);
 
 	PPGeDrawText(di->T("Confirm Password"), 235, 175, formText);
-	DrawInputBox(password_confirm, 243, 175, 413, 192, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f), true);
+	DrawInputBox(password_confirm, 243, 175, 413, 192, CalcFadedColor(0x40000000), inputBox, true);
 
 	DrawButton(di->T("Cancel"), 50, 210, 120, 225, CalcFadedColor(0xFF884300), 0.5f, (RegisterSelected)selected[(u8)stage] == RegisterSelected::CANCEL);
 	DrawButton(di->T("Continue"), 205, 210, 275, 225, CalcFadedColor(0xFF884300), 0.5f, (RegisterSelected)selected[(u8)stage] == RegisterSelected::CONTINUE);
@@ -1019,10 +1022,11 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 	const ImageID confirmBtnImage = confirmBtn == CTRL_CROSS ? ImageID("I_CROSS") : ImageID("I_CIRCLE");
 	const ImageID cancelBtnImage = cancelBtn == CTRL_CIRCLE ? ImageID("I_CIRCLE") : ImageID("I_CROSS");
 
-	PPGeStyle header = FadedStyle(PPGeAlign::BOX_LEFT, 0.7f);
-	PPGeStyle leftAligned = FadedStyle(PPGeAlign::BOX_LEFT, 0.5f);
 	PPGeStyle centerAligned = FadedStyle(PPGeAlign::BOX_HCENTER, 0.6f);
 	PPGeStyle formText = FadedStyle(PPGeAlign::BOX_RIGHT, 0.5f);
+	PPGeStyle header = FadedStyle(PPGeAlign::BOX_LEFT, 0.7f);
+	PPGeStyle descText = FadedStyle(PPGeAlign::BOX_LEFT, 0.6f);
+	PPGeStyle inputBox = FadedStyle(PPGeAlign::BOX_LEFT, 0.58f);
 	// Window Color: 0x40000000
 	// Button Color: 0xFF884300
 
@@ -1091,13 +1095,13 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 	PPGeDrawRect(48, 46, 430, 82, CalcFadedColor(0x40000000));
 
 	PPGeDrawText(di->T("Need a new account?"), 44, 20, header);
-	PPGeDrawText(di->T("Enter the following information."), 65, 54, FadedStyle(PPGeAlign::BOX_LEFT, 0.6f));
+	PPGeDrawText(di->T("Enter the following information."), 65, 54, descText);
 
 	PPGeDrawText(di->T("Online Name"), 235, 111, formText);
-	DrawInputBox(online_name, 243, 115, 413, 132, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f));
+	DrawInputBox(online_name, 243, 115, 413, 132, CalcFadedColor(0x40000000), inputBox);
 
 	PPGeDrawText(di->T("Avatar URL"), 235, 135, formText);
-	DrawInputBox(avatar_url, 243, 135, 413, 152, CalcFadedColor(0x40000000), FadedStyle(PPGeAlign::BOX_LEFT, 0.58f));
+	DrawInputBox(avatar_url, 243, 135, 413, 152, CalcFadedColor(0x40000000), inputBox);
 
 	DrawButton(di->T("Cancel"), 50, 210, 120, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)selected[(u8)stage] == PasswordSelected::CANCEL);
 	DrawButton(di->T("Continue"), 205, 210, 275, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)selected[(u8)stage] == PasswordSelected::CONTINUE);
