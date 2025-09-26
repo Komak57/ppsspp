@@ -551,11 +551,15 @@ namespace net {
 			return htonl(addr->sin_addr.s_addr);
 		}
 		u32 GetSigAddr() {
-			std::lock_guard<std::mutex> lock(sig_mutex);
+			std::unique_lock<std::mutex> lock(sig_mutex);
+			if (!addr_sig)
+				sigv.wait_for(lock, std::chrono::seconds(10), [&] { return addr_sig.load() != 0; });
 			return addr_sig.load();
 		}
 		u16 GetSigPort() {
-			std::lock_guard<std::mutex> lock(sig_mutex);
+			std::unique_lock<std::mutex> lock(sig_mutex);
+			if (!port_sig)
+				sigv.wait_for(lock, std::chrono::seconds(10), [&] { return port_sig.load() != 0; });
 			return port_sig.load();
 		}
 	public:

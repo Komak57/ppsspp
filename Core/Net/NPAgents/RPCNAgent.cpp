@@ -137,7 +137,10 @@ namespace net {
 
 					if (new_addr_sig != old_addr_sig)
 					{
-						addr_sig = new_addr_sig;
+						{
+							std::lock_guard<std::mutex> lock(sig_mutex);
+							addr_sig = new_addr_sig;
+						}
 						NOTICE_LOG(Log::sceNet, "New P2P IP: %s", ip2str(htonl(new_addr_sig)).c_str());
 						if (old_addr_sig == 0)
 						{
@@ -148,7 +151,10 @@ namespace net {
 
 					if (new_port_sig != old_port_sig)
 					{
-						port_sig = new_port_sig;
+						{
+							std::lock_guard<std::mutex> lock(sig_mutex);
+							port_sig = new_port_sig;
+						}
 						NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", htons(new_port_sig));
 						if (old_port_sig == 0)
 						{
