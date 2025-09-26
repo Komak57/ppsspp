@@ -157,7 +157,7 @@ bool NpAuthProcessEvents() {
 
 static int sceNpInit()
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s()", __FUNCTION__);
+	WARN_LOG(Log::sceNet, "UNTESTED %s()", __FUNCTION__);
 
 	// Instantiate NPID, Online_Name, and Avatar URL
 	std::memset(&npId, 0, sizeof(npId));
@@ -172,7 +172,7 @@ static int sceNpInit()
 			std::min<size_t>(127, npAuthServer->GetAvatarURL().length()));
 	}
 
-	return hleLogError(Log::sceNet, 0, "UNIMPL");
+	return hleLogWarning(Log::sceNet, 0);
 }
 
 static int sceNpTerm()
