@@ -176,6 +176,10 @@ namespace net {
 		}
 	}
 
+	std::unique_ptr<NPAgent> RPCNAuthAgent::CreateAgent() {
+		return net::CreateNPAgent(NPAgentType::RPCN, this->host_, this->port_);
+	}
+
 	bool RPCNAuthAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
 		std::string certPem = "-----BEGIN CERTIFICATE-----\n"
 			"MIIGITCCBAmgAwIBAgIUdkeQlAaaQsrixKtU72S0ug43r9YwDQYJKoZIhvcNAQEL"

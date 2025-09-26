@@ -685,6 +685,7 @@ namespace net {
 
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
+		virtual std::unique_ptr<NPAgent> CreateAgent() = 0;
 		virtual bool Connect(int maxTries = 1, double timeout = 20.0f, bool* cancelConnect = nullptr) = 0;
 		virtual void Disconnect() = 0;
 		virtual NPAgentType GetAuthType() const = 0;
@@ -741,6 +742,7 @@ namespace net {
 	public:
 		~PSNAuthAgent();
 		PSNAuthAgent(std::string host, int port);
+		std::unique_ptr<NPAgent> CreateAgent();
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 		void Disconnect();
 		int GetServers(SceNpCommunicationId npTitleId);
@@ -756,6 +758,7 @@ namespace net {
 	public:
 		~RPCNAuthAgent();
 		RPCNAuthAgent(std::string host, int port);
+		std::unique_ptr<NPAgent> CreateAgent();
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 		void Disconnect();
 		int GetServers(SceNpCommunicationId npTitleId);

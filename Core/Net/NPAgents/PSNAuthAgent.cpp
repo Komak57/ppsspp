@@ -60,6 +60,9 @@ namespace net {
 		connected = false;
 	}
 
+	std::unique_ptr<NPAgent> PSNAuthAgent::CreateAgent() {
+		return net::CreateNPAgent(NPAgentType::PSN, this->host_, this->port_);
+	}
 
 	bool PSNAuthAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
 		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
