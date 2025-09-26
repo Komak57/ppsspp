@@ -76,6 +76,7 @@ void HTTPConnection::InitSession(int connectionID) {
 }
 void HTTPConnection::DestroySession(int connectionID) {
 	//__KernelWaitCurThread(WAITTYPE_ASYNCIO, ThreadID, 0, 0, false, "sceHttpSendRequest");
+	this->connecting = false;
 	sessions.erase(connectionID);
 }
 
@@ -198,6 +199,7 @@ bool HTTPConnection::SSLConnect(int connectionID, int maxTries, double timeout, 
 			NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
 			start_time = std::chrono::high_resolution_clock::now();
 			while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
+				if (connecting == false) return false;
 				if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
 					char errbuf[128];
 					mbedtls_strerror(ret, errbuf, sizeof(errbuf));

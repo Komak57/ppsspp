@@ -217,6 +217,7 @@ static int sceHttpSendRequest(int requestID, u32 dataPtr, u32 dataSize) {
 
 	// Run the actual sendRequest on the host asynchronously
 	std::thread([req, dataPtr, dataSize]() mutable {
+		req->connecting = true;
 		int localRet = req->sendRequest(dataPtr, dataSize);
 
 		// Store the result and resume the PSP thread
@@ -225,7 +226,7 @@ static int sceHttpSendRequest(int requestID, u32 dataPtr, u32 dataSize) {
 
 	// Put the PSP thread into a wait state until sendRequest finishes
 	__KernelWaitCurThread(WAITTYPE_ASYNCIO, req->ThreadID, 0, 0, false, "sceHttpSendRequest");
-
+	req->connecting = false;
 
 
 	return hleLogDebug(Log::sceNet, retval);

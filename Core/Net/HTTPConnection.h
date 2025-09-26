@@ -103,6 +103,7 @@ public:
 	void DestroySession(int connectionID);
 
 	int ThreadID;
+	bool connecting = true;
 
 	int getTemplateID() { return templateID; }
 	const std::string getHost() { return hostString; }
