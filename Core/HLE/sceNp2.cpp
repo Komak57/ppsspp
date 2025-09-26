@@ -1687,9 +1687,10 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	sockaddr_in sockAddr{};
 	getLocalIp(&sockAddr);	// LocalIP
 	netInfo->localAddr = htonl(sockAddr.sin_addr.s_addr);
-	// FIXME: Get PublicIP from RPCN's Signaling server or PSN's STUN server
 	netInfo->mappedAddr = npServer->GetSigAddr();	// PublicIP
+	// Pure speculation
 	netInfo->natStatus = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
+	// Unverified extra data?
 	netInfo->UPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
 	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
 	netInfo->port = npServer->GetSigPort();
