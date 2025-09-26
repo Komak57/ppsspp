@@ -391,6 +391,8 @@ namespace net {
 			connected = false;
 		}
 
+		sockaddr_in client_addr;
+		socklen_t client_addr_size;
 
 		auto start_time = std::chrono::high_resolution_clock::now();
 		auto end_time = std::chrono::high_resolution_clock::now();
@@ -483,8 +485,7 @@ namespace net {
 				// This will either be
 				// - the public IP of the server if connecting over the internet
 				// - the local IP of the server if connecteing over LAN
-				sockaddr_in client_addr;
-				socklen_t client_addr_size = sizeof(client_addr);
+				client_addr_size = sizeof(client_addr);
 				if (getsockname(tls.netCtx.fd, reinterpret_cast<struct sockaddr*>(&client_addr), &client_addr_size) != 0)
 				{
 					ERROR_LOG(Log::sceNet, "Failed to get the client address from the socket!");
