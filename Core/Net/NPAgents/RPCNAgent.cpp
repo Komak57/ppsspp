@@ -183,7 +183,7 @@ namespace net {
 				//ping.emplace(ping.begin() + 1, _user_id);
 				//ping.emplace(ping.begin() + 9, +local_addr);
 				write_to_ptr<s64_le>(ping, 1, id_sig.load());
-				write_to_ptr<u32_be>(ping, 9, addr_sig.load());
+				write_to_ptr<u32_be>(ping, 9, local_addr_sig.load());
 				return ping;
 			};
 
@@ -472,6 +472,19 @@ namespace net {
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful. TLS: %s, Cipher: %s", mbedtls_ssl_get_version(&tls.sslCtx), mbedtls_ssl_get_ciphersuite(&tls.sslCtx));
 				connected = true;
 				conn = std::move(possible);
+
+				// Obtain the IP address of the RPCN server
+				// This will either be
+				// - the public IP of the server if connecting over the internet
+				// - the local IP of the server if connecteing over LAN
+				sockaddr_in client_addr;
+				socklen_t client_addr_size = sizeof(client_addr);
+				if (getsockname(tls.netCtx.fd, reinterpret_cast<struct sockaddr*>(&client_addr), &client_addr_size) != 0)
+				{
+					ERROR_LOG(Log::sceNet, "Failed to get the client address from the socket!");
+				}
+
+				local_addr_sig = client_addr.sin_addr.s_addr;
 
 				// Start reading data
 				start_read_thread();
