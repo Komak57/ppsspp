@@ -348,8 +348,8 @@ static inline void FreeUser(u32& addr) {
 static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityMask, int threadStackSize)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %d, %d, %d) at %08x", __FUNCTION__, poolSize, threadPriority, cpuAffinityMask, threadStackSize, currentMIPS->pc);
-	//if (npMatching2Inited)
-	//	return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ALREADY_INITIALIZED);
+	if (npMatching2Inited)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ALREADY_INITIALIZED);
 
 	if (poolSize == 0) {
 		return hleLogError(Log::sceNet, SCE_KERNEL_ERROR_ILLEGAL_MEMSIZE, "invalid pool size");
@@ -371,6 +371,56 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 	npMatching2Handlers.clear();
 	npMatching2Events.clear();
 	npMatching2Inited = true;
+
+	//net::PSNAuthAgent::GetServers(&ProcessHostnameWithInfraDNS, npTitleId, &servers);
+	//net::RPCNAuthAgent::GetServers(npTitleId, &servers);
+	// We don't need the auth agent after this.
+	npServer = npAuthServer->CreateAgent();
+
+	// Just in case the NPAgent is hosted on a different physical server
+	if (!npServer->Resolve()) {
+		ERROR_LOG(Log::sceNet, "Unable to find Server.");
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_AVAILABLE);
+	}
+
+	std::string npid = net::RPCNAuthAgent::generate_npid();
+	if (!npServer->Connect()) {
+		ERROR_LOG(Log::sceNet, "Could not connect.");
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE);
+	}
+
+	std::string* creds = NpGetLogin();
+	int ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
+	if (ret != 0) {
+		int errorCode;
+		switch ((ErrorType)ret) {
+		case ErrorType::LoginError:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BUSY;
+			ERROR_LOG(Log::sceNet, "Login Error");
+			break;
+		case ErrorType::LoginAlreadyLoggedIn:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED;
+			ERROR_LOG(Log::sceNet, "User is already signed in");
+			break;
+		case ErrorType::LoginInvalidUsername:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER;
+			ERROR_LOG(Log::sceNet, "Invalid Login Credentials");
+			break;
+		case ErrorType::LoginInvalidPassword:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH;
+			ERROR_LOG(Log::sceNet, "Invalid Login Credentials");
+			break;
+		case ErrorType::LoginInvalidToken:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_INVALID_TICKET;
+			ERROR_LOG(Log::sceNet, "Invalid Token");
+			break;
+		default:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BUSY;
+			ERROR_LOG(Log::sceNet, "Unable to Log In (%d)", ret);
+			break;
+		}
+		return hleLogError(Log::sceNet, errorCode);
+	}
 	return 0;
 }
 
@@ -410,10 +460,10 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 	INFO_LOG(Log::sceNet, "%s - Title ID: %s", __FUNCTION__, npTitleId.data);
 	INFO_LOG(Log::sceNet, "%s - Title NUM: %d", __FUNCTION__, npTitleId.num);
 	//INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npid->handle.data);
-	INFO_LOG(Log::sceNet, "%s - User ID: %d", __FUNCTION__, npAuthServer->GetUserID());
+	INFO_LOG(Log::sceNet, "%s - User ID: %d", __FUNCTION__, npServer->GetUserID());
 	INFO_LOG(Log::sceNet, "%s - Login ID: %s", __FUNCTION__, g_Config.infraNpId.c_str());
-	INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npAuthServer->GetOnlineName().c_str());
-	INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, npAuthServer->GetAvatarURL().c_str());
+	INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npServer->GetOnlineName().c_str());
+	INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, npServer->GetAvatarURL().c_str());
 	std::string datahex;
 	/*DataToHexString(npid->opt, sizeof(npid->opt), &datahex);
 	INFO_LOG(Log::sceNet, "%s - Options?: %s", __FUNCTION__, datahex.c_str());
@@ -443,57 +493,6 @@ static int sceNpMatching2ContextStart(int ctxId)
 
 	// TODO: use sceNpGetUserProfile and check server availability using sceNpService_76867C01
 	//npMatching2Ctx.started = true;
-	npServer = nullptr;
-	//net::PSNAuthAgent::GetServers(&ProcessHostnameWithInfraDNS, npTitleId, &servers);
-	//net::RPCNAuthAgent::GetServers(npTitleId, &servers);
-	npAuthServer->GetServers(npTitleId);
-	// We don't need the auth agent after this.
-	npAuthServer->Disconnect();
-
-	// Just in case the NPAgent is hosted on a different physical server
-	if (!npServer->Resolve()) {
-		ERROR_LOG(Log::sceNet, "Unable to find Server.");
-		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_AVAILABLE), 0);
-	}
-
-	std::string npid = net::RPCNAuthAgent::generate_npid();
-	if (!npServer->Connect()) {
-		ERROR_LOG(Log::sceNet, "Could not connect.");
-		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
-	}
-
-	std::string* creds = NpGetLogin();
-	int ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
-	if (ret != 0) {
-		int errorCode;
-		switch ((ErrorType)ret) {
-		case ErrorType::LoginError:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BUSY;
-			ERROR_LOG(Log::sceNet, "Login Error");
-			break;
-		case ErrorType::LoginAlreadyLoggedIn:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED;
-			ERROR_LOG(Log::sceNet, "User is already signed in");
-			break;
-		case ErrorType::LoginInvalidUsername:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER;
-			ERROR_LOG(Log::sceNet, "Invalid Login Credentials");
-			break;
-		case ErrorType::LoginInvalidPassword:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH;
-			ERROR_LOG(Log::sceNet, "Invalid Login Credentials");
-			break;
-		case ErrorType::LoginInvalidToken:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_INVALID_TICKET;
-			ERROR_LOG(Log::sceNet, "Invalid Token");
-			break;
-		default:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BUSY;
-			ERROR_LOG(Log::sceNet, "Unable to Log In (%d)", ret);
-			break;
-		}
-		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, errorCode), 0);
-	}
 
 	////signaling_handler::print_interfaces();
 	//if (g_signaling.connect("fe80::be24:11ff:fed8:39c4", 3657, 21)) {
@@ -527,11 +526,10 @@ static int sceNpMatching2ContextStop(int ctxId)
 	//TODO: Cancel all async tasks and return SCE_NP_MATCHING2_ERROR_ABORTED for each.
 	//abortNpMatching2Handlers();
 
-
-	if (npServer != 0 && npServer->IsConnected()) {
+	/*if (npServer != 0 && npServer->IsConnected()) {
 		g_signaling.stop();
 		npServer->Disconnect();
-	}
+	}*/
 
 	// Delete all tasks
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
@@ -680,10 +678,10 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 memberId, u
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
 	}
 
-	if (strncmp(NpGetNpId()->handle.data, member->userInfo.npId.handle.data, 16) == 0) {
+	/*if (strncmp(NpGetNpId()->handle.data, member->userInfo.npId.handle.data, 16) == 0) {
 		connInfo->status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_OWN_NP_ID, "Member is Self");
-	}
+	}*/
 	auto connID = g_signaling.get_conn_id_from_npid(member->userInfo.npId);
 
 
@@ -718,8 +716,11 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 	if (!Memory::IsValidAddress(serverIdsPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	if (npServer->servers.size() == 0)
+	if (!npServer || !npServer->IsConnected())
+	//if (npServer->servers.size() == 0)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND);
+
+	npServer->GetServers(npTitleId);
 
 	std::vector<u16> server_list;
 	for (auto it = npServer->servers.begin(); it != npServer->servers.end() && server_list.size() < maxServerIds; ++it) {
