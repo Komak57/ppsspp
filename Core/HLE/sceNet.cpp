@@ -1760,17 +1760,18 @@ static int sceNetUpnpTerm() {
 static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x)", __FUNCTION__, unknownPtr);
 	auto uPnPInfo = PSPPointer<SceNpUpnpInfo>::Create(unknownPtr);
-	if (!npServer) {
-		uPnPInfo->uPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
+	if (npServer) {
+		uPnPInfo->address = (npServer ? htonl(npServer->GetSigAddr()) : 0);
+	}
+	if (uPnPInfo->address == 0) {
+		uPnPInfo->uPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_UNKNOWN;
 		uPnPInfo->STUNStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
 		uPnPInfo->NATType = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
-		uPnPInfo->address = 0;
 	}
 	else {
 		uPnPInfo->uPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
 		uPnPInfo->STUNStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
 		uPnPInfo->NATType = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
-		uPnPInfo->address = (npServer ? htonl(npServer->GetSigAddr()) : 0);
 	}
 	NOTICE_LOG(Log::sceNet, " - uPnPStatus: %d", uPnPInfo->uPnPStatus);
 	NOTICE_LOG(Log::sceNet, " - STUNStatus: %d", uPnPInfo->STUNStatus);
