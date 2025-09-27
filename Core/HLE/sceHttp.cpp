@@ -216,12 +216,12 @@ static int sceHttpSendRequest(int requestID, u32 dataPtr, u32 dataSize) {
 	req->ThreadID = sceKernelGetThreadId();
 
 	// Run the actual sendRequest on the host asynchronously
-	std::thread([req, dataPtr, dataSize]() mutable {
+	std::thread([req, retval,dataPtr, dataSize]() mutable {
 		req->connecting = true;
-		int localRet = req->sendRequest(dataPtr, dataSize);
+		retval = req->sendRequest(dataPtr, dataSize);
 
 		// Store the result and resume the PSP thread
-		__KernelResumeThreadFromWait(req->ThreadID, localRet);
+		__KernelResumeThreadFromWait(req->ThreadID, retval);
 		}).detach();
 
 	// Put the PSP thread into a wait state until sendRequest finishes
