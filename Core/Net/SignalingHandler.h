@@ -65,8 +65,8 @@ struct signaling_info
 	u32 info_counter = 10;
 
 	// Matching2
-	u64 room_id = 0;
-	u16 member_id = 0;
+	SceNpMatching2RoomId room_id = 0;
+	SceNpMatching2RoomMemberId member_id = 0;
 
 	// Stats
 	u64 last_rtts[6] = {};
@@ -137,12 +137,12 @@ public:
 	// Create connection to RPCN
 	u32 init_sig(const SceNpId& npid);
 	// Create connection to P2P
-	u32 init_sig(const SceNpId& npid, u64 room_id, u16 member_id);
+	u32 init_sig(const SceNpId& npid, SceNpMatching2RoomId room_id, SceNpMatching2RoomMemberId member_id);
 	void update_si_addr(std::shared_ptr<signaling_info>& si, u32 new_addr, u16 new_port);
 	void update_si_mapped_addr(std::shared_ptr<signaling_info>& si, u32 new_addr, u16 new_port);
 	void update_si_status(std::shared_ptr<signaling_info>& si, s32 new_status, s32 error_code);
 	void update_ext_si_status(std::shared_ptr<signaling_info>& si, bool op_activated);
-	void DisconnectUsers(u64 room_id);
+	void DisconnectUsers(SceNpMatching2RoomId room_id);
 	void stop_sig_nl(u32 conn_id, bool forceful);
 	//void sig2_callback(u64 room_id, u16 member_id, SceNpMatching2Event event, s32 error_code) const;
 

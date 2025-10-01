@@ -226,7 +226,7 @@ int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
  * @param args Variable length of arguments, MAX_ARGS = 11
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
-int notifySignalingHandler(u32 room_id, u32 conn_id, u32 unknown, u32 roomMemberId, u32 eventCode, u32 errorCode) {
+int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 unknown, SceNpMatching2RoomMemberId roomMemberId, u32 eventCode, u32 errorCode) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	// FIXME: Need confirmation on arguments for conn_id, room_id
@@ -664,7 +664,7 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 
 // roomId may be a struct containing room info?
 static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 memberId, u32 roomId, u32 status, u32 peerMemberId, u32 connInfoPtr) {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(ctx: %d, memberId: %08X, roomId: %d, status: %08X, peerMemberId: %d, connInfoPtr: 0x%08X) at %08x", __FUNCTION__, ctxId, memberId, roomId, status, peerMemberId, connInfoPtr, currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNIMPL %s(ctx: %d, memberId: %08X, roomId: %d, status: %08X, peerMemberId: %d, connInfoPtr: 0x%08X) at %08x", __FUNCTION__, ctxId, memberId, roomId, status, peerMemberId, connInfoPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -771,7 +771,7 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
 		// Server ID is a 16-bit variable according to JPCSP
-		u16 serverId;
+		SceNpMatching2ServerId serverId;
 		if ((serverId = Memory::Read_U16(serverIdPtr)) == 0)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
 
@@ -1188,7 +1188,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 		// We initiate signaling if necessary
 		if (const auto* signaling_data = resp->signaling_data())
 		{
-			const u64 room_id = resp->room_data()->roomId();
+			const SceNpMatching2RoomId room_id = resp->room_data()->roomId();
 
 			for (unsigned int i = 0; i < signaling_data->size(); i++)
 			{
@@ -1201,7 +1201,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 				const u32 addr_p2p = htonl(sig_ip);
 				const u16 port_p2p = signaling_info->addr()->port();
 
-				const u16 member_id = signaling_info->member_id();
+				const SceNpMatching2RoomMemberId member_id = signaling_info->member_id();
 
 				auto member = npServer->cache.GetMember(member_id);
 

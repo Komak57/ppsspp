@@ -246,7 +246,7 @@ u32 signaling_handler::init_sig(const SceNpId& npid)
 }
 
 // Creates P2P Signaling connection
-u32 signaling_handler::init_sig(const SceNpId& npid, u64 room_id, u16 member_id)
+u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_id, SceNpMatching2RoomMemberId member_id)
 {
 	std::lock_guard lock(mtx_);
 	u32 conn_id = get_always_conn_id(npid);
@@ -370,7 +370,7 @@ void signaling_handler::update_ext_si_status(std::shared_ptr<signaling_info>& si
 	}
 }
 
-void signaling_handler::DisconnectUsers(u64 room_id)
+void signaling_handler::DisconnectUsers(SceNpMatching2RoomId room_id)
 {
 	std::lock_guard lock(mtx_);
 
@@ -417,8 +417,8 @@ void signaling_handler::stop_sig_nl(u32 conn_id, bool forceful)
 	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000040: 00 00 00 00 00 00 00 00 00 00 00                 ...........
 */
 // NOTE: this calls your existing send implementation. keep the logging/IPv6 path you showed.
-void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u16 port) const {
-	INFO_LOG(Log::sceNet, "send_signaling_packet(__, %08x, %04x)", addr, port);
+void signaling_handler::send_signaling_packet(signaling_packet& sp, u32_be addr, u16_be port) const {
+	INFO_LOG(Log::sceNet, "send_signaling_packet(command: %d, ip: %s, port: %d)", sp.command, ip2str(addr).c_str(), ntohs(port));
 	std::vector<u8> packet(sizeof(signaling_packet) + VPORT_0_HEADER_SIZE);
 	reinterpret_cast<u16_le&>(packet[0]) = 0; // VPort 0 (LE)
 	packet[2] = SUBSET_SIGNALING;
@@ -774,7 +774,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		return;
 	}
 
-	const auto room_id = notification->room_id();
+	const SceNpMatching2RoomId room_id = notification->room_id();
 
 	u32 _size = sizeof(SceNpMatching2RoomMemberUpdateInfo);
 	u32 ptr = np_memory.Alloc(_size);
@@ -804,7 +804,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		const u32 addr_p2p = result_ip; // register_ip()
 		const u16 port_p2p = signaling_info->port();
 		
-		const u16 member_id = notif_data->roomMemberDataInternal->memberId;
+		const SceNpMatching2RoomMemberId member_id = notif_data->roomMemberDataInternal->memberId;
 		const SceNpId& npid = notif_data->roomMemberDataInternal->userInfo.npId;
 
 		// Attempt Signaling
@@ -828,8 +828,8 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 }
 
 void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
-	ERROR_LOG(Log::sceNet, "NOTI UserLeftRoom UNINPLEMENTED");
-	u64 room_id = resp.stream->get<u64>();
+	WARN_LOG(Log::sceNet, "NOTI UserLeftRoom UNTESTED");
+	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
 	const auto* update_info = resp.stream->get_flatbuffer<RoomMemberUpdateInfo>();
 
 	if (resp.stream->is_error())
@@ -873,7 +873,7 @@ void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI RoomDestroyed UNINPLEMENTED");
 
-	u64 room_id = resp.stream->get<u64>();
+	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
 	const auto* update_info = resp.stream->get_flatbuffer<RoomUpdateInfo>();
 
 	if (resp.stream->is_error())
@@ -998,8 +998,8 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 	resp.stream = new vec_stream(resp.data);
 	//auto noti = new vec_stream(resp.data);
 
-	u64 room_id = resp.stream->get<u64>();
-	u16 member_id = resp.stream->get<u16>();
+	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
+	SceNpMatching2RoomMemberId member_id = resp.stream->get<u16>();
 	NOTICE_LOG(Log::sceNet, "NOTI RoomMessageReceived(room: %d, member: %d)", room_id, member_id);
 
 	const auto* message_info = resp.stream->get_flatbuffer<RoomMessageInfo>();
@@ -1036,8 +1036,8 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI SignalingHelper UNINPLEMENTED");
 
-	u64 room_id = resp.stream->get<u64>();
-	u16 member_id = resp.stream->get<u16>();
+	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
+	SceNpMatching2RoomMemberId member_id = resp.stream->get<u16>();
 	NOTICE_LOG(Log::sceNet, "NOTI Member %d sent message in room(%d)", member_id, room_id);
 
 	const auto* message_info = resp.stream->get_flatbuffer<RoomMessageInfo>();
