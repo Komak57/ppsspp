@@ -483,7 +483,7 @@ namespace net {
 				return 0;
 			}
 			if (tls.enabled) {
-				DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
+				VERBOSE_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
 				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
 
 				if (*cancelled) {
@@ -504,7 +504,7 @@ namespace net {
 						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_WRITE");
 						return retval;
 					case MBEDTLS_ERR_SSL_WANT_READ:
-						DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
+						VERBOSE_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
 						/*while (!ready)
 							ready = fd_util::WaitUntilReady(fd, CANCEL_INTERVAL, false);*/
 							// Read some more!
