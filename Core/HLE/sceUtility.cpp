@@ -1447,8 +1447,8 @@ static void sceUtilityPsnInitStart(u32 paramPtr)
 	psnStatus = pspUtilityPsnStatus::PSN_STATUS_BUSY;
 
 	last = (u64)(time_now_d() * 1000000.0);
-	//currentDialogType = UtilityDialogType::NPSIGNIN;
-	sceUtilityNpSigninInitStart(paramPtr);
+	hleCall(sceUtility, int, sceUtilityNpSigninInitStart, paramPtr);
+	//sceUtilityNpSigninInitStart(paramPtr);
 
 	return hleNoLogVoid();
 }
@@ -1456,7 +1456,9 @@ static void sceUtilityPsnInitStart(u32 paramPtr)
 static int sceUtilityPsnGetStatus()
 {
 	u64 now = (u64)(time_now_d() * 1000000.0);
-	int i = sceUtilityNpSigninUpdate(2); // Simulate normal behavior
+	//hleCall(sceUtility, int, sceUtilityNpSigninUpdate, 2);
+	int i = hleCall(sceUtility, int, sceUtilityNpSigninUpdate, 2);
+	//int i = sceUtilityNpSigninUpdate(2); // Simulate normal behavior
 	if (i == 0) {
 		switch (npSigninDialog->GetStatus()) {
 		case 0: // NP_SIGNIN_STATUS_NONE
@@ -1471,19 +1473,22 @@ static int sceUtilityPsnGetStatus()
 			switch (npSigninDialog->GetCommonParam()->result) {
 			case SCE_UTILITY_DIALOG_RESULT_SUCCESS:
 				psnStatus = pspUtilityPsnStatus::PSN_STATUS_AVAILABLE;
-				sceUtilityNpSigninShutdownStart();
+				hleCall(sceUtility, int, sceUtilityNpSigninShutdownStart);
+				//sceUtilityNpSigninShutdownStart();
 				break;
 			case SCE_UTILITY_DIALOG_RESULT_CANCEL:
 			case SCE_UTILITY_DIALOG_RESULT_ABORT:
 			default:
 				psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
-				sceUtilityNpSigninShutdownStart();
+				hleCall(sceUtility, int, sceUtilityNpSigninShutdownStart);
+				//sceUtilityNpSigninShutdownStart();
 				break;
 			}
 			break;
 		case 4: // SCE_UTILITY_STATUS_SHUTDOWN
 			psnStatus = pspUtilityPsnStatus::PSN_STATUS_ERROR;
-			sceUtilityNpSigninShutdownStart();
+			hleCall(sceUtility, int, sceUtilityNpSigninShutdownStart);
+			//sceUtilityNpSigninShutdownStart();
 			break;
 		case 5: // SCE_UTILITY_STATUS_SCREENSHOT_UNKNOWN
 			break;
