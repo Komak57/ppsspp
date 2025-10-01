@@ -125,9 +125,15 @@ bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, sockaddr_i
 		return false;
 	}
 	int ret = sendto(inetSocket->sock, reinterpret_cast<const char*>(data.data()), data.size(), 0, reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
-	int err = errno;
-	if (ret == -1)
+	if (ret < 0)
 	{
+		int errorCode = 0;
+#if PPSSPP_PLATFORM(WINDOWS)
+		errorCode = WSAGetLastError();
+#else
+		errorCode = errno;
+#endif
+		ERROR_LOG(Log::sceNet, "SendTo Failed: %d", errorCode);
 		return false;
 	}
 	DEBUG_LOG(Log::sceNet, "Sent %i bytes", ret);
