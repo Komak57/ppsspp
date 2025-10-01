@@ -102,15 +102,10 @@ bool signaling_handler::destroy_connection() {
 	g_PortManager.Remove("UDP", SCE_NP_PORT);
 	return true;
 }
+// This function assumes addr and port are in network order
+bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, sockaddr_in dest) const {
 
-bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, u32 addr, u16 port) const {
-	sockaddr_in dest;
-	memset(&dest, 0, sizeof(sockaddr_in));
-	dest.sin_family = AF_INET;
-	dest.sin_addr.s_addr = htonl(addr);
-	dest.sin_port = htons(port);
-
-	DEBUG_LOG(Log::sceNet, "Sending packet(%d bytes) to %s:%d", data.size(), ip2str(dest.sin_addr).c_str(), port);
+	INFO_LOG(Log::sceNet, "Sending packet(%d bytes) to %s:%d", data.size(), ip2str(dest.sin_addr).c_str(), ntohs(dest.sin_port));
 
 	std::string datahex;
 	DEBUG_HEXLOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size(), 386);
@@ -433,8 +428,14 @@ void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u1
 	sp.sent_port = port;
 	std::memcpy(packet.data() + VPORT_0_HEADER_SIZE, &sp, sizeof(signaling_packet));
 
-	if (!send_packet_ipv4(packet, addr, port)) {
-		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip2str(addr).c_str(), port);
+	sockaddr_in dest;
+	memset(&dest, 0, sizeof(sockaddr_in));
+	dest.sin_family = AF_INET;
+	dest.sin_addr.s_addr = addr;
+	dest.sin_port = port;
+
+	if (!send_packet_ipv4(packet, dest)) {
+		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip2str(addr).c_str(), ntohs(port));
 	}
 }
 

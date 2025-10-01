@@ -197,8 +197,9 @@ namespace net {
 				const auto ping = forge_ping_packet();
 
 				struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(conn->ai_addr);
+			addr->sin_port = SCE_RPCN_PORT;
 
-				if (!g_signaling.send_packet_ipv4(ping, GetConnAddr(), SCE_RPCN_PORT))
+			if (!g_signaling.send_packet_ipv4(ping, *addr))
 					ERROR_LOG(Log::sceNet, "Failed to send IPv4 PING to RPCN");
 
 				last_ping_time_ipv4 = now;

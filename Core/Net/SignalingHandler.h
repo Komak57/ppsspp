@@ -152,7 +152,7 @@ public:
 	void retire_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd);
 	void retire_all_packets(std::shared_ptr<signaling_info>& si);
 
-	bool send_packet_ipv4(const std::vector<u8>& data, u32 addr, u16 port) const;
+	bool send_packet_ipv4(const std::vector<u8>& data, sockaddr_in dest) const;
 	// Signal Triggers
 	void UserJoinedRoom(net::RPCNResponse resp);
 	void UserLeftRoom(net::RPCNResponse resp);
