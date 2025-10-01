@@ -74,6 +74,16 @@ bool signaling_handler::create_connection() {
 			return false;
 		}
 
+		// Bind socket for listening
+		sockaddr_in addr{};
+		addr.sin_family = AF_INET;
+		addr.sin_addr.s_addr = INADDR_ANY;
+		addr.sin_port = SCE_NP_PORT;
+
+		if (bind(inetSocket->sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to bind new socket for listening");
+		}
+
 		// Ignore SIGPIPE when supported (ie. BSD/MacOS)
 		setSockNoSIGPIPE(inetSocket->sock, 1);
 		// TODO: We should always use non-blocking mode and simulate blocking mode
