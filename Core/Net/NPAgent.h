@@ -544,19 +544,19 @@ namespace net {
 		s64 GetUserID() {
 			return user_id;
 		}
-		u32 GetConnAddr() {
+		u32_be GetConnAddr() {
 			struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(conn->ai_addr);
-			return htonl(addr->sin_addr.s_addr);
+			return addr->sin_addr.s_addr;
 		}
-		u32 GetSigAddr() {
+		u32_be GetSigAddr() {
 			std::unique_lock<std::mutex> lock(sig_mutex);
-			if (!addr_sig)
+			if (addr_sig.load() == 0)
 				sigv.wait_for(lock, std::chrono::seconds(10), [&] { return addr_sig.load() != 0; });
 			return addr_sig.load();
 		}
-		u16 GetSigPort() {
+		u16_be GetSigPort() {
 			std::unique_lock<std::mutex> lock(sig_mutex);
-			if (!port_sig)
+			if (port_sig.load() == 0)
 				sigv.wait_for(lock, std::chrono::seconds(10), [&] { return port_sig.load() != 0; });
 			return port_sig.load();
 		}
@@ -594,10 +594,9 @@ namespace net {
 
 		std::mutex sig_mutex;
 		std::condition_variable sigv;
-		std::thread signal_thread;
-		std::atomic<u32> addr_sig;
-		std::atomic<u32> port_sig;
-		std::atomic<u32> local_addr_sig = 0;
+		std::atomic<u32_be> addr_sig;
+		std::atomic<u16_be> port_sig;
+		std::atomic<u32_be> local_addr_sig = (u32_be)0;
 
 		std::chrono::steady_clock::time_point last_ping_time_ipv4{}, last_pong_time_ipv4{};
 		std::chrono::steady_clock::time_point last_ping_time_ipv6{}, last_pong_time_ipv6{};

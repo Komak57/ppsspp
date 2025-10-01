@@ -695,7 +695,6 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 memberId, u
 	}*/
 	auto connID = g_signaling.get_conn_id_from_npid(member->userInfo.npId);
 
-
 	auto si = g_signaling.get_sig_infos(*connID);
 	if (!si) {
 		connInfo->status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
@@ -709,7 +708,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 memberId, u
 	// Write Port
 	connInfo->port = si->port;
 
-	return hleLogError(Log::sceNet, SCE_NP_MATCHING2_OKAY, "Assigned Address for %s to %s:%d", member->userInfo.npId.handle.data, ip2str(si->addr).c_str(), si->port);
+	return hleLogWarning(Log::sceNet, SCE_NP_MATCHING2_OKAY, "Assigned Address for %s to %s:%d", member->userInfo.npId.handle.data, ip2str(si->addr).c_str(), ntohs(si->port));
 }
 
 /* Allocates the list of server Id's to memory
@@ -1195,11 +1194,15 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 				const auto* signaling_info = signaling_data->Get(i);
 				//ensure(signaling_info->addr());
 
-				const u32 sig_ip = static_cast<u32>(signaling_info->addr()->ip()->Get(0)) << 24 | static_cast<u32>(signaling_info->addr()->ip()->Get(1)) << 16 |
-					static_cast<u32>(signaling_info->addr()->ip()->Get(2)) << 8 | static_cast<u32>(signaling_info->addr()->ip()->Get(3));
+				auto vec = signaling_info->addr()->ip();
+				const u32_be result_ip =
+					static_cast<u32_be>(vec->Get(0)) << 24 |
+					static_cast<u32_be>(vec->Get(1)) << 16 |
+					static_cast<u32_be>(vec->Get(2)) << 8 |
+					static_cast<u32_be>(vec->Get(3));
 
-				const u32 addr_p2p = htonl(sig_ip);
-				const u16 port_p2p = signaling_info->addr()->port();
+				const u32_be addr_p2p = result_ip;
+				const u16_be port_p2p = htons(signaling_info->addr()->port());
 
 				const SceNpMatching2RoomMemberId member_id = signaling_info->member_id();
 
@@ -1208,11 +1211,11 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 				if (!member)
 					continue;
 
-				NOTICE_LOG(Log::sceNet, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(member->userInfo.npId.handle.data), room_id, ip2str(addr_p2p).c_str(), port_p2p);
+				NOTICE_LOG(Log::sceNet, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(member->userInfo.npId.handle.data), room_id, ip2str(addr_p2p).c_str(), ntohs(port_p2p));
 
 				// Attempt Signaling
 				const u32 conn_id = g_signaling.init_sig(member->userInfo.npId, room_id, member_id);
-				g_signaling.connect(conn_id, addr_p2p, port_p2p);
+				g_signaling.connect(conn_id, addr_p2p, SCE_NP_PORT);
 			}
 		}
 

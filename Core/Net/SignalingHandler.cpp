@@ -20,8 +20,9 @@ u64 signaling_handler::get_micro_timestamp(const std::chrono::steady_clock::time
 	return std::chrono::duration_cast<std::chrono::microseconds>(time_point.time_since_epoch()).count();
 }
 
-void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
-	NOTICE_LOG(Log::sceNet, "Signaling Connecting to %s:%d", ip2str(addr).c_str(), port);
+// This function assumes addr and port are in network order
+void signaling_handler::connect(u32 conn_id, u32_be addr, u16_be port) {
+	NOTICE_LOG(Log::sceNet, "Signaling Connecting to %s:%d", ip2str(addr).c_str(), ntohs(port));
 	std::scoped_lock lk(mtx_);
 	// Send Connect?
 	auto& sent_packet = sig_packet;
@@ -59,18 +60,18 @@ void signaling_handler::stop() {
 
 bool signaling_handler::create_connection() {
 	// Get the InetSocket object from the socket manager
-	auto inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
+	auto inetSocket = g_socketManager.FindSocketByPort(ntohs(SCE_NP_PORT));
 	if (inetSocket == nullptr) {
-		WARN_LOG(Log::sceNet, "Creating new socket for port %d", SCE_NP_PORT);
+		WARN_LOG(Log::sceNet, "Creating new socket for port %d", ntohs(SCE_NP_PORT));
 		//return;
 
-		int socket;
+		int index;
 		int hostErrno = 0;
 		// PSP_NET_INET_AF_INET = 2
 		// PSP_NET_INET_SOCK_CONN_DGRAM = 6
 		// PSP_NET_INET_IPPROTO_UNSPEC = 0
 		// PSP_NET_INET_IPPROTO_UDP = 17
-		inetSocket = g_socketManager.CreateSocket(&socket, &hostErrno, SocketState::UsedNetInet, 2, 6, 0);
+		inetSocket = g_socketManager.CreateSocket(&index, &hostErrno, SocketState::UsedNetInet, 2, 6, 0);
 		if (!inetSocket) {
 			ERROR_LOG(Log::sceNet, "Unable to create new socket");
 			return false;
@@ -96,9 +97,9 @@ bool signaling_handler::create_connection() {
 		setUDPConnReset(inetSocket->sock, false);
 
 		inetSocket->state = SocketState::UsedNetInet;
-		inetSocket->port = SCE_NP_PORT;
+		inetSocket->port = ntohs(SCE_NP_PORT);
 
-		bool ok = g_PortManager.Add("UDP", SCE_NP_PORT, SCE_NP_PORT);
+		bool ok = g_PortManager.Add("UDP", ntohs(SCE_NP_PORT), ntohs(SCE_NP_PORT));
 	}
 	// If not running, spin up the recv thread
 	if (!running_.exchange(false))
@@ -121,7 +122,7 @@ bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, sockaddr_i
 
 	std::string datahex;
 	DEBUG_HEXLOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size(), 386);
-	auto inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
+	auto inetSocket = g_socketManager.FindSocketByPort(ntohs(SCE_NP_PORT));
 	if (!inetSocket) {
 		ERROR_LOG(Log::sceNet, "Socket not found");
 		return false;
@@ -287,7 +288,7 @@ u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_i
 	return conn_id;
 }
 
-void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32 new_addr, u16 new_port)
+void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32_be new_addr, u16_be new_port)
 {
 	if (!si)
 		return;
@@ -310,7 +311,7 @@ void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32 
 	}
 }
 
-void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& si, u32 new_addr, u16 new_port)
+void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& si, u32_be new_addr, u16_be new_port)
 {
 	if (!si)
 		return;
@@ -507,7 +508,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 		if (!inetSocket) {
 			// Socket lost. Try to find it again!
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-			inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
+			inetSocket = g_socketManager.FindSocketByPort(ntohs(SCE_NP_PORT));
 			continue;
 		}
 		u8 buf[1500];
@@ -725,7 +726,7 @@ void signaling_handler::process_incoming_messages() {
 	}
 }
 
-void signaling_handler::handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32 op_addr, u32 op_port) {
+void signaling_handler::handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Ping");
 	/*reply = true;
 	schedule_repeat = false;
@@ -768,7 +769,7 @@ void signaling_handler::handle_pong(const signaling_packet* sp, std::shared_ptr<
 	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_info(const signaling_packet* sp, std::shared_ptr<signaling_info> si, u32 op_addr, u32 op_port) {
+void signaling_handler::handle_info(const signaling_packet* sp, std::shared_ptr<signaling_info> si, u32_be op_addr, u16_be op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Info");
 	/*update_si_addr(si, op_addr, op_port);
 	reply = false;
@@ -778,7 +779,7 @@ void signaling_handler::handle_info(const signaling_packet* sp, std::shared_ptr<
 	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u32 op_port) {
+void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Connect");
 	/*reply = true;
 	schedule_repeat = true;
@@ -796,7 +797,7 @@ void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_p
 	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_CONNECT_DELAY);
 }
 
-void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u32 op_port) {
+void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Connect ACK");
 	/*update_rtt(sp->timestamp_sender);
 	reply = true;
@@ -835,7 +836,7 @@ void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shar
 	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u32 op_port) {
+void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Confirm");
 	/*update_rtt(sp->timestamp_receiver);
 	reply = false;
@@ -869,7 +870,7 @@ void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_p
 	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_finished(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u32 op_port) {
+void signaling_handler::handle_finished(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Finished");
 	/*reply = true;
 	schedule_repeat = false;
@@ -925,13 +926,14 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	if (const auto* signaling_info = notification->signaling())
 	{
 		auto vec = signaling_info->ip();
-		const u32 ip = static_cast<u32>(vec->Get(0)) << 24 | static_cast<u32>(vec->Get(1)) << 16 |
-			static_cast<u32>(vec->Get(2)) << 8 | static_cast<u32>(vec->Get(3));
+		const u32_be result_ip = 
+			static_cast<u32_be>(vec->Get(0)) << 24 |
+			static_cast<u32_be>(vec->Get(1)) << 16 |
+			static_cast<u32_be>(vec->Get(2)) << 8 |
+			static_cast<u32_be>(vec->Get(3));
 
-		u32 result_ip = htonl(ip);
-
-		const u32 addr_p2p = result_ip; // register_ip()
-		const u16 port_p2p = signaling_info->port();
+		const u32_be addr_p2p = result_ip; // register_ip()
+		const u16_be port_p2p = htons(signaling_info->port());
 		
 		const SceNpMatching2RoomMemberId member_id = notif_data->roomMemberDataInternal->memberId;
 		const SceNpId& npid = notif_data->roomMemberDataInternal->userInfo.npId;
@@ -939,7 +941,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		// Attempt Signaling
 		auto connId = init_sig(npid, room_id, member_id);
 		// Connect to Signaling Server
-		g_signaling.connect(connId, addr_p2p, port_p2p);
+		g_signaling.connect(connId, addr_p2p, SCE_NP_PORT);
 	}
 	//auto ctx = get_ctx(resp.header.reqId);
 	const u32 event_key = 0;// get_event_key();
