@@ -613,8 +613,6 @@ namespace net {
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 		int GetServers(SceNpCommunicationId npTitleId);
 
-		void StartSignalingThread();
-
 		std::pair<int, int> GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut);
 		int RequestSignalingInfo(std::string npid, u32 conn_id);
 		int SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp);
@@ -642,8 +640,6 @@ namespace net {
 		int Login(const char* npid, const char* token, const char* password);
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 		int GetServers(SceNpCommunicationId npTitleId);
-
-		void StartSignalingThread();
 
 		std::pair<int, int> GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut);
 		int RequestSignalingInfo(std::string npid, u32 conn_id);

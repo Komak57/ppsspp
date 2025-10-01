@@ -652,10 +652,6 @@ namespace net {
 		return 0;
 	}
 
-	void RPCNAgent::StartSignalingThread() {
-		signal_thread = std::thread(&RPCNAgent::signaling_loop, this);
-	}
-
 	std::pair<int, int> RPCNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) {
 		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 

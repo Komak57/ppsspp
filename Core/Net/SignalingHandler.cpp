@@ -102,8 +102,10 @@ bool signaling_handler::create_connection() {
 		bool ok = g_PortManager.Add("UDP", ntohs(SCE_NP_PORT), ntohs(SCE_NP_PORT));
 	}
 	// If not running, spin up the recv thread
-	if (!running_.exchange(false))
+	if (!running_.exchange(false)) {
 		recv_thread_ = std::thread(&signaling_handler::recv_loop, this, inetSocket);
+		signaling_thread_ = std::thread(&signaling_handler::signaling_thread, this);
+	}
 	return true;
 }
 
