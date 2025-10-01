@@ -65,6 +65,10 @@ namespace net {
 			}
 		}
 	}
+
+	void PSNAgent::process_messages() {
+	}
+
 	bool PSNAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
 		WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 		if (port_ <= 0) {
@@ -295,9 +299,6 @@ namespace net {
 			}
 		}
 		return 0;
-	}
-	void PSNAgent::StartSignalingThread() {
-		//signal_thread = std::thread(&RPCNAgent::signaling_loop, this);
 	}
 
 	std::pair<int, int> PSNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npCommId, std::vector<SceNpMatching2World>* worldInfoOut) {

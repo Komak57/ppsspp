@@ -511,7 +511,6 @@ namespace net {
 		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
 		virtual int GetServers(SceNpCommunicationId npTitleId) = 0;
 
-		virtual void StartSignalingThread() = 0;
 		// NPAgent Functions
 		virtual std::pair<int, int> GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) = 0;
 		virtual int RequestSignalingInfo(std::string npid, u32 conn_id) = 0;
@@ -525,6 +524,8 @@ namespace net {
 		virtual int SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req) = 0;
 		virtual int SetUserInfo(SceNpMatching2SetUserInfoRequest* req) = 0;
 		virtual int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) = 0;
+
+		virtual void process_messages() = 0;
 
 		bool IsConnected() { return connected; }
 		//u8 GetStatus();
@@ -623,6 +624,8 @@ namespace net {
 		int SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req);
 		int SetUserInfo(SceNpMatching2SetUserInfoRequest* req);
 		int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData);
+
+		void process_messages();
 	};
 
 	class RPCNAgent : public NPAgent {
@@ -655,7 +658,7 @@ namespace net {
 		void start_read_thread();
 		void stop_read_thread();
 
-		void signaling_loop();
+		void process_messages();
 
 		u64 generate_request_id();
 		std::vector<u8> GetCommHeader() {

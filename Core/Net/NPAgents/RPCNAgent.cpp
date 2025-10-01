@@ -72,8 +72,6 @@ namespace net {
 		running = false;
 		if (read_thread.joinable())
 			read_thread.join();
-		if (signal_thread.joinable())
-			signal_thread.join();
 	}
 
 	namespace np {
@@ -114,12 +112,12 @@ namespace net {
 		std::memcpy(static_cast<void*>(&array[pos]), &value, sizeof(value));
 	}
 
-	void RPCNAgent::signaling_loop() {
+	void RPCNAgent::process_messages() {
 
-		while (running)
-		{
-			if (cancelled)
+		if (cancelled) {
+			WARN_LOG(Log::sceNet, "RPCN Cancelling");
 				return;
+		}
 			const auto now = std::chrono::steady_clock::now();
 			const auto rpcn_msgs = g_signaling.get_rpcn_msgs();
 
@@ -204,7 +202,7 @@ namespace net {
 					ERROR_LOG(Log::sceNet, "Failed to send IPv4 PING to RPCN");
 
 				last_ping_time_ipv4 = now;
-				continue;
+			return;
 			}
 
 			/*if (np::is_ipv6_supported() && time_since_last_ipv6_pong >= 5s && time_since_last_ipv6_ping > 500ms)
