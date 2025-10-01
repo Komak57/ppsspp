@@ -11,11 +11,14 @@
 #include <algorithm>
 
 #include "Core/MemMap.h"
+#include "Common/Net/SocketCompat.h"
 
 #pragma pack(push,1)
 #define SCE_NP_DEFINED
 
-const u32 SCE_NP_PORT = 3658;
+// Port used to communicate with P2P (3659)
+// NOTE: This should be 3658, but most games appear to already implement this themselves
+const u16_be SCE_NP_PORT = htons(3659);
 
 // Based on https://playstationdev.wiki/psvitadevwiki/index.php?title=Error_Codes
 #define	SCE_NP_ERROR_ALREADY_INITIALIZED				0x80550001
