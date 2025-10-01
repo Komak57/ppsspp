@@ -21,12 +21,12 @@ namespace net {
 		cancelled = true;
 		if (running)
 			stop_read_thread();
+		if (tls.enabled) {
+			// First shut down network I/O so ssl_read unblocks
+			ResetSSL();
+		}
 		if (connected) {
-			if (tls.enabled) {
-				// First shut down network I/O so ssl_read unblocks
-				ResetSSL();
-			}
-			else {
+			if (!tls.enabled) {
 				if ((intptr_t)sock_ != -1) {
 					closesocket(sock_);
 					sock_ = -1;
@@ -106,7 +106,6 @@ namespace net {
 			if (cancelled)
 				return;
 			if (ret <= 0) {
-				connected = false;
 				running = false;
 				break;
 			}
