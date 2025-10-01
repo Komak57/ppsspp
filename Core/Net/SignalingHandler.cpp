@@ -241,6 +241,12 @@ std::optional<signaling_info> signaling_handler::get_sig_infos(u32 conn_id)
 	return std::nullopt;
 }
 
+void signaling_handler::set_self_sig_info(SceNpId& npid)
+{
+	std::lock_guard lock(mtx_);
+	sig_packet.npid = npid;
+}
+
 // Creates Signaling connection to RPCN
 u32 signaling_handler::init_sig(const SceNpId& npid)
 {

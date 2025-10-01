@@ -134,6 +134,7 @@ public:
 	u32 get_always_conn_id(const SceNpId& npid);
 	std::optional<u32> get_conn_id_from_npid(const SceNpId& npid);
 	std::optional<signaling_info> get_sig_infos(u32 conn_id);
+	void set_self_sig_info(SceNpId& npid);
 	// Create connection to RPCN
 	u32 init_sig(const SceNpId& npid);
 	// Create connection to P2P
