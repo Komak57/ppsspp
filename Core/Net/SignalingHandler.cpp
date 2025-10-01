@@ -504,8 +504,30 @@ void signaling_handler::retire_all_packets(std::shared_ptr<signaling_info>& si)
 }
 
 void signaling_handler::recv_loop(InetSocket* inetSocket) {
+	NOTICE_LOG(Log::sceNet, "Signaling Receiver Thread Started");
 	// single-threaded receive path; no busy wait
 	running_ = true;
+	timeval tv{};
+	tv.tv_sec = 1;      // timeout 1s
+	tv.tv_usec = 0;
+//	// Wait for socket to be ready before starting the loop
+//	int ready = 0;
+//	while (ready == 0 && running_) {
+//		fd_set readfds;
+//		FD_ZERO(&readfds);
+//		FD_SET(inetSocket->sock, &readfds);
+//		ready = select(inetSocket->sock, &readfds, nullptr, nullptr, &tv);
+//		if (ready < 0) {
+//
+//			int errorCode = 0;
+//#if PPSSPP_PLATFORM(WINDOWS)
+//			errorCode = WSAGetLastError();
+//#else
+//			errorCode = errno;
+//#endif
+//			ERROR_LOG(Log::sceNet, "SIGSRV Socket Select Failed: %d", errorCode);
+//		}
+//	}
 	while (running_) {
 		if (!inetSocket) {
 			// Socket lost. Try to find it again!
@@ -520,15 +542,12 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 			reinterpret_cast<sockaddr*>(&src), &slen);
 		if (n < 0) {
 			int errorCode = 0;
-			fd_set readfds;
-			FD_ZERO(&readfds);
-			FD_SET(inetSocket->sock, &readfds);
-			timeval tv{};
-			tv.tv_sec = 1;      // timeout 1s
-			tv.tv_usec = 0;
 #if PPSSPP_PLATFORM(WINDOWS)
 			errorCode = WSAGetLastError();
 			if (errorCode == WSAEWOULDBLOCK) {
+				fd_set readfds;
+				FD_ZERO(&readfds);
+				FD_SET(inetSocket->sock, &readfds);
 				// Nothing wrong here, just check again after a short recess
 				int ready = select(inetSocket->sock, &readfds, nullptr, nullptr, &tv);
 				continue;
@@ -536,6 +555,9 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 #else
 			errorCode = errno;
 			if (errorCode == EAGAIN || errorCode == EWOULDBLOCK) {
+				fd_set readfds;
+				FD_ZERO(&readfds);
+				FD_SET(inetSocket->sock, &readfds);
 				// Nothing wrong here, just check again after a short recess
 				int ready = select(inetSocket->sock, &readfds, nullptr, nullptr, &tv);
 				continue;
@@ -551,10 +573,9 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 		}
 		if (n < VPORT_0_HEADER_SIZE) {
 			ERROR_LOG(Log::sceNet, "Bad vport 0 packet (no subset)");
-			return;
+			continue;
 		}
 
-		DEBUG_HEXLOG(Log::sceNet, "signaling_handler::dispatch_packet", reinterpret_cast<const char*>(buf), n, 386);
 
 		// vport + subset
 		const u16 vport_le = *reinterpret_cast<const u16_le*>(&buf[0]);
