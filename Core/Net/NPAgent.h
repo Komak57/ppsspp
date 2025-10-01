@@ -530,7 +530,11 @@ namespace net {
 		bool IsConnected() { return connected; }
 		//u8 GetStatus();
 		//int GetID() { return ID; }
-		SceNpMatching2ServerInfo GetServerInfo(u16 ServerID) { return { servers[ServerID]->id, servers[ServerID]->status}; };
+		SceNpMatching2ServerInfo GetServerInfo(u16 ServerID) {
+			if (servers.find(ServerID) == servers.end())
+				return { 0, SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE };
+			return { servers[ServerID]->id, servers[ServerID]->status };
+		};
 		std::string GetOnlineName() {
 			return online_name;
 		}
