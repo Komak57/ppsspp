@@ -508,6 +508,11 @@ static int sceNpMatching2ContextStart(int ctxId)
 	// TODO: use sceNpGetUserProfile and check server availability using sceNpService_76867C01
 	//npMatching2Ctx.started = true;
 
+	if (!npServer || !npServer->IsConnected())
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE);
+
+	npServer->GetServers(npTitleId);
+
 	////signaling_handler::print_interfaces();
 	//if (g_signaling.connect("fe80::be24:11ff:fed8:39c4", 3657, 21)) {
 	//	NOTICE_LOG(Log::sceNet, "Connected to Signaling Server!");
@@ -722,15 +727,12 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 	if (!Memory::IsValidAddress(serverIdsPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	if (!npServer || !npServer->IsConnected())
-	//if (npServer->servers.size() == 0)
+	if (npServer->servers.size() == 0)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND);
 
-	npServer->GetServers(npTitleId);
-
-	std::vector<u16> server_list;
+	std::vector<SceNpMatching2ServerId> server_list;
 	for (auto it = npServer->servers.begin(); it != npServer->servers.end() && server_list.size() < maxServerIds; ++it) {
-		server_list.push_back(it->first);
+		server_list.push_back(it->second->id);
 	}
 
 	int ofs = 0;
