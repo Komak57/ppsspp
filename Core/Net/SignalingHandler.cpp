@@ -8,6 +8,8 @@
 #include <Core/HLE/proAdhoc.h>
 #include <Core/HLE/NetInetConstants.h>
 #include <Core/HLE/sceNetInet.cpp>
+#include <System/OSD.h>
+#include <Data/Text/I18n.h>
 // Used for things like 10s
 using namespace std::chrono_literals;
 
@@ -604,7 +606,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 					{
 						std::lock_guard lock(sign_mtx_);
 						sign_msgs.push_back(std::move(msg));
-				}
+					}
 					//dispatch_packet(msg);
 				}
 				break;
@@ -686,12 +688,12 @@ void signaling_handler::signaling_thread() {
 				{
 					it = qpackets.erase(it);
 					continue;
-			}
+				}
 
 				delay = REPEAT_INFO_DELAY;
 				si->info_counter--;
 				break;
-		}
+			}
 
 			it++;
 
@@ -699,7 +701,7 @@ void signaling_handler::signaling_thread() {
 		}
 		// TODO: Sleep until next expected packet, or wake signal?
 	}
-	}
+}
 
 std::vector<signaling_message> signaling_handler::get_sign_msgs()
 {
@@ -717,35 +719,35 @@ void signaling_handler::process_incoming_messages() {
 
 	for (const auto& msg : msgs)
 	{
-	const auto* sp = reinterpret_cast<const signaling_packet*>(msg.data.data());
+		const auto* sp = reinterpret_cast<const signaling_packet*>(msg.data.data());
 		INFO_LOG(Log::sceNet, "SIGSERV Packet Received from %s", sp->npid.handle.data);
-	auto& sent_packet = sig_packet;
-	auto si = get_signaling_ptr(sp);
+		auto& sent_packet = sig_packet;
+		auto si = get_signaling_ptr(sp);
 
 		if (sp->command == SignalingCommand::Connect || sp->command == SignalingCommand::Info) {
-		const u32 conn_id = get_always_conn_id(sp->npid);
-		si = sig_peers.at(conn_id);
-	}
-	if (sp->command == SignalingCommand::Finished) {
-		// User is unknown to us or the connection is inactive
-		// Ignore packet unless it's a finished packet in case the finished_ack wasn't received by opponent
-		return;
-	}
-	const auto now = std::chrono::steady_clock::now();
-	if (si)
-		si->time_last_msg_recvd = now;
+			const u32 conn_id = get_always_conn_id(sp->npid);
+			si = sig_peers.at(conn_id);
+		}
+		if (sp->command == SignalingCommand::Finished) {
+			// User is unknown to us or the connection is inactive
+			// Ignore packet unless it's a finished packet in case the finished_ack wasn't received by opponent
+			return;
+		}
+		const auto now = std::chrono::steady_clock::now();
+		if (si)
+			si->time_last_msg_recvd = now;
 
-	switch (sp->command) {
-	case SignalingCommand::Ping:        handle_ping(sp, sent_packet, msg.src_addr, msg.src_port); break;
-	case SignalingCommand::Pong:        handle_pong(sp, si); break;
-	case SignalingCommand::Connect:     handle_connect(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
-	case SignalingCommand::ConnectAck:  handle_connect_ack(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
-	case SignalingCommand::Confirm:     handle_confirm(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
-	case SignalingCommand::Finished:    handle_finished(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
-	case SignalingCommand::FinishedAck: handle_finished_ack(sp, si); break;
-	case SignalingCommand::Info:        handle_info(sp, si, msg.src_addr, msg.src_port); break;
-	default: ERROR_LOG(Log::sceNet, "Invalid signaling command received");  break;
-	}
+		switch (sp->command) {
+		case SignalingCommand::Ping:        handle_ping(sp, sent_packet, msg.src_addr, msg.src_port); break;
+		case SignalingCommand::Pong:        handle_pong(sp, si); break;
+		case SignalingCommand::Connect:     handle_connect(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
+		case SignalingCommand::ConnectAck:  handle_connect_ack(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
+		case SignalingCommand::Confirm:     handle_confirm(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
+		case SignalingCommand::Finished:    handle_finished(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
+		case SignalingCommand::FinishedAck: handle_finished_ack(sp, si); break;
+		case SignalingCommand::Info:        handle_info(sp, si, msg.src_addr, msg.src_port); break;
+		default: ERROR_LOG(Log::sceNet, "Invalid signaling command received");  break;
+		}
 	}
 }
 
@@ -934,6 +936,13 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberUpdateInfo>::Create(ptr);
 	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, notification->update_info(), notif_data, false, false);
 
+	char buffer[256];
+	snprintf(buffer, sizeof(buffer), "%s Joined the room",
+		notif_data->roomMemberDataInternal->userInfo.npId.handle.data);
+	auto gr = GetI18NCategory(I18NCat::GRAPHICS);
+	g_OSD.Show(OSDType::MESSAGE_SUCCESS, gr->T(buffer), 3.0f);
+	NOTICE_LOG(Log::sceNet, "User %s(%d) joined the room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
+
 	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
 	auto member = npServer->cache.GetMember(notif_data->roomMemberDataInternal->memberId);
 	if (member) {
@@ -942,8 +951,6 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	}
 	// Cache new Room Member
 	npServer->cache.AddMember(*notif_data->roomMemberDataInternal);
-	
-	NOTICE_LOG(Log::sceNet, "User %s(%d) joined the room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
 
 	// We initiate signaling if necessary
 	if (const auto* signaling_info = notification->signaling())
@@ -1001,15 +1008,25 @@ void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberUpdateInfo>::Create(ptr);
 	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, update_info, notif_data, include_onlinename, include_avatarurl);
 
+	char buffer[256];
+	snprintf(buffer, sizeof(buffer), "%s Left the room",
+		notif_data->roomMemberDataInternal->userInfo.npId.handle.data);
+	auto gr = GetI18NCategory(I18NCat::GRAPHICS);
+	g_OSD.Show(OSDType::MESSAGE_ERROR, gr->T(buffer), 3.0f);
+	NOTICE_LOG(Log::sceNet, "NOTI UserLeftRoom User %s(%d) left room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
+
+	// Stop signaling. PS3 handles this in sceNpSignalingDeactivateConnection
+	auto conn = get_conn_id_from_npid(notif_data->roomMemberDataInternal->userInfo.npId);
+	if (conn)
+		stop_sig_nl(conn.value(), true);
 	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
-	auto member = npServer->cache.GetMember(notif_data->roomMemberDataInternal->memberId);
-	if (!member) {
+	auto room = npServer->cache.GetRoom(room_id);
+	if (!room) {
 		//get_match2_event(event_key, 0, 0);
 		return;
 	}
 	npServer->cache.RemoveMember(notif_data->roomMemberDataInternal->memberId);
 
-	NOTICE_LOG(Log::sceNet, "NOTI UserLeftRoom User %s(%d) left room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
 
 	/*if (room_event_cb)
