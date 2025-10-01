@@ -48,6 +48,8 @@ void signaling_handler::stop() {
 
 	if (recv_thread_.joinable())
 		recv_thread_.join();
+	if (signaling_thread_.joinable())
+		signaling_thread_.join();
 
 	destroy_connection();
 	// optional: clear contexts after all callbacks are done
@@ -571,26 +573,132 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 				{
 					signaling_message msg;
 					msg.src_addr = src.sin_addr.s_addr;
-					msg.src_port = htons(src.sin_port);
+					msg.src_port = src.sin_port;
 					msg.data = std::move(vport_0_data);
+					INFO_HEXLOG(Log::sceNet, "recv_loop::SIGSERV", reinterpret_cast<const char*>(msg.data.data()), msg.data.size(), 386);
 
-					dispatch_packet(msg);
+					{
+						std::lock_guard lock(sign_mtx_);
+						sign_msgs.push_back(std::move(msg));
+				}
+					//dispatch_packet(msg);
 				}
 				break;
 			default:
 				ERROR_LOG(Log::sceNet, "Invalid vport 0 subset (%d)", subset);
-				return;
+				continue;
 			}
 		}
+
 	}
 }
 
-void signaling_handler::dispatch_packet(signaling_message msg) {
+void signaling_handler::signaling_thread() {
+	NOTICE_LOG(Log::sceNet, "Signaling Thread Started");
+	while (running_)
+	{
+		process_incoming_messages();
+		npServer->process_messages();
+
+		const auto now = std::chrono::steady_clock::now();
+
+		for (auto it = qpackets.begin(); it != qpackets.end();)
+		{
+			auto& [timestamp, sig] = *it;
+
+			if (timestamp > now)
+				break;
+
+			SignalingCommand cmd = sig.packet.command;
+
+			if (sig.sig_info->time_last_msg_recvd < now - 60s && cmd != SignalingCommand::Info)
+			{
+				// We had no connection to opponent for 60 seconds, consider the connection dead
+				ERROR_LOG(Log::sceNet, "Timeout disconnection");
+				update_si_status(sig.sig_info, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TIMEOUT);
+				retire_packet(sig.sig_info, SignalingCommand::Ping); // Retire ping packet if necessary
+				break; // qpackets has been emptied of all packets for this user so we're requeuing
+			}
+
+			// Update the timestamp if necessary
+			switch (sig.packet.command)
+			{
+			case SignalingCommand::Connect:
+			case SignalingCommand::Ping:
+				sig.packet.timestamp_sender = get_micro_timestamp(now);
+				break;
+			case SignalingCommand::ConnectAck:
+				sig.packet.timestamp_receiver = get_micro_timestamp(now);
+				break;
+			default:
+				break;
+			}
+
+			// Resend the packet
+			send_signaling_packet(sig.packet, sig.sig_info->addr, sig.sig_info->port);
+
+			// Reschedule another packet
+			auto& si = sig.sig_info;
+
+			std::chrono::milliseconds delay(500);
+			switch (cmd)
+			{
+			case SignalingCommand::Ping:
+			case SignalingCommand::Pong:
+				delay = REPEAT_PING_DELAY;
+				break;
+			case SignalingCommand::Connect:
+			case SignalingCommand::ConnectAck:
+			case SignalingCommand::Confirm:
+				delay = REPEAT_CONNECT_DELAY;
+				break;
+			case SignalingCommand::Finished:
+			case SignalingCommand::FinishedAck:
+				delay = REPEAT_FINISHED_DELAY;
+				break;
+			case SignalingCommand::Info:
+				// Don't reschedule
+				if (si->info_counter == 0)
+				{
+					it = qpackets.erase(it);
+					continue;
+			}
+
+				delay = REPEAT_INFO_DELAY;
+				si->info_counter--;
+				break;
+		}
+
+			it++;
+
+			reschedule_packet(si, cmd, now + delay);
+		}
+		// TODO: Sleep until next expected packet, or wake signal?
+	}
+	}
+
+std::vector<signaling_message> signaling_handler::get_sign_msgs()
+{
+	std::vector<signaling_message> msgs;
+	std::lock_guard lock(sign_mtx_);
+	msgs = std::move(sign_msgs);
+	sign_msgs.clear();
+
+	return msgs;
+}
+
+void signaling_handler::process_incoming_messages() {
+
+	auto msgs = get_sign_msgs();
+
+	for (const auto& msg : msgs)
+	{
 	const auto* sp = reinterpret_cast<const signaling_packet*>(msg.data.data());
+		INFO_LOG(Log::sceNet, "SIGSERV Packet Received from %s", sp->npid.handle.data);
 	auto& sent_packet = sig_packet;
 	auto si = get_signaling_ptr(sp);
 
-	if (sp->command == SignalingCommand::Connect || SignalingCommand::Info) {
+		if (sp->command == SignalingCommand::Connect || sp->command == SignalingCommand::Info) {
 		const u32 conn_id = get_always_conn_id(sp->npid);
 		si = sig_peers.at(conn_id);
 	}
@@ -614,8 +722,7 @@ void signaling_handler::dispatch_packet(signaling_message msg) {
 	case SignalingCommand::Info:        handle_info(sp, si, msg.src_addr, msg.src_port); break;
 	default: ERROR_LOG(Log::sceNet, "Invalid signaling command received");  break;
 	}
-
-
+	}
 }
 
 void signaling_handler::handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32 op_addr, u32 op_port) {

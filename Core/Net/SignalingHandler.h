@@ -181,8 +181,10 @@ public:
 	}
 private:
 	void recv_loop(InetSocket* inetSocket);
+	void signaling_thread();
 	void ping_loop(s64* user_id, u32* local_addr);
-	void dispatch_packet(signaling_message msg);
+	std::vector<signaling_message> get_sign_msgs();
+	void process_incoming_messages();
 
 	void handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32 op_addr, u32 op_port);
 	void handle_pong(const signaling_packet* sp, std::shared_ptr<signaling_info> si);
@@ -205,10 +207,14 @@ private:
 private:
 	std::atomic<bool> running_{ false };
 	std::thread recv_thread_;
-	std::thread ping_thread_;
+	std::thread signaling_thread_;
 
 	mutable std::mutex mtx_;
 	std::vector<std::vector<u8>> rpcn_msgs{};
+
+	mutable std::mutex sign_mtx_;
+	std::vector<signaling_message> sign_msgs{};
+
 	std::unordered_map<u32, ContextState> contexts_;
 	std::map<std::chrono::steady_clock::time_point, queued_packet> qpackets; // (wakeup time, packet)
 	std::atomic<u32> next_ctx_{ 1 }; // simple monotonic id
