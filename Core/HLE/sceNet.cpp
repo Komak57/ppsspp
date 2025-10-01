@@ -57,6 +57,7 @@
 #include "Core/HLE/NetAdhocCommon.h"
 
 #include "Core/MIPS/MIPSCodeUtils.h" // for macros to implement __CreateHLELoop
+#include <Core/Net/SignalingHandler.h>
 
 // These are all public. Should probably add accessors around these.
 bool g_netInited;
@@ -1761,7 +1762,11 @@ static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x)", __FUNCTION__, unknownPtr);
 	auto uPnPInfo = PSPPointer<SceNpUpnpInfo>::Create(unknownPtr);
 	if (npServer) {
-		uPnPInfo->address = (npServer ? htonl(npServer->GetSigAddr()) : 0);
+		// Default to 0
+		uPnPInfo->address = 0;
+		if (npServer) {
+			uPnPInfo->address = npServer->GetSigAddr();
+		}
 	}
 	if (uPnPInfo->address == 0) {
 		uPnPInfo->uPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_UNKNOWN;
