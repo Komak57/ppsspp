@@ -421,12 +421,26 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 		}
 		return hleLogError(Log::sceNet, errorCode);
 	}
+
+	// FIXME: This thread runs even when you trigger break
+	// RPCS3 has only 1 connection perpetually active
+	// As such, it has additional functions in sceNp that
+	//  trigger signaling to start, and P2P connect requests
+	if (g_signaling.create_connection())
+		g_signaling.set_self_sig_info(*NpGetNpId());
+	else
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Signaling Loop could not be started");
 	return 0;
 }
 
 static int sceNpMatching2Term()
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s() at %08x", __FUNCTION__, currentMIPS->pc);
+
+	if (npServer && npServer->IsConnected()) {
+		g_signaling.stop();
+		npServer->Disconnect();
+	}
 
 	npMatching2Inited = false;
 	npMatching2Handlers.clear();
@@ -607,14 +621,6 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 
 	RegisterNpMatching2Handler(ctxId, callbackFunctionAddr, callbackArgument, SCE_NP_MATCHING2_SIGNALING_EVENT);
 
-	// FIXME: This thread runs even when you trigger break
-	// RPCS3 has only 1 connection perpetually active
-	// As such, it has additional functions in sceNp that
-	//  trigger signaling to start, and P2P connect requests
-	if (g_signaling.create_connection())
-		npServer->StartSignalingThread();
-	else
-		ERROR_LOG(Log::sceNet, "Signaling Loop could not be started.");
 
 	//notifySignalingHandler(0, 0, 0, 0, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_SIGNALING_EVENT);
 
