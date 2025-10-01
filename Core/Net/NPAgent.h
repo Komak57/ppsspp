@@ -519,12 +519,12 @@ namespace net {
 		virtual int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) = 0;
 		virtual int JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut) = 0;
 		virtual int LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) = 0;
-		virtual int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal* resp) = 0;
+		virtual int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp) = 0;
 		virtual int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req) = 0;
 		virtual int SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req) = 0;
 		virtual int SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req) = 0;
 		virtual int SetUserInfo(SceNpMatching2SetUserInfoRequest* req) = 0;
-		virtual int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse* respData) = 0;
+		virtual int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) = 0;
 
 		bool IsConnected() { return connected; }
 		//u8 GetStatus();
@@ -617,12 +617,12 @@ namespace net {
 		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
 		int JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut);
 		int LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp);
-		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal* resp);
+		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp);
 		int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req);
 		int SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req);
 		int SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req);
 		int SetUserInfo(SceNpMatching2SetUserInfoRequest* req);
-		int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse* respData);
+		int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData);
 	};
 
 	class RPCNAgent : public NPAgent {
@@ -645,12 +645,12 @@ namespace net {
 		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
 		int JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut);
 		int LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp);
-		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal* resp);
+		int GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp);
 		int SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req);
 		int SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req);
 		int SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req);
 		int SetUserInfo(SceNpMatching2SetUserInfoRequest* req);
-		int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse* respData);
+		int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData);
 
 		void start_read_thread();
 		void stop_read_thread();

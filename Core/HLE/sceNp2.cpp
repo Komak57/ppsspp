@@ -1815,7 +1815,7 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		auto req = PSPPointer<SceNpMatching2GetRoomDataExternalListRequest>::Create(reqParamPtr);
-		const GetRoomDataExternalListResponse* resp;
+		const GetRoomDataExternalListResponse* resp{};
 		int ret = npServer->GetRoomDataExternalList(req, resp);
 		if (ret != 0) {
 			int errorCode;

@@ -515,7 +515,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal* resp) {
+	int PSNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp) {
 		return 0;
 	}
 
@@ -535,7 +535,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse* respData) {
+	int PSNAgent::GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) {
 		return 0;
 	}
 }

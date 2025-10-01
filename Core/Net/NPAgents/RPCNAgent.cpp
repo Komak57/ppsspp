@@ -1117,7 +1117,7 @@ namespace net {
 		return 0;
 	}
 
-	int RPCNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal* resp) {
+	int RPCNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 
 		flatbuffers::Offset<flatbuffers::Vector<u16>> final_attr_ids_vec;
@@ -1412,7 +1412,7 @@ namespace net {
 		return 0;
 	}
 
-	int RPCNAgent::GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse* respData) {
+	int RPCNAgent::GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
 		std::vector<uint64_t> roomIds;
