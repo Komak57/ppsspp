@@ -513,6 +513,7 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
 				g_Config.infraNpId = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
+				g_Config.infraToken = "";
 			},
 				[&]() {
 				// Failure callback
@@ -531,6 +532,7 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 				[&](const std::string& value, int) {
 				// Success callback
 				g_Config.infraPassword = value;
+				g_Config.infraToken = "";
 			},
 				[&]() {
 				// Failure callback
