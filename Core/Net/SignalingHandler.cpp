@@ -1243,39 +1243,31 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 
 void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI SignalingHelper UNINPLEMENTED");
+	resp.stream = new vec_stream(resp.data);
 
-	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
-	SceNpMatching2RoomMemberId member_id = resp.stream->get<u16>();
-	NOTICE_LOG(Log::sceNet, "NOTI Member %d sent message in room(%d)", member_id, room_id);
+	const auto* matching_info = resp.stream->get_flatbuffer<MatchingSignalingInfo>();
 
-	const auto* message_info = resp.stream->get_flatbuffer<RoomMessageInfo>();
-
-	if (resp.stream->is_error())
+	if (resp.stream->is_error() || !matching_info->addr() || !matching_info->npid() || !matching_info->addr()->ip())
 	{
 		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomMessageReceived notification");
 		return;
 	}
 
-	const u32 event_key = 0;// get_event_key();
-	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
-	bool include_onlinename = false, include_avatarurl = false;
+	SceNpId npid_p2p;
+	memset(&npid_p2p, 0, sizeof(npid_p2p));
+	memcpy(&npid_p2p, matching_info->npid(), std::min<size_t>(16, matching_info->npid()->Length()));
 
-	u32 _size = sizeof(SceNpMatching2RoomMessageInfo);
-	u32 ptr = np_memory.Alloc(_size);
-	auto notif_data = PSPPointer<SceNpMatching2RoomMessageInfo>::Create(ptr);
-	np::RoomMessageInfo_to_SceNpMatching2RoomMessageInfo(np_memory, message_info, notif_data, include_onlinename, include_avatarurl);
+	auto vec = matching_info->addr()->ip();
+	const u32_be result_ip =
+		static_cast<u32_be>(vec->Get(0)) << 24 |
+		static_cast<u32_be>(vec->Get(1)) << 16 |
+		static_cast<u32_be>(vec->Get(2)) << 8 |
+		static_cast<u32_be>(vec->Get(3));
 
+	const u32 addr_p2p = result_ip;
+	const u16 port_p2p = htons(matching_info->addr()->port());
 
-	/*if (room_msg_cb)
-	{
-		sysutil_register_cb([room_msg_cb = this->room_msg_cb, room_msg_cb_ctx = this->room_msg_cb_ctx, room_id, member_id, event_key, room_msg_cb_arg = this->room_msg_cb_arg, size = edata.size()](ppu_thread& cb_ppu) -> s32
-		{
-			room_msg_cb(cb_ppu, room_msg_cb_ctx, room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, event_key, 0, size, room_msg_cb_arg);
-			return 0;
-		});
-	}*/
-
-	notifyRoomMessageHandler(room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
+	send_information_packets(addr_p2p, port_p2p, npid_p2p);
 }
 
 // GUI
