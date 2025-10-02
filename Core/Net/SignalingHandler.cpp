@@ -305,12 +305,7 @@ void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32_
 		addr_old.s_addr = si->addr;
 		addr_new.s_addr = new_addr;
 
-		char ip_str_old[16];
-		char ip_str_new[16];
-		inet_ntop(AF_INET, &addr_old, ip_str_old, sizeof(ip_str_old));
-		inet_ntop(AF_INET, &addr_new, ip_str_new, sizeof(ip_str_new));
-
-		NOTICE_LOG(Log::sceNet, "Updated Address from %s:%d to %s:%d", ip_str_old, si->port, ip_str_new, new_port);
+		NOTICE_LOG(Log::sceNet, "Updated Address from %s:%d to %s:%d", ip2str(addr_old).c_str(), ntohs(si->port), ip2str(addr_new).c_str(), ntohs(new_port));
 
 		si->addr = new_addr;
 		si->port = new_port;
@@ -335,12 +330,7 @@ void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& s
 		addr_old.s_addr = si->mapped_addr;
 		addr_new.s_addr = new_addr;
 
-		char ip_str_old[16];
-		char ip_str_new[16];
-		inet_ntop(AF_INET, &addr_old, ip_str_old, sizeof(ip_str_old));
-		inet_ntop(AF_INET, &addr_new, ip_str_new, sizeof(ip_str_new));
-
-		NOTICE_LOG(Log::sceNet, "Updated Mapped Address from %s:%d to %s:%d", ip_str_old, si->mapped_port, ip_str_new, new_port);
+		NOTICE_LOG(Log::sceNet, "Updated Mapped Address from %s:%d to %s:%d", ip2str(addr_old).c_str(), ntohs(si->mapped_port), ip2str(addr_new).c_str(), ntohs(new_port));
 
 		si->mapped_addr = new_addr;
 		si->mapped_port = new_port;
@@ -1266,8 +1256,8 @@ void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 		static_cast<u32_be>(vec->Get(2)) << 8 |
 		static_cast<u32_be>(vec->Get(3));
 
-	const u32 addr_p2p = result_ip;
-	const u16 port_p2p = htons(matching_info->addr()->port());
+	const u32_be addr_p2p = result_ip;
+	const u16_be port_p2p = htons(matching_info->addr()->port());
 
 	send_information_packets(addr_p2p, port_p2p, npid_p2p);
 }
