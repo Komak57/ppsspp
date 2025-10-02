@@ -710,8 +710,8 @@ void signaling_handler::signaling_thread() {
 			{
 				auto duration = (expected_timepoint - now);
 				wait_for_sign(duration);
-	}
-}
+			}
+		}
 	}
 }
 
@@ -773,6 +773,7 @@ void signaling_handler::handle_ping(const signaling_packet* sp, signaling_packet
 	sent_packet.command = SignalingCommand::Pong;
 	sent_packet.timestamp_sender = sp->timestamp_sender;
 	// Reply
+	INFO_LOG(Log::sceNet, "PONG -> P2P");
 	send_signaling_packet(sent_packet, op_addr, op_port);
 	// Don't Schedule Repeat
 }
@@ -829,6 +830,7 @@ void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_p
 	sent_packet.timestamp_receiver = get_micro_timestamp(std::chrono::steady_clock::now());
 	update_si_addr(si, op_addr, op_port);
 	// Reply
+	INFO_LOG(Log::sceNet, "CONNECT_ACK -> P2P");
 	send_signaling_packet(sent_packet, op_addr, op_port);
 	// Schedule Repeat
 	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_CONNECT_DELAY);
@@ -858,6 +860,7 @@ void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shar
 
 		sent_packet.command = SignalingCommand::Ping;
 		sent_packet.timestamp_sender = get_micro_timestamp(std::chrono::steady_clock::now());
+		INFO_LOG(Log::sceNet, "PING -> P2P");
 		send_signaling_packet(sent_packet, si->addr, si->port);
 		queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_PING_DELAY);
 	};
@@ -869,6 +872,7 @@ void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shar
 	update_si_mapped_addr(si, sp->sent_addr, sp->sent_port);
 	update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_ACTIVE, SCE_NP_MATCHING2_OKAY);
 	// Reply
+	INFO_LOG(Log::sceNet, "CONFIRM -> P2P");
 	send_signaling_packet(sent_packet, op_addr, op_port);
 	// Don't Schedule Repeat
 }
@@ -895,6 +899,7 @@ void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_p
 
 		sent_packet.command = SignalingCommand::Ping;
 		sent_packet.timestamp_sender = get_micro_timestamp(std::chrono::steady_clock::now());
+		INFO_LOG(Log::sceNet, "PING -> P2P");
 		send_signaling_packet(sent_packet, si->addr, si->port);
 		queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_PING_DELAY);
 	};
@@ -918,6 +923,7 @@ void signaling_handler::handle_finished(const signaling_packet* sp, std::shared_
 	update_ext_si_status(si, false);
 	update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TERMINATED_BY_PEER);
 	// Reply
+	INFO_LOG(Log::sceNet, "FINISHED_ACK -> P2P");
 	send_signaling_packet(sent_packet, op_addr, op_port);
 	// Don't Schedule Repeat
 }
