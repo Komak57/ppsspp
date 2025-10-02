@@ -339,8 +339,10 @@ namespace net {
 						return retval;
 					case MBEDTLS_ERR_SSL_WANT_READ:
 						DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
-						while (!ready)
+						while (!ready && (cancelled && !*cancelled))
 							ready = fd_util::WaitUntilReady(tls.netCtx.fd, CANCEL_INTERVAL, false);
+						if (cancelled && *cancelled)
+							return SCE_NP_AUTH_ERROR_ABORTED;
 							// Read some more!
 						continue;
 					default:
@@ -507,8 +509,10 @@ namespace net {
 						return retval;
 					case MBEDTLS_ERR_SSL_WANT_READ:
 						VERBOSE_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
-						while (!ready)
+						while (!ready && (cancelled && !*cancelled))
 							ready = fd_util::WaitUntilReady(tls.netCtx.fd, CANCEL_INTERVAL, false);
+						if (cancelled && *cancelled)
+							return SCE_NP_MANAGER_ERROR_ABORTED;
 							// Read some more!
 						continue;
 					default:

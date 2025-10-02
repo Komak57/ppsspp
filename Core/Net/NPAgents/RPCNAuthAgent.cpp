@@ -100,7 +100,7 @@ namespace net {
 	}
 
 	void RPCNAuthAgent::read_loop() {
-		while (running) {
+		while (running && !cancelled) {
 			Packet packet;
 			int ret = Recv(&packet, &cancelled); // Uses NPAuthAgent::Recv
 			if (cancelled)
@@ -138,7 +138,7 @@ namespace net {
 			case PacketType::Reply:
 				if (packet.Length() < RPCN_HEADER_SIZE + 1) {
 					ERROR_LOG(Log::sceNet, "RPCN Malformed Packet Length (%d)", packet.Length());
-					running = false;
+					cancelled = true;
 					Disconnect();
 					return;
 				}
