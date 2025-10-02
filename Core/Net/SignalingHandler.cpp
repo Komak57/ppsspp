@@ -1101,6 +1101,7 @@ void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 
 	NOTICE_LOG(Log::sceNet, "NOTI RoomDestroyed Received notification that room(%d) was destroyed", room_id);
 
+	DisconnectUsers(room_id);
 	//disconnect_sig2_users(room_id);
 
 	/*if (room_event_cb)
