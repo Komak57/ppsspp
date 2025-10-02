@@ -247,13 +247,14 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install CMake
+    - name: Install CMake <= 3.50
       uses: lukka/get-cmake@latest
       with:
         cmakeVersion: 3.27.8
 
     - name: Build mbedTLS
-      run:
+      working-directory: ext/mbedtls
+      run: |
         git clone https://github.com/Mbed-TLS/mbedtls.git
         cd mbedtls
         make no_test -j$(nproc)
