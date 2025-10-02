@@ -149,6 +149,7 @@ public:
 
 	// send helpers (you already have an implementation; we call into it)
 	void send_signaling_packet(signaling_packet& sp, u32_be addr, u16_be port) const;
+	void send_information_packets(u32_be addr, u16_be port, const SceNpId& npid);
 	void reschedule_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd, std::chrono::steady_clock::time_point new_timepoint);
 	void retire_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd);
 	void retire_all_packets(std::shared_ptr<signaling_info>& si);

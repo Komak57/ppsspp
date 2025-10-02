@@ -469,6 +469,24 @@ void signaling_handler::send_signaling_packet(signaling_packet& sp, u32_be addr,
 	}
 }
 
+void signaling_handler::send_information_packets(u32_be addr, u16_be port, const SceNpId& npid)
+{
+	std::lock_guard lock(mtx_);
+
+	const u32 conn_id = get_always_conn_id(npid);
+	std::shared_ptr<signaling_info> si = sig_peers.at(conn_id);
+	si->addr = addr;
+	si->port = port;
+	si->info_counter = 10;
+
+	auto& sent_packet = sig_packet;
+	sent_packet.command = SignalingCommand::Info;
+
+	INFO_LOG(Log::sceNet, "INFO -> P2P");
+	send_signaling_packet(sent_packet, addr, port);
+	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_INFO_DELAY);
+}
+
 void signaling_handler::reschedule_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd, std::chrono::steady_clock::time_point new_timepoint)
 {
 	for (auto it = qpackets.begin(); it != qpackets.end(); it++)
