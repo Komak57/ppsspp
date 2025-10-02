@@ -113,6 +113,7 @@ static int sceHttpEnd() {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpEnd()");
 	if (handthr.joinable()) {
 		handthr.join();
+		handthr = std::thread(); // reset
 	}
 	std::lock_guard<std::mutex> guard(httpLock);
 	httpObjects.clear();
@@ -244,6 +245,7 @@ static int sceHttpDeleteRequest(int requestID) {
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
 	if (handthr.joinable()) {
 		handthr.join();
+		handthr = std::thread(); // reset
 	}
 	const auto http_object = httpObjects.find(requestID)->second;
 	if (strcmp(http_object->className(), name_HTTPRequest) != 0)
