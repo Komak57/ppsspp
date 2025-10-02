@@ -592,7 +592,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 			case SUBSET_RPCN:
 				{
 					// push_back to rpcn_msgs
-					std::lock_guard lock(mtx_);
+					std::lock_guard lock(rpcn_mtx_);
 					rpcn_msgs.push_back(std::move(vport_0_data));
 					rpcn_msg_cv.notify_all();
 				}	

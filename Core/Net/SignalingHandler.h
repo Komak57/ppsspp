@@ -171,7 +171,7 @@ public:
 	void QuickMatchCompleteGUI(net::RPCNResponse resp);
 
 	void wait_for_rpcn(bool* running, bool* cancelled, std::chrono::nanoseconds duration) {
-		std::unique_lock<std::mutex> lock(mtx_);
+		std::unique_lock<std::mutex> lock(rpcn_mtx_);
 		rpcn_msg_cv.wait_for(lock, duration, [&] { return (!*running || *cancelled) || (!rpcn_msgs.empty()); });
 	}
 
@@ -183,7 +183,7 @@ public:
 	std::vector<std::vector<u8>> get_rpcn_msgs() {
 		std::vector<std::vector<u8>> msgs;
 		{
-			std::lock_guard lock(mtx_);
+			std::lock_guard lock(rpcn_mtx_);
 			msgs = std::move(rpcn_msgs);
 			rpcn_msgs.clear();
 		}
@@ -218,11 +218,15 @@ private:
 	std::atomic<bool> running_{ false };
 	std::thread recv_thread_;
 	std::thread signaling_thread_;
-
+	// This mutex handles general Signaling variables
 	mutable std::mutex mtx_;
+
+	// This mutex controls RPCN Message Packets
+	mutable std::mutex rpcn_mtx_;
 	std::condition_variable rpcn_msg_cv;
 	std::vector<std::vector<u8>> rpcn_msgs{};
 
+	// This mutex controls P2P Message Packets
 	mutable std::mutex sign_mtx_;
 	std::condition_variable sign_msg_cv;
 	std::vector<signaling_message> sign_msgs{};
