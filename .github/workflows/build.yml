@@ -76,6 +76,7 @@ jobs:
         }
         
     - name: Copy mbedTLS config
+      working-directory: ${{ env.GITHUB_WORKSPACE }}
       run: |
         cp ext/config.h ext/mbedtls/include/mbedtls/config.h
         
