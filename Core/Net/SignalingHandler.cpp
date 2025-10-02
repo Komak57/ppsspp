@@ -42,6 +42,7 @@ void signaling_handler::connect(u32 conn_id, u32_be addr, u16_be port) {
 		si->port = port;
 	}
 
+	INFO_LOG(Log::sceNet, "CONNECT -> P2P");
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, si, now + REPEAT_CONNECT_DELAY);
 }
@@ -436,6 +437,7 @@ void signaling_handler::stop_sig_nl(u32 conn_id, bool forceful)
 	auto& sent_packet = sig_packet;
 	sent_packet.command = SignalingCommand::Finished;
 
+	INFO_LOG(Log::sceNet, "FINISHED -> P2P");
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, std::move(si), std::chrono::steady_clock::now() + REPEAT_FINISHED_DELAY);
 }
@@ -1143,7 +1145,7 @@ void signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 
 	//extra_nps::print_SceNpMatching2RoomDataInternal(notif_data->newRoomDataInternal.get_ptr());
 
-	NOTICE_LOG(Log::sceNet, "NOTI RoomDestroyed Received notification that room(% d)'s data was updated", room_id);
+	NOTICE_LOG(Log::sceNet, "NOTI Received notification that room(%d)'s data was updated", room_id);
 
 	/*if (room_event_cb)
 	{
@@ -1185,7 +1187,7 @@ void signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	}
 	npServer->cache.AddMember(*notif_data->newRoomMemberDataInternal);
 
-	NOTICE_LOG(Log::sceNet, "NOTI RoomDestroyed User's %s(%d) room (%d) data was updated", notif_data->newRoomMemberDataInternal->userInfo.npId.handle.data, notif_data->newRoomMemberDataInternal->memberId, room_id);
+	NOTICE_LOG(Log::sceNet, "NOTI User %s(%d) data was updated for room (%d)", notif_data->newRoomMemberDataInternal->userInfo.npId.handle.data, notif_data->newRoomMemberDataInternal->memberId, room_id);
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());
 
 	/*if (room_event_cb)
