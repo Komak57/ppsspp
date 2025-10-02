@@ -326,6 +326,8 @@ int HTTPRequest::abortRequest() {
 	//if (progress_.progress == 0.0f)
 		//return SCE_HTTP_ERROR_BEFORE_SEND;
 	cancelled = true;
+
+	__KernelResumeThreadFromWait(ThreadID, SCE_HTTP_ERROR_ABORTED);
 	return 0;
 }
 
