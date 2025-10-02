@@ -673,6 +673,7 @@ void signaling_handler::signaling_thread() {
 			}
 
 			// Resend the packet
+			INFO_LOG(Log::sceNet, "Re-Send %d -> RPCN", sig.packet.command);
 			send_signaling_packet(sig.packet, sig.sig_info->addr, sig.sig_info->port);
 
 			// Reschedule another packet
@@ -967,8 +968,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	char buffer[256];
 	snprintf(buffer, sizeof(buffer), "%s Joined the room",
 		notif_data->roomMemberDataInternal->userInfo.npId.handle.data);
-	auto gr = GetI18NCategory(I18NCat::GRAPHICS);
-	g_OSD.Show(OSDType::MESSAGE_SUCCESS, gr->T(buffer), 3.0f);
+	g_OSD.Show(OSDType::MESSAGE_SUCCESS, buffer, 3.0f);
 	NOTICE_LOG(Log::sceNet, "User %s(%d) joined the room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
 
 	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
@@ -1039,8 +1039,7 @@ void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	char buffer[256];
 	snprintf(buffer, sizeof(buffer), "%s Left the room",
 		notif_data->roomMemberDataInternal->userInfo.npId.handle.data);
-	auto gr = GetI18NCategory(I18NCat::GRAPHICS);
-	g_OSD.Show(OSDType::MESSAGE_ERROR, gr->T(buffer), 3.0f);
+	g_OSD.Show(OSDType::MESSAGE_ERROR, buffer, 3.0f);
 	NOTICE_LOG(Log::sceNet, "NOTI UserLeftRoom User %s(%d) left room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
 
 	// Stop signaling. PS3 handles this in sceNpSignalingDeactivateConnection
