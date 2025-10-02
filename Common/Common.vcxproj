@@ -308,6 +308,7 @@
     <ClInclude Include="..\ext\basis_universal\basisu_transcoder.h" />
     <ClInclude Include="..\ext\basis_universal\basisu_transcoder_internal.h" />
     <ClInclude Include="..\ext\basis_universal\basisu_transcoder_uastc.h" />
+    <ClInclude Include="..\ext\config.h" />
     <ClInclude Include="..\ext\imgui\imconfig.h" />
     <ClInclude Include="..\ext\imgui\imgui.h" />
     <ClInclude Include="..\ext\imgui\imgui_extras.h" />

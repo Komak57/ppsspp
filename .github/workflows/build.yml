@@ -75,21 +75,9 @@ jobs:
           echo "#define PPSSPP_WIN_VERSION_NO_UPDATE 1" >> Windows/win-version.h
         }
         
-    - name: Setup CMake (for Windows compatibility)
-      uses: jwlawson/actions-setup-cmake@v2
-      with:
-        cmake-version: '3.16.9'
-        
-    - name: Enable Developer Command Prompt
-      uses: ilammy/msvc-dev-cmd@v1
-      with:
-        vsversion: '2022'
-        arch: 'x64'
-
-    - name: Build mbedTLS
-      working-directory: ext/mbedtls
+    - name: Copy mbedTLS config
       run: |
-        cmake -DENABLE_TESTING=Off . -B build -DCMAKE_BUILD_TYPE=Release
+        cp ext/config.h ext/mbedtls/include/mbedtls/config.h
         
     - name: Build Windows
       working-directory: ${{ env.GITHUB_WORKSPACE }}

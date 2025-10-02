@@ -689,6 +689,9 @@
       <Filter>Audio</Filter>
     </ClInclude>
     <ClInclude Include="LoongArch64Emitter.h" />
+    <ClInclude Include="..\ext\config.h">
+      <Filter>ext\mbedtls</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ABI.cpp" />
@@ -1417,6 +1420,9 @@
     </Filter>
     <Filter Include="Audio">
       <UniqueIdentifier>{92746a51-33a9-4a00-af10-3538322f04f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ext\mbedtls">
+      <UniqueIdentifier>{0f5b4410-75fa-42e3-a89f-e793dac8168b}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
