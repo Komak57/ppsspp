@@ -28,8 +28,15 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
         registry: ghcr.io
 
+    # --- fix repositories that have upper-case letters ---
+    - name: Set lower-case repository name
+      id: repo_lc
+      run: |
+        # Lowercase github.repository (owner/repo). Use tr for portability.
+        echo "REPO_LC=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
     - name: Build and push Docker image
       uses: docker/build-push-action@v6
       with:
         push: true
-        tags: ghcr.io/${{ github.repository }}:${{ steps.metadata.outputs.tag }}
+        tags: ghcr.io/${{ env.REPO_LC }}:${{ steps.metadata.outputs.tag }}
