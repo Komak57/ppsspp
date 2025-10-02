@@ -6,6 +6,7 @@
 #include "Core/MemMapHelpers.h"
 #include <Core/Net/SignalingHandler.h>
 #include <Core/HLE/proAdhoc.h>
+#include <System/OSD.h>
 
 using namespace std::literals::chrono_literals;
 
@@ -149,6 +150,10 @@ namespace net {
 							std::lock_guard<std::mutex> lock(sig_mutex);
 							addr_sig = new_addr_sig;
 						}
+						char buffer[256];
+						snprintf(buffer, sizeof(buffer), "Signaling Connected at %s:%d",
+							ip2str(new_addr_sig).c_str(), htons(new_port_sig));
+						g_OSD.Show(OSDType::MESSAGE_SUCCESS, buffer, 3.0f);
 						NOTICE_LOG(Log::sceNet, "New P2P IP: %s", ip2str(new_addr_sig).c_str());
 						if (old_addr_sig == 0)
 						{
