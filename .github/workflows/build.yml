@@ -79,6 +79,12 @@ jobs:
       uses: jwlawson/actions-setup-cmake@v2
       with:
         cmake-version: '3.16.9'
+        
+    - name: Enable Developer Command Prompt
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        vsversion: '2022'
+        arch: 'x64'
 
     - name: Build mbedTLS
       working-directory: ext/mbedtls
