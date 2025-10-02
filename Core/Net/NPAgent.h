@@ -526,6 +526,7 @@ namespace net {
 		virtual int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) = 0;
 
 		virtual void process_messages() = 0;
+		virtual void start_signal_thread() = 0;
 
 		bool IsConnected() { return connected; }
 		//u8 GetStatus();
@@ -627,6 +628,7 @@ namespace net {
 		int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData);
 
 		void process_messages();
+		void start_signal_thread();
 	};
 
 	class RPCNAgent : public NPAgent {
@@ -655,6 +657,7 @@ namespace net {
 		int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData);
 
 		void start_read_thread();
+		void start_signal_thread();
 		void stop_read_thread();
 
 		void process_messages();
@@ -674,6 +677,7 @@ namespace net {
 		void read_loop();
 
 		std::thread read_thread;
+		std::thread signaling_thread;
 		bool running = false;
 
 		std::mutex buffer_mutex;

@@ -69,9 +69,16 @@ namespace net {
 	}
 
 	void RPCNAgent::stop_read_thread() {
+		cancelled = true;
 		running = false;
 		if (read_thread.joinable())
 			read_thread.join();
+		if (signaling_thread.joinable())
+			signaling_thread.join();
+	}
+
+	void RPCNAgent::start_signal_thread() {
+		signaling_thread = std::thread(&RPCNAgent::process_messages, this);
 	}
 
 	namespace np {
@@ -113,7 +120,8 @@ namespace net {
 	}
 
 	void RPCNAgent::process_messages() {
-
+		NOTICE_LOG(Log::sceNet, "Signaling RPCN Handler Thread Started");
+		while (running) {
 		if (cancelled) {
 			WARN_LOG(Log::sceNet, "RPCN Cancelling");
 			return;
@@ -201,11 +209,12 @@ namespace net {
 			struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(conn->ai_addr);
 			addr->sin_port = SCE_RPCN_PORT;
 
+				INFO_LOG(Log::sceNet, "PING -> RPCN");
 			if (!g_signaling.send_packet_ipv4(ping, *addr))
 				ERROR_LOG(Log::sceNet, "Failed to send IPv4 PING to RPCN");
 
 			last_ping_time_ipv4 = now;
-			return;
+				continue;
 		}
 
 		/*if (np::is_ipv6_supported() && time_since_last_ipv6_pong >= 5s && time_since_last_ipv6_ping > 500ms)
@@ -244,6 +253,7 @@ namespace net {
 		/*if (!sem_rpcn.try_acquire_for(duration))
 		{
 		}*/
+	}
 	}
 
 	void RPCNAgent::read_loop() {

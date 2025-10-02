@@ -107,6 +107,7 @@ bool signaling_handler::create_connection() {
 	if (!running_.exchange(false)) {
 		recv_thread_ = std::thread(&signaling_handler::recv_loop, this, inetSocket);
 		signaling_thread_ = std::thread(&signaling_handler::signaling_thread, this);
+		npServer->start_signal_thread();
 	}
 	return true;
 }
@@ -624,7 +625,6 @@ void signaling_handler::signaling_thread() {
 	while (running_)
 	{
 		process_incoming_messages();
-		npServer->process_messages();
 
 		const auto now = std::chrono::steady_clock::now();
 

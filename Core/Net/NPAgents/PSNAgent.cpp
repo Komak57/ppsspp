@@ -69,6 +69,9 @@ namespace net {
 	void PSNAgent::process_messages() {
 	}
 
+	void PSNAgent::start_signal_thread() {
+	}
+
 	bool PSNAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
 		WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 		if (port_ <= 0) {
