@@ -594,6 +594,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 					// push_back to rpcn_msgs
 					std::lock_guard lock(mtx_);
 					rpcn_msgs.push_back(std::move(vport_0_data));
+					rpcn_msg_cv.notify_all();
 				}	
 				break;
 			case SUBSET_SIGNALING:
@@ -607,6 +608,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 					{
 						std::lock_guard lock(sign_mtx_);
 						sign_msgs.push_back(std::move(msg));
+						sign_msg_cv.notify_all();
 					}
 					//dispatch_packet(msg);
 				}
@@ -621,7 +623,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 }
 
 void signaling_handler::signaling_thread() {
-	NOTICE_LOG(Log::sceNet, "Signaling Thread Started");
+	NOTICE_LOG(Log::sceNet, "Signaling P2P Handler Thread Started");
 	while (running_)
 	{
 		process_incoming_messages();
@@ -700,6 +702,16 @@ void signaling_handler::signaling_thread() {
 			reschedule_packet(si, cmd, now + delay);
 		}
 		// TODO: Sleep until next expected packet, or wake signal?
+
+		if (!qpackets.empty())
+		{
+			const auto expected_timepoint = qpackets.begin()->first;
+			if (now < expected_timepoint)
+			{
+				auto duration = (expected_timepoint - now);
+				wait_for_sign(duration);
+	}
+}
 	}
 }
 

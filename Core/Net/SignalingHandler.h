@@ -170,6 +170,16 @@ public:
 	void UserKickedGUI(net::RPCNResponse resp);
 	void QuickMatchCompleteGUI(net::RPCNResponse resp);
 
+	void wait_for_rpcn(bool* running, bool* cancelled, std::chrono::nanoseconds duration) {
+		std::unique_lock<std::mutex> lock(mtx_);
+		rpcn_msg_cv.wait_for(lock, duration, [&] { return (!*running || *cancelled) || (!rpcn_msgs.empty()); });
+	}
+
+	void wait_for_sign(std::chrono::nanoseconds duration) {
+		std::unique_lock<std::mutex> lock(sign_mtx_);
+		sign_msg_cv.wait_for(lock, duration, [&] { return (!running_.load(std::memory_order_relaxed)) || (!sign_msgs.empty()); });
+	}
+
 	std::vector<std::vector<u8>> get_rpcn_msgs() {
 		std::vector<std::vector<u8>> msgs;
 		{
@@ -210,9 +220,11 @@ private:
 	std::thread signaling_thread_;
 
 	mutable std::mutex mtx_;
+	std::condition_variable rpcn_msg_cv;
 	std::vector<std::vector<u8>> rpcn_msgs{};
 
 	mutable std::mutex sign_mtx_;
+	std::condition_variable sign_msg_cv;
 	std::vector<signaling_message> sign_msgs{};
 
 	std::unordered_map<u32, ContextState> contexts_;
