@@ -42,8 +42,6 @@ bool httpInited = false;
 bool httpsInited = false;
 bool httpCacheInited = false;
 
-std::thread handthr;
-
 // Minimal struct to track PSP threads blocked on HTTP
 struct WaitHTTPInfo {
 	WaitHTTPInfo(SceUID tid) : threadID(tid) {}
@@ -111,9 +109,6 @@ static int sceHttpInit(int poolSize) {
 
 static int sceHttpEnd() {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpEnd()");
-	if (handthr.joinable()) {
-		handthr.join();
-	}
 	std::lock_guard<std::mutex> guard(httpLock);
 	httpObjects.clear();
 	httpInited = false;
@@ -221,7 +216,7 @@ static int sceHttpSendRequest(int requestID, u32 dataPtr, u32 dataSize) {
 	req->ThreadID = sceKernelGetThreadId();
 
 	// Run the actual sendRequest on the host asynchronously
-	handthr = std::thread([req, retval, dataPtr, dataSize]() mutable {
+	req->handthread = std::thread([req, retval, dataPtr, dataSize]() mutable {
 		req->connecting = true;
 		retval = req->sendRequest(dataPtr, dataSize);
 
@@ -242,13 +237,15 @@ static int sceHttpDeleteRequest(int requestID) {
 	std::lock_guard<std::mutex> guard(httpLock);
 	if (requestID <= 0 || requestID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
-	if (handthr.joinable()) {
-		handthr.join();
-	}
+
 	const auto http_object = httpObjects.find(requestID)->second;
 	if (strcmp(http_object->className(), name_HTTPRequest) != 0)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s", requestID, http_object->className(), name_HTTPRequest);
 
+	const auto& req = (HTTPRequest*)http_object.get();
+	if (req->handthread.joinable()) {
+		req->handthread.join();
+	}
 	//httpObjects.erase(httpObjects.begin() + requestID - 1);
 	httpObjects.erase(requestID);
 	return 0;
