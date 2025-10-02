@@ -13,6 +13,7 @@
 #include "Core/Debugger/MemBlockInfo.h"
 #include "Common/Net/URL.h"
 #include "Common/File/FileDescriptor.h"
+#include "Core/HLE/sceKernelThread.h"
 
 std::map<int, HTTPS_Session> sessions;
 
@@ -74,6 +75,8 @@ void HTTPConnection::InitSession(int connectionID) {
 	sessions[connectionID].session = &tls.session;
 }
 void HTTPConnection::DestroySession(int connectionID) {
+	//__KernelWaitCurThread(WAITTYPE_ASYNCIO, ThreadID, 0, 0, false, "sceHttpSendRequest");
+	this->connecting = false;
 	sessions.erase(connectionID);
 }
 
@@ -196,13 +199,16 @@ bool HTTPConnection::SSLConnect(int connectionID, int maxTries, double timeout, 
 			NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
 			start_time = std::chrono::high_resolution_clock::now();
 			while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
+				if (connecting == false) return false;
 				if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
 					char errbuf[128];
 					mbedtls_strerror(ret, errbuf, sizeof(errbuf));
 					ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_ssl_handshake ERROR -0x%x: %s", (unsigned int)-ret, errbuf);
 					goto retry;
 				}
+
 			}
+
 			end_time = std::chrono::high_resolution_clock::now();
 			duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 			if (duration_ms > 100)
@@ -439,10 +445,12 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 	if (postDataSize > 0)
 		requestHeaders["Content-Length"] = std::to_string(postDataSize);
 	const std::string delimiter = "\r\n";
-	const std::string extraHeaders = std::accumulate(requestHeaders.begin(), requestHeaders.end(), std::string(),
-		[delimiter](const std::string& s, const std::pair<const std::string, std::string>& p) {
-		return s + p.first + ": " + p.second + delimiter;
-	});
+	const std::string extraHeaders = std::accumulate(
+		requestHeaders.begin(), requestHeaders.end(), std::string(),
+		[this, delimiter](const std::string& s, const std::pair<const std::string, std::string>& p) {
+			return s + p.first + ": " + p.second + delimiter;
+		}
+	);
 
 	Url fileUrl(this->fullURL);
 	if (!fileUrl.Valid()) {
@@ -543,6 +551,5 @@ int HTTPRequest::sendRequest(u32 postDataPtr, u32 postDataSize) {
 		responseHeaders.push_back(line);
 		start = end + 2;  // Skip past the \r\n
 	}
-
 	return ErrorCode;
 }

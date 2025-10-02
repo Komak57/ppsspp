@@ -42,6 +42,18 @@ bool httpInited = false;
 bool httpsInited = false;
 bool httpCacheInited = false;
 
+std::thread handthr;
+
+// Minimal struct to track PSP threads blocked on HTTP
+struct WaitHTTPInfo {
+	WaitHTTPInfo(SceUID tid) : threadID(tid) {}
+
+	SceUID threadID;    // The PSP thread that is blocked
+};
+
+// Vector to store all blocked HTTP threads
+std::vector<WaitHTTPInfo> httpWaitingThreads;
+
 u32 NextObjectID() {
 	if (httpObjects.empty())
 		return 0;
@@ -99,6 +111,9 @@ static int sceHttpInit(int poolSize) {
 
 static int sceHttpEnd() {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpEnd()");
+	if (handthr.joinable()) {
+		handthr.join();
+	}
 	std::lock_guard<std::mutex> guard(httpLock);
 	httpObjects.clear();
 	httpInited = false;
@@ -188,7 +203,6 @@ static int sceHttpReadData(int requestID, u32 dataPtr, u32 dataSize) {
 	return hleDelayResult(hleLogDebug(Log::sceNet, retval), "fake read data latency", 5000);
 }
 
-// FIXME: JPCSP didn't do anything other than appending the data into internal buffer, does sceHttpSendRequest can be called multiple times before using sceHttpGetStatusCode or sceHttpReadData? any game do this?
 static int sceHttpSendRequest(int requestID, u32 dataPtr, u32 dataSize) {
 	WARN_LOG(Log::sceNet, "UNTESTED sceHttpSendRequest(%d, %x, %d)", requestID, dataPtr, dataSize);
 	if (!httpInited)
@@ -200,14 +214,26 @@ static int sceHttpSendRequest(int requestID, u32 dataPtr, u32 dataSize) {
 	if (dataSize > 0 && !Memory::IsValidRange(dataPtr, dataSize))
 		return hleLogError(Log::sceNet, -1, "invalid arg"); // SCE_HTTP_ERROR_INVALID_VALUE
 
-	int objId = NextObjectID();
 	const auto& req = (HTTPRequest*)httpObjects.find(requestID)->second.get();
-	// Internally try to connect, and get response headers (at least the status code?)
 	int retval = -1;
-	/*if (req->isSSLEnabled())
-		retval = req->sendSSLRequest(dataPtr, dataSize);
-	else*/
+
+	// Get current PSP thread
+	req->ThreadID = sceKernelGetThreadId();
+
+	// Run the actual sendRequest on the host asynchronously
+	handthr = std::thread([req, retval, dataPtr, dataSize]() mutable {
+		req->connecting = true;
 		retval = req->sendRequest(dataPtr, dataSize);
+
+		// Store the result and resume the PSP thread
+		__KernelResumeThreadFromWait(req->ThreadID, retval);
+		});
+
+	// Put the PSP thread into a wait state until sendRequest finishes
+	__KernelWaitCurThread(WAITTYPE_ASYNCIO, req->ThreadID, 0, 0, false, "sceHttpSendRequest");
+	req->connecting = false;
+
+
 	return hleLogDebug(Log::sceNet, retval);
 }
 
@@ -216,7 +242,9 @@ static int sceHttpDeleteRequest(int requestID) {
 	std::lock_guard<std::mutex> guard(httpLock);
 	if (requestID <= 0 || requestID >= NextObjectID())
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
-
+	if (handthr.joinable()) {
+		handthr.join();
+	}
 	const auto http_object = httpObjects.find(requestID)->second;
 	if (strcmp(http_object->className(), name_HTTPRequest) != 0)
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s", requestID, http_object->className(), name_HTTPRequest);
@@ -247,7 +275,7 @@ static int sceHttpDeleteConnection(int connectionID) {
 		return hleLogError(Log::sceNet, SCE_HTTP_ERROR_INVALID_ID, "httpObjects[%d]%s is not a %s", connectionID, http_object->className(), name_HTTPConnection);
 
 	const auto& conn = (HTTPConnection*)httpObjects.find(connectionID)->second.get();
-
+	
 	conn->Disconnect();
 	conn->DestroySession(connectionID);
 	//httpObjects.erase(httpObjects.begin() + connectionID - 1);

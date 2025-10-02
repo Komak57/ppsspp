@@ -38,6 +38,8 @@ public:
 
 	virtual const char* className() { return name_HTTPTemplate; } // to be more consistent, unlike typeid(v).name() which may varies among different compilers and requires RTTI
 
+	
+
 	const std::string getUserAgent() { return userAgent; }
 	int getHttpVer() { return httpVer; }
 	int getAutoProxyConf() { return autoProxyConf; }
@@ -102,6 +104,10 @@ public:
 	void InitSession(int connectionID);
 	void DestroySession(int connectionID);
 
+	
+	bool connecting = false;
+	
+
 	int getTemplateID() { return templateID; }
 	const std::string getHost() { return hostString; }
 	const std::string getScheme() { return scheme; }
@@ -123,6 +129,8 @@ enum class ThreadState {
 	DATA_AVAILABLE,
 	COMPLETE
 };
+#include <thread>
+
 
 class HTTPRequest : public HTTPConnection {
 private:
@@ -153,6 +161,9 @@ public:
 	void setInternalHeaderAddr(u32 addr) { headerAddr_ = addr; }
 	int getConnectionID() { return connectionID; }
 
+	int ThreadID;
+	std::thread handthread;
+	
 	int getResponseContentLength();
 	int abortRequest();
 	int getStatusCode();
