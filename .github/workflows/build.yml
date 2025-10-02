@@ -276,9 +276,9 @@ jobs:
         sudo apt-get install cmake
         
     - name: Build mbedTLS
-      working-directory: ppsspp/ext/mbedtls
+      working-directory: ext/mbedtls
       run: |
-        make no_test -j2
+        cmake -DENABLE_TESTING=Off . -B build -DCMAKE_BUILD_TYPE=Release
         
     - name: Install iOS dependencies
       if: matrix.id == 'ios'
