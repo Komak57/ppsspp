@@ -282,6 +282,8 @@ HTTPRequest::HTTPRequest(int connectionID, int method, const char* url, u64 cont
 HTTPRequest::~HTTPRequest() {
 	WARN_LOG(Log::HTTP, "HTTPRequest::~HTTPRequest(connectionID: %i)", this->connectionID);
 	abortRequest();
+	if (handthread.joinable())
+		handthread.join();
 	if (Memory::IsValidAddress(headerAddr_))
 		userMemory.Free(headerAddr_);
 }
@@ -323,6 +325,7 @@ int HTTPRequest::abortRequest() {
 	// FIXME: Will sceHttpAbortRequest returns an error if the request was not sent yet?
 	//if (progress_.progress == 0.0f)
 		//return SCE_HTTP_ERROR_BEFORE_SEND;
+	cancelled = true;
 	return 0;
 }
 
