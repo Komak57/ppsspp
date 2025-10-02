@@ -80,6 +80,7 @@ jobs:
       shell: cmd
       run: |
         copy ext\config.h ext\mbedtls\include\mbedtls\config.h
+        dir ext\mbedtls\include\mbedtls
         
     - name: Build Windows
       working-directory: ${{ env.GITHUB_WORKSPACE }}
