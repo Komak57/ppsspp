@@ -716,7 +716,7 @@ void signaling_handler::signaling_thread() {
 		}
 		// TODO: Sleep until next expected packet, or wake signal?
 
-		if (!qpackets.empty())
+		/*if (!qpackets.empty())
 		{
 			const auto expected_timepoint = qpackets.begin()->first;
 			if (now < expected_timepoint)
@@ -725,6 +725,9 @@ void signaling_handler::signaling_thread() {
 				wait_for_sign(duration);
 			}
 		}
+		else {
+		}*/
+		wait_for_sign(REPEAT_PING_DELAY);
 	}
 }
 
@@ -744,8 +747,16 @@ void signaling_handler::process_incoming_messages() {
 
 	for (const auto& msg : msgs)
 	{
+		if (msg.data.size() != sizeof(signaling_packet)) {
+			ERROR_LOG(Log::sceNet, "SIGSERV: Malformed Packet");
+			continue;
+		}
 		const auto* sp = reinterpret_cast<const signaling_packet*>(msg.data.data());
-		INFO_LOG(Log::sceNet, "SIGSERV Packet Received from %s", sp->npid.handle.data);
+
+		//if (!validate_signaling_packet(sp))
+			//continue;
+
+		INFO_LOG(Log::sceNet, "SIGSERV %s Packet Received from %s:%d(%s)", sp->command, ip2str(msg.src_addr).c_str(), ntohs(msg.src_port), sp->npid.handle.data);
 		auto& sent_packet = sig_packet;
 		auto si = get_signaling_ptr(sp);
 
