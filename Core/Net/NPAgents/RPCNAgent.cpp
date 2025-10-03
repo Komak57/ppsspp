@@ -751,12 +751,18 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Malformed reply to RequestSignalingInfos command");
 			return (u8)ErrorType::Malformed;
 		}
-		const u32 ip = static_cast<u32>(sigAddr->ip()->Get(0)) << 24 | static_cast<u32>(sigAddr->ip()->Get(1)) << 16 |
-			static_cast<u32>(sigAddr->ip()->Get(2)) << 8 | static_cast<u32>(sigAddr->ip()->Get(3));
-		u32 addr = htonl(ip);
+		auto vec = sigAddr->ip();
+		const u32_be result_ip =
+			static_cast<u32_be>(vec->Get(0)) << 24 |
+			static_cast<u32_be>(vec->Get(1)) << 16 |
+			static_cast<u32_be>(vec->Get(2)) << 8 |
+			static_cast<u32_be>(vec->Get(3));
+
+		u32 addr = result_ip;
 		if (addr == 0)
 			addr = htonl(getLocalIp(tls.netCtx.fd));
-		g_signaling.connect(conn_id, addr, sigAddr->port());
+		//g_signaling.connect(conn_id, addr, sigAddr->port());
+		g_signaling.connect(conn_id, addr, SCE_NP_PORT);
 		return 0;
 	}
 
