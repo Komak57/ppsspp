@@ -465,7 +465,7 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 	memcpy(&npTitleId, titleid, sizeof(SceNpCommunicationId));
 
 	SceNpCommunicationPassphrase* passph = (SceNpCommunicationPassphrase*)Memory::GetCharPointer(passPhrasePtr);
-
+	npServer->UpdateOptions(optionFlags);
 	// TODO: Get NPID from RPCN - login(nous),password,token(from email) - RPCS3 @GalCiv
 	/*SceNpId* npid = NpGetNpId();
 	if (!npid)
@@ -476,7 +476,9 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 	//INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npid->handle.data);
 	INFO_LOG(Log::sceNet, "%s - User ID: %d", __FUNCTION__, npServer->GetUserID());
 	INFO_LOG(Log::sceNet, "%s - Login ID: %s", __FUNCTION__, g_Config.infraNpId.c_str());
+	INFO_LOG(Log::sceNet, "%s - Use Online ID: %s", __FUNCTION__, (npServer->IncludeOnlineName() ? "YES" : "NO"));
 	INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npServer->GetOnlineName().c_str());
+	INFO_LOG(Log::sceNet, "%s - Use Avatar: %s", __FUNCTION__, (npServer->IncludeAvatarUrl() ? "YES" : "NO"));
 	INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, npServer->GetAvatarURL().c_str());
 	std::string datahex;
 	/*DataToHexString(npid->opt, sizeof(npid->opt), &datahex);
@@ -1065,7 +1067,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
 		SceNpId* npId = NpGetNpId();
-		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp, room_info, npId, true, false);
+		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp, room_info, npId, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
 
 		// Cache Rooms
 		//rooms.push_back(roomData);
@@ -1180,7 +1182,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 		room_resp->roomDataInternal = room_info;
 
 		SceNpId* npId = NpGetNpId();
-		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp->room_data(), room_info, npId, false, false);
+		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp->room_data(), room_info, npId, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
 		// Cache room_info
 		npServer->cache.AddRoom(*room_info);
 
@@ -1359,7 +1361,7 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
-		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp, room_info, NpGetNpId(), false, false);
+		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp, room_info, NpGetNpId(), npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
 		// Cache the new Room Info
 		npServer->cache.AddRoom(*room_info);
 
@@ -1847,11 +1849,9 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, errorCode), 0);
 		}
 
-		bool include_onlinename = true, include_avatarurl = false;
-
 		u32 alloc = sizeof(SceNpMatching2GetRoomDataExternalListResponse);
 		auto sce_get_room_ext_resp = PSPPointer<SceNpMatching2GetRoomDataExternalListResponse>::Create(np_memory.Alloc(alloc));
-		np::GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(np_memory, resp, sce_get_room_ext_resp, include_onlinename, include_avatarurl);
+		np::GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(np_memory, resp, sce_get_room_ext_resp, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, SCE_NP_MATCHING2_OKAY, 0);
 	});

@@ -531,6 +531,16 @@ namespace net {
 		bool IsConnected() { return connected; }
 		//u8 GetStatus();
 		//int GetID() { return ID; }
+		void UpdateOptions(s32 optionFlags) {
+			include_onlinename = optionFlags & SCE_NP_MATCHING2_CONTEXT_OPTION_USE_ONLINENAME;
+			include_avatarurl = optionFlags & SCE_NP_MATCHING2_CONTEXT_OPTION_USE_AVATARURL;
+		}
+		bool IncludeOnlineName() {
+			return include_onlinename;
+		}
+		bool IncludeAvatarUrl() {
+			return include_avatarurl;
+		}
 		SceNpMatching2ServerInfo GetServerInfo(u16 ServerID) {
 			if (servers.find(ServerID) == servers.end())
 				return { 0, SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE };
@@ -601,6 +611,9 @@ namespace net {
 
 		std::chrono::steady_clock::time_point last_ping_time_ipv4{}, last_pong_time_ipv4{};
 		std::chrono::steady_clock::time_point last_ping_time_ipv6{}, last_pong_time_ipv6{};
+
+		bool include_onlinename = false;
+		bool include_avatarurl = false;
 	};
 
 	class PSNAgent : public NPAgent {
