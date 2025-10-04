@@ -13,6 +13,7 @@
 #include "Common/Swap.h"
 #include "Core/MemMap.h"
 #include "Core/HLE/NpTypes.h"
+#include "Core/HLE/sceNetInet.h"
 
 
 #pragma pack(push,1)
@@ -721,10 +722,8 @@ struct SceNpMatching2ConnectionInfo {
 };
 
 struct SceNpMatching2SignalingInfo {
+	SceNetInetSockaddr conn;
 	SceNpMatching2ServerStatus status;
-	np_in_addr ipaddr;
-	np_in_port_t port;
-	u8 padding[1];
 };
 
 struct SceNpMatching2ServerInfo {
