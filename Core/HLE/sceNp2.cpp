@@ -1203,7 +1203,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 					static_cast<u32_be>(vec->Get(2)) << 8 |
 					static_cast<u32_be>(vec->Get(3));
 
-				const u32_be addr_p2p = result_ip;
+				const u32_be addr_p2p = htonl(result_ip);
 				const u16_be port_p2p = htons(signaling_info->addr()->port());
 
 				const SceNpMatching2RoomMemberId member_id = signaling_info->member_id();

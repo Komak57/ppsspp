@@ -1013,7 +1013,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 			static_cast<u32_be>(vec->Get(2)) << 8 |
 			static_cast<u32_be>(vec->Get(3));
 
-		const u32_be addr_p2p = result_ip; // register_ip()
+		const u32_be addr_p2p = htonl(result_ip); // register_ip()
 		const u16_be port_p2p = htons(signaling_info->port());
 		
 		const SceNpMatching2RoomMemberId member_id = notif_data->roomMemberDataInternal->memberId;
