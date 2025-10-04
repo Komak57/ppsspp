@@ -13,7 +13,7 @@
 #include "Common/Swap.h"
 #include "Core/MemMap.h"
 #include "Core/HLE/NpTypes.h"
-#include "Core/HLE/sceNetInet.h"
+#include "Core/HLE/NetInetTypes.h"
 
 
 #pragma pack(push,1)

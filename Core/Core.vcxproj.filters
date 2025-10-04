@@ -2326,6 +2326,7 @@
     <ClInclude Include="Net\NpMatching2Cache.h">
       <Filter>Net</Filter>
     </ClInclude>
+    <ClInclude Include="HLE\NetInetTypes.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\LICENSE.TXT" />

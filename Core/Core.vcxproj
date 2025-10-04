@@ -1049,6 +1049,7 @@
     <ClInclude Include="HLE\KernelThreadDebugInterface.h" />
     <ClInclude Include="HLE\KUBridge.h" />
     <ClInclude Include="HLE\NetInetConstants.h" />
+    <ClInclude Include="HLE\NetInetTypes.h" />
     <ClInclude Include="HLE\Np2Types.h" />
     <ClInclude Include="HLE\NpTypes.h" />
     <ClInclude Include="HLE\Plugins.h" />
