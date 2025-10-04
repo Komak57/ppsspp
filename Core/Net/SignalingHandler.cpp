@@ -740,7 +740,7 @@ void signaling_handler::signaling_thread() {
 		}
 		else {
 			// set thread wait duration to infinity
-			timeout = timeout = std::chrono::nanoseconds::max();
+			timeout = std::chrono::nanoseconds::max();
 		}
 	}
 }
