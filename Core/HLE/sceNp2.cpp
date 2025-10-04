@@ -1234,6 +1234,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
  * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
+ * PSP2i fails to create a party at 08ca57d8 when DAT_08ed59d4 is set to 2
  */
 static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)
 {
