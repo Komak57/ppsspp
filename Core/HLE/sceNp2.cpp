@@ -664,9 +664,9 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 	return 0; // error returns 0x80550004
 }
 
-// roomId may be a struct containing room info?
-static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 memberId, u32 roomId, u32 status, u32 peerMemberId, u32 connInfoPtr) {
-	WARN_LOG(Log::sceNet, "UNIMPL %s(ctx: %d, memberId: %08X, roomId: %d, status: %08X, peerMemberId: %d, connInfoPtr: 0x%08X) at %08x", __FUNCTION__, ctxId, memberId, roomId, status, peerMemberId, connInfoPtr, currentMIPS->pc);
+// PSP2i assigns unknown 0x10, 0x0c, or 0x14
+static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u32 roomId, u32 status, u32 peerMemberId, u32 connInfoPtr) {
+	WARN_LOG(Log::sceNet, "UNIMPL %s(%d, %08X, %d, %08X, %d, 0x%08X) at %08x", __FUNCTION__, ctxId, unknown, roomId, status, peerMemberId, connInfoPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -683,11 +683,11 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 memberId, u
 	if (connInfoPtr == 0 || !Memory::IsValidAddress(connInfoPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "connInfoPtr is an invalid pointer");
 
-	auto connInfo = PSPPointer<SceNpMatching2SignalingInfo>::Create(connInfoPtr);
+	auto connStatus = PSPPointer<SceNpMatching2ServerStatus>::Create(connInfoPtr);
 
 	auto member = npServer->cache.GetMember(peerMemberId);
 	if (!member) {
-		connInfo->status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
+		connStatus = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
 	}
 
@@ -699,18 +699,18 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 memberId, u
 
 	auto si = g_signaling.get_sig_infos(*connID);
 	if (!si) {
-		connInfo->status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
-		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
+		connStatus = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
+		return hleLogError(Log::sceNet, 0, "Not Connected");
 	}
 	
 	// Write Connection Status
-	connInfo->status = SCE_NP_SIGNALING_CONN_STATUS_ACTIVE;
+	connStatus = si->conn_status;
 	// Write IPAddress
-	connInfo->ipaddr.np_s_addr = si->addr;
-	// Write Port
-	connInfo->port = si->port;
+	/*connInfo->conn.sa_len = ip2str(si->addr).length();
+	memcpy(connInfo->conn.sa_data, ip2str(si->addr).c_str(), connInfo->conn.sa_len);
+	connInfo->conn.sa_family = 0x02;*/
 
-	return hleLogWarning(Log::sceNet, SCE_NP_MATCHING2_OKAY, "Assigned Address for %s to %s:%d", member->userInfo.npId.handle.data, ip2str(si->addr).c_str(), ntohs(si->port));
+	return hleLogWarning(Log::sceNet, SCE_NP_MATCHING2_OKAY, "- %d", connStatus);
 }
 
 /* Allocates the list of server Id's to memory
