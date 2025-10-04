@@ -175,10 +175,11 @@ public:
 		std::unique_lock<std::mutex> lock(rpcn_mtx_);
 		rpcn_msg_cv.wait_for(lock, duration, [&] { return (!*running || *cancelled) || (!rpcn_msgs.empty()); });
 	}
-
+	// Needs to wake when a packet is queued
+	// Needs to wake when a new connection is made
 	void wait_for_sign(std::chrono::nanoseconds duration) {
 		std::unique_lock<std::mutex> lock(sign_mtx_);
-		sign_msg_cv.wait_for(lock, duration, [&] { return (!running_.load(std::memory_order_relaxed)) || (!sign_msgs.empty()); });
+		sign_msg_cv.wait_for(lock, duration, [&] { return (!running_.load(std::memory_order_relaxed) || wakey.load(std::memory_order_relaxed) || !sign_msgs.empty()); });
 	}
 
 	std::vector<std::vector<u8>> get_rpcn_msgs() {
@@ -217,6 +218,7 @@ private:
 	
 private:
 	std::atomic<bool> running_{ false };
+	std::atomic<bool> wakey{ false };
 	std::thread recv_thread_;
 	std::thread signaling_thread_;
 	// This mutex handles general Signaling variables

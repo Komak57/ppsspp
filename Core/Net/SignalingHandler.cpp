@@ -45,6 +45,7 @@ void signaling_handler::connect(u32 conn_id, u32_be addr, u16_be port) {
 	INFO_LOG(Log::sceNet, "CONNECT -> P2P");
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, si, now + REPEAT_CONNECT_DELAY);
+	wakey.store(true);
 }
 
 void signaling_handler::stop() {
@@ -430,6 +431,7 @@ void signaling_handler::stop_sig_nl(u32 conn_id, bool forceful)
 	INFO_LOG(Log::sceNet, "FINISHED -> P2P");
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, std::move(si), std::chrono::steady_clock::now() + REPEAT_FINISHED_DELAY);
+	wakey.store(true);
 }
 /*
 	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000000: 00 00 01 53 49 47 4E 03 00 00 00 9A F6 3F B0 00  ...SIGN......?..
@@ -477,6 +479,7 @@ void signaling_handler::send_information_packets(u32_be addr, u16_be port, const
 	INFO_LOG(Log::sceNet, "INFO -> P2P");
 	send_signaling_packet(sent_packet, addr, port);
 	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_INFO_DELAY);
+	wakey.store(true);
 }
 
 void signaling_handler::reschedule_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd, std::chrono::steady_clock::time_point new_timepoint)
@@ -643,6 +646,7 @@ void signaling_handler::signaling_thread() {
 		wait_for_sign(timeout);
 		if (!running_.load(std::memory_order_relaxed))
 			return;
+		wakey.store(false);
 		process_incoming_messages();
 
 		const auto now = std::chrono::steady_clock::now();
