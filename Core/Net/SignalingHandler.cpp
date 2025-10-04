@@ -209,6 +209,7 @@ std::shared_ptr<signaling_info> signaling_handler::get_signaling_ptr(const signa
 //}
 
 void signaling_handler::queue_signaling_packet(signaling_packet& sp, std::shared_ptr<signaling_info> si, std::chrono::steady_clock::time_point wakeup_time) {
+	INFO_LOG(Log::sceNet, "queue_signaling_packet(command: %d, ip: %s, port: %d, %d)", sp.command, ip2str(si->addr).c_str(), ntohs(si->port), wakeup_time);
 	queued_packet qp;
 	qp.sig_info = std::move(si);
 	qp.packet = sp;
