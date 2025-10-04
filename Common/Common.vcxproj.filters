@@ -689,7 +689,7 @@
       <Filter>Audio</Filter>
     </ClInclude>
     <ClInclude Include="LoongArch64Emitter.h" />
-    <ClInclude Include="..\ext\config.h">
+    <ClInclude Include="..\ext\mbedtls.h">
       <Filter>ext\mbedtls</Filter>
     </ClInclude>
   </ItemGroup>
