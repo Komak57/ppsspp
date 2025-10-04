@@ -75,13 +75,6 @@ jobs:
           echo "#define PPSSPP_WIN_VERSION_NO_UPDATE 1" >> Windows/win-version.h
         }
         
-    - name: Copy mbedTLS config
-      working-directory: ${{ env.GITHUB_WORKSPACE }}
-      shell: cmd
-      run: |
-        copy ext\config.h ext\mbedtls\include\mbedtls\config.h
-        dir ext\mbedtls\include\mbedtls
-        
     - name: Build Windows
       working-directory: ${{ env.GITHUB_WORKSPACE }}
       run: msbuild /m /p:TrackFileAccess=false /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform=${{ matrix.platform }} Windows/PPSSPP.sln
@@ -285,7 +278,7 @@ jobs:
     - name: Build mbedTLS
       working-directory: ext/mbedtls
       run: |
-        cmake -DENABLE_TESTING=Off . -B build -DCMAKE_BUILD_TYPE=Release
+        cmake -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF -DMBEDTLS_CONFIG_FILE='"ppsspp/ext/mbedtls.h"' . -B build -DCMAKE_BUILD_TYPE=Release
         
     - name: Install iOS dependencies
       if: matrix.id == 'ios'
