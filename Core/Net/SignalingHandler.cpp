@@ -636,8 +636,13 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 
 void signaling_handler::signaling_thread() {
 	NOTICE_LOG(Log::sceNet, "Signaling P2P Handler Thread Started");
-	while (running_)
+	std::chrono::nanoseconds timeout = std::chrono::nanoseconds::max();
+	while (running_.load(std::memory_order_relaxed))
 	{
+		// Wait for timeout, or wake response
+		wait_for_sign(timeout);
+		if (!running_.load(std::memory_order_relaxed))
+			return;
 		process_incoming_messages();
 
 		const auto now = std::chrono::steady_clock::now();
@@ -646,6 +651,7 @@ void signaling_handler::signaling_thread() {
 		{
 			auto& [timestamp, sig] = *it;
 
+			// Next queued packet still waiting
 			if (timestamp > now)
 				break;
 
@@ -714,20 +720,24 @@ void signaling_handler::signaling_thread() {
 
 			reschedule_packet(si, cmd, now + delay);
 		}
-		// TODO: Sleep until next expected packet, or wake signal?
 
-		/*if (!qpackets.empty())
+		// TODO: Sleep until next queued packet, or next packet received
+		const auto current_timestamp = std::chrono::steady_clock::now();
+		if (!qpackets.empty())
 		{
-			const auto expected_timepoint = qpackets.begin()->first;
-			if (now < expected_timepoint)
+			const auto next_timestamp = qpackets.begin()->first;
+			if (current_timestamp > next_timestamp)
 			{
-				auto duration = (expected_timepoint - now);
-				wait_for_sign(duration);
+				timeout = 0s;
+			} else {
+				// set thread wait duration to nanoseconds until next queued packet
+				timeout = (next_timestamp - current_timestamp);
 			}
 		}
 		else {
-		}*/
-		wait_for_sign(REPEAT_PING_DELAY);
+			// set thread wait duration to infinity
+			timeout = timeout = std::chrono::nanoseconds::max();
+		}
 	}
 }
 
