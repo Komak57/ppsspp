@@ -46,6 +46,7 @@ void signaling_handler::connect(u32 conn_id, u32_be addr, u16_be port) {
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, si, now + REPEAT_CONNECT_DELAY);
 	wakey.store(true);
+	sign_msg_cv.notify_all();
 }
 
 void signaling_handler::stop() {
@@ -433,6 +434,7 @@ void signaling_handler::stop_sig_nl(u32 conn_id, bool forceful)
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, std::move(si), std::chrono::steady_clock::now() + REPEAT_FINISHED_DELAY);
 	wakey.store(true);
+	sign_msg_cv.notify_all();
 }
 /*
 	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000000: 00 00 01 53 49 47 4E 03 00 00 00 9A F6 3F B0 00  ...SIGN......?..
@@ -481,6 +483,7 @@ void signaling_handler::send_information_packets(u32_be addr, u16_be port, const
 	send_signaling_packet(sent_packet, addr, port);
 	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_INFO_DELAY);
 	wakey.store(true);
+	sign_msg_cv.notify_all();
 }
 
 void signaling_handler::reschedule_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd, std::chrono::steady_clock::time_point new_timepoint)
