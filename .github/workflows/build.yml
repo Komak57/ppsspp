@@ -75,6 +75,20 @@ jobs:
           echo "#define PPSSPP_WIN_VERSION_NO_UPDATE 1" >> Windows/win-version.h
         }
         
+    - name: Build mbedTLS
+      working-directory: ext/mbedtls
+      run: |
+        $cmake_version = "3.4.3"
+        $download_url = "https://cmake.org/files/v3.4/cmake-${cmake_version}-win64-x64.zip"
+        $download_path = "$env:TEMP\cmake.zip"
+        $install_path = "$env:GITHUB_WORKSPACE\cmake-custom"
+          
+        Invoke-WebRequest -Uri $download_url -OutFile $download_path
+        Expand-Archive -Path $download_path -DestinationPath $install_path
+          
+        Write-Host "::add-path::$install_path\cmake-${cmake_version}-win64-x64\bin"
+        cmake -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF -DMBEDTLS_CONFIG_FILE='"ppsspp/ext/mbedtls.h"' . -B build -DCMAKE_BUILD_TYPE=Release
+        
     - name: Build Windows
       working-directory: ${{ env.GITHUB_WORKSPACE }}
       run: msbuild /m /p:TrackFileAccess=false /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform=${{ matrix.platform }} Windows/PPSSPP.sln
