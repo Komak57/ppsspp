@@ -23,8 +23,8 @@ u64 signaling_handler::get_micro_timestamp(const std::chrono::steady_clock::time
 }
 
 // This function assumes addr and port are in network order
-void signaling_handler::connect(u32 conn_id, u32_be addr, u16_be port) {
-	NOTICE_LOG(Log::sceNet, "Signaling Connecting to %s:%d", ip2str(addr).c_str(), ntohs(port));
+void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
+	NOTICE_LOG(Log::sceNet, "Signaling Connecting to %s:%d", ip2str(addr).c_str(), port);
 	std::scoped_lock lk(mtx_);
 	// Send Connect?
 	auto& sent_packet = sig_packet;
@@ -65,9 +65,9 @@ void signaling_handler::stop() {
 
 bool signaling_handler::create_connection() {
 	// Get the InetSocket object from the socket manager
-	auto inetSocket = g_socketManager.FindSocketByPort(ntohs(SCE_NP_PORT));
+	auto inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
 	if (inetSocket == nullptr) {
-		WARN_LOG(Log::sceNet, "Creating new socket for port %d", ntohs(SCE_NP_PORT));
+		WARN_LOG(Log::sceNet, "Creating new socket for port %d", SCE_NP_PORT);
 		//return;
 
 		int index;
@@ -86,7 +86,7 @@ bool signaling_handler::create_connection() {
 		sockaddr_in addr{};
 		addr.sin_family = AF_INET;
 		addr.sin_addr.s_addr = INADDR_ANY;
-		addr.sin_port = SCE_NP_PORT;
+		addr.sin_port = ntohs(SCE_NP_PORT);
 
 		if (bind(inetSocket->sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to bind new socket for listening");
@@ -102,9 +102,9 @@ bool signaling_handler::create_connection() {
 		setUDPConnReset(inetSocket->sock, false);
 
 		inetSocket->state = SocketState::UsedNetInet;
-		inetSocket->port = ntohs(SCE_NP_PORT);
+		inetSocket->port = SCE_NP_PORT;
 
-		bool ok = g_PortManager.Add("UDP", ntohs(SCE_NP_PORT), ntohs(SCE_NP_PORT));
+		bool ok = g_PortManager.Add("UDP", SCE_NP_PORT, SCE_NP_PORT);
 	}
 	// If not running, spin up the recv thread
 	if (!running_.exchange(false)) {
@@ -130,7 +130,7 @@ bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, sockaddr_i
 
 	std::string datahex;
 	DEBUG_HEXLOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size(), 386);
-	auto inetSocket = g_socketManager.FindSocketByPort(ntohs(SCE_NP_PORT));
+	auto inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
 	if (!inetSocket) {
 		ERROR_LOG(Log::sceNet, "Socket not found");
 		return false;
@@ -210,7 +210,7 @@ std::shared_ptr<signaling_info> signaling_handler::get_signaling_ptr(const signa
 //}
 
 void signaling_handler::queue_signaling_packet(signaling_packet& sp, std::shared_ptr<signaling_info> si, std::chrono::steady_clock::time_point wakeup_time) {
-	INFO_LOG(Log::sceNet, "queue_signaling_packet(command: %d, ip: %s, port: %d, %d)", sp.command, ip2str(si->addr).c_str(), ntohs(si->port), wakeup_time);
+	INFO_LOG(Log::sceNet, "queue_signaling_packet(command: %d, ip: %s, port: %d, %d)", sp.command, ip2str(si->addr).c_str(), si->port, wakeup_time);
 	queued_packet qp;
 	qp.sig_info = std::move(si);
 	qp.packet = sp;
@@ -297,7 +297,7 @@ u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_i
 	return conn_id;
 }
 
-void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32_be new_addr, u16_be new_port)
+void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32 new_addr, u16 new_port)
 {
 	if (!si)
 		return;
@@ -308,14 +308,14 @@ void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32_
 		addr_old.s_addr = si->addr;
 		addr_new.s_addr = new_addr;
 
-		NOTICE_LOG(Log::sceNet, "Updated Address from %s:%d to %s:%d", ip2str(addr_old).c_str(), ntohs(si->port), ip2str(addr_new).c_str(), ntohs(new_port));
+		NOTICE_LOG(Log::sceNet, "Updated Address from %s:%d to %s:%d", ip2str(addr_old).c_str(), si->port, ip2str(addr_new).c_str(), new_port);
 
 		si->addr = new_addr;
 		si->port = new_port;
 	}
 }
 
-void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& si, u32_be new_addr, u16_be new_port)
+void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& si, u32 new_addr, u16 new_port)
 {
 	if (!si)
 		return;
@@ -333,7 +333,7 @@ void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& s
 		addr_old.s_addr = si->mapped_addr;
 		addr_new.s_addr = new_addr;
 
-		NOTICE_LOG(Log::sceNet, "Updated Mapped Address from %s:%d to %s:%d", ip2str(addr_old).c_str(), ntohs(si->mapped_port), ip2str(addr_new).c_str(), ntohs(new_port));
+		NOTICE_LOG(Log::sceNet, "Updated Mapped Address from %s:%d to %s:%d", ip2str(addr_old).c_str(), si->mapped_port, ip2str(addr_new).c_str(), new_port);
 
 		si->mapped_addr = new_addr;
 		si->mapped_port = new_port;
@@ -443,9 +443,9 @@ void signaling_handler::stop_sig_nl(u32 conn_id, bool forceful)
 	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000030: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
 	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000040: 00 00 00 00 00 00 00 00 00 00 00                 ...........
 */
-// NOTE: this calls your existing send implementation. keep the logging/IPv6 path you showed.
-void signaling_handler::send_signaling_packet(signaling_packet& sp, u32_be addr, u16_be port) const {
-	INFO_LOG(Log::sceNet, "send_signaling_packet(command: %d, ip: %s, port: %d)", sp.command, ip2str(addr).c_str(), ntohs(port));
+
+void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u16 port) const {
+	INFO_LOG(Log::sceNet, "send_signaling_packet(command: %d, ip: %s, port: %d)", sp.command, ip2str(addr).c_str(), port);
 	std::vector<u8> packet(sizeof(signaling_packet) + VPORT_0_HEADER_SIZE);
 	reinterpret_cast<u16_le&>(packet[0]) = 0; // VPort 0 (LE)
 	packet[2] = SUBSET_SIGNALING;
@@ -459,14 +459,14 @@ void signaling_handler::send_signaling_packet(signaling_packet& sp, u32_be addr,
 	memset(&dest, 0, sizeof(sockaddr_in));
 	dest.sin_family = AF_INET;
 	dest.sin_addr.s_addr = addr;
-	dest.sin_port = port;
+	dest.sin_port = htons(port);
 
 	if (!send_packet_ipv4(packet, dest)) {
-		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip2str(addr).c_str(), ntohs(port));
+		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip2str(addr).c_str(), port);
 	}
 }
 
-void signaling_handler::send_information_packets(u32_be addr, u16_be port, const SceNpId& npid)
+void signaling_handler::send_information_packets(u32 addr, u16 port, const SceNpId& npid)
 {
 	std::lock_guard lock(mtx_);
 
@@ -530,29 +530,11 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 	timeval tv{};
 	tv.tv_sec = 1;      // timeout 1s
 	tv.tv_usec = 0;
-//	// Wait for socket to be ready before starting the loop
-//	int ready = 0;
-//	while (ready == 0 && running_) {
-//		fd_set readfds;
-//		FD_ZERO(&readfds);
-//		FD_SET(inetSocket->sock, &readfds);
-//		ready = select(inetSocket->sock, &readfds, nullptr, nullptr, &tv);
-//		if (ready < 0) {
-//
-//			int errorCode = 0;
-//#if PPSSPP_PLATFORM(WINDOWS)
-//			errorCode = WSAGetLastError();
-//#else
-//			errorCode = errno;
-//#endif
-//			ERROR_LOG(Log::sceNet, "SIGSRV Socket Select Failed: %d", errorCode);
-//		}
-//	}
 	while (running_) {
 		if (!inetSocket) {
 			// Socket lost. Try to find it again!
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-			inetSocket = g_socketManager.FindSocketByPort(ntohs(SCE_NP_PORT));
+			inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
 			continue;
 		}
 		u8 buf[1500];
@@ -663,7 +645,7 @@ void signaling_handler::signaling_thread() {
 			if (timestamp > now)
 				break;
 
-			SignalingCommand cmd = sig.packet.command;
+			SignalingCommand cmd = (SignalingCommand)sig.packet.command;
 
 			if (sig.sig_info->time_last_msg_recvd < now - 60s && cmd != SignalingCommand::Info)
 			{
@@ -769,12 +751,15 @@ void signaling_handler::process_incoming_messages() {
 			ERROR_LOG(Log::sceNet, "SIGSERV: Malformed Packet");
 			continue;
 		}
+
+		auto op_addr = msg.src_addr;
+		auto op_port = msg.src_port;
 		const auto* sp = reinterpret_cast<const signaling_packet*>(msg.data.data());
 
 		//if (!validate_signaling_packet(sp))
 			//continue;
 
-		INFO_LOG(Log::sceNet, "SIGSERV %s Packet Received from %s:%d(%s)", sp->command, ip2str(msg.src_addr).c_str(), ntohs(msg.src_port), sp->npid.handle.data);
+		INFO_LOG(Log::sceNet, "SIGSERV %d Packet Received from %s:%d(%s)", sp->command, ip2str(op_addr).c_str(), op_port, sp->npid.handle.data);
 		auto& sent_packet = sig_packet;
 		auto si = get_signaling_ptr(sp);
 
@@ -792,20 +777,20 @@ void signaling_handler::process_incoming_messages() {
 			si->time_last_msg_recvd = now;
 
 		switch (sp->command) {
-		case SignalingCommand::Ping:        handle_ping(sp, sent_packet, msg.src_addr, msg.src_port); break;
+		case SignalingCommand::Ping:        handle_ping(sp, sent_packet, op_addr, op_port); break;
 		case SignalingCommand::Pong:        handle_pong(sp, si); break;
-		case SignalingCommand::Connect:     handle_connect(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
-		case SignalingCommand::ConnectAck:  handle_connect_ack(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
-		case SignalingCommand::Confirm:     handle_confirm(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
-		case SignalingCommand::Finished:    handle_finished(sp, si, sent_packet, msg.src_addr, msg.src_port); break;
+		case SignalingCommand::Connect:     handle_connect(sp, si, sent_packet, op_addr, op_port); break;
+		case SignalingCommand::ConnectAck:  handle_connect_ack(sp, si, sent_packet, op_addr, op_port); break;
+		case SignalingCommand::Confirm:     handle_confirm(sp, si, sent_packet, op_addr, op_port); break;
+		case SignalingCommand::Finished:    handle_finished(sp, si, sent_packet, op_addr, op_port); break;
 		case SignalingCommand::FinishedAck: handle_finished_ack(sp, si); break;
-		case SignalingCommand::Info:        handle_info(sp, si, msg.src_addr, msg.src_port); break;
+		case SignalingCommand::Info:        handle_info(sp, si, op_addr, op_port); break;
 		default: ERROR_LOG(Log::sceNet, "Invalid signaling command received");  break;
 		}
 	}
 }
 
-void signaling_handler::handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port) {
+void signaling_handler::handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Ping");
 	/*reply = true;
 	schedule_repeat = false;
@@ -849,7 +834,7 @@ void signaling_handler::handle_pong(const signaling_packet* sp, std::shared_ptr<
 	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_info(const signaling_packet* sp, std::shared_ptr<signaling_info> si, u32_be op_addr, u16_be op_port) {
+void signaling_handler::handle_info(const signaling_packet* sp, std::shared_ptr<signaling_info> si, u32 op_addr, u16 op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Info");
 	/*update_si_addr(si, op_addr, op_port);
 	reply = false;
@@ -859,7 +844,7 @@ void signaling_handler::handle_info(const signaling_packet* sp, std::shared_ptr<
 	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port) {
+void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Connect");
 	/*reply = true;
 	schedule_repeat = true;
@@ -878,7 +863,7 @@ void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_p
 	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_CONNECT_DELAY);
 }
 
-void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port) {
+void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Connect ACK");
 	/*update_rtt(sp->timestamp_sender);
 	reply = true;
@@ -919,7 +904,7 @@ void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shar
 	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port) {
+void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Confirm");
 	/*update_rtt(sp->timestamp_receiver);
 	reply = false;
@@ -954,7 +939,7 @@ void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_p
 	// Don't Schedule Repeat
 }
 
-void signaling_handler::handle_finished(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port) {
+void signaling_handler::handle_finished(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
 	INFO_LOG(Log::sceNet, "SIGSERV: Finished");
 	/*reply = true;
 	schedule_repeat = false;
@@ -1014,15 +999,18 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	// We initiate signaling if necessary
 	if (const auto* signaling_info = notification->signaling())
 	{
+		// register_ip()
 		auto vec = signaling_info->ip();
-		const u32_be result_ip = 
-			static_cast<u32_be>(vec->Get(0)) << 24 |
-			static_cast<u32_be>(vec->Get(1)) << 16 |
-			static_cast<u32_be>(vec->Get(2)) << 8 |
-			static_cast<u32_be>(vec->Get(3));
+		const u32 result_ip =
+			static_cast<u32>(vec->Get(0)) << 24 |
+			static_cast<u32>(vec->Get(1)) << 16 |
+			static_cast<u32>(vec->Get(2)) << 8 |
+			static_cast<u32>(vec->Get(3));
 
-		const u32_be addr_p2p = htonl(result_ip); // register_ip()
-		const u16_be port_p2p = htons(signaling_info->port());
+		const u32 addr_p2p = result_ip;
+		u16 port_p2p = signaling_info->port();
+		if (port_p2p == 3658)
+			port_p2p = SCE_NP_PORT;
 		
 		const SceNpMatching2RoomMemberId member_id = notif_data->roomMemberDataInternal->memberId;
 		const SceNpId& npid = notif_data->roomMemberDataInternal->userInfo.npId;
@@ -1030,7 +1018,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		// Attempt Signaling
 		auto connId = init_sig(npid, room_id, member_id);
 		// Connect to Signaling Server
-		g_signaling.connect(connId, addr_p2p, SCE_NP_PORT);
+		g_signaling.connect(connId, addr_p2p, port_p2p);
 	}
 	//auto ctx = get_ctx(resp.header.reqId);
 	const u32 event_key = 0;// get_event_key();
@@ -1276,14 +1264,17 @@ void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 	memcpy(&npid_p2p, matching_info->npid(), std::min<size_t>(16, matching_info->npid()->Length()));
 
 	auto vec = matching_info->addr()->ip();
+	NOTICE_LOG(Log::sceNet, " - IP at %d.%d.%d.%d", vec->Get(0), vec->Get(1), vec->Get(2), vec->Get(3));
 	const u32_be result_ip =
-		static_cast<u32_be>(vec->Get(0)) << 24 |
-		static_cast<u32_be>(vec->Get(1)) << 16 |
-		static_cast<u32_be>(vec->Get(2)) << 8 |
-		static_cast<u32_be>(vec->Get(3));
+		static_cast<u32>(vec->Get(0)) << 24 |
+		static_cast<u32>(vec->Get(1)) << 16 |
+		static_cast<u32>(vec->Get(2)) << 8 |
+		static_cast<u32>(vec->Get(3));
 
-	const u32_be addr_p2p = result_ip;
-	const u16_be port_p2p = htons(matching_info->addr()->port());
+	const u32 addr_p2p = result_ip;
+	u16 port_p2p = matching_info->addr()->port();
+	if (port_p2p == 3658)
+		port_p2p = SCE_NP_PORT;
 
 	send_information_packets(addr_p2p, port_p2p, npid_p2p);
 }

@@ -17,7 +17,7 @@
 #include "NpMatching2Cache.h"
 
 // Port used to communicate with RPCN (3657)
-const u16_be SCE_RPCN_PORT = htons(3657);
+const u16 SCE_RPCN_PORT = 3657;
 constexpr int RPCN_HEADER_SIZE = 15;
 //constexpr int COMMUNICATION_ID_SIZE = (9 + 3);
 
@@ -555,17 +555,17 @@ namespace net {
 		s64 GetUserID() {
 			return user_id;
 		}
-		u32_be GetConnAddr() {
+		u32 GetConnAddr() {
 			struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(conn->ai_addr);
 			return addr->sin_addr.s_addr;
 		}
-		u32_be GetSigAddr() {
+		u32 GetSigAddr() {
 			std::unique_lock<std::mutex> lock(sig_mutex);
 			if (addr_sig.load() == 0)
 				sigv.wait_for(lock, std::chrono::seconds(10), [&] { return addr_sig.load() != 0; });
 			return addr_sig.load();
 		}
-		u16_be GetSigPort() {
+		u16 GetSigPort() {
 			std::unique_lock<std::mutex> lock(sig_mutex);
 			if (port_sig.load() == 0)
 				sigv.wait_for(lock, std::chrono::seconds(10), [&] { return port_sig.load() != 0; });
@@ -605,9 +605,9 @@ namespace net {
 
 		std::mutex sig_mutex;
 		std::condition_variable sigv;
-		std::atomic<u32_be> addr_sig;
-		std::atomic<u16_be> port_sig;
-		std::atomic<u32_be> local_addr_sig = (u32_be)0;
+		std::atomic<u32> addr_sig;
+		std::atomic<u16> port_sig;
+		std::atomic<u32> local_addr_sig = (u32_be)0;
 
 		std::chrono::steady_clock::time_point last_ping_time_ipv4{}, last_pong_time_ipv4{};
 		std::chrono::steady_clock::time_point last_ping_time_ipv6{}, last_pong_time_ipv6{};

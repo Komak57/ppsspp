@@ -139,10 +139,10 @@ namespace net {
 				if (msg.size() == 6)
 				{
 					DEBUG_LOG(Log::sceNet, "RPCN Signal Pong Received");
-					const u32_be new_addr_sig = htonl(read_from_ptr<u32_be>(&msg[0]));
-					const u16_be new_port_sig = read_from_ptr<u16_le>(&msg[4]);
-					const u32_be old_addr_sig = addr_sig;
-					const u16_be old_port_sig = port_sig;
+					const u32 new_addr_sig = read_from_ptr<u32_le>(&msg[0]);
+					const u16 new_port_sig = ntohs(read_from_ptr<u16_be>(&msg[4]));
+					const u32 old_addr_sig = addr_sig;
+					const u16 old_port_sig = port_sig;
 
 					if (new_addr_sig != old_addr_sig)
 					{
@@ -152,7 +152,7 @@ namespace net {
 						}
 						char buffer[256];
 						snprintf(buffer, sizeof(buffer), "Signaling Connected at %s:%d",
-							ip2str(new_addr_sig).c_str(), htons(new_port_sig));
+							ip2str(new_addr_sig).c_str(), new_port_sig);
 						g_OSD.Show(OSDType::MESSAGE_SUCCESS, buffer, 3.0f);
 						NOTICE_LOG(Log::sceNet, "New P2P IP: %s", ip2str(new_addr_sig).c_str());
 						if (old_addr_sig == 0)
@@ -168,7 +168,7 @@ namespace net {
 							std::lock_guard<std::mutex> lock(sig_mutex);
 							port_sig = new_port_sig;
 						}
-						NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", ntohs(new_port_sig));
+						NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", new_port_sig);
 						if (old_port_sig == 0)
 						{
 							// wake thread
@@ -212,7 +212,7 @@ namespace net {
 				const auto ping = forge_ping_packet();
 
 				struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(conn->ai_addr);
-				addr->sin_port = SCE_RPCN_PORT;
+				addr->sin_port = htons(SCE_RPCN_PORT);
 
 				INFO_LOG(Log::sceNet, "PING -> RPCN");
 				if (!g_signaling.send_packet_ipv4(ping, *addr))
@@ -753,14 +753,14 @@ namespace net {
 		}
 		auto vec = sigAddr->ip();
 		const u32_be result_ip =
-			static_cast<u32_be>(vec->Get(0)) << 24 |
-			static_cast<u32_be>(vec->Get(1)) << 16 |
-			static_cast<u32_be>(vec->Get(2)) << 8 |
-			static_cast<u32_be>(vec->Get(3));
+			static_cast<u32>(vec->Get(0)) << 24 |
+			static_cast<u32>(vec->Get(1)) << 16 |
+			static_cast<u32>(vec->Get(2)) << 8 |
+			static_cast<u32>(vec->Get(3));
 
 		u32 addr = result_ip;
 		if (addr == 0)
-			addr = htonl(getLocalIp(tls.netCtx.fd));
+			addr = getLocalIp(tls.netCtx.fd);
 		//g_signaling.connect(conn_id, addr, sigAddr->port());
 		g_signaling.connect(conn_id, addr, SCE_NP_PORT);
 		return 0;

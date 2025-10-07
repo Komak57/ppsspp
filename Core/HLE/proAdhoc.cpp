@@ -177,7 +177,7 @@ std::string ip2str(in_addr in, bool maskPublicIP) {
 	return std::string(str);
 }
 // Expects addr in network order
-std::string ip2str(u32_be addr, bool maskPublicIP) {
+std::string ip2str(u32 addr, bool maskPublicIP) {
 	in_addr in;
 	in.s_addr = addr;
 	return ip2str(in, maskPublicIP);

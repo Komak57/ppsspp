@@ -47,12 +47,12 @@ static constexpr u32_le SIGNALING_VERSION = 3;
 struct signaling_info
 {
 	s32 conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
-	u32_be addr = 0;
-	u16_be port = 0;
+	u32 addr = 0;
+	u16 port = 0;
 
 	// User seen from that peer
-	u32_be mapped_addr = 0;
-	u16_be mapped_port = 0;
+	u32 mapped_addr = 0;
+	u16 mapped_port = 0;
 
 	// For handler
 	std::chrono::steady_clock::time_point time_last_msg_recvd = std::chrono::steady_clock::now();
@@ -82,15 +82,15 @@ struct signaling_packet {
 	u64_le timestamp_sender;
 	u64_le timestamp_receiver;
 	SignalingCommand command;
-	u32_be sent_addr;
-	u16_be sent_port;
+	u32_le sent_addr;
+	u16_le sent_port;
 	SceNpId npid;
 };
 
 struct signaling_message
 {
-	u32_be src_addr = 0;
-	u16_be src_port = 0;
+	u32 src_addr = 0;
+	u16 src_port = 0;
 
 	std::vector<u8> data;
 };
@@ -126,7 +126,7 @@ public:
 	// DEBUGGING
 	bool create_connection();
 	bool destroy_connection();
-	void connect(u32 conn_id, u32_be addr, u16_be port);
+	void connect(u32 conn_id, u32 addr, u16 port);
 	void stop();
 
 	std::shared_ptr<signaling_info> get_signaling_ptr(const signaling_packet* sp);
@@ -139,8 +139,8 @@ public:
 	u32 init_sig(const SceNpId& npid);
 	// Create connection to P2P
 	u32 init_sig(const SceNpId& npid, SceNpMatching2RoomId room_id, SceNpMatching2RoomMemberId member_id);
-	void update_si_addr(std::shared_ptr<signaling_info>& si, u32_be new_addr, u16_be new_port);
-	void update_si_mapped_addr(std::shared_ptr<signaling_info>& si, u32_be new_addr, u16_be new_port);
+	void update_si_addr(std::shared_ptr<signaling_info>& si, u32 new_addr, u16 new_port);
+	void update_si_mapped_addr(std::shared_ptr<signaling_info>& si, u32 new_addr, u16 new_port);
 	void update_si_status(std::shared_ptr<signaling_info>& si, s32 new_status, s32 error_code);
 	void update_ext_si_status(std::shared_ptr<signaling_info>& si, bool op_activated);
 	void DisconnectUsers(SceNpMatching2RoomId room_id);
@@ -148,8 +148,8 @@ public:
 	//void sig2_callback(u64 room_id, u16 member_id, SceNpMatching2Event event, s32 error_code) const;
 
 	// send helpers (you already have an implementation; we call into it)
-	void send_signaling_packet(signaling_packet& sp, u32_be addr, u16_be port) const;
-	void send_information_packets(u32_be addr, u16_be port, const SceNpId& npid);
+	void send_signaling_packet(signaling_packet& sp, u32 addr, u16 port) const;
+	void send_information_packets(u32 addr, u16 port, const SceNpId& npid);
 	void reschedule_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd, std::chrono::steady_clock::time_point new_timepoint);
 	void retire_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd);
 	void retire_all_packets(std::shared_ptr<signaling_info>& si);
@@ -200,13 +200,13 @@ private:
 	std::vector<signaling_message> get_sign_msgs();
 	void process_incoming_messages();
 
-	void handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port);
+	void handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32 op_addr, u16 op_port);
 	void handle_pong(const signaling_packet* sp, std::shared_ptr<signaling_info> si);
-	void handle_info(const signaling_packet* sp, std::shared_ptr<signaling_info> si, u32_be op_addr, u16_be op_port);
-	void handle_connect(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port);
-	void handle_connect_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port);
-	void handle_confirm(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port);
-	void handle_finished(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32_be op_addr, u16_be op_port);
+	void handle_info(const signaling_packet* sp, std::shared_ptr<signaling_info> si, u32 op_addr, u16 op_port);
+	void handle_connect(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port);
+	void handle_connect_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port);
+	void handle_confirm(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port);
+	void handle_finished(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port);
 	void handle_finished_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si);
 
 	// context helpers

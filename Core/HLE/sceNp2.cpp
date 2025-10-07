@@ -1197,14 +1197,16 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 				//ensure(signaling_info->addr());
 
 				auto vec = signaling_info->addr()->ip();
-				const u32_be result_ip =
-					static_cast<u32_be>(vec->Get(0)) << 24 |
-					static_cast<u32_be>(vec->Get(1)) << 16 |
-					static_cast<u32_be>(vec->Get(2)) << 8 |
-					static_cast<u32_be>(vec->Get(3));
+				const u32 result_ip =
+					static_cast<u32>(vec->Get(0)) << 24 |
+					static_cast<u32>(vec->Get(1)) << 16 |
+					static_cast<u32>(vec->Get(2)) << 8 |
+					static_cast<u32>(vec->Get(3));
 
-				const u32_be addr_p2p = htonl(result_ip);
-				const u16_be port_p2p = htons(signaling_info->addr()->port());
+				const u32 addr_p2p = result_ip;
+				u16 port_p2p = signaling_info->addr()->port();
+				if (port_p2p == 3658)
+					port_p2p = SCE_NP_PORT;
 
 				const SceNpMatching2RoomMemberId member_id = signaling_info->member_id();
 
@@ -1213,11 +1215,11 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 				if (!member)
 					continue;
 
-				NOTICE_LOG(Log::sceNet, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(member->userInfo.npId.handle.data), room_id, ip2str(addr_p2p).c_str(), ntohs(port_p2p));
+				NOTICE_LOG(Log::sceNet, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(member->userInfo.npId.handle.data), room_id, ip2str(addr_p2p).c_str(), port_p2p);
 
 				// Attempt Signaling
 				const u32 conn_id = g_signaling.init_sig(member->userInfo.npId, room_id, member_id);
-				g_signaling.connect(conn_id, addr_p2p, SCE_NP_PORT);
+				g_signaling.connect(conn_id, addr_p2p, port_p2p);
 			}
 		}
 
