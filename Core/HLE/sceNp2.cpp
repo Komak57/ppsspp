@@ -924,8 +924,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
+
 		if (!npMatching2Inited)
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
@@ -973,11 +972,8 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 			ERROR_LOG(Log::sceNet, " - Invalid worldId");
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ROOM_ID), 0);
 		}
-		// FIXME: Populate all relevant data from req into memory as required
-		const RoomDataInternal* resp;
 
-		// FIXME: Get roomData from PSN
-		int ret = npServer->CreateJoinRoom(request_id, req, resp);
+	int ret = npServer->CreateJoinRoom(request_id, req);
 		if (ret != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
@@ -1009,37 +1005,6 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 			ERROR_LOG(Log::sceNet, "Unable to Create Room: %08X", ret);
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, ret), 0);
 		}
-
-		u32 infoSize = sizeof(SceNpMatching2RoomDataInternal);
-		u32 roomDataPtr = np_memory.Alloc(infoSize);
-
-		if (!Memory::IsValidAddress(roomDataPtr)) {
-			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataExternal");
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
-		}
-		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
-		SceNpId* npId = NpGetNpId();
-		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp, room_info, npId, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
-
-		// Cache Rooms
-		//rooms.push_back(roomData);
-		npServer->cache.AddRoom(*room_info);
-
-		SceNpMatching2CreateJoinRoomResponse respData{};
-		respData.roomDataInternal = room_info;
-
-		u32 respSize = sizeof(respData);
-		u32 respPtr = np_memory.Alloc(respSize);
-
-		if (!Memory::IsValidAddress(respPtr)) {
-			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
-		}
-		Memory::Write_Struct(respData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
-
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respPtr);
-	});
-	tasks.emplace(request_id, std::move(task));
 
 	return 0;
 }

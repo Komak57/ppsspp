@@ -7,6 +7,7 @@
 #include <Core/Net/SignalingHandler.h>
 #include <Core/HLE/proAdhoc.h>
 #include <System/OSD.h>
+#include <Core/HLE/sceNp.h>
 #include <Core/HLE/sceNp2.h>
 #include <Core/Net/fb_helpers.h>
 
@@ -317,6 +318,7 @@ namespace net {
 				switch ((CommandType)header.command) {
 				case CommandType::GetWorldList: GetWorldInfo_Reply(header.reqId, buf); break;
 				case CommandType::SearchRoom: SearchRoom_Reply(header.reqId, buf); break;
+				case CommandType::CreateRoom: CreateJoinRoom_Reply(header.reqId, buf); break;
 				default: responses[header.reqId] = std::move(buf); break; // Response is synchronous
 				}
 				break;
@@ -911,7 +913,7 @@ namespace net {
 		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, SCE_NP_MATCHING2_OKAY, respPtr);
 	}
 	//async
-	int RPCNAgent::CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) {
+	int RPCNAgent::CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) {
 
 		flatbuffers::FlatBufferBuilder builder(4096);
 
@@ -1086,23 +1088,80 @@ namespace net {
 			return (u8)ErrorType::NotFound;
 		}
 
-		auto resp = take_pending_request(reqId);
-		if (resp.error != (u8)ErrorType::NoError)
-			return resp.error;
+		return 0;
+	}
+
+	int RPCNAgent::CreateJoinRoom_Reply(u64 reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError) {
+		int errorCode;
+		switch ((ErrorType)resp.error) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomGroupMaxSlotMismatch:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_INVALID_GROUP_SLOT_NUM;
+				ERROR_LOG(Log::sceNet, "Group Max Slot Mismatch");
+				break;
+			case ErrorType::RoomPasswordMissing:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_INVALID_PASSWORD_SLOT_MASK;
+				ERROR_LOG(Log::sceNet, "Password Slot Mask Missing");
+				break;
+			case ErrorType::RoomGroupNoJoinLabel:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL;
+				ERROR_LOG(Log::sceNet, "Group No Join Label");
+				break;
+			default:
+				errorCode = resp.error;
+				ERROR_LOG(Log::sceNet, "Unknown Error creating room: %08X", resp.error);
+				break;
+			}
+			ERROR_LOG(Log::sceNet, "Unable to Create Room: %08X", resp.error);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, resp.error), 0);
+		}
 		resp.stream = new vec_stream(resp.data, 1);
 
 		// 01 0D00 84010000 0100000000000000 00 700100002000000000001A00280026002000000018000000140010000E000000080004001A000000240000000000008400001000780000000C00000008000000000000000100000000000001020000003800000004000000DAFFFFFF000010000C000000E9118EA058FCE20068FFFFFF00005800040000000000000000000A0014000C00060008000A000000000010000C000000E9118EA058FCE20098FFFFFF000057000400000000000000010000001800000014001C000800140006000000000005000C001000140000000002100058000000000000800C000000FC118EA058FCE200010000000C00000008001000080004000800000014000000FC118EA058FCE20008000C00060008000800000000005900040000000000000000000A001000040008000C000A00000030000000240000000400000015000000687474703A2F2F44756D6D7941766174617255726C00000003000000666F78001000000052504353335F5A53675363633444377800000000
 
 		//auto stream = new vec_stream(resp.data);
-		roomDataOut = resp.stream->get_flatbuffer<RoomDataInternal>();
+		auto roomData = resp.stream->get_flatbuffer<RoomDataInternal>();
 		if (resp.stream->is_error()) {
-			return (u8)ErrorType::Malformed;
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
 		}
+		
+		u32 infoSize = sizeof(SceNpMatching2RoomDataInternal);
+		u32 roomDataPtr = np_memory.Alloc(infoSize);
 
-		return 0;
+		if (!Memory::IsValidAddress(roomDataPtr)) {
+			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataExternal");
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
+		}
+		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
+		SceNpId* npId = NpGetNpId();
+		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomData, room_info, npId, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
+
+		// Cache Rooms
+		//rooms.push_back(roomData);
+		npServer->cache.AddRoom(*room_info);
+
+		SceNpMatching2CreateJoinRoomResponse respData{};
+		respData.roomDataInternal = room_info;
+
+		u32 respSize = sizeof(respData);
+		u32 respPtr = np_memory.Alloc(respSize);
+
+		if (!Memory::IsValidAddress(respPtr)) {
+			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
 	}
+		Memory::Write_Struct(respData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
 
-	int RPCNAgent::JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& resp) {
+		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respPtr);
+	}
 		flatbuffers::FlatBufferBuilder builder(1024);
 
 		flatbuffers::Offset<flatbuffers::Vector<u8>> final_roompassword;

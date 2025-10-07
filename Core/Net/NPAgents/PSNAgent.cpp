@@ -452,7 +452,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) {
+	int PSNAgent::CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::CreatJoinRoom()");
 		if (sock_ <= 0) {
 			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Socket not connected");
