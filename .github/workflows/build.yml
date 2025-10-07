@@ -79,29 +79,31 @@ jobs:
       if: matrix.platform != 'Win32'
       working-directory: ext/mbedtls
       run: |
-        $cmake_version = "3.28.3"
-        $download_url = "https://cmake.org/files/v3.28/cmake-${cmake_version}-windows-arm64.zip"
+        $cmake_version = "3.28"
+        $cmake_subversion = "3"
+        $download_url = "https://cmake.org/files/v${cmake_version}/cmake-${cmake_version}.${cmake_subversion}-windows-arm64.zip"
         $download_path = "$env:TEMP\cmake.zip"
         $install_path = "$env:GITHUB_WORKSPACE\cmake-custom"
           
         Invoke-WebRequest -Uri $download_url -OutFile $download_path
         Expand-Archive -Path $download_path -DestinationPath $install_path
           
-        Write-Host "::add-path::$install_path\cmake-${cmake_version}-windows-arm64\bin"
+        Write-Host "::add-path::$install_path\cmake-${cmake_version}.${cmake_subversion}-windows-arm64\bin"
         
     - name: Install Custom CMAKE
       if: matrix.platform == 'Win32'
       working-directory: ext/mbedtls
       run: |
-        $cmake_version = "3.28.3"
-        $download_url = "https://cmake.org/files/v3.27/cmake-${cmake_version}-windows-x86_64.zip"
+        $cmake_version = "3.28"
+        $cmake_subversion = "3"
+        $download_url = "https://cmake.org/files/v${cmake_version}/cmake-${cmake_version}.${cmake_subversion}-windows-x86_64.zip"
         $download_path = "$env:TEMP\cmake.zip"
         $install_path = "$env:GITHUB_WORKSPACE\cmake-custom"
           
         Invoke-WebRequest -Uri $download_url -OutFile $download_path
         Expand-Archive -Path $download_path -DestinationPath $install_path
           
-        Write-Host "::add-path::$install_path\cmake-${cmake_version}-windows-x86_64\bin"
+        Write-Host "::add-path::$install_path\cmake-${cmake_version}.${cmake_subversion}-windows-x86_64\bin"
         
     - name: Build mbedTLS
       working-directory: ext/mbedtls
