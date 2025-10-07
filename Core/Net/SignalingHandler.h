@@ -42,7 +42,7 @@ static constexpr auto REPEAT_FINISHED_DELAY = std::chrono::milliseconds(500);
 static constexpr auto REPEAT_INFO_DELAY = std::chrono::milliseconds(200);
 //static constexpr be_t<u32> SIGNALING_SIGNATURE = (static_cast<u32>('S') << 24 | static_cast<u32>('I') << 16 | static_cast<u32>('G') << 8 | static_cast<u32>('N'));
 static constexpr u32 SIGNALING_SIGNATURE = (static_cast<u32>('N') << 24 | static_cast<u32>('G') << 16 | static_cast<u32>('I') << 8 | static_cast<u32>('S'));
-static constexpr u32 SIGNALING_VERSION = 3;
+static constexpr u32_le SIGNALING_VERSION = 3;
 
 struct signaling_info
 {
@@ -77,7 +77,7 @@ struct signaling_info
 };
 
 struct signaling_packet {
-	u32_le signature = SIGNALING_SIGNATURE;
+	u32_be signature = SIGNALING_SIGNATURE;
 	u32_le version = SIGNALING_VERSION;
 	u64_le timestamp_sender;
 	u64_le timestamp_receiver;
