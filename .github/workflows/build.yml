@@ -76,14 +76,13 @@ jobs:
         }
         
     - name: Install Custom CMAKE
-      if: matrix.platform != 'Win32'
       working-directory: ext/mbedtls
       run: |
         $cmake_version = "3.28"
         $cmake_subversion = "3"
         $install_path = "$env:GITHUB_WORKSPACE\cmake-custom"
           
-        if ("${{ matrix.platform }}" -eq "Win32") {
+        if ("${{ matrix.platform }}" -eq "x64") {
           $architecture = "windows-x86_64"
         } else {
           $architecture = "windows-arm64"
