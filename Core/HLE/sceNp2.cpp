@@ -820,7 +820,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
 
 		std::vector<SceNpMatching2World> worldArray;
-		auto [err, worldNum] = npServer->GetWorldInfo(serverId, npTitleId, &worldArray);
+		auto [err, worldNum] = npServer->GetWorldInfo(request_id, serverId, npTitleId, &worldArray);
 		if (err != 0) {
 			int errorCode;
 			switch ((ErrorType)err) {
@@ -916,7 +916,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 		// WARNING! This is a constant, and thus read-only
 		const SearchRoomResponse* roomResp;
 
-		int ret = npServer->SearchRoom(req, roomResp);
+	int ret = npServer->SearchRoom(request_id, req, roomResp);
 		if (ret != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
@@ -1025,7 +1025,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		const RoomDataInternal* resp;
 
 		// FIXME: Get roomData from PSN
-		int ret = npServer->CreateJoinRoom(req, resp);
+		int ret = npServer->CreateJoinRoom(request_id, req, resp);
 		if (ret != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
@@ -1127,7 +1127,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 		const JoinRoomResponse* resp;
 
 		// FIXME: Get roomData from PSN
-		int ret = npServer->JoinRoom(req, resp);
+		int ret = npServer->JoinRoom(request_id, req, resp);
 		if (ret != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
@@ -1258,7 +1258,7 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32
 
 		auto req = PSPPointer<SceNpMatching2LeaveRoomRequest>::Create(reqParamPtr);
 		u64 roomId = req->roomId;
-		int ret = npServer->LeaveRoom(req, &roomId);
+		int ret = npServer->LeaveRoom(request_id, req, &roomId);
 		if (ret != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
@@ -1334,7 +1334,7 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 
 		const RoomDataInternal* resp;
 		int ret;
-		if ((ret = npServer->GetRoomDataInternal(req, resp)) != 0) {
+		if ((ret = npServer->GetRoomDataInternal(request_id, req, resp)) != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
 			case ErrorType::Malformed:
@@ -1409,7 +1409,7 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 
 		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 
-		int ret = npServer->SetRoomDataExternal(req);
+		int ret = npServer->SetRoomDataExternal(request_id, req);
 		if (ret != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
@@ -1471,7 +1471,7 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 
 		int ret;
-		if ((ret = npServer->SetRoomDataInternal(req)) != 0) {
+		if ((ret = npServer->SetRoomDataInternal(request_id, req)) != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
 			case ErrorType::Malformed:
@@ -1574,7 +1574,7 @@ static int sceNpMatching2SetUserInfo(int ctxId, u32 reqParamPtr, u32 optParam, u
 
 		auto req = PSPPointer<SceNpMatching2SetUserInfoRequest>::Create(reqParamPtr);
 
-		int ret = npServer->SetUserInfo(req);
+		int ret = npServer->SetUserInfo(request_id, req);
 		if (ret != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
@@ -1832,7 +1832,7 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
 
 		auto req = PSPPointer<SceNpMatching2GetRoomDataExternalListRequest>::Create(reqParamPtr);
 		const GetRoomDataExternalListResponse* resp{};
-		int ret = npServer->GetRoomDataExternalList(req, resp);
+		int ret = npServer->GetRoomDataExternalList(request_id, req, resp);
 		if (ret != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
@@ -1912,6 +1912,7 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 	if (!npServer)
 		return SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND;
 
+	auto request_id = GenerateRequestId(assignedReqIdPtr);
 	auto req = PSPPointer<SceNpMatching2SendRoomMessageRequest>::Create(reqParamPtr);
 
 	INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
@@ -1923,7 +1924,7 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM);
 
 	int ret;
-	if ((ret = npServer->SendRoomMessage(req)) != 0) {
+	if ((ret = npServer->SendRoomMessage(request_id, req)) != 0) {
 		int errorCode;
 		switch ((ErrorType)ret) {
 		case ErrorType::Malformed:

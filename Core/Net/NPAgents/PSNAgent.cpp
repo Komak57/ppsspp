@@ -304,7 +304,7 @@ namespace net {
 		return 0;
 	}
 
-	std::pair<int, int> PSNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npCommId, std::vector<SceNpMatching2World>* worldInfoOut) {
+	std::pair<int, int> PSNAgent::GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npCommId, std::vector<SceNpMatching2World>* worldInfoOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npCommId.data);
 #ifndef AGENT_TESTING
 		if (sock_ <= 0) {
@@ -393,7 +393,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp) {
+	int PSNAgent::SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::SearchRoom()");
 		if (sock() <= 0) {
 			ERROR_LOG(Log::sceNet, "SearchRoom: Socket not connected");
@@ -452,7 +452,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) {
+	int PSNAgent::CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::CreatJoinRoom()");
 		if (sock_ <= 0) {
 			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Socket not connected");
@@ -511,35 +511,35 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::JoinRoom(PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut) {
+	int PSNAgent::JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut) {
 		return 0;
 	}
 
-	int PSNAgent::LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) {
+	int PSNAgent::LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) {
 		return 0;
 	}
 
-	int PSNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp) {
+	int PSNAgent::GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp) {
 		return 0;
 	}
 
-	int PSNAgent::SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req) {
+	int PSNAgent::SetRoomDataInternal(u64 reqId, SceNpMatching2SetRoomDataInternalRequest* req) {
 		return 0;
 	}
 
-	int PSNAgent::SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req) {
+	int PSNAgent::SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req) {
 		return 0;
 	}
 
-	int PSNAgent::SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req) {
+	int PSNAgent::SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req) {
 		return 0;
 	}
 
-	int PSNAgent::SetUserInfo(SceNpMatching2SetUserInfoRequest* req) {
+	int PSNAgent::SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req) {
 		return 0;
 	}
 
-	int PSNAgent::GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) {
+	int PSNAgent::GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) {
 		return 0;
 	}
 }

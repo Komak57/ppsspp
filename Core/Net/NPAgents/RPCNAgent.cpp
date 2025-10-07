@@ -669,15 +669,14 @@ namespace net {
 		//serversPtr->emplace(2, net::CreateNPAgent(net::NPAgentType::RPCN, 2, "rpcn.revurb.us", 3657, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
 		return 0;
 	}
-
-	std::pair<int, int> RPCNAgent::GetWorldInfo(int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) {
+	// async
+	std::pair<int, int> RPCNAgent::GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) {
 		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 
 		Packet packet = Packet();
 		packet.Write(this->GetCommHeader());
 		packet.Write((u16)this->selected->id);
 
-		auto reqId = generate_request_id();
 		packet.Pack(CommandType::GetWorldList, reqId);
 
 		INFO_LOG(Log::sceNet, "Requesting World Info");
@@ -765,6 +764,8 @@ namespace net {
 		g_signaling.connect(conn_id, addr, SCE_NP_PORT);
 		return 0;
 	}
+	//async
+	int RPCNAgent::SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req, const SearchRoomResponse*& roomResp) {
 
 	int RPCNAgent::SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const SearchRoomResponse*& roomResp) {
 
@@ -827,7 +828,7 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		auto reqId = generate_request_id();
+		//auto reqId = generate_request_id();
 		packet.Pack(CommandType::SearchRoom, reqId);
 
 		INFO_LOG(Log::sceNet, "Requesting Search Room for World #%d, Lobby #%d", req->worldId, req->lobbyId);
@@ -855,8 +856,8 @@ namespace net {
 
 		return 0;
 	}
-	
-	int RPCNAgent::CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) {
+	//async
+	int RPCNAgent::CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) {
 
 		flatbuffers::FlatBufferBuilder builder(4096);
 
@@ -1020,7 +1021,6 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		auto reqId = generate_request_id();
 		packet.Pack(CommandType::CreateRoom, reqId);
 
 		INFO_LOG(Log::sceNet, "Requesting Create Join for World #%d, Lobby #%d", req->worldId, req->lobbyId);
@@ -1104,6 +1104,8 @@ namespace net {
 	}
 
 	int RPCNAgent::LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) {
+	//async
+	int RPCNAgent::LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<PresenceOptionData> final_optdata = CreatePresenceOptionData(builder, builder.CreateVector(req->optData.data, 16), req->optData.length);
 		auto req_finished = CreateLeaveRoomRequest(builder, req->roomId, final_optdata);
@@ -1113,7 +1115,6 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		auto reqId = generate_request_id();
 		packet.Pack(CommandType::LeaveRoom, reqId);
 
 		INFO_LOG(Log::sceNet, "Leaving Room #%d", req->roomId);
@@ -1136,6 +1137,8 @@ namespace net {
 	}
 
 	int RPCNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp) {
+	//async
+	int RPCNAgent::GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 
 		flatbuffers::Offset<flatbuffers::Vector<u16>> final_attr_ids_vec;
@@ -1156,7 +1159,6 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		auto reqId = generate_request_id();
 		packet.Pack(CommandType::GetRoomDataInternal, reqId);
 
 		INFO_LOG(Log::sceNet, "Requesting Room Data Internal for Room #%d", req->roomId);
@@ -1181,6 +1183,8 @@ namespace net {
 	}
 
 	int RPCNAgent::SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req) {
+
+	int RPCNAgent::SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
 
@@ -1213,7 +1217,6 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		auto reqId = generate_request_id();
 		packet.Pack(CommandType::SendRoomMessage, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Room #%d a Message", req->roomId);
@@ -1233,8 +1236,8 @@ namespace net {
 		resp.stream = new vec_stream(resp.data, 1);
 		return 0;
 	}
-
-	int RPCNAgent::SetRoomDataInternal(SceNpMatching2SetRoomDataInternalRequest* req) {
+	//async
+	int RPCNAgent::SetRoomDataInternal(u64 reqId, SceNpMatching2SetRoomDataInternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_binattrinternal_vec;
 		if (req->roomBinAttrInternalNum && req->roomBinAttrInternal.IsValid())
@@ -1281,7 +1284,6 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		auto reqId = generate_request_id();
 		packet.Pack(CommandType::SetRoomDataInternal, reqId);
 
 		INFO_LOG(Log::sceNet, "Setting Room Data Internal for Room #%d", req->roomId);
@@ -1302,6 +1304,8 @@ namespace net {
 	}
 
 	int RPCNAgent::SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req) {
+	//async
+	int RPCNAgent::SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntAttr>>> final_searchintattrexternal_vec;
 		if (req->roomSearchableIntAttrExternalNum && req->roomSearchableIntAttrExternal)
@@ -1369,7 +1373,6 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		auto reqId = generate_request_id();
 		packet.Pack(CommandType::SetRoomDataExternal, reqId);
 
 		INFO_LOG(Log::sceNet, "Setting Room Data External for Room #%d", req->roomId);
@@ -1390,6 +1393,8 @@ namespace net {
 	}
 
 	int RPCNAgent::SetUserInfo(SceNpMatching2SetUserInfoRequest* req) {
+	//async
+	int RPCNAgent::SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_memberbinattr_vec;
 		if (req->userBinAttrNum && req->userBinAttr)
@@ -1410,7 +1415,6 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		auto reqId = generate_request_id();
 		packet.Pack(CommandType::SetUserInfo, reqId);
 
 		INFO_LOG(Log::sceNet, "Setting UserInfo for Server #%d", req->serverId);
@@ -1431,6 +1435,8 @@ namespace net {
 	}
 
 	int RPCNAgent::GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) {
+	//async
+	int RPCNAgent::GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
 		std::vector<uint64_t> roomIds;
@@ -1451,7 +1457,6 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		auto reqId = generate_request_id();
 		packet.Pack(CommandType::GetRoomDataExternalList, reqId);
 
 		INFO_LOG(Log::sceNet, "Getting RoomDataExternalList for Room #%d", req->roomId);
