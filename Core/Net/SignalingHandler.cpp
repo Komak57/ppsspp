@@ -626,11 +626,11 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 void signaling_handler::signaling_thread() {
 	NOTICE_LOG(Log::sceNet, "Signaling P2P Handler Thread Started");
 	std::chrono::nanoseconds timeout = std::chrono::nanoseconds::max();
-	while (running_.load(std::memory_order_relaxed))
+	while (running_.load(std::memory_order_acquire))
 	{
 		// Wait for timeout, or wake response
 		wait_for_sign(timeout);
-		if (!running_.load(std::memory_order_relaxed))
+		if (!running_.load(std::memory_order_acquire))
 			return;
 		wakey.store(false);
 		process_incoming_messages();
