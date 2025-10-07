@@ -1023,8 +1023,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
+
 		if (!npMatching2Inited)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
@@ -1041,10 +1040,9 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 			RegisterNpMatching2Handler(ctxId, Memory::Read_U32(roomMessageCbPtr), opt->cbFuncArg.ptr, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
 
 		auto req = PSPPointer<SceNpMatching2JoinRoomRequest>::Create(reqParamPtr);
-		const JoinRoomResponse* resp;
 
 		// FIXME: Get roomData from PSN
-		int ret = npServer->JoinRoom(request_id, req, resp);
+	int ret = npServer->JoinRoom(request_id, req);
 		if (ret != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
@@ -1087,62 +1085,6 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 			}
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, errorCode), 0);
 		}
-
-		u32 sizeof_room_resp = sizeof(SceNpMatching2JoinRoomResponse);
-		u32 roomRespPtr = np_memory.Alloc(sizeof_room_resp);
-		auto room_resp = PSPPointer<SceNpMatching2JoinRoomResponse>::Create(roomRespPtr);
-
-		u32 sizeof_room_info = sizeof(SceNpMatching2RoomDataInternal);
-		u32 roomInfoPtr = np_memory.Alloc(sizeof_room_info);
-		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
-
-		room_resp->roomDataInternal = room_info;
-
-		SceNpId* npId = NpGetNpId();
-		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp->room_data(), room_info, npId, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
-		// Cache room_info
-		npServer->cache.AddRoom(*room_info);
-
-		// We initiate signaling if necessary
-		if (const auto* signaling_data = resp->signaling_data())
-		{
-			const SceNpMatching2RoomId room_id = resp->room_data()->roomId();
-
-			for (unsigned int i = 0; i < signaling_data->size(); i++)
-			{
-				const auto* signaling_info = signaling_data->Get(i);
-				//ensure(signaling_info->addr());
-
-				auto vec = signaling_info->addr()->ip();
-				const u32 result_ip =
-					static_cast<u32>(vec->Get(0)) << 24 |
-					static_cast<u32>(vec->Get(1)) << 16 |
-					static_cast<u32>(vec->Get(2)) << 8 |
-					static_cast<u32>(vec->Get(3));
-
-				const u32 addr_p2p = result_ip;
-				u16 port_p2p = signaling_info->addr()->port();
-				if (port_p2p == 3658)
-					port_p2p = SCE_NP_PORT;
-
-				const SceNpMatching2RoomMemberId member_id = signaling_info->member_id();
-
-				auto member = npServer->cache.GetMember(member_id);
-
-				if (!member)
-					continue;
-
-				NOTICE_LOG(Log::sceNet, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(member->userInfo.npId.handle.data), room_id, ip2str(addr_p2p).c_str(), port_p2p);
-
-				// Attempt Signaling
-				const u32 conn_id = g_signaling.init_sig(member->userInfo.npId, room_id, member_id);
-				g_signaling.connect(conn_id, addr_p2p, port_p2p);
-			}
-		}
-
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, SCE_NP_MATCHING2_OKAY, roomRespPtr);
-	});
-	tasks.emplace(request_id, std::move(task));
 
 	return 0;
 }

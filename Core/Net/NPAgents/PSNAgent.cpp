@@ -511,7 +511,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut) {
+	int PSNAgent::JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) {
 		return 0;
 	}
 

@@ -319,6 +319,7 @@ namespace net {
 				case CommandType::GetWorldList: GetWorldInfo_Reply(header.reqId, buf); break;
 				case CommandType::SearchRoom: SearchRoom_Reply(header.reqId, buf); break;
 				case CommandType::CreateRoom: CreateJoinRoom_Reply(header.reqId, buf); break;
+				case CommandType::JoinRoom: JoinRoom_Reply(header.reqId, buf); break;
 				default: responses[header.reqId] = std::move(buf); break; // Response is synchronous
 				}
 				break;
@@ -1162,6 +1163,8 @@ namespace net {
 
 		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respPtr);
 	}
+	//async
+	int RPCNAgent::JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 
 		flatbuffers::Offset<flatbuffers::Vector<u8>> final_roompassword;
@@ -1190,7 +1193,6 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		auto reqId = generate_request_id();
 		packet.Pack(CommandType::JoinRoom, reqId);
 
 		INFO_LOG(Log::sceNet, "Join Room #%d", req->roomId);
@@ -1201,22 +1203,114 @@ namespace net {
 			return (u8)ErrorType::NotFound;
 		}
 
-		auto _resp = take_pending_request(reqId);
-		if (_resp.error != (u8)ErrorType::NoError)
-			return _resp.error;
-		_resp.stream = new vec_stream(_resp.data, 1);
-
-		//auto stream = new vec_stream(_resp.data);
-		resp = _resp.stream->get_flatbuffer<JoinRoomResponse>();
-		if (_resp.stream->is_error()) {
-			return (u8)ErrorType::Malformed;
-		}
-
 		return 0;
 		//return forge_request_with_com_id(builder, communication_id, CommandType::CreateRoomGUI, req_id);
 	}
 
-	int RPCNAgent::LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) {
+	int RPCNAgent::JoinRoom_Reply(u64 reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError) {
+			int errorCode;
+			switch ((ErrorType)resp.error) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomMissing:
+				errorCode = SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomAlreadyJoined:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomFull:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_ROOM_FULL;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomPasswordMismatch:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomGroupFull:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_GROUP_FULL;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomGroupJoinLabelNotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			default:
+				errorCode = resp.error;
+				ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", resp.error);
+				break;
+			}
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, errorCode), 0);
+		}
+		resp.stream = new vec_stream(resp.data, 1);
+
+		//auto stream = new vec_stream(_resp.data);
+		auto joinRoomResp = resp.stream->get_flatbuffer<JoinRoomResponse>();
+		if (resp.stream->is_error()) {
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+		}
+		u32 sizeof_room_resp = sizeof(SceNpMatching2JoinRoomResponse);
+		u32 roomRespPtr = np_memory.Alloc(sizeof_room_resp);
+		auto room_resp = PSPPointer<SceNpMatching2JoinRoomResponse>::Create(roomRespPtr);
+
+		u32 sizeof_room_info = sizeof(SceNpMatching2RoomDataInternal);
+		u32 roomInfoPtr = np_memory.Alloc(sizeof_room_info);
+		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
+
+		room_resp->roomDataInternal = room_info;
+
+		SceNpId* npId = NpGetNpId();
+		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, joinRoomResp->room_data(), room_info, npId, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
+		// Cache room_info
+		npServer->cache.AddRoom(*room_info);
+
+		// We initiate signaling if necessary
+		if (const auto* signaling_data = joinRoomResp->signaling_data())
+		{
+			const SceNpMatching2RoomId room_id = joinRoomResp->room_data()->roomId();
+
+			for (unsigned int i = 0; i < signaling_data->size(); i++)
+			{
+				const auto* signaling_info = signaling_data->Get(i);
+				//ensure(signaling_info->addr());
+
+				auto vec = signaling_info->addr()->ip();
+				const u32 result_ip =
+					static_cast<u32>(vec->Get(0)) << 24 |
+					static_cast<u32>(vec->Get(1)) << 16 |
+					static_cast<u32>(vec->Get(2)) << 8 |
+					static_cast<u32>(vec->Get(3));
+
+				const u32 addr_p2p = result_ip;
+				u16 port_p2p = signaling_info->addr()->port();
+				if (port_p2p == 3658)
+					port_p2p = SCE_NP_PORT;
+
+				const SceNpMatching2RoomMemberId member_id = signaling_info->member_id();
+
+				auto member = npServer->cache.GetMember(member_id);
+
+				if (!member)
+					continue;
+
+				NOTICE_LOG(Log::sceNet, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(member->userInfo.npId.handle.data), room_id, ip2str(addr_p2p).c_str(), port_p2p);
+
+				// Attempt Signaling
+				const u32 conn_id = g_signaling.init_sig(member->userInfo.npId, room_id, member_id);
+				g_signaling.connect(conn_id, addr_p2p, port_p2p);
+	}
+		}
+
+		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, SCE_NP_MATCHING2_OKAY, roomRespPtr);
+	}
 	//async
 	int RPCNAgent::LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) {
 		flatbuffers::FlatBufferBuilder builder(1024);
