@@ -1219,8 +1219,7 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
+
 		if (!npMatching2Inited)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
@@ -1254,10 +1253,6 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 			}
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, errorCode), 0);
 		}
-
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, SCE_NP_MATCHING2_OKAY, 0);
-	});
-	tasks.emplace(request_id, std::move(task));
 
 	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
 	return 0;
