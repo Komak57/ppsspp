@@ -675,7 +675,7 @@ namespace net {
 		int SetRoomDataExternal_Reply(u64 reqId, RPCNResponse resp);
 		int SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req);
 		int SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req);
-		int GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData);
+		int SetUserInfo_Reply(u64 reqId, RPCNResponse resp);
 
 		void start_read_thread();
 		void start_signal_thread();

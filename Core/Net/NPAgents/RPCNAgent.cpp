@@ -324,6 +324,7 @@ namespace net {
 				case CommandType::GetRoomDataInternal: GetRoomDataInternal_Reply(header.reqId, buf); break;
 				case CommandType::SetRoomDataInternal: SetRoomDataInternal_Reply(header.reqId, buf); break;
 				case CommandType::SetRoomDataExternal: SetRoomDataExternal_Reply(header.reqId, buf); break;
+				case CommandType::SetUserInfo: SetUserInfo_Reply(header.reqId, buf); break;
 				default: responses[header.reqId] = std::move(buf); break; // Response is synchronous
 				}
 				break;
@@ -1758,15 +1759,32 @@ namespace net {
 			return (u8)ErrorType::NotFound;
 		}
 
-		auto resp = take_pending_request(reqId);
-		if (resp.error != (u8)ErrorType::NoError)
-			return resp.error;
-		resp.stream = new vec_stream(resp.data, 1);
-
 		return 0;
 	}
 
-	int RPCNAgent::GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) {
+	int RPCNAgent::SetUserInfo_Reply(u64 reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError) {
+			int errorCode;
+			switch ((ErrorType)resp.error) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			default:
+				errorCode = resp.error;
+				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", resp.error);
+				break;
+			}
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, errorCode), 0);
+		}
+		resp.stream = new vec_stream(resp.data, 1);
+
+		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, SCE_NP_MATCHING2_OKAY, 0);
+	}
 	//async
 	int RPCNAgent::GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) {
 
