@@ -607,7 +607,7 @@ namespace net {
 		std::condition_variable sigv;
 		std::atomic<u32> addr_sig;
 		std::atomic<u16> port_sig;
-		std::atomic<u32> local_addr_sig = (u32_be)0;
+		std::atomic<u32> local_addr_sig = 0;
 
 		std::chrono::steady_clock::time_point last_ping_time_ipv4{}, last_pong_time_ipv4{};
 		std::chrono::steady_clock::time_point last_ping_time_ipv6{}, last_pong_time_ipv6{};
