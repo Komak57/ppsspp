@@ -515,7 +515,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) {
+	int PSNAgent::LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) {
 		return 0;
 	}
 

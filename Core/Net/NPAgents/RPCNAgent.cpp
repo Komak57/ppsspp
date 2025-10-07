@@ -320,6 +320,7 @@ namespace net {
 				case CommandType::SearchRoom: SearchRoom_Reply(header.reqId, buf); break;
 				case CommandType::CreateRoom: CreateJoinRoom_Reply(header.reqId, buf); break;
 				case CommandType::JoinRoom: JoinRoom_Reply(header.reqId, buf); break;
+				case CommandType::LeaveRoom: LeaveRoom_Reply(header.reqId, buf); break;
 				default: responses[header.reqId] = std::move(buf); break; // Response is synchronous
 				}
 				break;
@@ -1312,7 +1313,7 @@ namespace net {
 		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, SCE_NP_MATCHING2_OKAY, roomRespPtr);
 	}
 	//async
-	int RPCNAgent::LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) {
+	int RPCNAgent::LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<PresenceOptionData> final_optdata = CreatePresenceOptionData(builder, builder.CreateVector(req->optData.data, 16), req->optData.length);
 		auto req_finished = CreateLeaveRoomRequest(builder, req->roomId, final_optdata);
@@ -1332,18 +1333,51 @@ namespace net {
 			return (u8)ErrorType::Invalid;
 		}
 
-		auto _resp = take_pending_request(reqId);
-		if (_resp.error != (u8)ErrorType::NoError)
-			return _resp.error;
-		_resp.stream = new vec_stream(_resp.data, 1);
-
-		//memcpy(resp, &_resp.data, sizeof(u64));
-		resp = reinterpret_cast<u64*>(_resp.stream->get<u64>());
-
 		return 0;
 	}
 
-	int RPCNAgent::GetRoomDataInternal(SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp) {
+	int RPCNAgent::LeaveRoom_Reply(u64 reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError) {
+			int errorCode;
+			switch ((ErrorType)resp.error) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::Invalid:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+				ERROR_LOG(Log::sceNet, "User cannot leave a room they are not in");
+				break;
+			case ErrorType::RoomMissing:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+				ERROR_LOG(Log::sceNet, "User cannot leave a room that doesn't exist");
+				break;
+			default:
+				errorCode = resp.error;
+				ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", resp.error);
+				break;
+			}
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, errorCode, "NPAgent Bad Response"), 0);
+		}
+		resp.stream = new vec_stream(resp.data, 1);
+
+		//memcpy(resp, &_resp.data, sizeof(u64));
+		SceNpMatching2RoomId roomId = resp.stream->get<SceNpMatching2RoomId>();
+		if (resp.stream->is_error()) {
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+		}
+
+		// Execute signaling callback to update users
+		g_signaling.DisconnectUsers(roomId);
+		// Remove room from cache
+		//npServer->cache.RemoveRoom(roomId);
+
+		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);
+	}
 	//async
 	int RPCNAgent::GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp) {
 		flatbuffers::FlatBufferBuilder builder(1024);
