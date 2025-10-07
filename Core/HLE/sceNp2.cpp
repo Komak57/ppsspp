@@ -1161,8 +1161,7 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
+
 		if (!npMatching2Inited)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
@@ -1180,9 +1179,8 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 		INFO_LOG(Log::sceNet, " - attrIdNum:  %d", req->attrIdNum);
 
-		const RoomDataInternal* resp;
 		int ret;
-		if ((ret = npServer->GetRoomDataInternal(request_id, req, resp)) != 0) {
+	if ((ret = npServer->GetRoomDataInternal(request_id, req)) != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
 			case ErrorType::Malformed:
@@ -1204,30 +1202,6 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 			}
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, ret), 0);
 		}
-		
-		u32 alloc = sizeof(SceNpMatching2RoomDataInternal);
-		u32 roomInfoPtr = np_memory.Alloc(alloc);
-		if (!Memory::IsValidAddress(roomInfoPtr)) {
-			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomData");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
-		}
-		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
-		np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, resp, room_info, NpGetNpId(), npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
-		// Cache the new Room Info
-		npServer->cache.AddRoom(*room_info);
-
-		alloc = sizeof(SceNpMatching2GetRoomDataInternalResponse);
-		u32 roomRespPtr = np_memory.Alloc(alloc);
-		if (!Memory::IsValidAddress(roomRespPtr)) {
-			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
-		}
-		auto room_resp = PSPPointer<SceNpMatching2GetRoomDataInternalResponse>::Create(roomRespPtr);
-		room_resp->roomDataInternal = room_info;
-
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, SCE_NP_MATCHING2_OKAY, room_resp.ptr);
-	});
-	tasks.emplace(request_id, std::move(task));
 
 	return 0;
 }

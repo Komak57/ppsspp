@@ -518,7 +518,7 @@ namespace net {
 		virtual int CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) = 0;
 		virtual int JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) = 0;
 		virtual int LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) = 0;
-		virtual int GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp) = 0;
+		virtual int GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req) = 0;
 		virtual int SetRoomDataInternal(u64 reqId, SceNpMatching2SetRoomDataInternalRequest* req) = 0;
 		virtual int SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req) = 0;
 		virtual int SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req) = 0;
@@ -633,7 +633,7 @@ namespace net {
 		int CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req);
 		int JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req);
 		int LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req);
-		int GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp);
+		int GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req);
 		int SetRoomDataInternal(u64 reqId, SceNpMatching2SetRoomDataInternalRequest* req);
 		int SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req);
 		int SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req);
@@ -667,8 +667,8 @@ namespace net {
 		int JoinRoom_Reply(u64 reqId, RPCNResponse resp);
 		int LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req);
 		int LeaveRoom_Reply(u64 reqId, RPCNResponse resp);
-		int GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp);
-		int GetRoomDataExternalList(SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData);
+		int GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req);
+		int GetRoomDataInternal_Reply(u64 reqId, RPCNResponse resp);
 		int SetRoomDataInternal(u64 reqId, SceNpMatching2SetRoomDataInternalRequest* req);
 		int SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req);
 		int SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req);

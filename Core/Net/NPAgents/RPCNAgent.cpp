@@ -321,6 +321,7 @@ namespace net {
 				case CommandType::CreateRoom: CreateJoinRoom_Reply(header.reqId, buf); break;
 				case CommandType::JoinRoom: JoinRoom_Reply(header.reqId, buf); break;
 				case CommandType::LeaveRoom: LeaveRoom_Reply(header.reqId, buf); break;
+				case CommandType::GetRoomDataInternal: GetRoomDataInternal_Reply(header.reqId, buf); break;
 				default: responses[header.reqId] = std::move(buf); break; // Response is synchronous
 				}
 				break;
@@ -1379,7 +1380,7 @@ namespace net {
 		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);
 	}
 	//async
-	int RPCNAgent::GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp) {
+	int RPCNAgent::GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 
 		flatbuffers::Offset<flatbuffers::Vector<u16>> final_attr_ids_vec;
@@ -1411,19 +1412,60 @@ namespace net {
 			return (u8)ErrorType::NotFound;
 		}
 
-		auto response = take_pending_request(reqId);
-		if (response.error != (u8)ErrorType::NoError)
-			return response.error;
-		response.stream = new vec_stream(response.data, 1);
-
-		resp = response.stream->get_flatbuffer<RoomDataInternal>();
-		if (response.stream->is_error())
-			return (u8)ErrorType::Malformed;
-
 		return 0;
 	}
 
-	int RPCNAgent::SendRoomMessage(SceNpMatching2SendRoomMessageRequest* req) {
+	int RPCNAgent::GetRoomDataInternal_Reply(u64 reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError) {
+			int errorCode;
+			switch ((ErrorType)resp.error) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomMissing:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+				ERROR_LOG(Log::sceNet, "User cannot leave a room that doesn't exist");
+				break;
+			default:
+				errorCode = resp.error;
+				ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", resp.error);
+				break;
+			}
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
+		}
+		resp.stream = new vec_stream(resp.data, 1);
+
+		auto roomDataInternal = resp.stream->get_flatbuffer<RoomDataInternal>();
+		if (resp.stream->is_error())
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+
+		u32 alloc = sizeof(SceNpMatching2RoomDataInternal);
+		u32 roomInfoPtr = np_memory.Alloc(alloc);
+		if (!Memory::IsValidAddress(roomInfoPtr)) {
+			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomData");
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
+		}
+		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
+		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomDataInternal, room_info, NpGetNpId(), npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
+		// Cache the new Room Info
+		npServer->cache.AddRoom(*room_info);
+
+		alloc = sizeof(SceNpMatching2GetRoomDataInternalResponse);
+		u32 roomRespPtr = np_memory.Alloc(alloc);
+		if (!Memory::IsValidAddress(roomRespPtr)) {
+			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
+	}
+		auto room_resp = PSPPointer<SceNpMatching2GetRoomDataInternalResponse>::Create(roomRespPtr);
+		room_resp->roomDataInternal = room_info;
+
+		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, SCE_NP_MATCHING2_OKAY, room_resp.ptr);
+	}
 
 	int RPCNAgent::SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req) {
 

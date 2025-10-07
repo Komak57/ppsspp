@@ -519,7 +519,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req, const RoomDataInternal*& resp) {
+	int PSNAgent::GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req) {
 		return 0;
 	}
 
