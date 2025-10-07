@@ -322,6 +322,7 @@ namespace net {
 				case CommandType::JoinRoom: JoinRoom_Reply(header.reqId, buf); break;
 				case CommandType::LeaveRoom: LeaveRoom_Reply(header.reqId, buf); break;
 				case CommandType::GetRoomDataInternal: GetRoomDataInternal_Reply(header.reqId, buf); break;
+				case CommandType::SetRoomDataInternal: SetRoomDataInternal_Reply(header.reqId, buf); break;
 				default: responses[header.reqId] = std::move(buf); break; // Response is synchronous
 				}
 				break;
@@ -1578,15 +1579,40 @@ namespace net {
 			return (u8)ErrorType::NotFound;
 		}
 
-		auto resp = take_pending_request(reqId);
-		if (resp.error != (u8)ErrorType::NoError)
-			return resp.error;
-		resp.stream = new vec_stream(resp.data, 1);
-
 		return 0;
 	}
 
-	int RPCNAgent::SetRoomDataExternal(SceNpMatching2SetRoomDataExternalRequest* req) {
+	int RPCNAgent::SetRoomDataInternal_Reply(u64 reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError) {
+			int errorCode;
+			switch ((ErrorType)resp.error) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			case ErrorType::RoomMissing:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+				ERROR_LOG(Log::sceNet, "Room doesn't exist");
+				break;
+			default:
+				errorCode = resp.error;
+				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", resp.error);
+				break;
+			}
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
+		}
+		resp.stream = new vec_stream(resp.data, 1);
+
+		/*auto [r, self] = npServer->GetSelf(req->roomId);
+		if (r == 0)
+			g_signaling.init_sig(self->userInfo.npId);*/
+
+		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, SCE_NP_MATCHING2_OKAY, 0);
+	}
 	//async
 	int RPCNAgent::SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
