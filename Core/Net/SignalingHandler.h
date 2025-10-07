@@ -179,7 +179,7 @@ public:
 	// Needs to wake when a new connection is made
 	void wait_for_sign(std::chrono::nanoseconds duration) {
 		std::unique_lock<std::mutex> lock(sign_mtx_);
-		NOTICE_LOG(Log::sceNet, "signaling_thread Waiting for next sign_msg");
+		NOTICE_LOG(Log::sceNet, "signaling_thread Waiting %ds for next sign_msg", std::chrono::duration_cast<std::chrono::seconds>(duration));
 		sign_msg_cv.wait_for(lock, duration, [&] { return (!running_.load(std::memory_order_acquire) || wakey.load(std::memory_order_acquire) || !sign_msgs.empty()); });
 		NOTICE_LOG(Log::sceNet, "signaling_thread Woken");
 	}
