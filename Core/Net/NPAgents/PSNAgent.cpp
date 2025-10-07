@@ -304,17 +304,17 @@ namespace net {
 		return 0;
 	}
 
-	std::pair<int, int> PSNAgent::GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npCommId, std::vector<SceNpMatching2World>* worldInfoOut) {
+	int PSNAgent::GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npCommId) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npCommId.data);
 #ifndef AGENT_TESTING
 		if (sock_ <= 0) {
 			ERROR_LOG(Log::sceNet, "GetWorldInfo: Socket not connected");
-			return { -1, 0 };
+			return -1;
 		}
 #endif
 		if (cancelled) {
 			ERROR_LOG(Log::sceNet, "GetWorldInfo: Cancelled");
-			return { -1, 0 };
+			return -1;
 		}
 		// 1201 0036 10010000 01001000 00000000 e288f336a613981d1f8b0253f34d4028 1010 000c 4e50575230313434365f3030 4073 0002 0001
 		//
@@ -358,14 +358,14 @@ namespace net {
 		bool flushed = buffer.FlushSocketSSL(&tls, 60.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return { -1, 0 };
+			return -1;
 		}
 		core::Buffer readbuf;
 		// Read response
 		int ret;
 		if ((ret = readbuf.Read(sock(), 4096, &tls)) < 0) {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
-			return { -1, 0 };
+			return -1;
 		}
 
 		std::string response;
@@ -379,14 +379,14 @@ namespace net {
 			hexdata += hex_chars[(c & 0x0F) >> 0];
 		}
 		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
-		worldInfoOut->clear();
-		// Should get an array of worlds
-		SceNpMatching2World worldInfo = SceNpMatching2World();
-		worldInfo.worldId = 1;
+		//worldInfoOut->clear();
+		//// Should get an array of worlds
+		//SceNpMatching2World worldInfo = SceNpMatching2World();
+		//worldInfo.worldId = 1;
 
-		worldInfoOut->push_back(worldInfo);
+		//worldInfoOut->push_back(worldInfo);
 
-		return { 0, 0 };
+		return 0;
 	}
 
 	int PSNAgent::RequestSignalingInfo(std::string npid, u32 conn_id) {

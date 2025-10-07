@@ -512,7 +512,7 @@ namespace net {
 		virtual int GetServers(SceNpCommunicationId npTitleId) = 0;
 
 		// NPAgent Functions
-		virtual std::pair<int, int> GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) = 0;
+		virtual int GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId) = 0;
 		virtual int RequestSignalingInfo(std::string npid, u32 conn_id) = 0;
 		virtual int SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) = 0;
 		virtual int CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) = 0;
@@ -627,7 +627,7 @@ namespace net {
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 		int GetServers(SceNpCommunicationId npTitleId);
 
-		std::pair<int, int> GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut);
+		int GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId);
 		int RequestSignalingInfo(std::string npid, u32 conn_id);
 		int SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req);
 		int CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
@@ -656,7 +656,8 @@ namespace net {
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 		int GetServers(SceNpCommunicationId npTitleId);
 
-		std::pair<int, int> GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut);
+		int GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId);
+		int GetWorldInfo_Reply(u64 reqId, RPCNResponse resp);
 		int RequestSignalingInfo(std::string npid, u32 conn_id);
 		int SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req);
 		int SearchRoom_Reply(u64 reqId, RPCNResponse resp);

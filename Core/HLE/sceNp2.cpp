@@ -806,68 +806,38 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
-		if (!npMatching2Inited)
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
-		if (!Memory::IsValidAddress(serverIdPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+	if (!npMatching2Inited)
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
-		// Server ID is a 16-bit variable according to JPCSP
-		u16 serverId;
-		if ((serverId = Memory::Read_U16(serverIdPtr)) == 0 || !npServer->SelectServer(serverId))
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
+	if (!Memory::IsValidAddress(serverIdPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
-		std::vector<SceNpMatching2World> worldArray;
-		auto [err, worldNum] = npServer->GetWorldInfo(request_id, serverId, npTitleId, &worldArray);
-		if (err != 0) {
-			int errorCode;
-			switch ((ErrorType)err) {
-			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
-				break;
-			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
-			default:
-				errorCode = err;
-				ERROR_LOG(Log::sceNet, "Unknown Error requesting WorldInfo: %08X", err);
-				break;
-			}
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, errorCode), 0);
+	// Server ID is a 16-bit variable according to JPCSP
+	u16 serverId;
+	if ((serverId = Memory::Read_U16(serverIdPtr)) == 0 || !npServer->SelectServer(serverId))
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
+
+	auto err = npServer->GetWorldInfo(request_id, serverId, npTitleId);
+	if (err != 0) {
+		int errorCode;
+		switch ((ErrorType)err) {
+		case ErrorType::Malformed:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			ERROR_LOG(Log::sceNet, "Malformed Request");
+			break;
+		case ErrorType::NotFound:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+			ERROR_LOG(Log::sceNet, "Send Failed");
+			break;
+		default:
+			errorCode = err;
+			ERROR_LOG(Log::sceNet, "Unknown Error requesting WorldInfo: %08X", err);
+			break;
 		}
-		// First attempts for new games won't contain a world.
-		if (worldNum == 0) {
-			ERROR_LOG(Log::sceNet, "No Worlds Returned");
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD), 0);
-		}
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, errorCode), 0);
+	}
 
-		// Allocate space for all worlds
-		u32 worldsSize = sizeof(SceNpMatching2World) * worldNum;
-		// We have a maximum size
-		if (worldsSize > SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList)
-			worldsSize = SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList;
-		auto worlds = PSPPointer<SceNpMatching2World>::Create(np_memory.Alloc(worldsSize));
-		// Transfer WorldID
-		NOTICE_LOG(Log::sceNet, "Received %d worlds", worldNum);
-		for (int i = 0; i < worldsSize / sizeof(SceNpMatching2World); i++)
-		{
-			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d", i, worldArray[i].worldId);
-			worlds[i].worldId = worldArray[i].worldId;
-			npServer->cache.AddWorld(worldArray[i]);
-		}
-
-		u32 alloc = sizeof(SceNpMatching2GetWorldInfoListResponse);
-		auto resp = PSPPointer<SceNpMatching2GetWorldInfoListResponse>::Create(np_memory.Alloc(alloc));
-		resp->worldNum = worldNum;
-		resp->world = worlds;
-
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_OKAY, resp.ptr);
-	}); // ThreadEnd
-	tasks.emplace(request_id, std::move(task));
 	return 0;
 }
 
@@ -886,54 +856,54 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
 
-		if (!npMatching2Inited)
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
+	if (!npMatching2Inited)
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
-		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
-		if (!npServer)
+	if (!npServer)
 		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
-		const PSPPointer<SceNpMatching2SearchRoomRequest> req = PSPPointer<SceNpMatching2SearchRoomRequest>::Create(reqParamPtr);
+	const PSPPointer<SceNpMatching2SearchRoomRequest> req = PSPPointer<SceNpMatching2SearchRoomRequest>::Create(reqParamPtr);
 
-		INFO_LOG(Log::sceNet, "SceNpMatching2SearchRoomRequest(%08X)", req.ptr);
-		INFO_LOG(Log::sceNet, " - option:       %d", req->option);
-		INFO_LOG(Log::sceNet, " - worldId:      %d", req->worldId);
-		INFO_LOG(Log::sceNet, " - lobbyId:      %d", req->lobbyId);
-		INFO_LOG(Log::sceNet, " - rangeFilter:  %d", req->rangeFilter);
-		INFO_LOG(Log::sceNet, " - flagFilter:   %d", req->flagFilter);
-		INFO_LOG(Log::sceNet, " - flagAttr:     %d", req->flagAttr);
-		INFO_LOG(Log::sceNet, " - intFilterNum: %d", req->intFilterNum);
-		INFO_LOG(Log::sceNet, " - binFilterNum: %d", req->binFilterNum);
-		INFO_LOG(Log::sceNet, " - attrIdNum:    %d", req->attrIdNum);
-		if (!npServer->cache.GetWorld(req->worldId)) {
-			ERROR_LOG(Log::sceNet, " - Invalid World ID");
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
-		}
-			
-		// WARNING! This is a constant, and thus read-only
-		const SearchRoomResponse* roomResp;
+	INFO_LOG(Log::sceNet, "SceNpMatching2SearchRoomRequest(%08X)", req.ptr);
+	INFO_LOG(Log::sceNet, " - option:       %d", req->option);
+	INFO_LOG(Log::sceNet, " - worldId:      %d", req->worldId);
+	INFO_LOG(Log::sceNet, " - lobbyId:      %d", req->lobbyId);
+	INFO_LOG(Log::sceNet, " - rangeFilter:  %d", req->rangeFilter);
+	INFO_LOG(Log::sceNet, " - flagFilter:   %d", req->flagFilter);
+	INFO_LOG(Log::sceNet, " - flagAttr:     %d", req->flagAttr);
+	INFO_LOG(Log::sceNet, " - intFilterNum: %d", req->intFilterNum);
+	INFO_LOG(Log::sceNet, " - binFilterNum: %d", req->binFilterNum);
+	INFO_LOG(Log::sceNet, " - attrIdNum:    %d", req->attrIdNum);
+	if (!npServer->cache.GetWorld(req->worldId)) {
+		ERROR_LOG(Log::sceNet, " - Invalid World ID");
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
+	}
+
+	// WARNING! This is a constant, and thus read-only
+	const SearchRoomResponse* roomResp;
 
 	int ret = npServer->SearchRoom(request_id, req);
-		if (ret != 0) {
-			int errorCode;
-			switch ((ErrorType)ret) {
-			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
-				break;
-			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
-			default:
-				errorCode = ret;
-				ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", ret);
-				break;
-			}
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, errorCode), 0);
+	if (ret != 0) {
+		int errorCode;
+		switch ((ErrorType)ret) {
+		case ErrorType::Malformed:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			ERROR_LOG(Log::sceNet, "Malformed Request");
+			break;
+		case ErrorType::NotFound:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+			ERROR_LOG(Log::sceNet, "Send Failed");
+			break;
+		default:
+			errorCode = ret;
+			ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", ret);
+			break;
 		}
+		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, errorCode), 0);
+	}
 
 	return 0;
 }
