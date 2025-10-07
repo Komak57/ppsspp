@@ -325,6 +325,7 @@ namespace net {
 				case CommandType::SetRoomDataInternal: SetRoomDataInternal_Reply(header.reqId, buf); break;
 				case CommandType::SetRoomDataExternal: SetRoomDataExternal_Reply(header.reqId, buf); break;
 				case CommandType::SetUserInfo: SetUserInfo_Reply(header.reqId, buf); break;
+				case CommandType::GetRoomDataExternalList: GetRoomDataExternalList_Reply(header.reqId, buf); break;
 				default: responses[header.reqId] = std::move(buf); break; // Response is synchronous
 				}
 				break;
@@ -734,7 +735,7 @@ namespace net {
 		if (num_worlds == 0) {
 			ERROR_LOG(Log::sceNet, "No Worlds Returned");
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD), 0);
-	}
+		}
 
 		// Allocate space for all worlds
 		u32 worldsSize = sizeof(SceNpMatching2World) * num_worlds;
@@ -1099,8 +1100,8 @@ namespace net {
 
 	int RPCNAgent::CreateJoinRoom_Reply(u64 reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
-		int errorCode;
-		switch ((ErrorType)resp.error) {
+			int errorCode;
+			switch ((ErrorType)resp.error) {
 			case ErrorType::Malformed:
 				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
 				ERROR_LOG(Log::sceNet, "Malformed Request");
@@ -1163,7 +1164,7 @@ namespace net {
 		if (!Memory::IsValidAddress(respPtr)) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
-	}
+		}
 		Memory::Write_Struct(respData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
 
 		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respPtr);
@@ -1311,7 +1312,7 @@ namespace net {
 				// Attempt Signaling
 				const u32 conn_id = g_signaling.init_sig(member->userInfo.npId, room_id, member_id);
 				g_signaling.connect(conn_id, addr_p2p, port_p2p);
-	}
+			}
 		}
 
 		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, SCE_NP_MATCHING2_OKAY, roomRespPtr);
@@ -1463,7 +1464,7 @@ namespace net {
 		if (!Memory::IsValidAddress(roomRespPtr)) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
-	}
+		}
 		auto room_resp = PSPPointer<SceNpMatching2GetRoomDataInternalResponse>::Create(roomRespPtr);
 		room_resp->roomDataInternal = room_info;
 
@@ -1786,7 +1787,7 @@ namespace net {
 		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, SCE_NP_MATCHING2_OKAY, 0);
 	}
 	//async
-	int RPCNAgent::GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) {
+	int RPCNAgent::GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
 		std::vector<uint64_t> roomIds;
@@ -1818,16 +1819,39 @@ namespace net {
 			return (u8)ErrorType::NotFound;
 		}
 
-		auto resp = take_pending_request(reqId);
-		if (resp.error != (u8)ErrorType::NoError)
-			return resp.error;
+		return 0;
+	}
+
+	int RPCNAgent::GetRoomDataExternalList_Reply(u64 reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError) {
+			int errorCode;
+			switch ((ErrorType)resp.error) {
+			case ErrorType::Malformed:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+				ERROR_LOG(Log::sceNet, "Malformed Request");
+				break;
+			case ErrorType::NotFound:
+				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+				ERROR_LOG(Log::sceNet, "Send Failed");
+				break;
+			default:
+				errorCode = resp.error;
+				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", resp.error);
+				break;
+			}
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, errorCode), 0);
+		}
 		resp.stream = new vec_stream(resp.data, 1);
 
-		respData = resp.stream->get_flatbuffer<GetRoomDataExternalListResponse>();
+		auto roomDataExternal = resp.stream->get_flatbuffer<GetRoomDataExternalListResponse>();
 		if (resp.stream->is_error()) {
 			return (u8)ErrorType::Malformed;
 		}
+		u32 alloc = sizeof(SceNpMatching2GetRoomDataExternalListResponse);
+		auto getRoomDataExtListResponse = PSPPointer<SceNpMatching2GetRoomDataExternalListResponse>::Create(np_memory.Alloc(alloc));
+		::np::GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(np_memory, roomDataExternal, getRoomDataExtListResponse, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
 
+		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, SCE_NP_MATCHING2_OKAY, getRoomDataExtListResponse.ptr);
 		return 0;
 	}
 }

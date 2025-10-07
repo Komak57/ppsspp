@@ -539,7 +539,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) {
+	int PSNAgent::GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req) {
 		return 0;
 	}
 }

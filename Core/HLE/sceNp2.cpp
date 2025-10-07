@@ -1162,46 +1162,46 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
 
-		if (!npMatching2Inited)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
+	if (!npMatching2Inited)
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
-		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
-		if (!npServer)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
+	if (!npServer)
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 
-		auto req = PSPPointer<SceNpMatching2GetRoomDataInternalRequest>::Create(reqParamPtr);
-		//Memory::Memcpy(&req, reqParamPtr, sizeof(req));
+	auto req = PSPPointer<SceNpMatching2GetRoomDataInternalRequest>::Create(reqParamPtr);
+	//Memory::Memcpy(&req, reqParamPtr, sizeof(req));
 
-		INFO_LOG(Log::sceNet, "SceNpMatching2GetRoomDataInternalRequest(%08X)", req.ptr);
-		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
-		INFO_LOG(Log::sceNet, " - attrIdNum:  %d", req->attrIdNum);
+	INFO_LOG(Log::sceNet, "SceNpMatching2GetRoomDataInternalRequest(%08X)", req.ptr);
+	INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
+	INFO_LOG(Log::sceNet, " - attrIdNum:  %d", req->attrIdNum);
 
-		int ret;
+	int ret;
 	if ((ret = npServer->GetRoomDataInternal(request_id, req)) != 0) {
-			int errorCode;
-			switch ((ErrorType)ret) {
-			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
-				break;
-			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
-			case ErrorType::RoomMissing:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
-				ERROR_LOG(Log::sceNet, "User cannot leave a room that doesn't exist");
-				break;
-			default:
-				errorCode = ret;
-				ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", ret);
-				break;
-			}
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, ret), 0);
+		int errorCode;
+		switch ((ErrorType)ret) {
+		case ErrorType::Malformed:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			ERROR_LOG(Log::sceNet, "Malformed Request");
+			break;
+		case ErrorType::NotFound:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+			ERROR_LOG(Log::sceNet, "Send Failed");
+			break;
+		case ErrorType::RoomMissing:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+			ERROR_LOG(Log::sceNet, "User cannot leave a room that doesn't exist");
+			break;
+		default:
+			errorCode = ret;
+			ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", ret);
+			break;
 		}
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, ret), 0);
+	}
 
 	return 0;
 }
@@ -1220,39 +1220,39 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
 
-		if (!npMatching2Inited)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
+	if (!npMatching2Inited)
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
-		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
-		auto req = PSPPointer<SceNpMatching2SetRoomDataExternalRequest>::Create(reqParamPtr);
+	auto req = PSPPointer<SceNpMatching2SetRoomDataExternalRequest>::Create(reqParamPtr);
 
-		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
+	INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 
-		int ret = npServer->SetRoomDataExternal(request_id, req);
-		if (ret != 0) {
-			int errorCode;
-			switch ((ErrorType)ret) {
-			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
-				break;
-			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
-			case ErrorType::RoomMissing:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
-				ERROR_LOG(Log::sceNet, "Room doesn't exist");
-				break;
-			default:
-				errorCode = ret;
-				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
-				break;
-			}
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, errorCode), 0);
+	int ret = npServer->SetRoomDataExternal(request_id, req);
+	if (ret != 0) {
+		int errorCode;
+		switch ((ErrorType)ret) {
+		case ErrorType::Malformed:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			ERROR_LOG(Log::sceNet, "Malformed Request");
+			break;
+		case ErrorType::NotFound:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+			ERROR_LOG(Log::sceNet, "Send Failed");
+			break;
+		case ErrorType::RoomMissing:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+			ERROR_LOG(Log::sceNet, "Room doesn't exist");
+			break;
+		default:
+			errorCode = ret;
+			ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
+			break;
 		}
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, errorCode), 0);
+	}
 
 	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
 	return 0;
@@ -1273,42 +1273,42 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
 		
-		if (!npMatching2Inited)
+	if (!npMatching2Inited)
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
-		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
-		if (!npServer)
+	if (!npServer)
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
-		auto req = PSPPointer<SceNpMatching2SetRoomDataInternalRequest>::Create(reqParamPtr);
+	auto req = PSPPointer<SceNpMatching2SetRoomDataInternalRequest>::Create(reqParamPtr);
 
-		INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
+	INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 
-		int ret;
-		if ((ret = npServer->SetRoomDataInternal(request_id, req)) != 0) {
-			int errorCode;
-			switch ((ErrorType)ret) {
-			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
-				break;
-			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
-			case ErrorType::RoomMissing:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
-				ERROR_LOG(Log::sceNet, "Room doesn't exist");
-				break;
-			default:
-				errorCode = ret;
-				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
-				break;
-			}
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
+	int ret;
+	if ((ret = npServer->SetRoomDataInternal(request_id, req)) != 0) {
+		int errorCode;
+		switch ((ErrorType)ret) {
+		case ErrorType::Malformed:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			ERROR_LOG(Log::sceNet, "Malformed Request");
+			break;
+		case ErrorType::NotFound:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+			ERROR_LOG(Log::sceNet, "Send Failed");
+			break;
+		case ErrorType::RoomMissing:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
+			ERROR_LOG(Log::sceNet, "Room doesn't exist");
+			break;
+		default:
+			errorCode = ret;
+			ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
+			break;
 		}
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
+	}
 
 	return 0;
 }
@@ -1370,36 +1370,36 @@ static int sceNpMatching2SetUserInfo(int ctxId, u32 reqParamPtr, u32 optParam, u
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
 
-		if (!npMatching2Inited)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
+	if (!npMatching2Inited)
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
-		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
-		if (!npServer)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
+	if (!npServer)
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
-		auto req = PSPPointer<SceNpMatching2SetUserInfoRequest>::Create(reqParamPtr);
+	auto req = PSPPointer<SceNpMatching2SetUserInfoRequest>::Create(reqParamPtr);
 
-		int ret = npServer->SetUserInfo(request_id, req);
-		if (ret != 0) {
-			int errorCode;
-			switch ((ErrorType)ret) {
-			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
-				break;
-			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
-			default:
-				errorCode = ret;
-				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
-				break;
-			}
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, errorCode), 0);
+	int ret = npServer->SetUserInfo(request_id, req);
+	if (ret != 0) {
+		int errorCode;
+		switch ((ErrorType)ret) {
+		case ErrorType::Malformed:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			ERROR_LOG(Log::sceNet, "Malformed Request");
+			break;
+		case ErrorType::NotFound:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+			ERROR_LOG(Log::sceNet, "Send Failed");
+			break;
+		default:
+			errorCode = ret;
+			ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
+			break;
 		}
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, errorCode), 0);
+	}
 
 	return 0;
 }
@@ -1622,46 +1622,36 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
-		if (!npMatching2Inited)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
-		if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
+	if (!npMatching2Inited)
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
-		if (!npServer)
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
+	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
-		auto req = PSPPointer<SceNpMatching2GetRoomDataExternalListRequest>::Create(reqParamPtr);
-		const GetRoomDataExternalListResponse* resp{};
-		int ret = npServer->GetRoomDataExternalList(request_id, req, resp);
-		if (ret != 0) {
-			int errorCode;
-			switch ((ErrorType)ret) {
-			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
-				break;
-			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
-			default:
-				errorCode = ret;
-				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
-				break;
-			}
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, errorCode), 0);
+	if (!npServer)
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
+
+	auto req = PSPPointer<SceNpMatching2GetRoomDataExternalListRequest>::Create(reqParamPtr);
+	int ret = npServer->GetRoomDataExternalList(request_id, req);
+	if (ret != 0) {
+		int errorCode;
+		switch ((ErrorType)ret) {
+		case ErrorType::Malformed:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
+			ERROR_LOG(Log::sceNet, "Malformed Request");
+			break;
+		case ErrorType::NotFound:
+			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+			ERROR_LOG(Log::sceNet, "Send Failed");
+			break;
+		default:
+			errorCode = ret;
+			ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
+			break;
 		}
-
-		u32 alloc = sizeof(SceNpMatching2GetRoomDataExternalListResponse);
-		auto sce_get_room_ext_resp = PSPPointer<SceNpMatching2GetRoomDataExternalListResponse>::Create(np_memory.Alloc(alloc));
-		np::GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(np_memory, resp, sce_get_room_ext_resp, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
-
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, SCE_NP_MATCHING2_OKAY, 0);
-	});
-	tasks.emplace(request_id, std::move(task));
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, errorCode), 0);
+	}
 
 	return 0;
 }

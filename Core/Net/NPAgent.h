@@ -523,7 +523,7 @@ namespace net {
 		virtual int SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req) = 0;
 		virtual int SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req) = 0;
 		virtual int SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req) = 0;
-		virtual int GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData) = 0;
+		virtual int GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req) = 0;
 
 		virtual void process_messages() = 0;
 		virtual void start_signal_thread() = 0;
@@ -638,7 +638,7 @@ namespace net {
 		int SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req);
 		int SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req);
 		int SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req);
-		int GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req, const GetRoomDataExternalListResponse*& respData);
+		int GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req);
 
 		void process_messages();
 		void start_signal_thread();
@@ -676,6 +676,8 @@ namespace net {
 		int SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req);
 		int SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req);
 		int SetUserInfo_Reply(u64 reqId, RPCNResponse resp);
+		int GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req);
+		int GetRoomDataExternalList_Reply(u64 reqId, RPCNResponse resp);
 
 		void start_read_thread();
 		void start_signal_thread();
