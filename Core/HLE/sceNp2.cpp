@@ -885,8 +885,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
+
 		if (!npMatching2Inited)
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
@@ -916,7 +915,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 		// WARNING! This is a constant, and thus read-only
 		const SearchRoomResponse* roomResp;
 
-	int ret = npServer->SearchRoom(request_id, req, roomResp);
+	int ret = npServer->SearchRoom(request_id, req);
 		if (ret != 0) {
 			int errorCode;
 			switch ((ErrorType)ret) {
@@ -935,23 +934,6 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 			}
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, errorCode), 0);
 		}
-
-		uint32_t room_count = roomResp->rooms() ? roomResp->rooms()->size() : 0;
-		uint32_t start_index = roomResp->startIndex();
-		uint32_t total_rooms = roomResp->total();
-
-		INFO_LOG(Log::sceNet, " - Start Index: %d", start_index);
-		INFO_LOG(Log::sceNet, " - Total:       %d", total_rooms);
-		INFO_LOG(Log::sceNet, " - Rooms:       %d", room_count);
-
-		u32 respSize = sizeof(SceNpMatching2SearchRoomResponse);
-		u32 respPtr = np_memory.Alloc(respSize);
-		auto respData = PSPPointer<SceNpMatching2SearchRoomResponse>::Create(respPtr);
-		np::SearchRoomResponse_to_SceNpMatching2SearchRoomResponse(np_memory, roomResp, respData);
-
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, SCE_NP_MATCHING2_OKAY, respPtr);
-	});
-	tasks.emplace(request_id, std::move(task));
 
 	return 0;
 }

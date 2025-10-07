@@ -7,6 +7,8 @@
 #include <Core/Net/SignalingHandler.h>
 #include <Core/HLE/proAdhoc.h>
 #include <System/OSD.h>
+#include <Core/HLE/sceNp2.h>
+#include <Core/Net/fb_helpers.h>
 
 using namespace std::literals::chrono_literals;
 
@@ -312,7 +314,10 @@ namespace net {
 					else
 						ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", buf.error, PacketTypeNames[buf.error]);
 				}
-				responses[header.reqId] = std::move(buf);
+				switch ((CommandType)header.command) {
+				case CommandType::SearchRoom: SearchRoom_Reply(header.reqId, buf); break;
+				default: responses[header.reqId] = std::move(buf); break; // Response is synchronous
+				}
 				break;
 			case PacketType::Notification:
 				switch ((NotificationType)header.command) {
@@ -765,9 +770,7 @@ namespace net {
 		return 0;
 	}
 	//async
-	int RPCNAgent::SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req, const SearchRoomResponse*& roomResp) {
-
-	int RPCNAgent::SearchRoom(PSPPointer<SceNpMatching2SearchRoomRequest> req, const SearchRoomResponse*& roomResp) {
+	int RPCNAgent::SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntSearchFilter>>> final_intfilter_vec;
@@ -840,21 +843,37 @@ namespace net {
 			return (u8)ErrorType::NotFound;
 		}
 
-		auto resp = take_pending_request(reqId);
+		return 0;
+	}
+
+	int RPCNAgent::SearchRoom_Reply(u64 reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError)
-			return resp.error;
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, resp.error), 0);
 		resp.stream = new vec_stream(resp.data, 1);
 		//                                                     20       12       0        8        6        1    
 		// NPAgent::Recv('01 1000 28000000 0100000000000000 00 14000000 0C000000 00000600 08000400 06000000 01000000')
 
 		//auto stream = new vec_stream(resp.data);
-		roomResp = resp.stream->get_flatbuffer<SearchRoomResponse>();
+		auto roomResp = resp.stream->get_flatbuffer<SearchRoomResponse>();
 		if (resp.stream->is_error()) {
-			return (u8)ErrorType::Malformed;
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
 		}
 		//roomResp = _resp;
 
-		return 0;
+		uint32_t room_count = roomResp->rooms() ? roomResp->rooms()->size() : 0;
+		uint32_t start_index = roomResp->startIndex();
+		uint32_t total_rooms = roomResp->total();
+
+		INFO_LOG(Log::sceNet, " - Start Index: %d", start_index);
+		INFO_LOG(Log::sceNet, " - Total:       %d", total_rooms);
+		INFO_LOG(Log::sceNet, " - Rooms:       %d", room_count);
+
+		u32 respSize = sizeof(SceNpMatching2SearchRoomResponse);
+		u32 respPtr = np_memory.Alloc(respSize);
+		auto respData = PSPPointer<SceNpMatching2SearchRoomResponse>::Create(respPtr);
+		::np::SearchRoomResponse_to_SceNpMatching2SearchRoomResponse(np_memory, roomResp, respData);
+
+		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, SCE_NP_MATCHING2_OKAY, respPtr);
 	}
 	//async
 	int RPCNAgent::CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) {

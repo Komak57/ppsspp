@@ -393,7 +393,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp) {
+	int PSNAgent::SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::SearchRoom()");
 		if (sock() <= 0) {
 			ERROR_LOG(Log::sceNet, "SearchRoom: Socket not connected");

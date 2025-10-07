@@ -514,7 +514,7 @@ namespace net {
 		// NPAgent Functions
 		virtual std::pair<int, int> GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut) = 0;
 		virtual int RequestSignalingInfo(std::string npid, u32 conn_id) = 0;
-		virtual int SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp) = 0;
+		virtual int SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) = 0;
 		virtual int CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut) = 0;
 		virtual int JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut) = 0;
 		virtual int LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp) = 0;
@@ -629,7 +629,7 @@ namespace net {
 
 		std::pair<int, int> GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut);
 		int RequestSignalingInfo(std::string npid, u32 conn_id);
-		int SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp);
+		int SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req);
 		int CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
 		int JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut);
 		int LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp);
@@ -658,8 +658,8 @@ namespace net {
 
 		std::pair<int, int> GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId, std::vector<SceNpMatching2World>* worldInfoOut);
 		int RequestSignalingInfo(std::string npid, u32 conn_id);
-		int SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req, const  SearchRoomResponse*& roomResp);
-		int CreateJoinRoom(PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
+		int SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req);
+		int SearchRoom_Reply(u64 reqId, RPCNResponse resp);
 		int CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req, const RoomDataInternal*& roomDataOut);
 		int LeaveRoom(PSPPointer<SceNpMatching2LeaveRoomRequest> req, u64* resp);
 		int JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req, const JoinRoomResponse*& roomDataOut);
