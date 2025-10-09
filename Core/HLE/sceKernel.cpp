@@ -1637,3 +1637,16 @@ const char *KernelErrorToString(u32 err) {
 		return nullptr;
 	}
 }
+
+u32_le __CreateHLELoop(u32_le* loopAddr, const char* sceFuncName, const char* hleFuncName, const char* tagName) {
+	if (loopAddr == NULL || sceFuncName == NULL || hleFuncName == NULL)
+		return 0;
+
+	loopAddr[0] = MIPS_MAKE_SYSCALL(sceFuncName, hleFuncName);
+	loopAddr[1] = MIPS_MAKE_B(-2);
+	loopAddr[2] = MIPS_MAKE_NOP();
+	u32 blockSize = sizeof(u32_le) * 3;
+	u32_le threadHackAddress = kernelMemory.Alloc(blockSize, false, tagName); // blockSize will be rounded to 256 granularity
+	Memory::Memcpy(threadHackAddress, loopAddr, sizeof(u32_le) * 3); // This area will be cleared again after loading an old savestate :(
+	return threadHackAddress;
+}

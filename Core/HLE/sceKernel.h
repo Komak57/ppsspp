@@ -303,3 +303,4 @@ void Register_UtilsForKernel();
 
 // returns nullptr if not found.
 const char *KernelErrorToString(u32 err);
+u32_le __CreateHLELoop(u32_le* loopAddr, const char* sceFuncName, const char* hleFuncName, const char* tagName);
