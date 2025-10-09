@@ -54,6 +54,11 @@ namespace core {
 					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
 						ERROR_LOG(Log::sceNet, "FlushSocket: Client closed connection gracefully");
 						return true;
+					case MBEDTLS_ERR_SSL_WANT_WRITE:
+						WARN_LOG(Log::sceNet, "FlushSocket: Socket expecting to Write");
+						return false;
+					case MBEDTLS_ERR_SSL_WANT_READ:
+						continue;
 					default:
 						ERROR_LOG(Log::sceNet, "SSL write failed: -0x%04x", -sent);
 						return false;
