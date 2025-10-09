@@ -30,12 +30,12 @@ namespace core {
 	}
 
 	bool Buffer::FlushSocketSSL(HTTPS_Config* tls, double timeout, bool* cancelled) {
-		static constexpr float CANCEL_INTERVAL = 0.25f;
+		static constexpr float CANCEL_INTERVAL = 5.00f;
+		double endTimeout = time_now_d() + timeout;
 
 		data_.iterate_blocks([&](const char* data, size_t size) {
 			for (size_t pos = 0, end = size; pos < end; ) {
 				bool ready = false;
-				double endTimeout = time_now_d() + timeout;
 				while (!ready) {
 					if (cancelled && *cancelled)
 						return false;
