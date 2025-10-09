@@ -177,7 +177,7 @@ void __Np2SignalingGetRPCNResponses()
 	}
 	//ScheduleRPCNState(1, newState, delayus, "RPCN Wait State");
 	DEBUG_LOG(Log::sceNet, "RPCN Waiting %d ms", (delayus / 1000));
-	int r = hleDelayResult(0, "RPCN Wait State", delayus);
+	//int r = hleDelayResult(0, "RPCN Wait State", delayus);
 	hleNoLogVoid();
 }
 
@@ -195,7 +195,8 @@ void __Np2SignalingGetP2PResponses()
 
 	//ScheduleP2PState(3, newState, delayus, "P2P Wait State");
 	DEBUG_LOG(Log::sceNet, "P2P Waiting %d ms", (delayus / 1000));
-	int r = hleDelayResult(0, "P2P Wait State", delayus);
+	//int r = hleDelayResult(0, "P2P Wait State", delayus);
+	hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
 	hleNoLogVoid();
 }
 
