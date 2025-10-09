@@ -178,6 +178,7 @@ void __Np2SignalingGetRPCNResponses()
 	//ScheduleRPCNState(1, newState, delayus, "RPCN Wait State");
 	DEBUG_LOG(Log::sceNet, "RPCN Waiting %d ms", (delayus / 1000));
 	//int r = hleDelayResult(0, "RPCN Wait State", delayus);
+	hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
 	hleNoLogVoid();
 }
 
