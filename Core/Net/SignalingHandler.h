@@ -128,6 +128,7 @@ public:
 	bool destroy_connection();
 	void connect(u32 conn_id, u32 addr, u16 port);
 	void stop();
+	std::chrono::microseconds HandleResponses();
 
 	std::shared_ptr<signaling_info> get_signaling_ptr(const signaling_packet* sp);
 
@@ -171,18 +172,19 @@ public:
 	void UserKickedGUI(net::RPCNResponse resp);
 	void QuickMatchCompleteGUI(net::RPCNResponse resp);
 
-	void wait_for_rpcn(bool* running, bool* cancelled, std::chrono::nanoseconds duration) {
+	/*void wait_for_rpcn(bool* running, bool* cancelled, std::chrono::nanoseconds duration) {
 		std::unique_lock<std::mutex> lock(rpcn_mtx_);
 		rpcn_msg_cv.wait_for(lock, duration, [&] { return (!*running || *cancelled) || (!rpcn_msgs.empty()); });
-	}
+	}*/
 	// Needs to wake when a packet is queued
 	// Needs to wake when a new connection is made
-	void wait_for_sign(std::chrono::nanoseconds duration) {
+	/*void wait_for_sign(std::chrono::nanoseconds duration) {
+		INFO_LOG(Log::sceNet, "signaling_thread: Acquiring lock.");
 		std::unique_lock<std::mutex> lock(sign_mtx_);
 		NOTICE_LOG(Log::sceNet, "signaling_thread Waiting %ds for next sign_msg", std::chrono::duration_cast<std::chrono::seconds>(duration));
-		sign_msg_cv.wait_for(lock, duration, [&] { return (!running_ || wakey.load() || !sign_msgs.empty()); });
+		sign_msg_cv.wait_for(lock, duration, [&] { return (!running_ || !sign_msgs.empty()); });
 		NOTICE_LOG(Log::sceNet, "signaling_thread Woken");
-	}
+	}*/
 
 	std::vector<std::vector<u8>> get_rpcn_msgs() {
 		std::vector<std::vector<u8>> msgs;
@@ -195,9 +197,6 @@ public:
 	}
 private:
 	void recv_loop(InetSocket* inetSocket);
-	void wake_signaling_thread();
-	void signaling_thread();
-	void ping_loop(s64* user_id, u32* local_addr);
 	std::vector<signaling_message> get_sign_msgs();
 	void process_incoming_messages();
 
@@ -221,7 +220,6 @@ private:
 	
 private:
 	bool running_ = false;
-	std::atomic<bool> wakey{ false };
 	std::thread recv_thread_;
 	std::thread signaling_thread_;
 	// This mutex handles general Signaling variables

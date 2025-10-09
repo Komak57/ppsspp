@@ -45,7 +45,6 @@ void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
 	INFO_LOG(Log::sceNet, "CONNECT -> P2P");
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, si, now + REPEAT_CONNECT_DELAY);
-	wake_signaling_thread();
 }
 
 void signaling_handler::stop() {
@@ -53,8 +52,8 @@ void signaling_handler::stop() {
 
 	if (recv_thread_.joinable())
 		recv_thread_.join();
-	if (signaling_thread_.joinable())
-		signaling_thread_.join();
+	/*if (signaling_thread_.joinable())
+		signaling_thread_.join();*/
 
 	destroy_connection();
 	// optional: clear contexts after all callbacks are done
@@ -108,7 +107,7 @@ bool signaling_handler::create_connection() {
 	// If not running, spin up the recv thread
 	if (!running_) {
 		recv_thread_ = std::thread(&signaling_handler::recv_loop, this, inetSocket);
-		signaling_thread_ = std::thread(&signaling_handler::signaling_thread, this);
+		//signaling_thread_ = std::thread(&signaling_handler::signaling_thread, this);
 		//npServer->start_signal_thread();
 	}
 	return true;
@@ -432,7 +431,6 @@ void signaling_handler::stop_sig_nl(u32 conn_id, bool forceful)
 	INFO_LOG(Log::sceNet, "FINISHED -> P2P");
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, std::move(si), std::chrono::steady_clock::now() + REPEAT_FINISHED_DELAY);
-	wake_signaling_thread();
 }
 /*
 	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000000: 00 00 01 53 49 47 4E 03 00 00 00 9A F6 3F B0 00  ...SIGN......?..
@@ -480,7 +478,6 @@ void signaling_handler::send_information_packets(u32 addr, u16 port, const SceNp
 	INFO_LOG(Log::sceNet, "INFO -> P2P");
 	send_signaling_packet(sent_packet, addr, port);
 	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_INFO_DELAY);
-	wake_signaling_thread();
 }
 
 void signaling_handler::reschedule_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd, std::chrono::steady_clock::time_point new_timepoint)
@@ -620,24 +617,8 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 	}
 }
 
-void signaling_handler::wake_signaling_thread() {
-	{
-		std::lock_guard<std::mutex> lock(sign_mtx_);
-		wakey.store(true);
-	}
-	sign_msg_cv.notify_one();
-}
-
-void signaling_handler::signaling_thread() {
-	NOTICE_LOG(Log::sceNet, "Signaling P2P Handler Thread Started");
-	std::chrono::nanoseconds timeout = std::chrono::nanoseconds::max();
-	while (running_)
-	{
-		// Wait for timeout, or wake response
-		wait_for_sign(timeout);
-		if (!running_)
-			return;
-		wakey.store(false);
+std::chrono::microseconds signaling_handler::HandleResponses() {
+	DEBUG_LOG(Log::sceNet, "Signaling P2P Handler Thread Started");
 		process_incoming_messages();
 
 		const auto now = std::chrono::steady_clock::now();
@@ -723,16 +704,15 @@ void signaling_handler::signaling_thread() {
 			const auto next_timestamp = qpackets.begin()->first;
 			if (current_timestamp > next_timestamp)
 			{
-				timeout = 0s;
+			return 0s;
 			} else {
 				// set thread wait duration to nanoseconds until next queued packet
-				timeout = (next_timestamp - current_timestamp);
+			return std::chrono::duration_cast<std::chrono::microseconds>(next_timestamp - current_timestamp);
 			}
 		}
 		else {
 			// set thread wait duration to infinity
-			timeout = std::chrono::nanoseconds::max();
-		}
+		return std::chrono::duration_cast<std::chrono::microseconds>(5s); // 5000000 == 5s
 	}
 }
 

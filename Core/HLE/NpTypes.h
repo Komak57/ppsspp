@@ -25,6 +25,11 @@ extern u32 np2RPCNThreadHackAddr;
 extern u32_le np2RPCNThreadCode[3];
 extern SceUID np2RPCNThreadID;
 
+extern u32 np2P2PThreadHackAddr;
+extern u32_le np2P2PThreadCode[3];
+extern SceUID np2P2PThreadID;
+
+
 // Based on https://playstationdev.wiki/psvitadevwiki/index.php?title=Error_Codes
 #define	SCE_NP_ERROR_ALREADY_INITIALIZED				0x80550001
 #define	SCE_NP_ERROR_NOT_INITIALIZED					0x80550002

@@ -60,6 +60,11 @@ signaling_handler g_signaling;
 int np2RPCNState = NP_SIGNIN_STATUS_NONE;
 static int np2RPCNStateEvent = -1;
 static int actionAfterRPCNMipsCall;
+// P2P Signaling
+int np2P2PState = NP_SIGNIN_STATUS_NONE;
+static int np2P2PStateEvent = -1;
+static int actionAfterP2PMipsCall;
+
 static void __RPCNState(u64 userdata, int cyclesLate) {
 	SceUID threadID = userdata >> 32;
 	int uid = (int)(userdata & 0xFFFFFFFF);
@@ -93,13 +98,53 @@ int ScheduleRPCNState(int event, int newState, int usec, const char* reason) {
 	return 0;
 }
 
+static void __P2PState(u64 userdata, int cyclesLate) {
+	SceUID threadID = userdata >> 32;
+	int uid = (int)(userdata & 0xFFFFFFFF);
+	int event = uid - 1;
+
+	s64 result = 0;
+	u32 error = 0;
+
+	SceUID waitID = __KernelGetWaitID(threadID, WAITTYPE_NET, error);
+	if (waitID == 0 || error != 0) {
+		WARN_LOG(Log::sceNet, "sceNp2 State WaitID(%i) on Thread(%i) already woken up? (error: %08x)", uid, threadID, error);
+		return;
+	}
+
+	u32 waitVal = __KernelGetWaitValue(threadID, error);
+	if (error == 0) {
+		np2P2PState = waitVal;
+	}
+
+	__KernelResumeThreadFromWait(threadID, result);
+	WARN_LOG(Log::sceNet, "Returning (WaitID: %d, error: %08x) Result (%08x) of sceNp2 - Event: %d, State: %d", waitID, error, (int)result, event, np2P2PState);
+}
+
+int ScheduleP2PState(int event, int newState, int usec, const char* reason) {
+	int uid = event + 1;
+
+	u64 param = ((u64)__KernelGetCurThread()) << 32 | uid;
+	CoreTiming::ScheduleEvent(usToCycles(usec), np2P2PStateEvent, param);
+	__KernelWaitCurThread(WAITTYPE_NET, uid, newState, 0, false, reason);
+
+	return 0;
+}
+
 void __Np2Init() {
 	npMatching2Inited = false;
 
 	np2RPCNState = NP_SIGNIN_STATUS_NONE;
+	np2P2PState = NP_SIGNIN_STATUS_NONE;
 	np2RPCNStateEvent = CoreTiming::RegisterEvent("__RPCNState", __RPCNState);
+	np2P2PStateEvent = CoreTiming::RegisterEvent("__P2PState", __P2PState);
+
 	np2RPCNThreadHackAddr = __CreateHLELoop(np2RPCNThreadCode, "sceNpMatching2", "__Np2SignalingGetRPCNResponses", "np2RPCNThreadHack");
+	np2P2PThreadHackAddr = __CreateHLELoop(np2P2PThreadCode, "sceNpMatching2", "__Np2SignalingGetP2PResponses", "np2P2PThreadHack");
+	//np2SignalingThreadHackAddr = __CreateHLELoop(np2SignalingThreadCode, "sceNpMatching2", "__NpMatching2GetResponses", "np2SignalingThreadHack");
+
 	//actionAfterMatching2MipsCall = __KernelRegisterActionType(AfterMatching2MipsCall::Create);
+	//actionAfter2SignalingMipsCall = __KernelRegisterActionType(AfterMatching2MipsCall::Create);
 }
 
 void __Np2Shutdown() {
@@ -111,6 +156,9 @@ void __Np2Shutdown() {
 	// Stop fake PSP Thread
 	if (np2RPCNThreadID != 0) {
 		__KernelStopThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread stopped");
+}
+	if (np2P2PThreadID != 0) {
+		__KernelStopThread(np2P2PThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread stopped");
 }
 }
 
@@ -130,6 +178,24 @@ void __Np2SignalingGetRPCNResponses()
 	//ScheduleRPCNState(1, newState, delayus, "RPCN Wait State");
 	DEBUG_LOG(Log::sceNet, "RPCN Waiting %d ms", (delayus / 1000));
 	int r = hleDelayResult(0, "RPCN Wait State", delayus);
+	hleNoLogVoid();
+}
+
+void __Np2SignalingGetP2PResponses()
+{
+	hleSkipDeadbeef();
+
+	int newState = SCE_NP_MATCHING2_STATE_NONE;
+	int delayus = 1000000;
+	if (npMatching2Inited) {
+		newState = SCE_NP_MATCHING2_STATE_INIT;
+		//g_signaling.get_wait_time_ns();
+		delayus = g_signaling.HandleResponses().count();
+	}
+
+	//ScheduleP2PState(3, newState, delayus, "P2P Wait State");
+	DEBUG_LOG(Log::sceNet, "P2P Waiting %d ms", (delayus / 1000));
+	int r = hleDelayResult(0, "P2P Wait State", delayus);
 	hleNoLogVoid();
 }
 
@@ -431,6 +497,9 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 	if (np2RPCNThreadID > 0) {
 		__KernelStartThread(np2RPCNThreadID, 0, 0);
 	}
+	if (np2P2PThreadID > 0) {
+		__KernelStartThread(np2P2PThreadID, 0, 0);
+	}
 	np_memory.Init(npPoolAddr, poolSize, false);
 
 	npMatching2MemStat.npMemSize = poolSize - 0x20;
@@ -515,6 +584,10 @@ static int sceNpMatching2Term()
 	if (np2RPCNThreadID != 0) {
 		__KernelStopThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread stopped");
 	}
+	if (np2P2PThreadID != 0) {
+		__KernelStopThread(np2P2PThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread stopped");
+	}
+
 	npMatching2Inited = false;
 	npMatching2Handlers.clear();
 	npMatching2Events.clear();
@@ -2017,6 +2090,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0x97529ECC, &WrapI_IUUU<sceNpMatching2KickoutRoomMember>,				"sceNpMatching2KickoutRoomMember",				'i', "ixxx"   },
 	// Fake function for PPSSPP's use.
 	{0X756E6F2C, &WrapV_V<__Np2SignalingGetRPCNResponses>,					"__Np2SignalingGetRPCNResponses",					'v', ""		  },
+	{0X756E6F48, &WrapV_V<__Np2SignalingGetP2PResponses>,					"__Np2SignalingGetP2PResponses",					'v', ""		  },
 };
 
 void Register_sceNpMatching2()
