@@ -1287,7 +1287,7 @@ namespace net {
 					static_cast<u32>(vec->Get(2)) << 8 |
 					static_cast<u32>(vec->Get(3));
 
-				const u32 addr_p2p = result_ip;
+				const u32 addr_p2p = htonl(result_ip);
 				u16 port_p2p = signaling_info->addr()->port();
 				if (port_p2p == 3658)
 					port_p2p = SCE_NP_PORT;
