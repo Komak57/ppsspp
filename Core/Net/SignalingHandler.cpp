@@ -109,7 +109,7 @@ bool signaling_handler::create_connection() {
 	if (!running_) {
 		recv_thread_ = std::thread(&signaling_handler::recv_loop, this, inetSocket);
 		signaling_thread_ = std::thread(&signaling_handler::signaling_thread, this);
-		npServer->start_signal_thread();
+		//npServer->start_signal_thread();
 	}
 	return true;
 }

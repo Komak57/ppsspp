@@ -56,9 +56,50 @@ std::unique_ptr<net::NPAgent> npServer = nullptr;
 std::map<u16, std::future<int>> tasks;
 signaling_handler g_signaling;
 
+// RPCN Signaling
+int np2RPCNState = NP_SIGNIN_STATUS_NONE;
+static int np2RPCNStateEvent = -1;
+static int actionAfterRPCNMipsCall;
+static void __RPCNState(u64 userdata, int cyclesLate) {
+	SceUID threadID = userdata >> 32;
+	int uid = (int)(userdata & 0xFFFFFFFF);
+	int event = uid - 1;
+
+	s64 result = 0;
+	u32 error = 0;
+
+	SceUID waitID = __KernelGetWaitID(threadID, WAITTYPE_NET, error);
+	if (waitID == 0 || error != 0) {
+		WARN_LOG(Log::sceNet, "sceNp2 State WaitID(%i) on Thread(%i) already woken up? (error: %08x)", uid, threadID, error);
+		return;
+	}
+
+	u32 waitVal = __KernelGetWaitValue(threadID, error);
+	if (error == 0) {
+		np2RPCNState = waitVal;
+	}
+
+	__KernelResumeThreadFromWait(threadID, result);
+	WARN_LOG(Log::sceNet, "Returning (WaitID: %d, error: %08x) Result (%08x) of sceNp2 - Event: %d, State: %d", waitID, error, (int)result, event, np2RPCNState);
+}
+
+int ScheduleRPCNState(int event, int newState, int usec, const char* reason) {
+	int uid = event + 1;
+
+	u64 param = ((u64)__KernelGetCurThread()) << 32 | uid;
+	CoreTiming::ScheduleEvent(usToCycles(usec), np2RPCNStateEvent, param);
+	__KernelWaitCurThread(WAITTYPE_NET, uid, newState, 0, false, reason);
+
+	return 0;
+}
 
 void __Np2Init() {
 	npMatching2Inited = false;
+
+	np2RPCNState = NP_SIGNIN_STATUS_NONE;
+	np2RPCNStateEvent = CoreTiming::RegisterEvent("__RPCNState", __RPCNState);
+	np2RPCNThreadHackAddr = __CreateHLELoop(np2RPCNThreadCode, "sceNpMatching2", "__Np2SignalingGetRPCNResponses", "np2RPCNThreadHack");
+	//actionAfterMatching2MipsCall = __KernelRegisterActionType(AfterMatching2MipsCall::Create);
 }
 
 void __Np2Shutdown() {
@@ -66,7 +107,32 @@ void __Np2Shutdown() {
 		g_signaling.stop();
 		npServer->Disconnect();
 	}
+
+	// Stop fake PSP Thread
+	if (np2RPCNThreadID != 0) {
+		__KernelStopThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread stopped");
 }
+}
+
+void __Np2SignalingGetRPCNResponses()
+{
+	hleSkipDeadbeef();
+	int newState = SCE_NP_MATCHING2_STATE_NONE;
+	int delayus = 1000000;
+	if (npServer) {
+		newState = SCE_NP_MATCHING2_STATE_INIT;
+		delayus = 1000000;
+		if (npServer->IsConnected()) {
+			newState = SCE_NP_MATCHING2_STATE_CONNECTED;
+			delayus = npServer->HandleResponses().count();
+		}
+	}
+	//ScheduleRPCNState(1, newState, delayus, "RPCN Wait State");
+	DEBUG_LOG(Log::sceNet, "RPCN Waiting %d ms", (delayus / 1000));
+	int r = hleDelayResult(0, "RPCN Wait State", delayus);
+	hleNoLogVoid();
+}
+
 /* Generate a Request Id for various callbacks
  * @param assignedReqIdPtr pointer to AppRequestID
  * @return u32 System RequestID
@@ -362,6 +428,9 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 	if (npPoolAddr == 0) {
 		return hleLogError(Log::sceNet, SCE_KERNEL_ERROR_NO_MEMORY, "unable to allocate pool");
 	}
+	if (np2RPCNThreadID > 0) {
+		__KernelStartThread(np2RPCNThreadID, 0, 0);
+	}
 	np_memory.Init(npPoolAddr, poolSize, false);
 
 	npMatching2MemStat.npMemSize = poolSize - 0x20;
@@ -442,6 +511,10 @@ static int sceNpMatching2Term()
 		npServer->Disconnect();
 	}
 
+	// Stop fake PSP Thread
+	if (np2RPCNThreadID != 0) {
+		__KernelStopThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread stopped");
+	}
 	npMatching2Inited = false;
 	npMatching2Handlers.clear();
 	npMatching2Events.clear();
@@ -1942,6 +2015,8 @@ const HLEFunction sceNpMatching2[] = {
 	{0x5C7DB6A4, nullptr,													"sceNpMatching2GetRoomMemberDataInternalList",	'i', ""       },
 	{0xFBF494C0, &WrapI_IUUU<sceNpMatching2GetRoomMemberDataExternalList>,	"sceNpMatching2GetRoomMemberDataExternalList",	'i', "ixxx"   },
 	{0x97529ECC, &WrapI_IUUU<sceNpMatching2KickoutRoomMember>,				"sceNpMatching2KickoutRoomMember",				'i', "ixxx"   },
+	// Fake function for PPSSPP's use.
+	{0X756E6F2C, &WrapV_V<__Np2SignalingGetRPCNResponses>,					"__Np2SignalingGetRPCNResponses",					'v', ""		  },
 };
 
 void Register_sceNpMatching2()

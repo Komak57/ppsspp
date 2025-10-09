@@ -3,10 +3,12 @@
 #include <Core/Net/Buffer.h>
 #include <Common/File/FileDescriptor.h>
 #include <TimeUtil.h>
+#include <chrono>
 #include <Common/Net/URL.h>
 #include "Common/Net/HTTPClient.h"
 #include <Core/HLE/sceNet.h>
 
+using namespace std::literals::chrono_literals;
 /*
 	< 12010036100100000100100000000000e288f336a613981d1f8b0253f34d40281010000c4e50575230313434365f3030407300020001
 	> 1002002710010000010010000000000019490bc9118fc488581dcbfcb27a4a31001d0003000101
@@ -66,10 +68,18 @@ namespace net {
 		}
 	}
 
-	void PSNAgent::process_messages() {
+	void PSNAgent::start_read_thread() {
+		if (running) return;
+		running = true;
 	}
 
-	void PSNAgent::start_signal_thread() {
+	void PSNAgent::stop_read_thread() {
+		if (!running) return;
+		running = false;
+	}
+
+	std::chrono::microseconds PSNAgent::HandleResponses() {
+		return std::chrono::duration_cast<std::chrono::microseconds>(10s);
 	}
 
 	bool PSNAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {

@@ -482,7 +482,7 @@ namespace net {
 		int ready = 0;
 
 		while (state != ReadState::Complete) {
-			if (*cancelled) {
+			if (cancelled && *cancelled) {
 				WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");
 				return 0;
 			}
@@ -509,8 +509,8 @@ namespace net {
 						return retval;
 					case MBEDTLS_ERR_SSL_WANT_READ:
 						VERBOSE_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
-						while (!ready && (cancelled && !*cancelled))
-							ready = fd_util::WaitUntilReady(tls.netCtx.fd, CANCEL_INTERVAL, false);
+							while (!ready && (cancelled && !*cancelled))
+								ready = fd_util::WaitUntilReady(tls.netCtx.fd, CANCEL_INTERVAL, false);
 						if (cancelled && *cancelled)
 							return SCE_NP_MANAGER_ERROR_ABORTED;
 							// Read some more!

@@ -14,9 +14,16 @@
 #include "Core/MemMap.h"
 #include "Core/HLE/NpTypes.h"
 #include "Core/HLE/NetInetTypes.h"
+//#include "Core/HLE/sceKernelThread.h"
+#include <Core/MIPS/MIPSCodeUtils.h>
+#include <Common/Serialize/SerializeFuncs.h>
 
 
 #pragma pack(push,1)
+#define SCE_NP_MATCHING2_STATE_NONE			0
+#define SCE_NP_MATCHING2_STATE_INIT			1
+#define SCE_NP_MATCHING2_STATE_CONNECTED	2
+#define SCE_NP_MATCHING2_STATE_DISCONNECTED	3
 
 // Based on https://gist.githubusercontent.com/raw/4140449/PS%20Vita (Might be slightly different with PSP?)
 #define SCE_NP_MATCHING2_OKAY									0x00000000

@@ -11,10 +11,11 @@
 #include "Common/Net/Resolve.h"
 #include "Common/Net/SocketCompat.h"
 
+#include "Core/HLE/NpTypes.h"
 #include "Core/HLE/Np2Types.h"
 #include "Core/np2_structs_generated.h"
 #include "Core/Net/HTTPS.h"
-#include "NpMatching2Cache.h"
+#include "Core/Net/NpMatching2Cache.h"
 
 // Port used to communicate with RPCN (3657)
 const u16 SCE_RPCN_PORT = 3657;
@@ -495,6 +496,7 @@ namespace net {
 		bool Resolve(DNSType type = DNSType::ANY);
 		virtual void Disconnect() = 0;
 		bool Send(Packet* packet, double timeout, bool* cancelled);
+		virtual std::chrono::microseconds HandleResponses() = 0;
 		int Recv(Packet* packet, bool* cancelled);
 		
 		bool SelectServer(u16 ServerID) {
@@ -525,8 +527,8 @@ namespace net {
 		virtual int SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req) = 0;
 		virtual int GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req) = 0;
 
-		virtual void process_messages() = 0;
-		virtual void start_signal_thread() = 0;
+		virtual void start_read_thread() = 0;
+		virtual void stop_read_thread() = 0;
 
 		bool IsConnected() { return connected; }
 		//u8 GetStatus();
@@ -620,6 +622,7 @@ namespace net {
 	public:
 		~PSNAgent();
 		PSNAgent(std::string host, int port);
+		std::chrono::microseconds HandleResponses();
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
 		void Disconnect();
@@ -640,8 +643,10 @@ namespace net {
 		int SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req);
 		int GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req);
 
-		void process_messages();
-		void start_signal_thread();
+		void start_read_thread();
+		void stop_read_thread();
+	private:
+		bool running = false;
 	};
 
 	class RPCNAgent : public NPAgent {
@@ -649,6 +654,7 @@ namespace net {
 		static const u32 PROTOCOL_VERSION = 26;
 		~RPCNAgent();
 		RPCNAgent(std::string host, int port);
+		std::chrono::microseconds HandleResponses();
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
 		void Disconnect();
@@ -680,10 +686,7 @@ namespace net {
 		int GetRoomDataExternalList_Reply(u64 reqId, RPCNResponse resp);
 
 		void start_read_thread();
-		void start_signal_thread();
 		void stop_read_thread();
-
-		void process_messages();
 
 		u64 generate_request_id();
 		std::vector<u8> GetCommHeader() {

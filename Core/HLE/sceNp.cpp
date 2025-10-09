@@ -31,6 +31,9 @@
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/sceNp.h"
 #include <Core/Net/NPAgent.h>
+#include "Core/HLE/sceKernelThread.h"
+#include "sceKernelMemory.h"
+#include "ErrorCodes.h"
 
 
 std::unique_ptr<net::NPAuthAgent> npAuthServer;
@@ -606,14 +609,36 @@ void Register_sceNpAuth()
 
 static int sceNpServiceTerm()
 {
+	if (np2RPCNThreadID != 0) {
+		__KernelStopThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread stopped");
+		__KernelDeleteThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread deleted");
+		np2RPCNThreadID = 0;
+	}
 	if (npAuthServer && npAuthServer->IsConnected())
 		npAuthServer->Disconnect();
 	// No parameters
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 
+u32 np2RPCNThreadHackAddr = 0;
+u32_le np2RPCNThreadCode[3];
+SceUID np2RPCNThreadID = 0;
+
+void np2ValidateLoopMemory() {
+	// Allocate Memory if it wasn't valid/allocated after loaded from old SaveState
+	if (!np2RPCNThreadHackAddr || (np2RPCNThreadHackAddr && strcmp("np2RPCNThreadHack", kernelMemory.GetBlockTag(np2RPCNThreadHackAddr)) != 0)) {
+		u32 blockSize = sizeof(np2RPCNThreadCode);
+		np2RPCNThreadHackAddr = kernelMemory.Alloc(blockSize, false, "np2RPCNThreadHack");
+		if (np2RPCNThreadHackAddr) Memory::Memcpy(np2RPCNThreadHackAddr, np2RPCNThreadCode, sizeof(np2RPCNThreadCode));
+	}
+}
 static int sceNpServiceInit(u32 poolSize, u32 stackSize, u32 threadPrio) 
 {
+	// Create APctl fake-Thread
+	np2ValidateLoopMemory();
+
+	np2RPCNThreadID = __KernelCreateThread("np2RPCNThreadHack", __KernelGetCurThreadModuleId(), np2RPCNThreadHackAddr, threadPrio, stackSize, PSP_THREAD_ATTR_USER, 0, true);
+
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 
