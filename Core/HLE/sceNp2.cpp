@@ -2074,8 +2074,8 @@ const HLEFunction sceNpMatching2[] = {
 	{0xFBF494C0, &WrapI_IUUU<sceNpMatching2GetRoomMemberDataExternalList>,	"sceNpMatching2GetRoomMemberDataExternalList",	'i', "ixxx"   },
 	{0x97529ECC, &WrapI_IUUU<sceNpMatching2KickoutRoomMember>,				"sceNpMatching2KickoutRoomMember",				'i', "ixxx"   },
 	// Fake function for PPSSPP's use.
-	{0X756E6F2C, &WrapV_V<__Np2SignalingGetRPCNResponses>,					"__Np2SignalingGetRPCNResponses",					'v', ""		  },
-	{0X756E6F48, &WrapV_V<__Np2SignalingGetP2PResponses>,					"__Np2SignalingGetP2PResponses",					'v', ""		  },
+	{0X756E6F1C, &WrapV_V<__Np2SignalingGetRPCNResponses>,					"__Np2SignalingGetRPCNResponses",					'v', ""		  },
+	{0X756E6F28, &WrapV_V<__Np2SignalingGetP2PResponses>,					"__Np2SignalingGetP2PResponses",					'v', ""		  },
 };
 
 void Register_sceNpMatching2()
