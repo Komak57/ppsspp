@@ -45,6 +45,8 @@ void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
 	INFO_LOG(Log::sceNet, "CONNECT -> P2P");
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, si, now + REPEAT_CONNECT_DELAY);
+	if (np2P2PThreadID)
+		__KernelResumeThreadFromWait(np2P2PThreadID, 0);
 }
 
 void signaling_handler::stop() {
@@ -431,6 +433,8 @@ void signaling_handler::stop_sig_nl(u32 conn_id, bool forceful)
 	INFO_LOG(Log::sceNet, "FINISHED -> P2P");
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, std::move(si), std::chrono::steady_clock::now() + REPEAT_FINISHED_DELAY);
+	if (np2P2PThreadID)
+		__KernelResumeThreadFromWait(np2P2PThreadID, 0);
 }
 /*
 	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000000: 00 00 01 53 49 47 4E 03 00 00 00 9A F6 3F B0 00  ...SIGN......?..
@@ -478,6 +482,8 @@ void signaling_handler::send_information_packets(u32 addr, u16 port, const SceNp
 	INFO_LOG(Log::sceNet, "INFO -> P2P");
 	send_signaling_packet(sent_packet, addr, port);
 	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_INFO_DELAY);
+	if (np2P2PThreadID)
+		__KernelResumeThreadFromWait(np2P2PThreadID, 0);
 }
 
 void signaling_handler::reschedule_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd, std::chrono::steady_clock::time_point new_timepoint)
@@ -590,6 +596,8 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 						rpcn_msgs.push_back(std::move(vport_0_data));
 					}
 					rpcn_msg_cv.notify_all();
+					if (np2RPCNThreadID)
+						__KernelResumeThreadFromWait(np2RPCNThreadID, 0);
 				}	
 				break;
 			case SUBSET_SIGNALING:
@@ -605,6 +613,8 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 						sign_msgs.push_back(std::move(msg));
 					}
 					sign_msg_cv.notify_all();
+					if (np2P2PThreadID)
+						__KernelResumeThreadFromWait(np2P2PThreadID, 0);
 					//dispatch_packet(msg);
 				}
 				break;
@@ -846,6 +856,8 @@ void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_p
 	send_signaling_packet(sent_packet, op_addr, op_port);
 	// Schedule Repeat
 	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_CONNECT_DELAY);
+	if (np2P2PThreadID)
+		__KernelResumeThreadFromWait(np2P2PThreadID, 0);
 }
 
 void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
@@ -875,6 +887,8 @@ void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shar
 		INFO_LOG(Log::sceNet, "PING -> P2P");
 		send_signaling_packet(sent_packet, si->addr, si->port);
 		queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_PING_DELAY);
+		if (np2P2PThreadID)
+			__KernelResumeThreadFromWait(np2P2PThreadID, 0);
 	};
 	setup_ping();
 	sent_packet.command = SignalingCommand::Confirm;
@@ -914,6 +928,8 @@ void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_p
 		INFO_LOG(Log::sceNet, "PING -> P2P");
 		send_signaling_packet(sent_packet, si->addr, si->port);
 		queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_PING_DELAY);
+		if (np2P2PThreadID)
+			__KernelResumeThreadFromWait(np2P2PThreadID, 0);
 	};
 	setup_ping();
 	retire_packet(si, SignalingCommand::ConnectAck);
