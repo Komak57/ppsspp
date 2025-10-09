@@ -32,7 +32,7 @@
 #include "Core/Net/SignalingHandler.h"
 #include "Core/HLE/sceKernelMemory.h"
 #include "Core/Net/fb_helpers.h"
-#include "Core/HLE/proAdhoc.h"
+#include "Core/HLE/proAdhoc.h" // For Local IP
 //#include "NpMatchingContext.h"
 //#include "Np2SignalingHandler.h"
 
@@ -156,10 +156,10 @@ void __Np2Shutdown() {
 	// Stop fake PSP Thread
 	if (np2RPCNThreadID != 0) {
 		__KernelStopThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread stopped");
-}
+	}
 	if (np2P2PThreadID != 0) {
 		__KernelStopThread(np2P2PThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread stopped");
-}
+	}
 }
 
 void __Np2SignalingGetRPCNResponses()
@@ -517,47 +517,31 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 
 	// Just in case the NPAgent is hosted on a different physical server
 	if (!npServer->Resolve()) {
-		ERROR_LOG(Log::sceNet, "Unable to find Server.");
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_AVAILABLE);
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_AVAILABLE, "Unable to find Server.");
 	}
 
 	std::string npid = net::RPCNAuthAgent::generate_npid();
 	if (!npServer->Connect()) {
-		ERROR_LOG(Log::sceNet, "Could not connect.");
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE);
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Could not connect.");
 	}
 
 	std::string* creds = NpGetLogin();
 	int ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
 	if (ret != 0) {
-		int errorCode;
 		switch ((ErrorType)ret) {
 		case ErrorType::LoginError:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BUSY;
-			ERROR_LOG(Log::sceNet, "Login Error");
-			break;
+			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BUSY, "Login Error");
 		case ErrorType::LoginAlreadyLoggedIn:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED;
-			ERROR_LOG(Log::sceNet, "User is already signed in");
-			break;
+			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED, "User is already signed in");
 		case ErrorType::LoginInvalidUsername:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER;
-			ERROR_LOG(Log::sceNet, "Invalid Login Credentials");
-			break;
+			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER, "Invalid Login Credentials");
 		case ErrorType::LoginInvalidPassword:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH;
-			ERROR_LOG(Log::sceNet, "Invalid Login Credentials");
-			break;
+			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH, "Invalid Login Credentials");
 		case ErrorType::LoginInvalidToken:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_INVALID_TICKET;
-			ERROR_LOG(Log::sceNet, "Invalid Token");
-			break;
+			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_INVALID_TICKET, "Invalid Token");
 		default:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BUSY;
-			ERROR_LOG(Log::sceNet, "Unable to Log In (%d)", ret);
-			break;
+			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BUSY, "Unable to Log In (%d)", ret);
 		}
-		return hleLogError(Log::sceNet, errorCode);
 	}
 
 	// FIXME: This thread runs even when you trigger break
