@@ -228,16 +228,16 @@ namespace net {
 			last_ping_time_ipv6 = now;
 			continue;
 		}*/
-
 			auto min_duration_for = [&](const auto last_ping_time, const auto last_pong_time) -> std::chrono::nanoseconds
 			{
-				if ((now - last_pong_time) < 5s)
+				auto current_time = std::chrono::steady_clock::now();
+				if ((current_time - last_pong_time) < 5s)
 				{
-					return (std::chrono::duration_cast<std::chrono::nanoseconds>(5s) - (now - last_pong_time));
+					return (std::chrono::duration_cast<std::chrono::nanoseconds>(5s) - (current_time - last_pong_time));
 				}
 				else
 				{
-					return (std::chrono::duration_cast<std::chrono::nanoseconds>(500ms) - (now - last_pong_time));
+					return (std::chrono::duration_cast<std::chrono::nanoseconds>(500ms) - (current_time - last_pong_time));
 				}
 			};
 
