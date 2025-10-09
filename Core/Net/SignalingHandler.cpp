@@ -619,99 +619,99 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 
 std::chrono::microseconds signaling_handler::HandleResponses() {
 	DEBUG_LOG(Log::sceNet, "Signaling P2P Handler Thread Started");
-		process_incoming_messages();
+	process_incoming_messages();
 
-		const auto now = std::chrono::steady_clock::now();
+	const auto now = std::chrono::steady_clock::now();
 
-		for (auto it = qpackets.begin(); it != qpackets.end();)
+	for (auto it = qpackets.begin(); it != qpackets.end();)
+	{
+		auto& [timestamp, sig] = *it;
+
+		// Next queued packet still waiting
+		if (timestamp > now)
+			break;
+
+		SignalingCommand cmd = (SignalingCommand)sig.packet.command;
+
+		if (sig.sig_info->time_last_msg_recvd < now - 60s && cmd != SignalingCommand::Info)
 		{
-			auto& [timestamp, sig] = *it;
-
-			// Next queued packet still waiting
-			if (timestamp > now)
-				break;
-
-			SignalingCommand cmd = (SignalingCommand)sig.packet.command;
-
-			if (sig.sig_info->time_last_msg_recvd < now - 60s && cmd != SignalingCommand::Info)
-			{
-				// We had no connection to opponent for 60 seconds, consider the connection dead
-				ERROR_LOG(Log::sceNet, "Timeout disconnection");
-				update_si_status(sig.sig_info, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TIMEOUT);
-				retire_packet(sig.sig_info, SignalingCommand::Ping); // Retire ping packet if necessary
-				break; // qpackets has been emptied of all packets for this user so we're requeuing
-			}
-
-			// Update the timestamp if necessary
-			switch (sig.packet.command)
-			{
-			case SignalingCommand::Connect:
-			case SignalingCommand::Ping:
-				sig.packet.timestamp_sender = get_micro_timestamp(now);
-				break;
-			case SignalingCommand::ConnectAck:
-				sig.packet.timestamp_receiver = get_micro_timestamp(now);
-				break;
-			default:
-				break;
-			}
-
-			// Resend the packet
-			INFO_LOG(Log::sceNet, "Re-Send %d -> RPCN", sig.packet.command);
-			send_signaling_packet(sig.packet, sig.sig_info->addr, sig.sig_info->port);
-
-			// Reschedule another packet
-			auto& si = sig.sig_info;
-
-			std::chrono::milliseconds delay(500);
-			switch (cmd)
-			{
-			case SignalingCommand::Ping:
-			case SignalingCommand::Pong:
-				delay = REPEAT_PING_DELAY;
-				break;
-			case SignalingCommand::Connect:
-			case SignalingCommand::ConnectAck:
-			case SignalingCommand::Confirm:
-				delay = REPEAT_CONNECT_DELAY;
-				break;
-			case SignalingCommand::Finished:
-			case SignalingCommand::FinishedAck:
-				delay = REPEAT_FINISHED_DELAY;
-				break;
-			case SignalingCommand::Info:
-				// Don't reschedule
-				if (si->info_counter == 0)
-				{
-					it = qpackets.erase(it);
-					continue;
-				}
-
-				delay = REPEAT_INFO_DELAY;
-				si->info_counter--;
-				break;
-			}
-
-			it++;
-
-			reschedule_packet(si, cmd, now + delay);
+			// We had no connection to opponent for 60 seconds, consider the connection dead
+			ERROR_LOG(Log::sceNet, "Timeout disconnection");
+			update_si_status(sig.sig_info, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TIMEOUT);
+			retire_packet(sig.sig_info, SignalingCommand::Ping); // Retire ping packet if necessary
+			break; // qpackets has been emptied of all packets for this user so we're requeuing
 		}
 
-		// TODO: Sleep until next queued packet, or next packet received
-		const auto current_timestamp = std::chrono::steady_clock::now();
-		if (!qpackets.empty())
+		// Update the timestamp if necessary
+		switch (sig.packet.command)
 		{
-			const auto next_timestamp = qpackets.begin()->first;
-			if (current_timestamp > next_timestamp)
+		case SignalingCommand::Connect:
+		case SignalingCommand::Ping:
+			sig.packet.timestamp_sender = get_micro_timestamp(now);
+			break;
+		case SignalingCommand::ConnectAck:
+			sig.packet.timestamp_receiver = get_micro_timestamp(now);
+			break;
+		default:
+			break;
+		}
+
+		// Resend the packet
+		INFO_LOG(Log::sceNet, "Re-Send %d -> RPCN", sig.packet.command);
+		send_signaling_packet(sig.packet, sig.sig_info->addr, sig.sig_info->port);
+
+		// Reschedule another packet
+		auto& si = sig.sig_info;
+
+		std::chrono::milliseconds delay(500);
+		switch (cmd)
+		{
+		case SignalingCommand::Ping:
+		case SignalingCommand::Pong:
+			delay = REPEAT_PING_DELAY;
+			break;
+		case SignalingCommand::Connect:
+		case SignalingCommand::ConnectAck:
+		case SignalingCommand::Confirm:
+			delay = REPEAT_CONNECT_DELAY;
+			break;
+		case SignalingCommand::Finished:
+		case SignalingCommand::FinishedAck:
+			delay = REPEAT_FINISHED_DELAY;
+			break;
+		case SignalingCommand::Info:
+			// Don't reschedule
+			if (si->info_counter == 0)
 			{
+				it = qpackets.erase(it);
+				continue;
+			}
+
+			delay = REPEAT_INFO_DELAY;
+			si->info_counter--;
+			break;
+		}
+
+		it++;
+
+		reschedule_packet(si, cmd, now + delay);
+	}
+
+	// TODO: Sleep until next queued packet, or next packet received
+	const auto current_timestamp = std::chrono::steady_clock::now();
+	if (!qpackets.empty())
+	{
+		const auto next_timestamp = qpackets.begin()->first;
+		if (current_timestamp > next_timestamp)
+		{
 			return 0s;
-			} else {
-				// set thread wait duration to nanoseconds until next queued packet
+		} else {
+			// set thread wait duration to nanoseconds until next queued packet
 			return std::chrono::duration_cast<std::chrono::microseconds>(next_timestamp - current_timestamp);
-			}
 		}
-		else {
-			// set thread wait duration to infinity
+	}
+	else {
+		// set thread wait duration to infinity
 		return std::chrono::duration_cast<std::chrono::microseconds>(5s); // 5000000 == 5s
 	}
 }
@@ -738,7 +738,7 @@ void signaling_handler::process_incoming_messages() {
 		}
 
 		auto op_addr = msg.src_addr;
-		auto op_port = msg.src_port;
+		auto op_port = ntohs(msg.src_port);
 		const auto* sp = reinterpret_cast<const signaling_packet*>(msg.data.data());
 
 		//if (!validate_signaling_packet(sp))
