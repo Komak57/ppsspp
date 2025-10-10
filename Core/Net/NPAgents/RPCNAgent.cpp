@@ -754,44 +754,46 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return (u8)ErrorType::NotFound;
+			return SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
 		}
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError) {
-
 			switch ((ErrorType)resp.error)
 			{
 			case ErrorType::NotFound:
 			{
 				ERROR_LOG(Log::sceNet, "Signaling information was requested for a user that doesn't exist or is not online");
-				break;
+				return SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND;
 			}
 			default:
 				ERROR_LOG(Log::sceNet, "Unexpected error in reply to RequestSignalingInfos: %d", resp.error);
-				break;
+				return SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED;
 			}
-			return resp.error;
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
 		const auto* sigAddr = resp.stream->get_flatbuffer<SignalingAddr>();
 		if (resp.stream->is_error() || !sigAddr->ip()) {
 			ERROR_LOG(Log::sceNet, "Malformed reply to RequestSignalingInfos command");
-			return (u8)ErrorType::Malformed;
+			return SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED;
 		}
 		auto vec = sigAddr->ip();
-		const u32_be result_ip =
+		const u32 result_ip =
 			static_cast<u32>(vec->Get(0)) << 24 |
 			static_cast<u32>(vec->Get(1)) << 16 |
 			static_cast<u32>(vec->Get(2)) << 8 |
 			static_cast<u32>(vec->Get(3));
 
-		u32 addr = result_ip;
+		u32 addr = htonl(result_ip);
 		if (addr == 0)
 			addr = getLocalIp(tls.netCtx.fd);
-		//g_signaling.connect(conn_id, addr, sigAddr->port());
-		g_signaling.connect(conn_id, addr, SCE_NP_PORT);
+
+		u16 port = sigAddr->port();
+		if (port == 3658)
+			port = SCE_NP_PORT;
+
+		g_signaling.connect(conn_id, addr, port);
 		return 0;
 	}
 	//async
