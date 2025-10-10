@@ -1284,7 +1284,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return (u8)ErrorType::Invalid;
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		return 0;
@@ -1295,25 +1295,15 @@ namespace net {
 			int errorCode;
 			switch ((ErrorType)resp.error) {
 			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
 			case ErrorType::Invalid:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
 			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
-				ERROR_LOG(Log::sceNet, "User cannot leave a room they are not in");
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "User cannot leave a room they are not in"), 0);
 			case ErrorType::RoomMissing:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
-				ERROR_LOG(Log::sceNet, "User cannot leave a room that doesn't exist");
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "User cannot leave a room that doesn't exist"), 0);
 			default:
-				errorCode = resp.error;
-				ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", resp.error);
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, -errorCode, "Unknown Error Leaving Room"), 0);
 			}
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, errorCode, "NPAgent Bad Response"), 0);
 		}
@@ -1322,7 +1312,7 @@ namespace net {
 		//memcpy(resp, &_resp.data, sizeof(u64));
 		SceNpMatching2RoomId roomId = resp.stream->get<SceNpMatching2RoomId>();
 		if (resp.stream->is_error()) {
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
 		}
 
 		// Execute signaling callback to update users

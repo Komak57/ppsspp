@@ -1156,35 +1156,9 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32
 
 	auto req = PSPPointer<SceNpMatching2LeaveRoomRequest>::Create(reqParamPtr);
 	int ret = npServer->LeaveRoom(request_id, req);
-	if (ret != 0) {
-		int errorCode;
-		switch ((ErrorType)ret) {
-		case ErrorType::Malformed:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-			ERROR_LOG(Log::sceNet, "Malformed Request");
-			break;
-		case ErrorType::Invalid:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		case ErrorType::NotFound:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
-			ERROR_LOG(Log::sceNet, "User cannot leave a room they are not in");
-			break;
-		case ErrorType::RoomMissing:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
-			ERROR_LOG(Log::sceNet, "User cannot leave a room that doesn't exist");
-			break;
-		default:
-			errorCode = ret;
-			ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", ret);
-			break;
-		}
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, ret, "NPAgent Bad Response"), 0);
-	}
 
 	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
-	return 0;
+	return ret;
 }
 
 /* Incomplete - Requests attributes of a specific Lobby/Party
