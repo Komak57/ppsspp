@@ -529,6 +529,9 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 	//net::PSNAuthAgent::GetServers(&ProcessHostnameWithInfraDNS, npTitleId, &servers);
 	//net::RPCNAuthAgent::GetServers(npTitleId, &servers);
 	// We don't need the auth agent after this.
+	if (npAuthServer && npAuthServer->IsConnected())
+		npAuthServer->Disconnect();
+
 	npServer = npAuthServer->CreateAgent();
 
 	// Just in case the NPAgent is hosted on a different physical server
