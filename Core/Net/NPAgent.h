@@ -680,6 +680,7 @@ namespace net {
 		int SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req);
 		int SetRoomDataExternal_Reply(u64 reqId, RPCNResponse resp);
 		int SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req);
+		int SendRoomMessage_Reply(u64 reqId, RPCNResponse resp);
 		int SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req);
 		int SetUserInfo_Reply(u64 reqId, RPCNResponse resp);
 		int GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req);
