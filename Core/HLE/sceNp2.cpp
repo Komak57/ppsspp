@@ -814,8 +814,8 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 }
 
 // PSP2i assigns unknown 0x10, 0x0c, or 0x14
-static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u32 roomId, u32 status, u32 peerMemberId, u32 connInfoPtr) {
-	WARN_LOG(Log::sceNet, "UNIMPL %s(%d, %08X, %d, %08X, %d, 0x%08X) at %08x", __FUNCTION__, ctxId, unknown, roomId, status, peerMemberId, connInfoPtr, currentMIPS->pc);
+static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u32 roomId, u32 status, u32 peerMemberId, u32 connInfoPtr, u32 ipAddrPtr, u32 portPtr) {
+	WARN_LOG(Log::sceNet, "UNIMPL %s(%d, %08X, %d, %08X, %d, 0x%08X, 0x%08X) at %08x", __FUNCTION__, ctxId, unknown, roomId, status, peerMemberId, connInfoPtr, ipAddrPtr, portPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -854,6 +854,17 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u3
 	
 	// Write Connection Status
 	connStatus = si->conn_status;
+
+	if (ipAddrPtr == 0 || !Memory::IsValidAddress(ipAddrPtr))
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "ipAddrPtr is an invalid pointer");
+
+	Memory::Write_U32(si->addr, ipAddrPtr);
+
+	if (portPtr == 0 || !Memory::IsValidAddress(portPtr))
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "portPtr is an invalid pointer");
+
+	Memory::Write_U16(si->port, portPtr);
+
 	// Write IPAddress
 	/*connInfo->conn.sa_len = ip2str(si->addr).length();
 	memcpy(connInfo->conn.sa_data, ip2str(si->addr).c_str(), connInfo->conn.sa_len);
