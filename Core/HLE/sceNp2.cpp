@@ -1125,50 +1125,8 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParam, u32 
 
 	// FIXME: Get roomData from PSN
 	int ret = npServer->JoinRoom(request_id, req);
-	if (ret != 0) {
-		int errorCode;
-		switch ((ErrorType)ret) {
-		case ErrorType::Malformed:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-			ERROR_LOG(Log::sceNet, "Malformed Request");
-			break;
-		case ErrorType::NotFound:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		case ErrorType::RoomMissing:
-			errorCode = SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		case ErrorType::RoomAlreadyJoined:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		case ErrorType::RoomFull:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_ROOM_FULL;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		case ErrorType::RoomPasswordMismatch:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		case ErrorType::RoomGroupFull:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_GROUP_FULL;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		case ErrorType::RoomGroupJoinLabelNotFound:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		default:
-			errorCode = ret;
-			ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", ret);
-			break;
-		}
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, errorCode), 0);
-	}
 
-	return 0;
+	return ret;
 }
 
 /* Incomplete - Leaves the current Lobby/Party

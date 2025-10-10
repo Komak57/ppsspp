@@ -1175,7 +1175,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return (u8)ErrorType::NotFound;
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		return 0;
@@ -1184,53 +1184,33 @@ namespace net {
 
 	int RPCNAgent::JoinRoom_Reply(u64 reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
-			int errorCode;
 			switch ((ErrorType)resp.error) {
 			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
 			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Bad Response"), 0);
 			case ErrorType::RoomMissing:
-				errorCode = SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room Missing"), 0);
 			case ErrorType::RoomAlreadyJoined:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED, "Already Joined Room"), 0);
 			case ErrorType::RoomFull:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_ROOM_FULL;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_ROOM_FULL, "Room is Full"), 0);
 			case ErrorType::RoomPasswordMismatch:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH, "Incorrect Password"), 0);
 			case ErrorType::RoomGroupFull:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_GROUP_FULL;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_GROUP_FULL, "Group is Full"), 0);
 			case ErrorType::RoomGroupJoinLabelNotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL, "Duplicate Group Label"), 0);
 			default:
-				errorCode = resp.error;
-				ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", resp.error);
-				break;
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, -resp.error, "Unknown Error Joining Room"), 0);
 			}
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, errorCode), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
 		//auto stream = new vec_stream(_resp.data);
 		auto joinRoomResp = resp.stream->get_flatbuffer<JoinRoomResponse>();
 		if (resp.stream->is_error()) {
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
 		}
 		u32 sizeof_room_resp = sizeof(SceNpMatching2JoinRoomResponse);
 		u32 roomRespPtr = np_memory.Alloc(sizeof_room_resp);
