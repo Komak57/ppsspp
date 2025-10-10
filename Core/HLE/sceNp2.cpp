@@ -1843,16 +1843,19 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParam, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 
+	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
+	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
+	auto request_id = GenerateRequestId(assignedReqIdPtr);
+
 	if (!npMatching2Inited)
-		return SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED;
+		return notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
 	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
-		return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
+		return notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
 	if (!npServer)
-		return SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND;
+		return notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
-	auto request_id = GenerateRequestId(assignedReqIdPtr);
 	auto req = PSPPointer<SceNpMatching2SendRoomMessageRequest>::Create(reqParamPtr);
 
 	INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
@@ -1861,37 +1864,11 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 
 	auto roomData = npServer->cache.GetRoom(req->roomId);
 	if (!roomData)
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM);
+		return notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't exist"), 0);
 
-	int ret;
-	if ((ret = npServer->SendRoomMessage(request_id, req)) != 0) {
-		int errorCode;
-		switch ((ErrorType)ret) {
-		case ErrorType::Malformed:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-			ERROR_LOG(Log::sceNet, "Malformed Request");
-			break;
-		case ErrorType::NotFound:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		case ErrorType::RoomMissing:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
-			ERROR_LOG(Log::sceNet, "Room Missing");
-			break;
-		case ErrorType::Unauthorized:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_FORBIDDEN;
-			ERROR_LOG(Log::sceNet, "Unauthorized");
-			break;
-		default:
-			errorCode = ret;
-			ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
-			break;
-		}
-		return hleLogError(Log::sceNet, errorCode);
-	}
+	int ret = npServer->SendRoomMessage(request_id, req);
 
-	return 0;
+	return ret;
 }
 
 static int sceNpMatching2GrantRoomOwner(int ctxId, u32 reqParamPtr, u32 optParam, u32 assignedReqIdPtr)

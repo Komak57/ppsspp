@@ -316,6 +316,7 @@ namespace net {
 				case CommandType::GetRoomDataInternal: GetRoomDataInternal_Reply(header.reqId, buf); break;
 				case CommandType::SetRoomDataInternal: SetRoomDataInternal_Reply(header.reqId, buf); break;
 				case CommandType::SetRoomDataExternal: SetRoomDataExternal_Reply(header.reqId, buf); break;
+				case CommandType::SendRoomMessage: SendRoomMessage_Reply(header.reqId, buf); break;
 				case CommandType::SetUserInfo: SetUserInfo_Reply(header.reqId, buf); break;
 				case CommandType::GetRoomDataExternalList: GetRoomDataExternalList_Reply(header.reqId, buf); break;
 				default: responses[header.reqId] = std::move(buf); break; // Response is synchronous
@@ -1503,17 +1504,23 @@ namespace net {
 		// NPAgent::Send()
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
-			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return (u8)ErrorType::NotFound;
+			return notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Unable to Send"), 0);
+		}
+		return 0;
 		}
 
-		auto resp = take_pending_request(reqId);
-		if (resp.error != (u8)ErrorType::NoError) {
-			ERROR_LOG(Log::sceNet, "Response Error: %s", PacketTypeNames[resp.error]);
-			return resp.error;
+	int RPCNAgent::SendRoomMessage_Reply(u64 reqId, RPCNResponse resp) {
+		switch ((ErrorType)resp.error) {
+		case ErrorType::NoError: break;
+		case ErrorType::RoomMissing:
+			return notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't exist"), 0);
+		case ErrorType::Unauthorized:
+			return notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_FORBIDDEN, "Unauthorized"), 0);
+		default:
+			return notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Unknown Error"), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
-		return 0;
+		return notifyRoomMessageHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, 0, 0);
 	}
 	//async
 	int RPCNAgent::SetRoomDataInternal(u64 reqId, SceNpMatching2SetRoomDataInternalRequest* req) {
