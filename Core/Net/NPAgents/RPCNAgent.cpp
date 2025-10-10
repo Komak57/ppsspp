@@ -1075,7 +1075,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return (u8)ErrorType::NotFound;
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		return 0;
@@ -1083,35 +1083,21 @@ namespace net {
 
 	int RPCNAgent::CreateJoinRoom_Reply(u64 reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
-			int errorCode;
 			switch ((ErrorType)resp.error) {
 			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
-				break;
+				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
 			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
+				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
 			case ErrorType::RoomGroupMaxSlotMismatch:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_INVALID_GROUP_SLOT_NUM;
-				ERROR_LOG(Log::sceNet, "Group Max Slot Mismatch");
-				break;
+				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_INVALID_GROUP_SLOT_NUM, "Group Max Slot Mismatch"), 0);
 			case ErrorType::RoomPasswordMissing:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_INVALID_PASSWORD_SLOT_MASK;
-				ERROR_LOG(Log::sceNet, "Password Slot Mask Missing");
-				break;
+				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_INVALID_PASSWORD_SLOT_MASK, "Password Slot Mask Missing"), 0);
 			case ErrorType::RoomGroupNoJoinLabel:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL;
-				ERROR_LOG(Log::sceNet, "Group No Join Label");
+				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL, "Group No Join Label"), 0);
 				break;
 			default:
-				errorCode = resp.error;
-				ERROR_LOG(Log::sceNet, "Unknown Error creating room: %08X", resp.error);
-				break;
+				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, resp.error, "Unknown Error creating room"), 0);
 			}
-			ERROR_LOG(Log::sceNet, "Unable to Create Room: %08X", resp.error);
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, resp.error), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 

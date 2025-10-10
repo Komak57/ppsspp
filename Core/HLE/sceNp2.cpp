@@ -1087,39 +1087,8 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	}
 
 	int ret = npServer->CreateJoinRoom(request_id, req);
-	if (ret != 0) {
-		int errorCode;
-		switch ((ErrorType)ret) {
-		case ErrorType::Malformed:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-			ERROR_LOG(Log::sceNet, "Malformed Request");
-			break;
-		case ErrorType::NotFound:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		case ErrorType::RoomGroupMaxSlotMismatch:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_INVALID_GROUP_SLOT_NUM;
-			ERROR_LOG(Log::sceNet, "Group Max Slot Mismatch");
-			break;
-		case ErrorType::RoomPasswordMissing:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_INVALID_PASSWORD_SLOT_MASK;
-			ERROR_LOG(Log::sceNet, "Password Slot Mask Missing");
-			break;
-		case ErrorType::RoomGroupNoJoinLabel:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL;
-			ERROR_LOG(Log::sceNet, "Group No Join Label");
-			break;
-		default:
-			errorCode = ret;
-			ERROR_LOG(Log::sceNet, "Unknown Error creating room: %08X", ret);
-			break;
-		}
-		ERROR_LOG(Log::sceNet, "Unable to Create Room: %08X", ret);
-		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, ret), 0);
-	}
 
-	return 0;
+	return ret;
 }
 
 /* Incomplete - Joins an existing Lobby/Party
