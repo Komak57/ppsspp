@@ -866,8 +866,8 @@ namespace net {
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
-			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return (u8)ErrorType::NotFound;
+			ERROR_LOG(Log::sceNet, "Unable to Send");
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		return 0;
@@ -875,7 +875,7 @@ namespace net {
 
 	int RPCNAgent::SearchRoom_Reply(u64 reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError)
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, resp.error), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
 		resp.stream = new vec_stream(resp.data, 1);
 		//                                                     20       12       0        8        6        1    
 		// NPAgent::Recv('01 1000 28000000 0100000000000000 00 14000000 0C000000 00000600 08000400 06000000 01000000')
@@ -883,7 +883,7 @@ namespace net {
 		//auto stream = new vec_stream(resp.data);
 		auto roomResp = resp.stream->get_flatbuffer<SearchRoomResponse>();
 		if (resp.stream->is_error()) {
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
 		}
 		//roomResp = _resp;
 

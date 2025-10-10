@@ -1017,26 +1017,8 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParam, u3
 	const SearchRoomResponse* roomResp;
 
 	int ret = npServer->SearchRoom(request_id, req);
-	if (ret != 0) {
-		int errorCode;
-		switch ((ErrorType)ret) {
-		case ErrorType::Malformed:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-			ERROR_LOG(Log::sceNet, "Malformed Request");
-			break;
-		case ErrorType::NotFound:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		default:
-			errorCode = ret;
-			ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", ret);
-			break;
-		}
-		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, errorCode), 0);
-	}
 
-	return 0;
+	return ret;
 }
 
 /* Incomplete - Hosts a Lobby/Party
