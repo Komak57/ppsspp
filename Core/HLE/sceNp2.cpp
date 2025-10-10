@@ -234,7 +234,6 @@ bool RegisterNpMatching2Handler(int ctxId, u32 callbackPtr, u32 argPtr, SceNpMat
 
 	if (!Memory::IsValidAddress(callbackPtr)) {
 		WARN_LOG(Log::sceNet, "%s - Disabling Callback for Event (%d)", __FUNCTION__, callbackPtr, argPtr, event_type);
-		return false;
 	}
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
