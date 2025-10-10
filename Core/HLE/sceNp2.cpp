@@ -720,13 +720,15 @@ static int sceNpMatching2DestroyContext(int ctxId)
 
 	// Remove callback handler
 	int handlerID = ctxId - 1;
-	if (npMatching2Handlers.find(handlerID) != npMatching2Handlers.end()) {
-		npMatching2Handlers.erase(handlerID);
-		WARN_LOG(Log::sceNet, "%s: Deleted handler %d", __FUNCTION__, handlerID);
+
+	for (std::map<u32, NpMatching2Handler>::iterator it = npMatching2Handlers.begin(); it != npMatching2Handlers.end(); ++it) {
+		if (it->second.ctx_id == handlerID) {
+			npMatching2Handlers.erase(it);
+			WARN_LOG(Log::sceNet, "%s: Deleted handler %d", __FUNCTION__, handlerID);
+			return 0;
+		}
 	}
-	else {
-		ERROR_LOG(Log::sceNet, "%s: Invalid Context ID %d", __FUNCTION__, ctxId);
-	}
+	ERROR_LOG(Log::sceNet, "%s: Invalid Context ID %d", __FUNCTION__, ctxId);
 
 	return 0;
 }
