@@ -833,10 +833,10 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u3
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "connInfoPtr is an invalid pointer");
 
 	auto connStatus = PSPPointer<SceNpMatching2ServerStatus>::Create(connInfoPtr);
+	connStatus = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 
 	auto member = npServer->cache.GetMember(peerMemberId);
 	if (!member) {
-		connStatus = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
 	}
 
@@ -845,11 +845,13 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u3
 		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_OWN_NP_ID, "Member is Self");
 	}*/
 	auto connID = g_signaling.get_conn_id_from_npid(member->userInfo.npId);
+	if (!connID) {
+		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Connection not found");
+	}
 
 	auto si = g_signaling.get_sig_infos(*connID);
 	if (!si) {
-		connStatus = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
-		return hleLogError(Log::sceNet, 0, "Not Connected");
+		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
 	}
 	
 	// Write Connection Status
