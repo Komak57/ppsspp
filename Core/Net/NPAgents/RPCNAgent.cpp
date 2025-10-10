@@ -691,8 +691,8 @@ namespace net {
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
-			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return (u8)ErrorType::NotFound;
+			ERROR_LOG(Log::sceNet, "Unable to Send");
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 		//worldInfoOut->emplace(worldInfo.worldId, worldInfo);
 		return 0;
@@ -700,29 +700,12 @@ namespace net {
 
 	int RPCNAgent::GetWorldInfo_Reply(u64 reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError)
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, resp.error), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
 		resp.stream = new vec_stream(resp.data, 1);
 
-		std::vector<SceNpMatching2World> worldArray{};
-		worldArray.clear();
 		// Currently under the assumption that the first byte is some error code
 		size_t offset = 1;
 		u32 num_worlds = resp.stream->get<u32>();
-		//memcpy(&num_worlds, resp.data.data() + offset, sizeof(num_worlds));
-		//offset += 4;
-		for (u32 i = 0; i < num_worlds; ++i)
-		{
-			SceNpMatching2World world{};
-			//memcpy(&world.worldId, resp.data.data() + offset, sizeof(world.worldId));
-			world.worldId = resp.stream->get<SceNpMatching2WorldId>();
-
-			worldArray.push_back(world);
-			//offset += 4;
-		}
-		if (resp.stream->is_error()) {
-			ERROR_LOG(Log::sceNet, "World Info Malformed");
-			num_worlds = 0;
-		}
 
 		// First attempts for new games won't contain a world.
 		if (num_worlds == 0) {
@@ -738,11 +721,16 @@ namespace net {
 		auto worlds = PSPPointer<SceNpMatching2World>::Create(np_memory.Alloc(worldsSize));
 		// Transfer WorldID
 		NOTICE_LOG(Log::sceNet, "Received %d worlds", num_worlds);
-		for (int i = 0; i < worldsSize / sizeof(SceNpMatching2World); i++)
-		{
-			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d", i, worldArray[i].worldId);
-			worlds[i].worldId = worldArray[i].worldId;
-			npServer->cache.AddWorld(worldArray[i]);
+
+		for (u32 i = 0; i < num_worlds; ++i) {
+			worlds[i].worldId = resp.stream->get<SceNpMatching2WorldId>();
+			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d", i, worlds[i].worldId);
+			npServer->cache.AddWorld(worlds[i]);
+		}
+
+		if (resp.stream->is_error()) {
+			ERROR_LOG(Log::sceNet, "World Info Malformed");
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD, 0);
 		}
 
 		u32 alloc = sizeof(SceNpMatching2GetWorldInfoListResponse);

@@ -966,26 +966,8 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
 
 	auto err = npServer->GetWorldInfo(request_id, serverId, npTitleId);
-	if (err != 0) {
-		int errorCode;
-		switch ((ErrorType)err) {
-		case ErrorType::Malformed:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-			ERROR_LOG(Log::sceNet, "Malformed Request");
-			break;
-		case ErrorType::NotFound:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		default:
-			errorCode = err;
-			ERROR_LOG(Log::sceNet, "Unknown Error requesting WorldInfo: %08X", err);
-			break;
-		}
-		return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, errorCode), 0);
-	}
 
-	return 0;
+	return err;
 }
 
 /* Incomplete - Searches for all Lobbies/Parties
