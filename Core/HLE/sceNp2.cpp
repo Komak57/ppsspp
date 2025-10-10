@@ -1193,31 +1193,9 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 	INFO_LOG(Log::sceNet, " - roomId:     %d", req->roomId);
 	INFO_LOG(Log::sceNet, " - attrIdNum:  %d", req->attrIdNum);
 
-	int ret;
-	if ((ret = npServer->GetRoomDataInternal(request_id, req)) != 0) {
-		int errorCode;
-		switch ((ErrorType)ret) {
-		case ErrorType::Malformed:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-			ERROR_LOG(Log::sceNet, "Malformed Request");
-			break;
-		case ErrorType::NotFound:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		case ErrorType::RoomMissing:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
-			ERROR_LOG(Log::sceNet, "User cannot leave a room that doesn't exist");
-			break;
-		default:
-			errorCode = ret;
-			ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", ret);
-			break;
-		}
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, ret), 0);
-	}
+	int ret = npServer->GetRoomDataInternal(request_id, req);
 
-	return 0;
+	return ret;
 }
 
 /* Incomplete - Unconfirmed. Similar to sceNpMatching2SetRoomDataInternal

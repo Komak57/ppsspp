@@ -1351,8 +1351,7 @@ namespace net {
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
-			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return (u8)ErrorType::NotFound;
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Unable to Send"), 0);
 		}
 
 		return 0;
@@ -1363,35 +1362,26 @@ namespace net {
 			int errorCode;
 			switch ((ErrorType)resp.error) {
 			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
-				break;
+				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
 			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
-				break;
+				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
 			case ErrorType::RoomMissing:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
-				ERROR_LOG(Log::sceNet, "User cannot leave a room that doesn't exist");
-				break;
+				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't Exist"), 0);
 			default:
-				errorCode = resp.error;
-				ERROR_LOG(Log::sceNet, "Unknown Error requesting Room Info: %08X", resp.error);
-				break;
+				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, -resp.error, "Unknown Error"), 0);
 			}
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
 		auto roomDataInternal = resp.stream->get_flatbuffer<RoomDataInternal>();
 		if (resp.stream->is_error())
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
 
 		u32 alloc = sizeof(SceNpMatching2RoomDataInternal);
 		u32 roomInfoPtr = np_memory.Alloc(alloc);
 		if (!Memory::IsValidAddress(roomInfoPtr)) {
-			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomData");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomData"), 0);
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
 		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomDataInternal, room_info, NpGetNpId(), npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
@@ -1401,8 +1391,7 @@ namespace net {
 		alloc = sizeof(SceNpMatching2GetRoomDataInternalResponse);
 		u32 roomRespPtr = np_memory.Alloc(alloc);
 		if (!Memory::IsValidAddress(roomRespPtr)) {
-			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
+			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomResponse"), 0);
 		}
 		auto room_resp = PSPPointer<SceNpMatching2GetRoomDataInternalResponse>::Create(roomRespPtr);
 		room_resp->roomDataInternal = room_info;
