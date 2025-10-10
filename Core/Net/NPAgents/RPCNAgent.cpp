@@ -1439,23 +1439,23 @@ namespace net {
 		// NPAgent::Send()
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
-			return notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Unable to Send"), 0);
+			return 0;// notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Unable to Send"), 0);
 		}
 		return 0;
-		}
+	}
 
 	int RPCNAgent::SendRoomMessage_Reply(u64 reqId, RPCNResponse resp) {
 		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError: break;
 		case ErrorType::RoomMissing:
-			return notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't exist"), 0);
+			return 0;// notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't exist"), 0);
 		case ErrorType::Unauthorized:
-			return notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_FORBIDDEN, "Unauthorized"), 0);
+			return 0;// notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_FORBIDDEN, "Unauthorized"), 0);
 		default:
-			return notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Unknown Error"), 0);
+			return 0;// notifyRoomMessageHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Unknown Error"), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
-		return notifyRoomMessageHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, 0, 0);
+		return 0;// notifyRoomMessageHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, 0, 0);
 	}
 	//async
 	int RPCNAgent::SetRoomDataInternal(u64 reqId, SceNpMatching2SetRoomDataInternalRequest* req) {
