@@ -419,8 +419,8 @@ bool NpMatching2ProcessEvents() {
 				if (!Memory::IsValidAddress(it->second.cb.ptr))
 					return hleLogWarning(Log::sceNet, false, " - Skipping Invalid Callback");
 				else
-				NOTICE_LOG(Log::sceNet, "SceNpMatching2RequestCallback - FUN_%08x(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", it->second.cb.ptr,
-					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]);
+					NOTICE_LOG(Log::sceNet, "SceNpMatching2RequestCallback - FUN_%08x(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", it->second.cb.ptr,
+						event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]);
 				break;
 			case SCE_NP_MATCHING2_ROOM_EVENT:
 				event.args[0] = it->second.ctx_id;
@@ -429,8 +429,8 @@ bool NpMatching2ProcessEvents() {
 				if (!Memory::IsValidAddress(it->second.cb.ptr))
 					return hleLogWarning(Log::sceNet, false, " - Skipping Invalid Callback");
 				else
-				NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomEventCallback - FUN_%08x(ctxId: %d, roomId: %d, param_3: %08x, memberId: %d, event: %08x, dataPtr: %08x, argPtr: %08x)", it->second.cb.ptr,
-					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6]);
+					NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomEventCallback - FUN_%08x(ctxId: %d, roomId: %d, param_3: %08x, memberId: %d, event: %08x, dataPtr: %08x, argPtr: %08x)", it->second.cb.ptr,
+						event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6]);
 				break;
 			case SCE_NP_MATCHING2_ROOM_MSG_EVENT:
 				event.args[0] = it->second.ctx_id;
@@ -439,8 +439,8 @@ bool NpMatching2ProcessEvents() {
 				if (!Memory::IsValidAddress(it->second.cb.ptr))
 					return hleLogWarning(Log::sceNet, false, " - Skipping Invalid Callback");
 				else
-				NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomMessageCallback - FUN_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %08x, param_5: %08x, event: %08x, dataPtr: %08x, argPtr: %08x)", it->second.cb.ptr,
-					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
+					NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomMessageCallback - FUN_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %08x, param_5: %08x, event: %08x, dataPtr: %08x, argPtr: %08x)", it->second.cb.ptr,
+						event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
 				break;
 			case SCE_NP_MATCHING2_LOBBY_EVENT:
 				event.args[0] = it->second.ctx_id;
@@ -448,7 +448,7 @@ bool NpMatching2ProcessEvents() {
 				if (!Memory::IsValidAddress(it->second.cb.ptr))
 					return hleLogWarning(Log::sceNet, false, " - Skipping Invalid Callback");
 				else
-				ERROR_LOG(Log::sceNet, "UNIMPLEMENTED SceNpMatching2LobbyEventCallback - FUN_%08x(ctxId: %d)", it->second.cb.ptr, event.args[0]);
+					ERROR_LOG(Log::sceNet, "UNIMPLEMENTED SceNpMatching2LobbyEventCallback - FUN_%08x(ctxId: %d)", it->second.cb.ptr, event.args[0]);
 				return false;
 			case SCE_NP_MATCHING2_LOBBY_MSG_EVENT:
 				event.args[0] = it->second.ctx_id;
@@ -462,8 +462,8 @@ bool NpMatching2ProcessEvents() {
 				if (!Memory::IsValidAddress(it->second.cb.ptr))
 					return hleLogWarning(Log::sceNet, false, " - Skipping Invalid Callback");
 				else
-				NOTICE_LOG(Log::sceNet, "SceNpMatching2SignalingCallback - FUN_%08x(param_1: %d, param_2: %d, param_3: %d, param_4: %d, param_5: %d, param_6: %d, param_7: %d, param_8: %08x)", it->second.cb.ptr,
-					event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
+					NOTICE_LOG(Log::sceNet, "SceNpMatching2SignalingCallback - FUN_%08x(param_1: %d, param_2: %d, param_3: %d, param_4: %d, param_5: %d, param_6: %d, param_7: %d, param_8: %08x)", it->second.cb.ptr,
+						event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
 				break;
 			default:
 				NOTICE_LOG(Log::sceNet, "UNHANDLED Callback Type %d - FUN_%08x(ctxId: %d)", event.event_code, it->second.cb.ptr, event.args[0]);
@@ -471,7 +471,7 @@ bool NpMatching2ProcessEvents() {
 				return false;
 			}
 			//DEBUG_LOG(Log::sceNet, "NpMatching2Callback [HandlerID=%i][EventID=%04x][State=%04x][ArgsPtr=%08x]", it->first, event, stat, it->second.argument);
-
+			
 			hleEnqueueCall(it->second.cb.ptr, event.argc, event.args);
 			return true;
 		}
@@ -1873,7 +1873,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0xDFEDB642, &WrapI_IUU<sceNpMatching2SignalingGetPeerNetInfoResult>,	"sceNpMatching2SignalingGetPeerNetInfoResult",	'i', "ixx"    },
 	{0x9462C05A, &WrapI_IU<sceNpMatching2SignalingCancelPeerNetInfo>,		"sceNpMatching2SignalingCancelPeerNetInfo",		'i', "ix"     },
 	{0x3892E9A6, &WrapI_IUUUU<sceNpMatching2SignalingGetConnectionInfo>,	"sceNpMatching2SignalingGetConnectionInfo",		'i', "ixxxx"  },
-	{0x6D6D0C75, &WrapI_IUUUUU<sceNpMatching2SignalingGetConnectionStatus>,	"sceNpMatching2SignalingGetConnectionStatus",	'i', "ixxxxx" },
+	{0x6D6D0C75, &WrapI_IUUUUUUU<sceNpMatching2SignalingGetConnectionStatus>,	"sceNpMatching2SignalingGetConnectionStatus",	'i', "ixxxxxxx" },
 
 	{0x2E61F6E1, &WrapI_IIII<sceNpMatching2Init>,							"sceNpMatching2Init",							'i', "iiii"   },
 	{0x8BF37D8C, &WrapI_V<sceNpMatching2Term>,								"sceNpMatching2Term",							'i', ""       },
