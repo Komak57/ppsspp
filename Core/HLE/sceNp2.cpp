@@ -941,14 +941,14 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParam,
 		// Check server status
 		//servers[serverId]->Resolve();
 
-		u32 infoSize = sizeof(SceNpMatching2ServerInfo);
 		SceNpMatching2ServerInfo serverInfo = npServer->GetServerInfo(serverId);
 
-		// Allocate space, and write value into the pool
-		u32 serverInfoPtr = np_memory.Alloc(infoSize);
-		Memory::Write_Struct(serverInfo, serverInfoPtr, "SceNpMatching2ServerInfo", 25);
+		u32 respSize = sizeof(SceNpMatching2GetServerInfoResponse);
+		auto serv_info = PSPPointer<SceNpMatching2GetServerInfoResponse>::Create(np_memory.Alloc(respSize));
+		serv_info->server.id = serverInfo.id;
+		serv_info->server.status = serverInfo.status;
 
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, SCE_NP_MATCHING2_OKAY, serverInfoPtr);
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, SCE_NP_MATCHING2_OKAY, serv_info.ptr);
 	}); // ThreadEnd
 	tasks.emplace(request_id, std::move(task));
 	return 0;
