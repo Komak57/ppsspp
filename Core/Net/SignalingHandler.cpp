@@ -1109,8 +1109,8 @@ void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 	auto notif_data = PSPPointer<SceNpMatching2RoomUpdateInfo>::Create(ptr);
 	np::RoomUpdateInfo_to_SceNpMatching2RoomUpdateInfo(update_info, notif_data);
 
-	// Remove room from cache
-	npServer->cache.RemoveRoom(room_id);
+	// Remove room from cache - RPCS3 doesn't do this here?
+	//npServer->cache.RemoveRoom(room_id);
 
 	NOTICE_LOG(Log::sceNet, "NOTI RoomDestroyed Received notification that room(%d) was destroyed", room_id);
 
