@@ -651,8 +651,7 @@ static int sceNpMatching2ContextStart(int ctxId)
 	if (!npServer || !npServer->IsConnected())
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE);
 
-	npServer->GetServers(npTitleId);
-
+	int ret = npServer->GetServers(npTitleId);
 	////signaling_handler::print_interfaces();
 	//if (g_signaling.connect("fe80::be24:11ff:fed8:39c4", 3657, 21)) {
 	//	NOTICE_LOG(Log::sceNet, "Connected to Signaling Server!");
