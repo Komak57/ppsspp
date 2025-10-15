@@ -310,16 +310,16 @@ int notifyRequestHandler(SceNpMatching2RequestId reqId, SceNpMatching2Event even
  * @param args Variable length of arguments, MAX_ARGS = 11
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
-int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr) {
+int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, RPCNMatching2RequestEvent requestEvent, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	u32 args[8];
 	//args[0] = ctxId	// ContextID
 	args[1] = roomId;	// RoomID
-	args[2] = 2;		// ConnId?
-	args[3] = 3;		// param_4 - EventKey?
+	args[2] = 0;		// ConnId? Ignored by PSP2i
+	args[3] = match2_event_cnt.fetch_add(1); // param_4? Ingored by PSP2i
 	args[4] = memberId;	// MemberID
-	args[5] = event;	// Event
+	args[5] = requestEvent;// Event [SCE_NP_MATCHING2_ROOM_MSG_EVENT_ChatMessage / SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message]
 	args[6] = dataPtr;	// Message
 	//args[7] = argsPtr	// Request Arguments
 
@@ -340,7 +340,7 @@ int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
 	u32 args[7];
 	//args[0] = ctxId	// ContextID
 	args[1] = roomId;	// RoomID
-	args[2] = 2;		// ConnectionID?
+	args[2] = match2_event_cnt.fetch_add(1); // ConnectionID?
 	args[3] = memberId;	// MemberID?
 	args[4] = event;	// Event
 	args[5] = dataPtr;	// ErrorCode
@@ -357,7 +357,7 @@ int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
  * @param args Variable length of arguments, MAX_ARGS = 11
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
-int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 unknown, SceNpMatching2RoomMemberId roomMemberId, u32 eventCode, u32 errorCode) {
+int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 unknown, SceNpMatching2RoomMemberId roomMemberId, SceNpMatching2Event event, s32 errorCode) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	// FIXME: Need confirmation on arguments for conn_id, room_id
@@ -367,7 +367,7 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 unknow
 	args[2] = conn_id;		// conn_id?
 	args[3] = unknown;		// unknown?
 	args[4] = roomMemberId;	// roomMemberId
-	args[5] = eventCode;	// EventCode
+	args[5] = event;		// EventCode
 	args[6] = errorCode;	// ErrorCode
 	//args[7] = 0;			// cbArgs
 
