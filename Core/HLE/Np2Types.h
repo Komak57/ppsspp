@@ -682,10 +682,10 @@ inline std::string EventToString(SceNpMatching2EventType event_type) {
 }
 
 struct NpMatching2Handler {
-	u32 ctx_id;
+	SceNpMatching2ContextId ctx_id;
 	PSPPointer<SceNpMatching2RequestCallback> cb;
 	PSPPointer<u8> cb_arg;
-	u32 event_type;
+	SceNpMatching2EventType event_type;
 };
 
 // Arg1 and Arg2 seems to be a pair and predefined: 0x0001 with 0x1001, 0x0002 with 0x1008, 0x0003 with 0x1006, 0x0004 with 0x1007, 
@@ -700,23 +700,23 @@ struct NpMatching2Handler {
 struct NpMatching2Args {
 	// Now allows for optional arguments to be omitted in the sending process.
 	static const size_t MAX_ARGS = 11;
-	u32 request_id; // Only REQUEST_EVENT tracks request id's
-	u32 event_code; // Everything has a matching Event code
+	SceNpMatching2RequestId request_id; // Only REQUEST_EVENT tracks request id's
+	SceNpMatching2EventType event_type; // Everything has a matching Event code
 	//u32 cbFunc;
 	size_t argc = 0;
 	u32_le args[MAX_ARGS]; // 7 elements (excluding optional data)? or may be 11 elements (including optional data)?
 	// May be followed by optional data? since these Args usually created on the stack
 
-	NpMatching2Args(u32 event_code, size_t argc, u32_le args[]) {
+	NpMatching2Args(size_t argc, u32_le args[], SceNpMatching2EventType event_type) {
 		this->request_id = 0;
-		this->event_code = event_code;
+		this->event_type = event_type;
 		this->argc = (argc > MAX_ARGS) ? MAX_ARGS : argc;
 		for (size_t i = 0; i < this->argc; ++i)
 			this->args[i] = args[i];
 	}
-	NpMatching2Args(u32 request_id, u32 event_code, size_t argc, u32_le args[]) {
+	NpMatching2Args(SceNpMatching2RequestId request_id, size_t argc, u32_le args[], SceNpMatching2EventType event_type) {
 		this->request_id = request_id;
-		this->event_code = event_code;
+		this->event_type = event_type;
 		this->argc = (argc > MAX_ARGS) ? MAX_ARGS : argc;
 		for (size_t i = 0; i < this->argc; ++i)
 			this->args[i] = args[i];
