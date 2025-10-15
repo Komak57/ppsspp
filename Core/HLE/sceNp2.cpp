@@ -568,7 +568,7 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 		g_signaling.set_self_sig_info(*NpGetNpId());
 	else
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Signaling Loop could not be started");
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2Term()
@@ -594,7 +594,7 @@ static int sceNpMatching2Term()
 
 	FreeUser(npPoolAddr);
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr, u32 ctxIdPtr, s32 optionFlags)
@@ -638,7 +638,7 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 	// Returning dummy Id, a 16-bit variable according to JPCSP
 	// FIXME: It seems ctxId need to be in the range of 1 to 7 to be valid ?
 	Memory::Write_U16(1, ctxIdPtr);
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2ContextStart(int ctxId)
@@ -672,7 +672,9 @@ static int sceNpMatching2ContextStart(int ctxId)
 
 	hleEatMicro(1000000);
 	// Returning 0x805508A6 (error code inherited from sceNpService_76867C01 which check server availability) if can't check server availability (ie. Fat Princess (US) through http://static-resource.np.community.playstation.net/np/resource/psp-title/NPWR00670_00/matching/NPWR00670_00-matching.xml using User-Agent: "PS3Community-agent/1.0.0 libhttp/1.0.0")
-	return 0;
+	if (ret != 0)
+		return hleLogError(Log::sceNet, ret, "Unable to retrieve Server list");
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2ContextStop(int ctxId)
@@ -704,7 +706,7 @@ static int sceNpMatching2ContextStop(int ctxId)
 	defaultOptParams.clear();
 	npMatching2Events.clear();
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2DestroyContext(int ctxId)
@@ -728,7 +730,7 @@ static int sceNpMatching2DestroyContext(int ctxId)
 	}
 	ERROR_LOG(Log::sceNet, "%s: Invalid Context ID %d", __FUNCTION__, ctxId);
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2GetMemoryStat(u32 memStatPtr)
@@ -744,7 +746,7 @@ static int sceNpMatching2GetMemoryStat(u32 memStatPtr)
 	*memStat = npMatching2MemStat;
 	memStat.NotifyWrite("NpMatching2GetMemoryStat");
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFunctionAddr, u32 callbackArgument)
@@ -762,11 +764,8 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 
 	SetDefaultParams(ctxId, callbackFunctionAddr, callbackArgument, SCE_NP_MATCHING2_SIGNALING_EVENT);
 
-	if (!ctx)
-	{
-		return SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND;
+	return SCE_NP_MATCHING2_OKAY; // error returns 0x80550004
 	}
-	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 // PSP2i assigns unknown 0x10, 0x0c, or 0x14
 static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u32 roomId, u32 status, u32 peerMemberId, u32 connInfoPtr, u32 ipAddrPtr, u32 portPtr) {
@@ -939,7 +938,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 
 	auto err = npServer->GetWorldInfo(request_id, serverId, npTitleId);
 
-	return err;
+	return hleLogError(Log::sceNet, SCE_NP_MATCHING2_OKAY, "FIXME: Incorrect World struct");
 }
 
 /* Incomplete - Searches for all Lobbies/Parties
@@ -989,7 +988,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 
 	int ret = npServer->SearchRoom(request_id, req);
 
-	return ret;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 /* Incomplete - Hosts a Lobby/Party
@@ -1060,7 +1059,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 
 	int ret = npServer->CreateJoinRoom(request_id, req);
 
-	return ret;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 /* Incomplete - Joins an existing Lobby/Party
@@ -1099,7 +1098,8 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u
 	// FIXME: Get roomData from PSN
 	int ret = npServer->JoinRoom(request_id, req);
 
-	return ret;
+
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 /* Incomplete - Leaves the current Lobby/Party
@@ -1132,7 +1132,7 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, 
 	int ret = npServer->LeaveRoom(request_id, req);
 
 	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
-	return ret;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 /* Incomplete - Requests attributes of a specific Lobby/Party
@@ -1170,7 +1170,7 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 
 	int ret = npServer->GetRoomDataInternal(request_id, req);
 
-	return ret;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 /* Incomplete - Unconfirmed. Similar to sceNpMatching2SetRoomDataInternal
@@ -1223,7 +1223,7 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 	}
 
 	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 /* Incomplete - Sets attributes of a specific Lobby/Party
@@ -1279,7 +1279,7 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
 	}
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 /* Incomplete - Sends a Chat Message to relevant players?
@@ -1323,7 +1323,7 @@ static int sceNpMatching2SetDefaultRequestOptParam(int ctxId, u32 optParam)
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2SetUserInfo(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
@@ -1348,7 +1348,7 @@ static int sceNpMatching2SetUserInfo(int ctxId, u32 reqParamPtr, u32 optParamPtr
 
 	int ret = npServer->SetUserInfo(request_id, req);
 
-	return ret;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2GetUserInfoList(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
@@ -1406,7 +1406,7 @@ static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 op
 	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
 	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_SIGNALING_EVENT);
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2GetSignalingOptParamLocal(int ctxId, u32 roomId, u32 optParam)
@@ -1430,7 +1430,9 @@ static int sceNpMatching2GetSignalingOptParamLocal(int ctxId, u32 roomId, u32 op
 		return 0;
 	}
 
+	if (defaultOptParams.find(SCE_NP_MATCHING2_SIGNALING_EVENT) == defaultOptParams.end())
 	return SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
@@ -1456,7 +1458,8 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	netInfo->UPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
 	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
 	netInfo->port = npServer->GetSigPort();
-	return 0;
+
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 roomId, u32 roomMemberId, u32 signalingReqIdPtr)
@@ -1471,6 +1474,7 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 roomId, u32 room
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
 	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingReqIdPtr, u32 netInfoPtr)
@@ -1484,7 +1488,7 @@ static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingR
 	if (!Memory::IsValidAddress(signalingReqIdPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqIdPtr)
@@ -1498,7 +1502,7 @@ static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqI
 	if (!Memory::IsValidAddress(signalingReqIdPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 roomId, u32 memberId, u32 code, u32 connInfoPtr)
@@ -1597,7 +1601,7 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, errorCode), 0);
 	}
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2GetRoomPasswordLocal(int ctxId, u32 roomIdPtr, u32 withPasswordPtr, u32 roomPasswordPtr)
@@ -1626,7 +1630,7 @@ static int sceNpMatching2GetRoomPasswordLocal(int ctxId, u32 roomIdPtr, u32 with
 		withPassword = false;
 	}
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 /* Incomplete - Sends a Room Message to relevant players?
@@ -1670,7 +1674,7 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 
 	int ret = npServer->SendRoomMessage(request_id, req);
 
-	return ret;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2GrantRoomOwner(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
@@ -1698,7 +1702,7 @@ static int sceNpMatching2GetRoomMemberIdListLocal(int ctxId, u32 roomId, u32 sor
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, sortMethod, memberId, memberIdNum, currentMIPS->pc);
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2SetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
@@ -1726,7 +1730,7 @@ static int sceNpMatching2GetRoomMemberDataInternalLocal(int ctxId, u32 roomId, u
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x, %08x, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, memberId, attrId, attrIdNum, memberPtr, bufPtr, bufLen, currentMIPS->pc);
 
-	return 0;
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 static int sceNpMatching2GetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
