@@ -52,6 +52,7 @@ void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
 void signaling_handler::stop(const char* reason) {
 	if (!running_) return;
 
+	running_ = false;
 	if (recv_thread_.joinable())
 		recv_thread_.join();
 	/*if (signaling_thread_.joinable())
