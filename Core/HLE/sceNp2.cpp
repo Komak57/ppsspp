@@ -298,7 +298,7 @@ int notifyRequestHandler(SceNpMatching2RequestId reqId, SceNpMatching2Event even
 	args[4] = dataPtr;	// Response struct
 	//args[5] = argsPtr	// Request Arguments
 
-	npMatching2Events.push_back(NpMatching2Args(reqId, SCE_NP_MATCHING2_REQUEST_EVENT, 6, args));
+	npMatching2Events.push_back(NpMatching2Args(reqId, 6, args, SCE_NP_MATCHING2_REQUEST_EVENT));
 
 	return 0;
 }
@@ -322,7 +322,7 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemb
 	args[6] = dataPtr;	// Message
 	//args[7] = argsPtr	// Request Arguments
 
-	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_ROOM_MSG_EVENT, 8, args));
+	npMatching2Events.push_back(NpMatching2Args(8, args, SCE_NP_MATCHING2_ROOM_MSG_EVENT));
 
 	return 0;
 }
@@ -345,7 +345,7 @@ int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
 	args[5] = dataPtr;	// ErrorCode
 	//args[6] = argsPtr	// Request Arguments
 
-	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_ROOM_EVENT, 7, args));
+	npMatching2Events.push_back(NpMatching2Args(7, args, SCE_NP_MATCHING2_ROOM_EVENT));
 
 	return 0;
 }
@@ -370,7 +370,7 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 unknow
 	args[6] = errorCode;	// ErrorCode
 	//args[7] = 0;			// cbArgs
 
-	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_SIGNALING_EVENT, 8, args));
+	npMatching2Events.push_back(NpMatching2Args(8, args, SCE_NP_MATCHING2_SIGNALING_EVENT));
 
 	return 0;
 }
