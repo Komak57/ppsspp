@@ -515,7 +515,7 @@ namespace net {
 					ERROR_LOG(Log::sceNet, "Failed to get the client address from the socket!");
 				}
 
-				local_addr_sig = client_addr.sin_addr.s_addr;
+				local_addr_sig = ntohl(client_addr.sin_addr.s_addr);
 
 				// Start reading data
 				start_read_thread();
