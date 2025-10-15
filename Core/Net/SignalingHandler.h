@@ -127,7 +127,7 @@ public:
 	bool create_connection();
 	bool destroy_connection();
 	void connect(u32 conn_id, u32 addr, u16 port);
-	void stop();
+	void stop(const char* reason);
 	std::chrono::microseconds HandleResponses();
 
 	std::shared_ptr<signaling_info> get_signaling_ptr(const signaling_packet* sp);

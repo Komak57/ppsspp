@@ -538,6 +538,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 	while (running_) {
 		if (!inetSocket) {
 			// Socket lost. Try to find it again!
+			WARN_LOG(Log::sceNet, "Reaquiring Socket for Signaling Receiver Thread");
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
 			continue;
@@ -1078,15 +1079,6 @@ void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
 
-	/*if (room_event_cb)
-	{
-		sysutil_register_cb([room_event_cb = this->room_event_cb, room_event_cb_ctx = this->room_event_cb_ctx, room_id, event_key, room_event_cb_arg = this->room_event_cb_arg, size = edata.size()](ppu_thread& cb_ppu) -> s32
-		{
-			room_event_cb(cb_ppu, room_event_cb_ctx, room_id, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, event_key, 0, size, room_event_cb_arg);
-			return 0;
-		});
-	}*/
-
 	notifyRoomEventHandler(room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, notif_data.ptr);
 }
 
@@ -1102,8 +1094,6 @@ void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 		return;
 	}
 
-	const u32 event_key = 0;// get_event_key();
-
 	u32 _size = sizeof(SceNpMatching2RoomUpdateInfo);
 	u32 ptr = np_memory.Alloc(_size);
 	auto notif_data = PSPPointer<SceNpMatching2RoomUpdateInfo>::Create(ptr);
@@ -1116,15 +1106,6 @@ void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 
 	DisconnectUsers(room_id);
 	//disconnect_sig2_users(room_id);
-
-	/*if (room_event_cb)
-	{
-		sysutil_register_cb([room_event_cb = this->room_event_cb, room_event_cb_ctx = this->room_event_cb_ctx, room_id, event_key, room_event_cb_arg = this->room_event_cb_arg, size = edata.size()](ppu_thread& cb_ppu) -> s32
-		{
-			room_event_cb(cb_ppu, room_event_cb_ctx, room_id, SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, event_key, 0, size, room_event_cb_arg);
-			return 0;
-		});
-	}*/
 
 	notifyRoomEventHandler(room_id, 0, SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, notif_data.ptr);
 }
@@ -1140,9 +1121,6 @@ void signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 		ERROR_LOG(Log::sceNet, "NOTI Malformed UpdatedRoomDataInternal notification");
 		return;
 	}
-
-	const u32 event_key = 0;// get_event_key();
-	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
 
 	u32 _size = sizeof(SceNpMatching2RoomDataInternalUpdateInfo);
 	u32 ptr = np_memory.Alloc(_size);
@@ -1216,25 +1194,12 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomMessageReceived notification");
 		return;
 	}
-	//g_signaling.start(connId, (u32)0x0202A8C0, 3657);
-
-	const u32 event_key = 0; //get_event_key();
-	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
 
 	u32 _size = sizeof(SceNpMatching2RoomMessageInfo);
 	u32 ptr = np_memory.Alloc(_size);
 	auto notif_data = PSPPointer<SceNpMatching2RoomMessageInfo>::Create(ptr);
 
 	np::RoomMessageInfo_to_SceNpMatching2RoomMessageInfo(np_memory, message_info, notif_data, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
-
-	/*if (room_msg_cb)
-	{
-		sysutil_register_cb([room_msg_cb = this->room_msg_cb, room_msg_cb_ctx = this->room_msg_cb_ctx, room_id, member_id, event_key, room_msg_cb_arg = this->room_msg_cb_arg, size = edata.size()](ppu_thread& cb_ppu) -> s32
-		{
-			room_msg_cb(cb_ppu, room_msg_cb_ctx, room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, event_key, 0, size, room_msg_cb_arg);
-			return 0;
-		});
-	}*/
 
 	notifyRoomMessageHandler(room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
 }
@@ -1247,7 +1212,7 @@ void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 
 	if (resp.stream->is_error() || !matching_info->addr() || !matching_info->npid() || !matching_info->addr()->ip())
 	{
-		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomMessageReceived notification");
+		ERROR_LOG(Log::sceNet, "NOTI Malformed SignalingHelper notification");
 		return;
 	}
 

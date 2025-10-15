@@ -658,9 +658,8 @@ namespace np
 
 		if (auto msg = mi->msg())
 		{
-			std::string msg_hex;
-			DataToHexString(msg->Data(), msg->size(), &msg_hex);
-			NOTICE_LOG(Log::sceNet, " - Message Len: %d, Message: %s", msg->size(), msg_hex.c_str());
+			NOTICE_LOG(Log::sceNet, " - Message Len: %d", msg->size());
+			NOTICE_HEXLOG(Log::sceNet, " - Message:", msg->Data(), msg->size(), msg->size());
 			sce_mi->msgLen = msg->size();
 			//auto* ptr_msg_data = static_cast<u8*>(edata.allocate<void>(msg->size(), sce_mi->msg));
 			u32 alloc = msg->size();

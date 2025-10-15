@@ -843,11 +843,11 @@ struct SceNpMatching2UserInfo
 	u32 joinedSessionInfoNum;
 };
 
-// World
+// World | PS3 to PSP discrepencies
 struct SceNpMatching2World
 {
 	u32 unk;
-	SceNpMatching2WorldId worldId; // PS3 to PSP discrepency. WorldId is at offset +4
+	SceNpMatching2WorldId worldId; // WorldId is at offset +4
 	u32 numOfLobby;
 	u32 maxNumOfTotalLobbyMember;
 	u32 curNumOfTotalLobbyMember;
