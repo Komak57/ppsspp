@@ -150,7 +150,7 @@ void __Np2Init() {
 
 void __Np2Shutdown() {
 	if (npServer && npServer->IsConnected()) {
-		g_signaling.stop();
+		g_signaling.stop("NpMatching2 Shutdown");
 		npServer->Disconnect();
 	}
 
@@ -576,16 +576,8 @@ static int sceNpMatching2Term()
 	WARN_LOG(Log::sceNet, "UNTESTED %s() at %08x", __FUNCTION__, currentMIPS->pc);
 
 	if (npServer && npServer->IsConnected()) {
-		g_signaling.stop();
+		g_signaling.stop("NpMatching2 Terminating");
 		npServer->Disconnect();
-	}
-
-	// Stop fake PSP Thread
-	if (np2RPCNThreadID != 0) {
-		__KernelStopThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread stopped");
-	}
-	if (np2P2PThreadID != 0) {
-		__KernelStopThread(np2P2PThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread stopped");
 	}
 
 	npMatching2Inited = false;

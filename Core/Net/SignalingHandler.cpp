@@ -14,7 +14,7 @@
 using namespace std::chrono_literals;
 
 signaling_handler::signaling_handler() {}
-signaling_handler::~signaling_handler() { stop(); }
+signaling_handler::~signaling_handler() { stop("signaling_handler destroyed"); }
 signaling_packet sig_packet{};
 
 u64 signaling_handler::get_micro_timestamp(const std::chrono::steady_clock::time_point& time_point)
@@ -49,13 +49,17 @@ void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
 		__KernelResumeThreadFromWait(np2P2PThreadID, 0);
 }
 
-void signaling_handler::stop() {
+void signaling_handler::stop(const char* reason) {
 	if (!running_) return;
 
 	if (recv_thread_.joinable())
 		recv_thread_.join();
 	/*if (signaling_thread_.joinable())
 		signaling_thread_.join();*/
+	if (np2RPCNThreadID)
+		__KernelStopThread(np2RPCNThreadID, 0, "");
+	if (np2P2PThreadID)
+		__KernelStopThread(np2P2PThreadID, 0, "");
 
 	destroy_connection();
 	// optional: clear contexts after all callbacks are done
