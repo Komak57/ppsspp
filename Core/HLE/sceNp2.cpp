@@ -710,12 +710,10 @@ static int sceNpMatching2DestroyContext(int ctxId)
 	//	return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND); //SCE_NP_MATCHING2_ERROR_INVALID_CONTEXT_ID
 
 	// Remove callback handler
-	int handlerID = ctxId - 1;
-
-	for (std::map<u32, NpMatching2Handler>::iterator it = npMatching2Handlers.begin(); it != npMatching2Handlers.end(); ++it) {
-		if (it->second.ctx_id == handlerID) {
+	for (auto it = npMatching2Handlers.begin(); it != npMatching2Handlers.end(); ++it) {
+		if (it->first == ctxId) {
 			npMatching2Handlers.erase(it);
-			WARN_LOG(Log::sceNet, "%s: Deleted handler %d", __FUNCTION__, handlerID);
+			WARN_LOG(Log::sceNet, "%s: Deleted handler %d", __FUNCTION__, ctxId);
 			return 0;
 		}
 	}
