@@ -830,7 +830,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u3
  * @return Number of servers we allocated
  * @note PSP has been observed writing these in decremental order
  */
-static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int maxServerIds)
+static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, u32 maxServerIds)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %d) at %08x", __FUNCTION__, ctxId, serverIdsPtr, maxServerIds, currentMIPS->pc);
 	if (!npMatching2Inited)
@@ -842,22 +842,22 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
 	if (npServer->servers.size() == 0)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND);
 
-	std::vector<SceNpMatching2ServerId> server_list;
-	for (auto it = npServer->servers.begin(); it != npServer->servers.end() && server_list.size() < maxServerIds; ++it) {
-		server_list.push_back(it->second->id);
-	}
+	auto servers = PSPPointer<SceNpMatching2ServerId>::Create(serverIdsPtr);
 
-	int ofs = 0;
-	for (auto rit = server_list.rbegin(); rit != server_list.rend(); ++rit, ofs+=2) {
-		Memory::Write_U16(*rit, serverIdsPtr + ofs);
+
+	u32 num_servs = std::min(static_cast<u32>(npServer->servers.size()), maxServerIds);
+
+	NOTICE_LOG(Log::sceNet, " - Server Count: %d", num_servs);
+	if (servers.IsValid()) {
+		for (u32 i = 0; i < num_servs; i++)
+		{
+			NOTICE_LOG(Log::sceNet, " - Server[%d] ID: %d", i, npServer->servers[i].id);
+			servers[i] = npServer->servers[i].id;
 	}
-	/*for (auto it = servers.rbegin(); it != servers.rend() && count < maxServerIds; ++it, ++count) {
-		Memory::Write_U16(it->first, serverIdsPtr + ofs);
-		ofs += 2;
-	}*/
+	}
 
 	// Return the number of servers allocated to memory
-	return server_list.size();
+	return num_servs;
 }
 
 /* Produces information about a target server
