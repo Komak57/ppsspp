@@ -1402,17 +1402,23 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
 	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
+	auto connId = g_signaling.get_conn_id_from_npid(*NpGetNpId());
+	if (!connId)
+		return SCE_NP_MATCHING2_SIGNALING_ERROR_CONNID_NOT_AVAILABLE;
+	auto si = g_signaling.get_sig_infos(*connId);
+	if (!si)
+		return SCE_NP_MATCHING2_SIGNALING_ERROR_NETINFO_NOT_AVAILABLE;
 
-	sockaddr_in sockAddr{};
-	getLocalIp(&sockAddr);	// LocalIP
-	netInfo->localAddr = htonl(sockAddr.sin_addr.s_addr);
-	netInfo->mappedAddr = npServer->GetSigAddr();	// PublicIP
+	// FIXME: Use npServer->local_addr_sig
+	netInfo->localAddr = si->addr;
+	netInfo->mappedAddr = si->mapped_addr;	// PublicIP
 	// Pure speculation
+	//si->conn_status
 	netInfo->natStatus = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
 	// Unverified extra data?
-	netInfo->UPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
+	netInfo->UPnPStatus = (g_Config.bEnableUPnP ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
 	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-	netInfo->port = npServer->GetSigPort();
+	netInfo->port = htons(si->port);
 
 	return SCE_NP_MATCHING2_OKAY;
 }
