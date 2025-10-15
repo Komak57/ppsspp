@@ -666,6 +666,21 @@ enum
 	SCE_NP_MATCHING2_USER_BIN_ATTR_1_ID = 0x005f,
 };
 
+inline std::string EventToString(SceNpMatching2EventType event_type) {
+
+	std::string event_name = "UNKNOWN";
+	switch (event_type) {
+	case SCE_NP_MATCHING2_REQUEST_EVENT: event_name = "REQUEST_EVENT"; break;
+	case SCE_NP_MATCHING2_ROOM_EVENT: event_name = "ROOM_EVENT"; break;
+	case SCE_NP_MATCHING2_ROOM_MSG_EVENT: event_name = "ROOM_MSG_EVENT"; break;
+	case SCE_NP_MATCHING2_LOBBY_EVENT: event_name = "LOBBY_EVENT"; break;
+	case SCE_NP_MATCHING2_LOBBY_MSG_EVENT: event_name = "LOBBY_MSG_EVENT"; break;
+	case SCE_NP_MATCHING2_SIGNALING_EVENT: event_name = "SIGNALING_EVENT"; break;
+	default: event_name = "UNHANDLED"; break;
+	}
+	return event_name;
+}
+
 struct NpMatching2Handler {
 	u32 ctx_id;
 	PSPPointer<SceNpMatching2RequestCallback> cb;
