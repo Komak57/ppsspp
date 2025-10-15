@@ -884,6 +884,8 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamP
 
 		if (!Memory::IsValidAddress(serverIdPtr))
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
+	// Server ID is a 16-bit variable according to JPCSP
+	SceNpMatching2ServerId serverId = Memory::Read_U16(serverIdPtr);
 
 		// Check server status
 		//servers[serverId]->Resolve();
@@ -891,9 +893,16 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamP
 		SceNpMatching2ServerInfo serverInfo = npServer->GetServerInfo(serverId);
 
 		u32 respSize = sizeof(SceNpMatching2GetServerInfoResponse);
-		auto serv_info = PSPPointer<SceNpMatching2GetServerInfoResponse>::Create(np_memory.Alloc(respSize));
+	auto serv_info_ptr = np_memory.Alloc(respSize);
+	if (serv_info_ptr == 0)
+		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
+	auto serv_info = PSPPointer<SceNpMatching2GetServerInfoResponse>::Create(serv_info_ptr);
+
 		serv_info->server.id = serverInfo.id;
 		serv_info->server.status = serverInfo.status;
+
+	NOTICE_LOG(Log::sceNet, " - Server ID: %d", serverInfo.id);
+	NOTICE_LOG(Log::sceNet, " - Server Status: %d", serverInfo.status);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, SCE_NP_MATCHING2_OKAY, serv_info.ptr);
 }
