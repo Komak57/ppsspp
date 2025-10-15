@@ -810,8 +810,10 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u3
 	if (portPtr == 0 || !Memory::IsValidAddress(portPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "portPtr is an invalid pointer");
 
-	u16 port = htons(3658);
-	Memory::Write_U16(port, portPtr);
+	u16 port = si->port;
+	if (port == 3658)
+		port = SCE_NP_PORT;
+	Memory::Write_U16(htons(port), portPtr);
 	NOTICE_LOG(Log::sceNet, " - Port: %d", ntohs(Memory::Read_U16(portPtr)));
 
 	// Write IPAddress
