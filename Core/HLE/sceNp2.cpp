@@ -239,9 +239,9 @@ SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 	auto req_id = GenerateRequestId(assignedReqId);
 
-	if (!Memory::IsValidAddress(optParam.cbFunc.ptr)) {
-		req_id = 0; // PSP2i crashes if this isn't set to abort
-	}
+	//if (!Memory::IsValidAddress(optParam.cbFunc.ptr)) {
+	//	req_id = 0; // PSP2i crashes if this isn't set to abort
+	//}
 	NpMatching2Handler handler{};
 
 	handler.ctx_id = ctxId; // double handle
