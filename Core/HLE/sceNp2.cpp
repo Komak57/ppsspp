@@ -1342,14 +1342,12 @@ static int sceNpMatching2AbortRequest(int ctxId, u32 assignedReqIdPtr)
 	auto request_id = Memory::Read_U32(assignedReqIdPtr);
 
 	// Process matching Event_Code
-	for (std::deque<NpMatching2Args>::iterator it = npMatching2Events.begin(); it != npMatching2Events.end(); ++it) {
-		if (it->event_code != SCE_NP_MATCHING2_REQUEST_EVENT)
-			continue; // Only REQUEST_EVENT tracks Request IDs
-		if (it->request_id == request_id) {
-			npMatching2Events.erase(it);
-			return 0;
+	for (auto it = npMatching2Handlers.begin(); it != npMatching2Handlers.end(); ++it) {
+		if (it->first != request_id)
+			continue;
+		npMatching2Handlers.erase(it);
+		return SCE_NP_MATCHING2_OKAY;
 		}
-	}
 	return SCE_NP_MATCHING2_ERROR_REQUEST_NOT_FOUND;
 }
 
