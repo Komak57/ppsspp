@@ -514,18 +514,18 @@ namespace net {
 		virtual int GetServers(SceNpCommunicationId npTitleId) = 0;
 
 		// NPAgent Functions
-		virtual int GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId) = 0;
+		virtual int GetWorldInfo(SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) = 0;
 		virtual int RequestSignalingInfo(std::string npid, u32 conn_id) = 0;
-		virtual int SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) = 0;
-		virtual int CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) = 0;
-		virtual int JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) = 0;
-		virtual int LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) = 0;
-		virtual int GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req) = 0;
-		virtual int SetRoomDataInternal(u64 reqId, SceNpMatching2SetRoomDataInternalRequest* req) = 0;
-		virtual int SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req) = 0;
-		virtual int SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req) = 0;
-		virtual int SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req) = 0;
-		virtual int GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req) = 0;
+		virtual int SearchRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) = 0;
+		virtual int CreateJoinRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) = 0;
+		virtual int JoinRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) = 0;
+		virtual int LeaveRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) = 0;
+		virtual int GetRoomDataInternal(SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req) = 0;
+		virtual int SetRoomDataInternal(SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req) = 0;
+		virtual int SetRoomDataExternal(SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req) = 0;
+		virtual int SendRoomMessage(SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req) = 0;
+		virtual int SetUserInfo(SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) = 0;
+		virtual int GetRoomDataExternalList(SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req) = 0;
 
 		virtual void start_read_thread() = 0;
 		virtual void stop_read_thread() = 0;
@@ -630,18 +630,18 @@ namespace net {
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 		int GetServers(SceNpCommunicationId npTitleId);
 
-		int GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId);
+		int GetWorldInfo(SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
 		int RequestSignalingInfo(std::string npid, u32 conn_id);
-		int SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req);
-		int CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req);
-		int JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req);
-		int LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req);
-		int GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req);
-		int SetRoomDataInternal(u64 reqId, SceNpMatching2SetRoomDataInternalRequest* req);
-		int SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req);
-		int SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req);
-		int SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req);
-		int GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req);
+		int SearchRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req);
+		int CreateJoinRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req);
+		int JoinRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req);
+		int LeaveRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req);
+		int GetRoomDataInternal(SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req);
+		int SetRoomDataInternal(SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req);
+		int SetRoomDataExternal(SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req);
+		int SendRoomMessage(SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req);
+		int SetUserInfo(SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req);
+		int GetRoomDataExternalList(SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req);
 
 		void start_read_thread();
 		void stop_read_thread();
@@ -662,29 +662,29 @@ namespace net {
 		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
 		int GetServers(SceNpCommunicationId npTitleId);
 
-		int GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npTitleId);
-		int GetWorldInfo_Reply(u64 reqId, RPCNResponse resp);
+		int GetWorldInfo(SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
+		int GetWorldInfo_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp);
 		int RequestSignalingInfo(std::string npid, u32 conn_id);
-		int SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req);
-		int SearchRoom_Reply(u64 reqId, RPCNResponse resp);
-		int CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req);
-		int CreateJoinRoom_Reply(u64 reqId, RPCNResponse resp);
-		int JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req);
-		int JoinRoom_Reply(u64 reqId, RPCNResponse resp);
-		int LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req);
-		int LeaveRoom_Reply(u64 reqId, RPCNResponse resp);
-		int GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req);
-		int GetRoomDataInternal_Reply(u64 reqId, RPCNResponse resp);
-		int SetRoomDataInternal(u64 reqId, SceNpMatching2SetRoomDataInternalRequest* req);
-		int SetRoomDataInternal_Reply(u64 reqId, RPCNResponse resp);
-		int SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req);
-		int SetRoomDataExternal_Reply(u64 reqId, RPCNResponse resp);
-		int SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req);
-		int SendRoomMessage_Reply(u64 reqId, RPCNResponse resp);
-		int SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req);
-		int SetUserInfo_Reply(u64 reqId, RPCNResponse resp);
-		int GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req);
-		int GetRoomDataExternalList_Reply(u64 reqId, RPCNResponse resp);
+		int SearchRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req);
+		int SearchRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp);
+		int CreateJoinRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req);
+		int CreateJoinRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp);
+		int JoinRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req);
+		int JoinRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp);
+		int LeaveRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req);
+		int LeaveRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp);
+		int GetRoomDataInternal(SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req);
+		int GetRoomDataInternal_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp);
+		int SetRoomDataInternal(SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req);
+		int SetRoomDataInternal_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp);
+		int SetRoomDataExternal(SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req);
+		int SetRoomDataExternal_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp);
+		int SendRoomMessage(SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req);
+		int SendRoomMessage_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp);
+		int SetUserInfo(SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req);
+		int SetUserInfo_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp);
+		int GetRoomDataExternalList(SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req);
+		int GetRoomDataExternalList_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp);
 
 		void start_read_thread();
 		void stop_read_thread();
@@ -699,7 +699,7 @@ namespace net {
 		}
 		// Waits for a response matching request_id
 		// Blocks until the full packet for that request is ready
-		RPCNResponse take_pending_request(u64 request_id);
+		RPCNResponse take_pending_request(SceNpMatching2RequestId request_id);
 	private:
 		void read_loop();
 

@@ -314,7 +314,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::GetWorldInfo(u64 reqId, int server_id, SceNpCommunicationId npCommId) {
+	int PSNAgent::GetWorldInfo(SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npCommId) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npCommId.data);
 #ifndef AGENT_TESTING
 		if (sock_ <= 0) {
@@ -403,7 +403,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::SearchRoom(u64 reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {
+	int PSNAgent::SearchRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::SearchRoom()");
 		if (sock() <= 0) {
 			ERROR_LOG(Log::sceNet, "SearchRoom: Socket not connected");
@@ -462,7 +462,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::CreateJoinRoom(u64 reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) {
+	int PSNAgent::CreateJoinRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) {
 		NOTICE_LOG(Log::sceNet, "NPAgent::CreatJoinRoom()");
 		if (sock_ <= 0) {
 			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Socket not connected");
@@ -521,35 +521,35 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::JoinRoom(u64 reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) {
+	int PSNAgent::JoinRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) {
 		return 0;
 	}
 
-	int PSNAgent::LeaveRoom(u64 reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) {
+	int PSNAgent::LeaveRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) {
 		return 0;
 	}
 
-	int PSNAgent::GetRoomDataInternal(u64 reqId, SceNpMatching2GetRoomDataInternalRequest* req) {
+	int PSNAgent::GetRoomDataInternal(SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req) {
 		return 0;
 	}
 
-	int PSNAgent::SetRoomDataInternal(u64 reqId, SceNpMatching2SetRoomDataInternalRequest* req) {
+	int PSNAgent::SetRoomDataInternal(SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req) {
 		return 0;
 	}
 
-	int PSNAgent::SendRoomMessage(u64 reqId, SceNpMatching2SendRoomMessageRequest* req) {
+	int PSNAgent::SendRoomMessage(SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req) {
 		return 0;
 	}
 
-	int PSNAgent::SetRoomDataExternal(u64 reqId, SceNpMatching2SetRoomDataExternalRequest* req) {
+	int PSNAgent::SetRoomDataExternal(SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req) {
 		return 0;
 	}
 
-	int PSNAgent::SetUserInfo(u64 reqId, SceNpMatching2SetUserInfoRequest* req) {
+	int PSNAgent::SetUserInfo(SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) {
 		return 0;
 	}
 
-	int PSNAgent::GetRoomDataExternalList(u64 reqId, SceNpMatching2GetRoomDataExternalListRequest* req) {
+	int PSNAgent::GetRoomDataExternalList(SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req) {
 		return 0;
 	}
 }
