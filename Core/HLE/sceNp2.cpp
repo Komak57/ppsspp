@@ -55,7 +55,6 @@ std::map< SceNpMatching2EventType, NpMatching2Handler> defaultOptParams;
 
 //std::map<u16, std::unique_ptr<net::NPAgent>> servers;
 std::unique_ptr<net::NPAgent> npServer = nullptr;
-std::map<u16, std::future<int>> tasks;
 signaling_handler g_signaling;
 
 // RPCN Signaling
@@ -878,7 +877,7 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, int m
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
- * @note Performs the operations in an async lambda function
+ * @note Server will respond with relevant information and trigger the related callback
  * @note PSP2i calls this once witha reqId 0, and then once for each server allocated in sceNpMatching2GetServerIdListLocal
  */
 static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamPtr, u32 assignedReqIdPtr) {
@@ -896,11 +895,6 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamP
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
 		if (!Memory::IsValidAddress(serverIdPtr))
-			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
-
-		// Server ID is a 16-bit variable according to JPCSP
-		SceNpMatching2ServerId serverId;
-		if ((serverId = Memory::Read_U16(serverIdPtr)) == 0)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
 
 		// Check server status
@@ -914,9 +908,6 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamP
 		serv_info->server.status = serverInfo.status;
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, SCE_NP_MATCHING2_OKAY, serv_info.ptr);
-	}); // ThreadEnd
-	tasks.emplace(request_id, std::move(task));
-	return 0;
 }
 
 /* Produces information about the lobbies, parties, and existing player counts
@@ -1317,11 +1308,6 @@ static int sceNpMatching2SendRoomChatMessage(int ctxId, u32 reqParamPtr, u32 opt
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomChatMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomChatMessage, SCE_NP_MATCHING2_OKAY, 0);
-	});
-	tasks.emplace(request_id, std::move(task));
-
-	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
-	return 0;
 }
 
 static int sceNpMatching2SetDefaultRequestOptParam(int ctxId, u32 optParam)
@@ -1374,11 +1360,6 @@ static int sceNpMatching2GetUserInfoList(int ctxId, u32 reqParamPtr, u32 optPara
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
 	Memory::Write_U32(request_id, assignedReqIdPtr);
 
-	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
-	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
-	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
 		if (!npMatching2Inited)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetUserInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
@@ -1389,10 +1370,6 @@ static int sceNpMatching2GetUserInfoList(int ctxId, u32 reqParamPtr, u32 optPara
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetUserInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetUserInfoList, SCE_NP_MATCHING2_OKAY, 0);
-	});
-	tasks.emplace(request_id, std::move(task));
-
-	return 0;
 }
 
 static int sceNpMatching2AbortRequest(int ctxId, u32 assignedReqIdPtr)
@@ -1705,11 +1682,6 @@ static int sceNpMatching2GrantRoomOwner(int ctxId, u32 reqParamPtr, u32 optParam
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
 	Memory::Write_U32(request_id, assignedReqIdPtr);
 
-	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
-	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
-	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
 		if (!npMatching2Inited)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GrantRoomOwner, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
@@ -1720,10 +1692,6 @@ static int sceNpMatching2GrantRoomOwner(int ctxId, u32 reqParamPtr, u32 optParam
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GrantRoomOwner, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GrantRoomOwner, SCE_NP_MATCHING2_OKAY, 0);
-	});
-	tasks.emplace(request_id, std::move(task));
-
-	return 0;
 }
 
 static int sceNpMatching2GetRoomMemberIdListLocal(int ctxId, u32 roomId, u32 sortMethod, u32 memberId, u32 memberIdNum)
@@ -1742,11 +1710,6 @@ static int sceNpMatching2SetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
 	Memory::Write_U32(request_id, assignedReqIdPtr);
 
-	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
-	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
-	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
 		if (!npMatching2Inited)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
@@ -1757,10 +1720,6 @@ static int sceNpMatching2SetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, SCE_NP_MATCHING2_OKAY, 0);
-	});
-	tasks.emplace(request_id, std::move(task));
-
-	return 0;
 }
 
 static int sceNpMatching2GetRoomMemberDataInternalLocal(int ctxId, u32 roomId, u32 memberId, u32 attrId, u32 attrIdNum, u32 memberPtr, u32 bufPtr, u32 bufLen)
@@ -1779,11 +1738,6 @@ static int sceNpMatching2GetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
 	Memory::Write_U32(request_id, assignedReqIdPtr);
 
-	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
-	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
-	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
 		if (!npMatching2Inited)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
@@ -1794,10 +1748,6 @@ static int sceNpMatching2GetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, SCE_NP_MATCHING2_OKAY, 0);
-	});
-	tasks.emplace(request_id, std::move(task));
-
-	return 0;
 }
 
 static int sceNpMatching2GetRoomMemberDataExternalList(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
@@ -1809,11 +1759,6 @@ static int sceNpMatching2GetRoomMemberDataExternalList(int ctxId, u32 reqParamPt
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
 	Memory::Write_U32(request_id, assignedReqIdPtr);
 
-	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
-	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
-	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
 		if (!npMatching2Inited)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
@@ -1824,10 +1769,6 @@ static int sceNpMatching2GetRoomMemberDataExternalList(int ctxId, u32 reqParamPt
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataExternalList, SCE_NP_MATCHING2_OKAY, 0);
-	});
-	tasks.emplace(request_id, std::move(task));
-
-	return 0;
 }
 
 static int sceNpMatching2KickoutRoomMember(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
@@ -1839,11 +1780,6 @@ static int sceNpMatching2KickoutRoomMember(int ctxId, u32 reqParamPtr, u32 optPa
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
 	Memory::Write_U32(request_id, assignedReqIdPtr);
 
-	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
-	RegisterNpMatching2Handler(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
-	auto request_id = GenerateRequestId(assignedReqIdPtr);
-	// ThreadStart
-	std::future<int> task = std::async(std::launch::async, [=]() -> int {
 		if (!npMatching2Inited)
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_KickoutRoomMember, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
 
@@ -1854,10 +1790,6 @@ static int sceNpMatching2KickoutRoomMember(int ctxId, u32 reqParamPtr, u32 optPa
 			return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_KickoutRoomMember, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_KickoutRoomMember, SCE_NP_MATCHING2_OKAY, 0);
-	});
-	tasks.emplace(request_id, std::move(task));
-
-	return 0;
 }
 
 
