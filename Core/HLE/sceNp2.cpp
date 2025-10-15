@@ -1131,6 +1131,11 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, 
 	auto req = PSPPointer<SceNpMatching2LeaveRoomRequest>::Create(reqParamPtr);
 	int ret = npServer->LeaveRoom(request_id, req);
 
+	// Execute signaling callback to update users
+	g_signaling.DisconnectUsers(req->roomId);
+	if (np2P2PThreadID)
+		__KernelStopThread(np2P2PThreadID, 0, "User Left Room");
+
 	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
 	return SCE_NP_MATCHING2_OKAY;
 }
