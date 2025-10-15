@@ -584,7 +584,7 @@ namespace net {
 		avatar_url = resp.stream->get_string(false);
 		user_id = resp.stream->get<s64>();
 
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 
 	int RPCNAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
@@ -675,7 +675,7 @@ namespace net {
 		}
 		//serversPtr->emplace(1, net::CreateNPAgent(net::NPAgentType::RPCN, 1, "rpcn.revurb.us", 31313, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
 		//serversPtr->emplace(2, net::CreateNPAgent(net::NPAgentType::RPCN, 2, "rpcn.revurb.us", 3657, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 	// async
 	int RPCNAgent::GetWorldInfo(SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) {
@@ -695,7 +695,7 @@ namespace net {
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 		//worldInfoOut->emplace(worldInfo.worldId, worldInfo);
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 
 	int RPCNAgent::GetWorldInfo_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
@@ -794,7 +794,7 @@ namespace net {
 			port = SCE_NP_PORT;
 
 		g_signaling.connect(conn_id, addr, port);
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 	//async
 	int RPCNAgent::SearchRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {
@@ -870,7 +870,7 @@ namespace net {
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 
 	int RPCNAgent::SearchRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
@@ -1078,7 +1078,7 @@ namespace net {
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 
 	int RPCNAgent::CreateJoinRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
@@ -1178,7 +1178,7 @@ namespace net {
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 		//return forge_request_with_com_id(builder, communication_id, CommandType::CreateRoomGUI, req_id);
 	}
 
@@ -1287,7 +1287,7 @@ namespace net {
 			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 
 	int RPCNAgent::LeaveRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
@@ -1352,7 +1352,7 @@ namespace net {
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Unable to Send"), 0);
 		}
 
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 
 	int RPCNAgent::GetRoomDataInternal_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
@@ -1389,7 +1389,7 @@ namespace net {
 		alloc = sizeof(SceNpMatching2GetRoomDataInternalResponse);
 		u32 roomRespPtr = np_memory.Alloc(alloc);
 		if (!Memory::IsValidAddress(roomRespPtr)) {
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomResponse"), 0);
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomResponse"), 0);
 		}
 		auto room_resp = PSPPointer<SceNpMatching2GetRoomDataInternalResponse>::Create(roomRespPtr);
 		room_resp->roomDataInternal = room_info;
@@ -1439,7 +1439,7 @@ namespace net {
 		if (!flushed) {
 			return notifyRequestHandler(reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Unable to Send"), 0);
 		}
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 
 	int RPCNAgent::SendRoomMessage_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
@@ -1514,7 +1514,7 @@ namespace net {
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 
 	int RPCNAgent::SetRoomDataInternal_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
@@ -1628,7 +1628,7 @@ namespace net {
 			return (u8)ErrorType::NotFound;
 		}
 
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 
 	int RPCNAgent::SetRoomDataExternal_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
@@ -1657,7 +1657,7 @@ namespace net {
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 	//async
 	int RPCNAgent::SetUserInfo(SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) {
@@ -1692,7 +1692,7 @@ namespace net {
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 
 	int RPCNAgent::SetUserInfo_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
@@ -1751,7 +1751,7 @@ namespace net {
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
-		return 0;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 
 	int RPCNAgent::GetRoomDataExternalList_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
