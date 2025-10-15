@@ -201,20 +201,16 @@ void __Np2SignalingGetP2PResponses()
 	hleNoLogVoid();
 }
 
-/* Generate a Request Id for various callbacks
- * @param assignedReqIdPtr pointer to AppRequestID
+/* Generate a Unique Request Id for various callbacks
+ * @param app_req value derrived from AppRequestID
  * @return u32 System RequestID
  */
-u32 GenerateRequestId(u32 assignedReqIdPtr) {
-	if (!Memory::IsValidAddress(assignedReqIdPtr)) {
-		ERROR_LOG(Log::sceNet, "%s - Invalid assignedReqIdPtr %08x", __FUNCTION__, assignedReqIdPtr);
-		return 0; // 0 => aborted
+SceNpMatching2RequestId GenerateRequestId(SceNpMatching2RequestId app_req) {
+	SceNpMatching2RequestId request_id = app_req + 1;
+	while (request_id == 0 || npMatching2Handlers.find(request_id) != npMatching2Handlers.end())
+		request_id++;
+	return request_id;
 	}
-
-	// PPSSPP uses LE memory; value returned is host-endian u32.
-	u32 reqId = Memory::Read_U32(assignedReqIdPtr) + 1;
-	return reqId;
-}
 
 //template <typename T>
 //void Write_Struct(const T& object, const u32 address, const char* tag, size_t taglen) {
