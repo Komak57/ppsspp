@@ -1085,18 +1085,18 @@ namespace net {
 		if (resp.error != (u8)ErrorType::NoError) {
 			switch ((ErrorType)resp.error) {
 			case ErrorType::Malformed:
-				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
 			case ErrorType::NotFound:
-				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
 			case ErrorType::RoomGroupMaxSlotMismatch:
-				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_INVALID_GROUP_SLOT_NUM, "Group Max Slot Mismatch"), 0);
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_INVALID_GROUP_SLOT_NUM, "Group Max Slot Mismatch"), 0);
 			case ErrorType::RoomPasswordMissing:
-				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_INVALID_PASSWORD_SLOT_MASK, "Password Slot Mask Missing"), 0);
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_INVALID_PASSWORD_SLOT_MASK, "Password Slot Mask Missing"), 0);
 			case ErrorType::RoomGroupNoJoinLabel:
-				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL, "Group No Join Label"), 0);
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL, "Group No Join Label"), 0);
 				break;
 			default:
-				return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, resp.error, "Unknown Error creating room"), 0);
+				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, resp.error, "Unknown Error creating room"), 0);
 			}
 		}
 		resp.stream = new vec_stream(resp.data, 1);
@@ -1106,7 +1106,7 @@ namespace net {
 		//auto stream = new vec_stream(resp.data);
 		auto roomData = resp.stream->get_flatbuffer<RoomDataInternal>();
 		if (resp.stream->is_error()) {
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
 		}
 		
 		u32 infoSize = sizeof(SceNpMatching2RoomDataInternal);
@@ -1114,7 +1114,7 @@ namespace net {
 
 		if (!Memory::IsValidAddress(roomDataPtr)) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataExternal");
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
 		SceNpId* npId = NpGetNpId();
