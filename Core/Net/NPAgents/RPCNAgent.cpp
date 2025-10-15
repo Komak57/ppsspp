@@ -136,7 +136,7 @@ namespace net {
 			{
 				DEBUG_LOG(Log::sceNet, "RPCN Signal Pong Received");
 				const u32 new_addr_sig = read_from_ptr<u32_le>(&msg[0]);
-				const u16 new_port_sig = ntohs(read_from_ptr<u16_be>(&msg[4]));
+				const u16 new_port_sig = read_from_ptr<u16_le>(&msg[4]);
 				const u32 old_addr_sig = addr_sig;
 				const u16 old_port_sig = port_sig;
 
@@ -148,7 +148,7 @@ namespace net {
 					}
 					char buffer[256];
 					snprintf(buffer, sizeof(buffer), "Signaling Connected at %s:%d",
-						ip2str(new_addr_sig).c_str(), new_port_sig);
+						ip2str(new_addr_sig).c_str(), ntohs(new_port_sig));
 					g_OSD.Show(OSDType::MESSAGE_SUCCESS, buffer, 3.0f);
 					NOTICE_LOG(Log::sceNet, "New P2P IP: %s", ip2str(new_addr_sig).c_str());
 					if (old_addr_sig == 0)
