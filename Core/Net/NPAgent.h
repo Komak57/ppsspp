@@ -499,13 +499,23 @@ namespace net {
 		virtual std::chrono::microseconds HandleResponses() = 0;
 		int Recv(Packet* packet, bool* cancelled);
 		
-		bool SelectServer(u16 ServerID) {
-			if (servers.find(ServerID) != servers.end()) {
-				selected = servers[ServerID].get();
-				return true;
+		bool SelectServer(SceNpMatching2ServerId ServerID) {
+			for (size_t i = 0; i < servers.size(); ++i) {
+				if (servers[i].id == ServerID) {
+					selected = &servers[i];
+					return true;
+				}
 			}
 			return false;
 		}
+
+		SceNpMatching2ServerInfo GetServerInfo(SceNpMatching2ServerId ServerID) {
+			for (size_t i = 0; i < servers.size(); ++i)
+				if (servers[i].id == ServerID)
+					return { servers[i].id, servers[i].status };
+
+			return { ServerID, SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE };
+		};
 
 		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) = 0;
 		// NPAuthAgent Functions
@@ -543,11 +553,6 @@ namespace net {
 		bool IncludeAvatarUrl() {
 			return include_avatarurl;
 		}
-		SceNpMatching2ServerInfo GetServerInfo(u16 ServerID) {
-			if (servers.find(ServerID) == servers.end())
-				return { 0, SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE };
-			return { servers[ServerID]->id, servers[ServerID]->status };
-		};
 		std::string GetOnlineName() {
 			return online_name;
 		}
@@ -575,18 +580,14 @@ namespace net {
 		}
 	public:
 		// Holds all servers provided by GetServers
-		std::map<u16, std::unique_ptr<NPServerInfo>> servers;
+		// <index, NPServerInfo>
+		std::vector<NPServerInfo> servers;
 		// Pointer to the selected server
 		NPServerInfo* selected = nullptr;
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
 
-		// FIXME: Restructure to be offline-friendly cache of worlds, rooms, and members
-		/*u32 worldInfoPtr;
-		std::vector<SceNpMatching2World> worlds;
-		u32 roomDataPtr;
-		std::map<u32, SceNpMatching2RoomDataInternal> rooms;*/
 		Cache cache;
 
 	protected:

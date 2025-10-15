@@ -306,7 +306,7 @@ namespace net {
 
 				if (!npServer)
 					npServer = net::CreateNPAgent(NPAgentType::PSN, server.host, server.port);
-				npServer->servers.emplace(server.id, std::make_unique<NPServerInfo>(server));
+				npServer->servers.push_back(server);
 				//serversPtr->emplace(server_id, net::CreateNPAgent(net::NPAgentType::PSN, server_id, server_host, server_port, server_status));
 				i++;
 			}

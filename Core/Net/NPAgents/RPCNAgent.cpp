@@ -654,18 +654,19 @@ namespace net {
 		resp.stream = new vec_stream(resp.data, 1);
 
 		u16 num_servs = resp.stream->get<u16>();
+		selected = nullptr;
 		if (npServer)
 			npServer->servers.clear();
 		for (u16 i = 0; i < num_servs; i++)
 		{
 			NPServerInfo server{};
 			server.nptype = NPAgentType::RPCN;
-			server.id = resp.stream->get<u16>();
+			server.id = resp.stream->get<SceNpMatching2ServerId>();
 			server.host = this->host_;
 			server.port = this->port_;
 			server.status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
 
-			npServer->servers.emplace(server.id, std::make_unique<NPServerInfo>(server));
+			npServer->servers.push_back(server);
 			//serversPtr->emplace(server_id, net::CreateNPAgent(net::NPAgentType::RPCN, server_id, this->host_, this->port_, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
 		}
 		if (resp.stream->is_error()) {
