@@ -1181,34 +1181,22 @@ void signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 		return;
 	}
 
-	const u32 event_key = 0;// get_event_key();
-	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
-
 	u32 _size = sizeof(SceNpMatching2RoomMemberDataInternalUpdateInfo);
 	u32 ptr = np_memory.Alloc(_size);
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberDataInternalUpdateInfo>::Create(ptr);
 	np::RoomMemberDataInternalUpdateInfo_to_SceNpMatching2RoomMemberDataInternalUpdateInfo(np_memory, update_info, notif_data, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
 
-	auto member = npServer->cache.GetMember(notif_data->newRoomMemberDataInternal->memberId);
-	if (member) {
-		//get_match2_event(event_key, 0, 0);
+	auto room = npServer->cache.GetRoom(room_id);
+	if (!room)
 		return;
-	}
-	npServer->cache.AddMember(*notif_data->newRoomMemberDataInternal);
 
-	NOTICE_LOG(Log::sceNet, "NOTI User %s(%d) data was updated for room (%d)", notif_data->newRoomMemberDataInternal->userInfo.npId.handle.data, notif_data->newRoomMemberDataInternal->memberId, room_id);
+	npServer->cache.AddMember(*notif_data->newRoomMemberDataInternal);
+	SceNpMatching2RoomMemberId memberId = notif_data->newRoomMemberDataInternal->memberId;
+
+	NOTICE_LOG(Log::sceNet, "NOTI User %s(%d) data was updated for room (%d)", notif_data->newRoomMemberDataInternal->userInfo.npId.handle.data, memberId, room_id);
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());
 
-	/*if (room_event_cb)
-	{
-		sysutil_register_cb([room_event_cb = this->room_event_cb, room_event_cb_ctx = this->room_event_cb_ctx, room_id, event_key, room_event_cb_arg = this->room_event_cb_arg, size = edata.size()](ppu_thread& cb_ppu) -> s32
-		{
-			room_event_cb(cb_ppu, room_event_cb_ctx, room_id, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, event_key, 0, size, room_event_cb_arg);
-			return 0;
-		});
-	}*/
-
-	notifyRoomEventHandler(room_id, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
+	notifyRoomEventHandler(room_id, memberId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
 }
 
 void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
