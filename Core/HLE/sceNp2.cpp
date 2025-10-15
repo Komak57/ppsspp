@@ -1434,7 +1434,31 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 roomId, u32 room
 	if (!Memory::IsValidAddress(netInfoPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	return 0;
+	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
+	auto room = npServer->cache.GetRoom(roomId);
+	if (!room)
+		return SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND;
+	auto member = npServer->cache.GetMember(roomMemberId);
+	if (!member)
+		return SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND;
+	auto connId = g_signaling.get_conn_id_from_npid(member->userInfo.npId);
+	if (!connId)
+		return SCE_NP_MATCHING2_SIGNALING_ERROR_CONNID_NOT_AVAILABLE;
+	auto si = g_signaling.get_sig_infos(*connId);
+	if (!si)
+		return SCE_NP_MATCHING2_SIGNALING_ERROR_NETINFO_NOT_AVAILABLE;
+
+	// FIXME: Use npServer->local_addr_sig
+	netInfo->localAddr = si->addr;
+	netInfo->mappedAddr = si->mapped_addr;	// PublicIP
+	// Pure speculation
+	//si->conn_status
+	netInfo->natStatus = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
+	// Unverified extra data?
+	netInfo->UPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
+	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
+	netInfo->port = htons(si->port);
+
 	return SCE_NP_MATCHING2_OKAY;
 }
 
