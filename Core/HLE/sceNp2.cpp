@@ -510,9 +510,9 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 	if (np2RPCNThreadID > 0) {
 		__KernelStartThread(np2RPCNThreadID, 0, 0);
 	}
-	if (np2P2PThreadID > 0) {
+	/*if (np2P2PThreadID > 0) {
 		__KernelStartThread(np2P2PThreadID, 0, 0);
-	}
+	}*/
 	np_memory.Init(npPoolAddr, poolSize, false);
 
 	npMatching2MemStat.npMemSize = poolSize - 0x20;
@@ -1095,6 +1095,8 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u
 
 	auto req = PSPPointer<SceNpMatching2JoinRoomRequest>::Create(reqParamPtr);
 
+	if (np2P2PThreadID)
+		__KernelStartThread(np2P2PThreadID, 0, 0);
 	// FIXME: Get roomData from PSN
 	int ret = npServer->JoinRoom(request_id, req);
 
