@@ -1184,28 +1184,28 @@ namespace net {
 	}
 
 	int RPCNAgent::JoinRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
-			switch ((ErrorType)resp.error) {
+		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError:
 			break;
-			case ErrorType::Malformed:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
-			case ErrorType::NotFound:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Bad Response"), 0);
-			case ErrorType::RoomMissing:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room Missing"), 0);
-			case ErrorType::RoomAlreadyJoined:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED, "Already Joined Room"), 0);
-			case ErrorType::RoomFull:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_ROOM_FULL, "Room is Full"), 0);
-			case ErrorType::RoomPasswordMismatch:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH, "Incorrect Password"), 0);
-			case ErrorType::RoomGroupFull:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_GROUP_FULL, "Group is Full"), 0);
-			case ErrorType::RoomGroupJoinLabelNotFound:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL, "Duplicate Group Label"), 0);
-			default:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, -resp.error, "Unknown Error Joining Room"), 0);
-			}
+		case ErrorType::Malformed:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
+		case ErrorType::NotFound:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Bad Response"), 0);
+		case ErrorType::RoomMissing:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room Missing"), 0);
+		case ErrorType::RoomAlreadyJoined:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED, "Already Joined Room"), 0);
+		case ErrorType::RoomFull:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_ROOM_FULL, "Room is Full"), 0);
+		case ErrorType::RoomPasswordMismatch:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH, "Incorrect Password"), 0);
+		case ErrorType::RoomGroupFull:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_GROUP_FULL, "Group is Full"), 0);
+		case ErrorType::RoomGroupJoinLabelNotFound:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL, "Duplicate Group Label"), 0);
+		default:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, -resp.error, "Unknown Error Joining Room"), 0);
+		}
 		resp.stream = new vec_stream(resp.data, 1);
 
 		//auto stream = new vec_stream(_resp.data);
@@ -1292,20 +1292,20 @@ namespace net {
 	}
 
 	int RPCNAgent::LeaveRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
-			switch ((ErrorType)resp.error) {
+		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError:
 			break;
-			case ErrorType::Malformed:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
-			case ErrorType::Invalid:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
-			case ErrorType::NotFound:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "User cannot leave a room they are not in"), 0);
-			case ErrorType::RoomMissing:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "User cannot leave a room that doesn't exist"), 0);
-			default:
+		case ErrorType::Malformed:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
+		case ErrorType::Invalid:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
+		case ErrorType::NotFound:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "User cannot leave a room they are not in"), 0);
+		case ErrorType::RoomMissing:
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "User cannot leave a room that doesn't exist"), 0);
+		default:
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED, "Unknown Error Leaving Room"), 0);
-			}
+		}
 		resp.stream = new vec_stream(resp.data, 1);
 
 		//memcpy(resp, &_resp.data, sizeof(u64));
@@ -1314,8 +1314,6 @@ namespace net {
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
 		}
 
-		// Execute signaling callback to update users
-		g_signaling.DisconnectUsers(roomId);
 		// Remove room from cache
 		//npServer->cache.RemoveRoom(roomId);
 
