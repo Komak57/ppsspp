@@ -578,7 +578,7 @@ namespace net {
 		}*/
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return resp.error;
+			return SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
 		resp.stream = new vec_stream(resp.data, 1);
 
 		online_name = resp.stream->get_string(false);
