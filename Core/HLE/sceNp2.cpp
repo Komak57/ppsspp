@@ -936,7 +936,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 
 	auto err = npServer->GetWorldInfo(request_id, serverId, npTitleId);
 
-	return hleLogError(Log::sceNet, SCE_NP_MATCHING2_OKAY, "FIXME: Incorrect World struct");
+	return SCE_NP_MATCHING2_OKAY;
 }
 
 /* Incomplete - Searches for all Lobbies/Parties
