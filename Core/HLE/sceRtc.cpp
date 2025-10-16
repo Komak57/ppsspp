@@ -38,44 +38,8 @@
 
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceRtc.h"
+#include <Core/Net/NPAgent.h>
 
-#ifdef HAVE_LIBNX
-// I guess that works...
-#define setenv(x, y, z) (void*)0
-#define tzset() (void*)0
-#define unsetenv(x) (void*)0
-#endif // HAVE_LIBNX
-
-// This is a base time that everything is relative to.
-// This way, time doesn't move strangely with savestates, turbo speed, etc.
-static PSPTimeval rtcBaseTime;
-static u64 rtcBaseTicks;
-
-// Grabbed from JPSCP
-// This is the # of microseconds between January 1, 0001 and January 1, 1970.
-const u64 rtcMagicOffset = 62135596800000000ULL;
-// This is the # of microseconds between January 1, 0001 and January 1, 1601 (for Win32 FILETIME.)
-const u64 rtcFiletimeOffset = 50491123200000000ULL;
-
-// 400 years is a convenient number, since leap days and everything cycle every 400 years.
-// 400 years is in other words 20871 full weeks.
-const u64 rtc400YearTicks = (u64)20871 * 7 * 24 * 3600 * 1000000ULL;
-
-// This is the last moment the clock was adjusted.
-// It's possible games may not like the clock being adjusted in the past hour (cheating?)
-// So this returns a static time.
-const u64 rtcLastAdjustedTicks = rtcMagicOffset + 41 * 365 * 24 * 3600 * 1000000ULL;
-// The reincarnated time seems related to the battery or manufacturing date.
-// On a test PSP, it was over 3 years in the past, so we again pick a fixed date.
-const u64 rtcLastReincarnatedTicks = rtcMagicOffset + 40 * 365 * 24 * 3600 * 1000000ULL;
-
-const int PSP_TIME_INVALID_YEAR = -1;
-const int PSP_TIME_INVALID_MONTH = -2;
-const int PSP_TIME_INVALID_DAY = -3;
-const int PSP_TIME_INVALID_HOUR = -4;
-const int PSP_TIME_INVALID_MINUTES = -5;
-const int PSP_TIME_INVALID_SECONDS = -6;
-const int PSP_TIME_INVALID_MICROSECONDS = -7;
 
 u64 __RtcGetCurrentTick()
 {
