@@ -165,7 +165,7 @@ namespace net {
 						std::lock_guard<std::mutex> lock(sig_mutex);
 						port_sig = new_port_sig;
 					}
-					NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", new_port_sig);
+					NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", ntohs(new_port_sig));
 					if (old_port_sig == 0)
 					{
 						// wake thread
