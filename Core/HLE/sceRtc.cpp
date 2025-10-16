@@ -67,8 +67,8 @@ void gettimeofday(timeval *tv, void *ignore)
 	u64 from_1601_us = (((u64) ft_local.dwHighDateTime << 32ULL) + (u64) ft_local.dwLowDateTime) / 10ULL;
 	u64 from_1970_us = from_1601_us - FILETIME_FROM_UNIX_EPOCH_US;
 
-	tv->tv_sec = long(from_1970_us / 1000000UL);
-	tv->tv_usec = from_1970_us % 1000000UL;
+	tv->tv_sec = long(from_1970_us / TICKS_PER_SECOND);
+	tv->tv_usec = from_1970_us % TICKS_PER_SECOND;
 }
 
 time_t rtc_timegm(struct tm *tm)
@@ -104,7 +104,7 @@ static time_t rtc_timegm(struct tm *tm)
 #endif
 
 static void RtcUpdateBaseTicks() {
-	rtcBaseTicks = 1000000ULL * rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
+	rtcBaseTicks = TICKS_PER_SECOND * rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
 }
 
 void __RtcInit()
@@ -136,8 +136,8 @@ void __RtcTimeOfDay(PSPTimeval *tv)
 	*tv = rtcBaseTime;
 
 	s64 adjustedUs = additionalUs + tv->tv_usec;
-	tv->tv_sec += long(adjustedUs / 1000000UL);
-	tv->tv_usec = adjustedUs % 1000000UL;
+	tv->tv_sec += long(adjustedUs / TICKS_PER_SECOND);
+	tv->tv_usec = adjustedUs % TICKS_PER_SECOND;
 }
 
 int32_t RtcBaseTime(int32_t *micro) {
@@ -204,11 +204,11 @@ static void civil_from_days(s64 z, s64 &out_y, u32 &out_m, u32 &out_d)
 
 static void __RtcTicksToPspTime(ScePspDateTime &t, u64 ticks)
 {
-	u64 Day = 24ull * 60ull * 60ull * 1000000ull;
-	t.microsecond = ticks % 1000000ull;
-	t.second = ticks / 1000000ull % 60ull;
-	t.minute = ticks / 1000000ull / 60ull % 60ull;
-	t.hour   = ticks / 1000000ull / 60ull / 60ull % 24ull;
+	u64 Day = 24ull * 60ull * 60ull * TICKS_PER_SECOND;
+	t.microsecond = ticks % TICKS_PER_SECOND;
+	t.second = ticks / TICKS_PER_SECOND % 60ull;
+	t.minute = ticks / TICKS_PER_SECOND / 60ull % 60ull;
+	t.hour   = ticks / TICKS_PER_SECOND / 60ull / 60ull % 24ull;
 	s64 z = s64(ticks / Day) - s64(rtcMagicOffset / Day);
         s64 y;
 	u32 m, d;
@@ -223,7 +223,7 @@ static u64 __RtcPspTimeToTicks(const ScePspDateTime &pt)
 	s64 z = days_from_civil(s64(pt.year), pt.month, pt.day);
 	return rtcMagicOffset +
 		pt.microsecond + 
-		1000000ull * (pt.second +
+		TICKS_PER_SECOND * (pt.second +
 		60ull * (pt.minute + 
 		60ull * (pt.hour + 
 		24ull * u64(z))));
@@ -236,7 +236,7 @@ static bool __RtcValidatePspTime(const ScePspDateTime &t)
 
 static u32 sceRtcGetTickResolution()
 {
-	return hleLogDebug(Log::sceRtc, 1000000);
+	return hleLogDebug(Log::sceRtc, TICKS_PER_SECOND);
 }
 
 static u32 sceRtcGetCurrentTick(u32 tickPtr)
@@ -406,11 +406,11 @@ static int sceRtcConvertLocalTimeToUTC(u32 tickLocalPtr,u32 tickUTCPtr)
 #ifdef _WIN32
 		long timezone_val;
 		_get_timezone(&timezone_val);
-		srcTick -= -timezone_val * 1000000ULL;
+		srcTick -= -timezone_val * TICKS_PER_SECOND;
 #elif !defined(_AIX) && !defined(__sgi) && !defined(__hpux) && !defined(HAVE_LIBNX)
 		time_t timezone = 0;
 		tm *time = localtime(&timezone);
-		srcTick -= time->tm_gmtoff*1000000ULL;
+		srcTick -= time->tm_gmtoff* TICKS_PER_SECOND;
 #endif
 		Memory::Write_U64(srcTick, tickUTCPtr);
 	}
@@ -431,11 +431,11 @@ static int sceRtcConvertUtcToLocalTime(u32 tickUTCPtr,u32 tickLocalPtr)
 #ifdef _WIN32
 		long timezone_val;
 		_get_timezone(&timezone_val);
-		srcTick += -timezone_val * 1000000ULL;
+		srcTick += -timezone_val * TICKS_PER_SECOND;
 #elif !defined(_AIX) && !defined(__sgi) && !defined(__hpux) && !defined(HAVE_LIBNX)
 		time_t timezone = 0;
 		tm *time = localtime(&timezone);
-		srcTick += time->tm_gmtoff*1000000ULL;
+		srcTick += time->tm_gmtoff* TICKS_PER_SECOND;
 #endif
 		Memory::Write_U64(srcTick, tickLocalPtr);
 	}
@@ -467,7 +467,7 @@ static int sceRtcCheckValid(u32 datePtr) {
 		result = PSP_TIME_INVALID_MINUTES;
 	else if (pt->second < 0 || pt->second > 59)
 		result = PSP_TIME_INVALID_SECONDS;
-	else if (pt->microsecond >= 1000000UL)
+	else if (pt->microsecond >= TICKS_PER_SECOND)
 		result = PSP_TIME_INVALID_MICROSECONDS;
 	return hleLogDebug(Log::sceRtc, result);
 }
@@ -477,7 +477,7 @@ static int sceRtcSetTime_t(u32 datePtr, u32 time) {
 	if (!pt.IsValid())
 		return hleLogError(Log::sceRtc, 1, "bad address");
 
-	__RtcTicksToPspTime(*pt, time * 1000000ULL + rtcMagicOffset);
+	__RtcTicksToPspTime(*pt, time * TICKS_PER_SECOND + rtcMagicOffset);
 	return hleLogDebug(Log::sceRtc, 0);
 }
 
@@ -486,7 +486,7 @@ static int sceRtcSetTime64_t(u32 datePtr, u64 time) {
 	if (!pt.IsValid())
 		return hleLogError(Log::sceRtc, 1, "bad address");
 
-	__RtcTicksToPspTime(*pt, time * 1000000ULL + rtcMagicOffset);
+	__RtcTicksToPspTime(*pt, time * TICKS_PER_SECOND + rtcMagicOffset);
 	return hleLogDebug(Log::sceRtc, 0);
 }
 
@@ -496,7 +496,7 @@ static int sceRtcGetTime_t(u32 datePtr, u32 timePtr) {
 	if (!pt.IsValid() || !timep.IsValid())
 		return hleLogError(Log::sceRtc, 1, "bad address");
 
-	*timep = (u32)((__RtcPspTimeToTicks(*pt) - rtcMagicOffset) / 1000000ULL);
+	*timep = (u32)((__RtcPspTimeToTicks(*pt) - rtcMagicOffset) / TICKS_PER_SECOND);
 	return hleLogDebug(Log::sceRtc, 0);
 }
 
@@ -506,7 +506,7 @@ static int sceRtcGetTime64_t(u32 datePtr, u32 timePtr) {
 	if (!pt.IsValid() || !timep.IsValid())
 		return hleLogError(Log::sceRtc, 1, "bad address");
 
-	*timep = (__RtcPspTimeToTicks(*pt) - rtcMagicOffset) / 1000000ULL;
+	*timep = (__RtcPspTimeToTicks(*pt) - rtcMagicOffset) / TICKS_PER_SECOND;
 	return hleLogDebug(Log::sceRtc, 0);
 }
 
@@ -642,7 +642,7 @@ static int sceRtcTickAddSeconds(u32 destTickPtr, u32 srcTickPtr, u64 numSecs)
 	{
 		s64 srcTick = (s64)Memory::Read_U64(srcTickPtr);
 
-		srcTick += numSecs * 1000000UL;
+		srcTick += numSecs * TICKS_PER_SECOND;
 		Memory::Write_U64(srcTick, destTickPtr);
 	}
 	return hleLogDebug(Log::sceRtc, 0);
@@ -665,7 +665,7 @@ static int sceRtcTickAddHours(u32 destTickPtr, u32 srcTickPtr, int numHours)
 	if (Memory::IsValidAddress(destTickPtr) && Memory::IsValidAddress(srcTickPtr))
 	{
 		s64 srcTick = (s64)Memory::Read_U64(srcTickPtr);
-		srcTick += numHours * 3600ULL * 1000000ULL;
+		srcTick += numHours * 3600ULL * TICKS_PER_SECOND;
 		Memory::Write_U64(srcTick, destTickPtr);
 	}
 	return hleLogDebug(Log::sceRtc, 0);
@@ -677,7 +677,7 @@ static int sceRtcTickAddDays(u32 destTickPtr, u32 srcTickPtr, int numDays)
 	{
 		s64 srcTick = (s64)Memory::Read_U64(srcTickPtr);
 
-		srcTick += numDays * 86400ULL * 1000000ULL;
+		srcTick += numDays * 86400ULL * TICKS_PER_SECOND;
 		Memory::Write_U64(srcTick, destTickPtr);
 	}
 	return hleLogDebug(Log::sceRtc, 0);
@@ -689,7 +689,7 @@ static int sceRtcTickAddWeeks(u32 destTickPtr, u32 srcTickPtr, int numWeeks)
 	{
 		s64 srcTick = (s64)Memory::Read_U64(srcTickPtr);
 
-		srcTick += numWeeks * 7ULL * 86400ULL * 1000000ULL;
+		srcTick += numWeeks * 7ULL * 86400ULL * TICKS_PER_SECOND;
 		Memory::Write_U64(srcTick, destTickPtr);
 	}
 	return hleLogDebug(Log::sceRtc, 0);

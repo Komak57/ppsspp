@@ -29,6 +29,7 @@ struct PSPTimeval {
 	s32_le tv_usec;
 };
 
+#define TICKS_PER_SECOND 1000000ULL
 #ifdef HAVE_LIBNX
 // I guess that works...
 #define setenv(x, y, z) (void*)0
