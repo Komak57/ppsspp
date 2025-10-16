@@ -844,10 +844,24 @@ struct SceNpMatching2UserInfo
 };
 
 // World | PS3 to PSP discrepencies
+
+struct PS3NpMatching2World
+{
+	SceNpMatching2WorldId worldId; // WorldId is at offset +4
+	u32 numOfLobby;
+	u32 maxNumOfTotalLobbyMember;
+	u32 curNumOfTotalLobbyMember;
+	u32 curNumOfRoom;
+	u32 curNumOfTotalRoomMember;
+	u8 withEntitlementId;
+	SceNpEntitlementId entitlementId;
+	u8 padding[3];
+};
+// Fat Princess suggests this is size 0x40
 struct SceNpMatching2World
 {
-	u32 unk;
-	SceNpMatching2WorldId worldId; // WorldId is at offset +4
+	SceNpMatching2WorldId worldId; // Usually ignored
+	SceNpMatching2WorldId worldIndex; // offset +4 is vital
 	u32 numOfLobby;
 	u32 maxNumOfTotalLobbyMember;
 	u32 curNumOfTotalLobbyMember;

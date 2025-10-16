@@ -725,7 +725,8 @@ namespace net {
 
 		for (u32 i = 0; i < num_worlds; ++i) {
 			worlds[i].worldId = resp.stream->get<SceNpMatching2WorldId>();
-			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d", i, worlds[i].worldId);
+			worlds[i].worldIndex= i + 1;
+			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d | Index: %d", i, worlds[i].worldId, worlds[i].worldIndex);
 			npServer->cache.AddWorld(worlds[i]);
 		}
 
