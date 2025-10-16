@@ -313,24 +313,23 @@ static int sceNpGetMyLanguages(u32 langListPtr)
 }
 
 // Conflicting Information. PSPSDK suggests this uses SceNpUserInfo2, but PPSSPP originally used SceNpUserInformation
+// Fat Princess allocates 216 bytes for this
 static int sceNpGetUserProfile(u32 profilePtr)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x)", __FUNCTION__, profilePtr);
 
-	auto profile = PSPPointer<SceNpUserInfo2>::Create(profilePtr);
+	auto profile = PSPPointer<SceNpUserInfo>::Create(profilePtr);
 	if (!Memory::IsValidAddress(profilePtr))
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_ARGUMENT, "invalid arg");
 
 	profile.FillWithZero();
-	strncpy(profile->npId.handle.data, g_Config.infraNpId.c_str(), std::min<size_t>(16, g_Config.infraNpId.length()));
-	strncpy(profile->onlineName->data, npAuthServer->GetOnlineName().c_str(), std::min<size_t>(16, npAuthServer->GetOnlineName().length()));
-	truncate_cpy(profile->avatarUrl->data, sizeof(profile->avatarUrl), npAuthServer->GetAvatarURL());
+	strncpy(profile->userId.handle.data, g_Config.infraNpId.c_str(), std::min<size_t>(16, g_Config.infraNpId.length()));
+	strncpy(profile->name.data, npAuthServer->GetOnlineName().c_str(), std::min<size_t>(16, npAuthServer->GetOnlineName().length()));
+	truncate_cpy(profile->icon.data, sizeof(profile->icon), npAuthServer->GetAvatarURL());
 
-	INFO_LOG(Log::sceNet, "%s - NpId: %s", __FUNCTION__, profile->npId.handle.data);
-	std::string datahex;
-	DataToHexString(profile->npId.opt, sizeof(profile->npId.opt), &datahex);
-	INFO_LOG(Log::sceNet, "%s - Options?: %s", __FUNCTION__, datahex.c_str());
-	INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, profile->avatarUrl->data);
+	INFO_LOG(Log::sceNet, "%s - NpId: %s", __FUNCTION__, profile->userId.handle.data);
+	INFO_LOG(Log::sceNet, "%s - Online Name: %s", __FUNCTION__, profile->name.data);
+	INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, profile->icon.data);
 
 	profile.NotifyWrite("NpGetUserProfile");
 
