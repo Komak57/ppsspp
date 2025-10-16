@@ -7,6 +7,7 @@
 #include <Common/Net/URL.h>
 #include "Common/Net/HTTPClient.h"
 #include <Core/HLE/sceNet.h>
+#include <Core/HLE/sceRtc.h>
 
 using namespace std::literals::chrono_literals;
 /*
@@ -312,6 +313,10 @@ namespace net {
 			}
 		}
 		return 0;
+	}
+
+	u64 PSNAgent::GetNetworkTime() {
+		return 1000000ULL * rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
 	}
 
 	int PSNAgent::GetWorldInfo(SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npCommId) {

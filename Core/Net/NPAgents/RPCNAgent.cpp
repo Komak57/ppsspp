@@ -139,6 +139,7 @@ namespace net {
 				const u16 new_port_sig = read_from_ptr<u16_le>(&msg[4]);
 				const u32 old_addr_sig = addr_sig;
 				const u16 old_port_sig = port_sig;
+				latency = (last_pong_time_ipv4 - now).count() / 2;
 
 				if (new_addr_sig != old_addr_sig)
 				{
@@ -677,6 +678,34 @@ namespace net {
 		//serversPtr->emplace(1, net::CreateNPAgent(net::NPAgentType::RPCN, 1, "rpcn.revurb.us", 31313, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
 		//serversPtr->emplace(2, net::CreateNPAgent(net::NPAgentType::RPCN, 2, "rpcn.revurb.us", 3657, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
 		return SCE_NP_MATCHING2_OKAY;
+	}
+
+	u64 RPCNAgent::GetNetworkTime() {
+		Packet packet = Packet();
+
+		auto reqId = generate_request_id();
+		packet.Pack(CommandType::GetNetworkTime, reqId);
+
+		INFO_LOG(Log::sceNet, "Sending Get Network Time Request");
+
+		bool flushed = Send(&packet, 5.0, &cancelled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return -1;
+		}
+
+		auto resp = take_pending_request(reqId);
+		if (resp.error != (u8)ErrorType::NoError)
+			return -2;
+		resp.stream = new vec_stream(resp.data, 1);
+
+		u64 tick = resp.stream->get<u64>();
+
+		if (resp.stream->is_error()) {
+			ERROR_LOG(Log::sceNet, "Malformed reply to GetNetworkTime command");
+			return -3;
+		}
+		return tick;
 	}
 	// async
 	int RPCNAgent::GetWorldInfo(SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) {

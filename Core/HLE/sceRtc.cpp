@@ -927,12 +927,38 @@ static int sceRtcFormatRFC3339LocalTime(u32 outPtr, u32 srcTickPtr)
 	return __RtcFormatRFC3339(outPtr, srcTickPtr, tz_seconds / 60);
 }
 
-static int sceRtcGetCurrentNetworkTick(u32 tick)
+// Returning anything other than 0 is usually flagged as an error
+// This function should return the time difference between
+//  system time and network time, while updating system time
+//  It should also account for network latency
+static int sceRtcGetCurrentNetworkTick(u32 timeDiffPtr)
 {
-	// Should get time from network, but we'll return local time for now
-	tick = 1000000ULL * rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
-	//return hleLogWarning(Log::sceNet, 0, "UNIMPL");
-	return 0; // Untested
+	DEBUG_LOG(Log::sceRtc, "UNTESTED %s(%08x) at %08x", __FUNCTION__, timeDiffPtr, currentMIPS->pc);
+	auto time = PSPPointer<CellRtcTick>::Create(timeDiffPtr);
+	// FIXME: rtcBaseTime isn't being updated, so timeDiffUs is always notably > 0
+	u64 localTimeUs = 1000000ULL * rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
+	u64 timeDiffUs = 0;
+	time->tick = 0;
+
+	// Get time from server if connected
+	if (npAuthServer && npAuthServer->IsConnected()) {
+		u64 ret = npAuthServer->GetNetworkTime();
+		if (ret < 0)
+			return hleLogWarning(Log::sceRtc, 0, " - Unable to get Server Time");
+		timeDiffUs = (ret - localTimeUs);
+		// Latency is not available until npServer starts
+		time->tick = timeDiffUs / 1000000ULL;
+	}
+	else if (npServer && npServer->IsConnected()) {
+		u64 ret = npServer->GetNetworkTime();
+		if (ret < 0)
+			return hleLogWarning(Log::sceRtc, 0, " - Unable to get Server Time");
+		timeDiffUs = (ret - localTimeUs) - npServer->GetLatencyUs();
+		time->tick = timeDiffUs / 1000000ULL;
+	}
+	// FIXME: Force returning 0s to prevent 
+	time->tick = 0;
+	return hleLogWarning(Log::sceRtc, 0, " - %llus -> 0s", (timeDiffUs / 1000000ULL)); // Untested
 }
 
 const HLEFunction sceRtc[] =

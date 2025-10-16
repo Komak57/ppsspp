@@ -482,30 +482,31 @@ namespace net {
 		return 0;
 	}
 
-	u64 RPCNAuthAgent::GetNetworkTime(u32 req_id) {
+	u64 RPCNAuthAgent::GetNetworkTime() {
 		Packet packet = Packet();
 
 		auto reqId = generate_request_id();
 		packet.Pack(CommandType::GetNetworkTime, reqId);
 
-		INFO_LOG(Log::sceNet, "Sending Login Request");
+		INFO_LOG(Log::sceNet, "Sending Get Network Time Request");
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return 0;
+			return -1;
 		}
 
 		auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return 0;
+			return -2;
 		resp.stream = new vec_stream(resp.data, 1);
 
-		u64 network_time = resp.stream->get<u64>();
+		u64 tick = resp.stream->get<u64>();
+
 		if (resp.stream->is_error()) {
-			ERROR_LOG(Log::sceNet, "Malformed reply to GetNetworkTime");
-			return 0;
+			ERROR_LOG(Log::sceNet, "Malformed reply to GetNetworkTime command");
+			return -3;
 		}
-		return network_time;
+		return tick;
 	}
 }

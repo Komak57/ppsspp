@@ -6,6 +6,7 @@
 #include <TimeUtil.h>
 #include <Core/Net/Buffer.cpp>
 #include <Core/HLE/sceNet.h>
+#include <Core/HLE/sceRtc.h>
 namespace net {
 	// FIXME: Populate with actual connection credentials for PSN
 	PSNAuthAgent::PSNAuthAgent(std::string host, int port) {
@@ -38,8 +39,8 @@ namespace net {
 		return 0;
 	}
 
-	u64 PSNAuthAgent::GetNetworkTime(u32 req_id) {
-		return 0;
+	u64 PSNAuthAgent::GetNetworkTime() {
+		return 1000000ULL * rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
 	}
 
 	void PSNAuthAgent::Disconnect() {
