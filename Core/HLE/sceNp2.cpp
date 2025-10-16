@@ -1544,7 +1544,7 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 roomId, u32 m
 
 static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
 	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
@@ -1562,24 +1562,6 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
 
 	auto req = PSPPointer<SceNpMatching2GetRoomDataExternalListRequest>::Create(reqParamPtr);
 	int ret = npServer->GetRoomDataExternalList(request_id, req);
-	if (ret != 0) {
-		int errorCode;
-		switch ((ErrorType)ret) {
-		case ErrorType::Malformed:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-			ERROR_LOG(Log::sceNet, "Malformed Request");
-			break;
-		case ErrorType::NotFound:
-			errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-			ERROR_LOG(Log::sceNet, "Send Failed");
-			break;
-		default:
-			errorCode = ret;
-			ERROR_LOG(Log::sceNet, "Unknown Error: %08X", ret);
-			break;
-		}
-		return notifyRequestHandler(request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, errorCode), 0);
-	}
 
 	return SCE_NP_MATCHING2_OKAY;
 }

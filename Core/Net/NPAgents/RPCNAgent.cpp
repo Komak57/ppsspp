@@ -1755,30 +1755,24 @@ namespace net {
 	}
 
 	int RPCNAgent::GetRoomDataExternalList_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
-		if (resp.error != (u8)ErrorType::NoError) {
-			int errorCode;
 			switch ((ErrorType)resp.error) {
+		case ErrorType::NoError:
+			break;
 			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
 				break;
 			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
 				break;
 			default:
-				errorCode = resp.error;
-				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", resp.error);
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, -resp.error, "Unknown Error: %08x", resp.error), 0);
 				break;
 			}
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, errorCode), 0);
-		}
-		resp.stream = new vec_stream(resp.data, 1);
 
 		auto roomDataExternal = resp.stream->get_flatbuffer<GetRoomDataExternalListResponse>();
-		if (resp.stream->is_error()) {
-			return (u8)ErrorType::Malformed;
-		}
+		if (resp.stream->is_error())
+			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Response"), 0);
+
 		u32 alloc = sizeof(SceNpMatching2GetRoomDataExternalListResponse);
 		auto getRoomDataExtListResponse = PSPPointer<SceNpMatching2GetRoomDataExternalListResponse>::Create(np_memory.Alloc(alloc));
 		::np::GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(np_memory, roomDataExternal, getRoomDataExtListResponse, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
