@@ -1392,33 +1392,28 @@ static int sceNpMatching2GetSignalingOptParamLocal(int ctxId, u32 roomId, u32 op
 
 static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%08x) at %08x", __FUNCTION__, netInfoPtr, currentMIPS->pc);
+	ERROR_LOG(Log::sceNet, "UNTESTED %s(%08x) at %08x", __FUNCTION__, netInfoPtr, currentMIPS->pc);
 
 	// ThreadStart
 	if (!npMatching2Inited)
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED, "Not Initialized");
 
 	if (!Memory::IsValidAddress(netInfoPtr))
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "Invalid Argument");
 
+	
 	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
-	auto connId = g_signaling.get_conn_id_from_npid(*NpGetNpId());
-	if (!connId)
-		return SCE_NP_MATCHING2_SIGNALING_ERROR_CONNID_NOT_AVAILABLE;
-	auto si = g_signaling.get_sig_infos(*connId);
-	if (!si)
-		return SCE_NP_MATCHING2_SIGNALING_ERROR_NETINFO_NOT_AVAILABLE;
 
 	// FIXME: Use npServer->local_addr_sig
-	netInfo->localAddr = si->addr;
-	netInfo->mappedAddr = si->mapped_addr;	// PublicIP
+	netInfo->localAddr = npServer->GetLocalAddr();	// Local  IP
+	netInfo->mappedAddr = npServer->GetSigAddr();	// Public IP
 	// Pure speculation
 	//si->conn_status
 	netInfo->natStatus = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
 	// Unverified extra data?
 	netInfo->UPnPStatus = (g_Config.bEnableUPnP ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
 	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-	netInfo->port = htons(si->port);
+	netInfo->port = htons(npServer->GetSigPort());
 
 	return SCE_NP_MATCHING2_OKAY;
 }

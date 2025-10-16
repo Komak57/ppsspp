@@ -566,6 +566,12 @@ namespace net {
 			struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(conn->ai_addr);
 			return addr->sin_addr.s_addr;
 		}
+		u32 GetLocalAddr() {
+			std::unique_lock<std::mutex> lock(sig_mutex);
+			if (local_addr_sig.load() == 0)
+				sigv.wait_for(lock, std::chrono::seconds(10), [&] { return local_addr_sig.load() != 0; });
+			return local_addr_sig.load();
+		}
 		u32 GetSigAddr() {
 			std::unique_lock<std::mutex> lock(sig_mutex);
 			if (addr_sig.load() == 0)
