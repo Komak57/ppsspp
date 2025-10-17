@@ -30,6 +30,9 @@ struct PSPTimeval {
 };
 
 #define TICKS_PER_SECOND 1000000ULL
+#define TICKS_PER_MILLI 1000ULL
+#define TICKS_PER_MICRO 1ULL
+
 #ifdef HAVE_LIBNX
 // I guess that works...
 #define setenv(x, y, z) (void*)0
@@ -67,6 +70,9 @@ const int PSP_TIME_INVALID_HOUR = -4;
 const int PSP_TIME_INVALID_MINUTES = -5;
 const int PSP_TIME_INVALID_SECONDS = -6;
 const int PSP_TIME_INVALID_MICROSECONDS = -7;
+
+// One Second Drift
+#define CLOCK_DRIFT_LIMIT_USECS 1000000ULL
 
 void __RtcTimeOfDay(PSPTimeval *tv);
 int32_t RtcBaseTime(int32_t *micro = nullptr);

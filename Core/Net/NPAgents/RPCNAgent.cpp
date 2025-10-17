@@ -139,7 +139,7 @@ namespace net {
 				const u16 new_port_sig = read_from_ptr<u16_le>(&msg[4]);
 				const u32 old_addr_sig = addr_sig;
 				const u16 old_port_sig = port_sig;
-				latency = (last_pong_time_ipv4 - now).count() / 2;
+				latency = std::chrono::duration_cast<std::chrono::microseconds>(now - last_ping_time_ipv4).count() / 2;
 
 				if (new_addr_sig != old_addr_sig)
 				{
@@ -1784,19 +1784,19 @@ namespace net {
 	}
 
 	int RPCNAgent::GetRoomDataExternalList_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
-			switch ((ErrorType)resp.error) {
+		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError:
 			break;
-			case ErrorType::Malformed:
+		case ErrorType::Malformed:
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
-				break;
-			case ErrorType::NotFound:
+			break;
+		case ErrorType::NotFound:
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
-				break;
-			default:
+			break;
+		default:
 			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, -resp.error, "Unknown Error: %08x", resp.error), 0);
-				break;
-			}
+			break;
+		}
 
 		auto roomDataExternal = resp.stream->get_flatbuffer<GetRoomDataExternalListResponse>();
 		if (resp.stream->is_error())

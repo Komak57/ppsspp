@@ -927,38 +927,59 @@ static int sceRtcFormatRFC3339LocalTime(u32 outPtr, u32 srcTickPtr)
 	return __RtcFormatRFC3339(outPtr, srcTickPtr, tz_seconds / 60);
 }
 
+s64 syncOffset = 0;
 // Returning anything other than 0 is usually flagged as an error
 // This function should return the time difference between
-//  system time and network time, while updating system time
-//  It should also account for network latency
+//  local time and system time, while updating game time
+//  to match network time. It should also account for network latency
 static int sceRtcGetCurrentNetworkTick(u32 timeDiffPtr)
 {
 	DEBUG_LOG(Log::sceRtc, "UNTESTED %s(%08x) at %08x", __FUNCTION__, timeDiffPtr, currentMIPS->pc);
-	auto time = PSPPointer<CellRtcTick>::Create(timeDiffPtr);
-	// FIXME: rtcBaseTime isn't being updated, so timeDiffTicks is always notably > 0
-	u64 localTimeTicks = rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
-	u64 timeDiffTicks = 0;
-	time->tick = 0;
+	auto time = PSPPointer<PSPTimeval>::Create(timeDiffPtr);
+	
+	// Get PSP RTC Clock time
+	PSPTimeval rtc_clock{};
+	__RtcTimeOfDay(&rtc_clock);
+	u64 localTime = rtc_clock.tv_sec * TICKS_PER_SECOND + rtc_clock.tv_usec + rtcMagicOffset;
+	
+	// Get System Time
+	timeval sys_clock{};
+	gettimeofday(&sys_clock, NULL);
+	u64 currentTime = sys_clock.tv_sec * TICKS_PER_SECOND + sys_clock.tv_usec + rtcMagicOffset;
 
+	// Calculate difference (drift)
+	s64 drift = (s64)currentTime - (s64)(localTime + syncOffset);
+
+	// Update Game Time, override later
+	time->tv_sec = drift / TICKS_PER_SECOND;
+	time->tv_usec = drift % TICKS_PER_SECOND;
+
+	// check if we need to do a network update
+	if (std::llabs(drift) < CLOCK_DRIFT_LIMIT_USECS)
+		return 0;
+
+	WARN_LOG(Log::sceRtc, " - Drift of %ull us", std::llabs(drift));
+
+	u64 serverTime = 0;
 	// Get time from server if connected
-	if (npAuthServer && npAuthServer->IsConnected()) {
-		u64 ret = npAuthServer->GetNetworkTime() / TICKS_PER_SECOND;
-		if (ret < 0)
-			return hleLogWarning(Log::sceRtc, 0, " - Unable to get Server Time");
-		timeDiffTicks = (ret - localTimeTicks);
-		// Latency is not available until npServer starts
-		time->tick = timeDiffTicks;
-	}
-	else if (npServer && npServer->IsConnected()) {
-		u64 ret = npServer->GetNetworkTime() / TICKS_PER_SECOND;
-		if (ret < 0)
-			return hleLogWarning(Log::sceRtc, 0, " - Unable to get Server Time");
-		timeDiffTicks = (ret - localTimeTicks) - (npServer->GetLatencyUs() / TICKS_PER_SECOND);
-		time->tick = timeDiffTicks;
-	}
-	// FIXME: Force returning 0s to prevent PSP2i from spamming until this is fixed
-	time->tick = 0;
-	return hleLogWarning(Log::sceRtc, 0, " - %llus -> 0s", (timeDiffTicks)); // Untested
+	if (npAuthServer && npAuthServer->IsConnected())
+		serverTime = npAuthServer->GetNetworkTime(); // - Latency is not available until npServer starts
+	else if (npServer && npServer->IsConnected())
+		serverTime = npServer->GetNetworkTime() + npServer->GetLatencyUs();
+
+	// Didn't get the time from the server, update with Current Time
+	if (serverTime <= 0)
+		return hleLogWarning(Log::sceRtc, 0, " - Unable to get Server Time");
+
+	// Calculate new difference (drift)
+	syncOffset = (s64)serverTime - (s64)localTime;
+	drift = (s64)serverTime - (s64)(localTime + syncOffset);
+
+	// Update Game Time
+	time->tv_sec = drift / TICKS_PER_SECOND;
+	time->tv_usec = drift % TICKS_PER_SECOND;
+
+	return hleLogWarning(Log::sceRtc, 0, "Synchronized with Network Time");
 }
 
 const HLEFunction sceRtc[] =
