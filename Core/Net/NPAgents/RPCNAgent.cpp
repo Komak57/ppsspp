@@ -10,6 +10,7 @@
 #include <Core/HLE/sceNp.h>
 #include <Core/HLE/sceNp2.h>
 #include <Core/Net/fb_helpers.h>
+#include <Data/Text/I18n.h>
 
 using namespace std::literals::chrono_literals;
 
@@ -150,10 +151,13 @@ namespace net {
 						std::lock_guard<std::mutex> lock(sig_mutex);
 						addr_sig = new_addr_sig;
 					}
-					char buffer[256];
+					/*char buffer[256];
 					snprintf(buffer, sizeof(buffer), "Signaling Connected at %s:%d",
 						ip2str(new_addr_sig).c_str(), ntohs(new_port_sig));
-					g_OSD.Show(OSDType::MESSAGE_SUCCESS, buffer, 3.0f);
+					g_OSD.Show(OSDType::MESSAGE_SUCCESS, buffer, 3.0f);*/
+					auto n = GetI18NCategory(I18NCat::NETWORKING);
+					g_OSD.Show(OSDType::MESSAGE_SUCCESS, std::string(n->T("SH: Connected")) + std::string(" [") + ip2str(new_addr_sig) + std::string("]:") + std::to_string(ntohs(new_port_sig)), 0.0f, "userjoinroom");
+
 					NOTICE_LOG(Log::sceNet, "New P2P IP: %s", ip2str(new_addr_sig).c_str());
 					if (old_addr_sig == 0)
 					{

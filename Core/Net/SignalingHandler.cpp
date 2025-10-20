@@ -988,12 +988,11 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberUpdateInfo>::Create(ptr);
 	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, notification->update_info(), notif_data, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
 
-	char buffer[256];
+	/*char buffer[256];
 	snprintf(buffer, sizeof(buffer), "%s Joined the room",
 		notif_data->roomMemberDataInternal->userInfo.npId.handle.data);
 	g_OSD.Show(OSDType::MESSAGE_SUCCESS, buffer, 3.0f);
-	NOTICE_LOG(Log::sceNet, "User %s(%d) joined the room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
-
+	NOTICE_LOG(Log::sceNet, "User %s(%d) joined the room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);*/
 	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
 	auto member = npServer->cache.GetMember(notif_data->roomMemberDataInternal->memberId);
 	if (member) {
@@ -1018,8 +1017,12 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 
 		const u32 addr_p2p = htonl(result_ip);
 		u16 port_p2p = signaling_info->port();
-		if (port_p2p == 3658)
+		auto n = GetI18NCategory(I18NCat::NETWORKING);
+		if (port_p2p == 3658) {
+			g_OSD.Show(OSDType::MESSAGE_WARNING, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(port_p2p) + std::string(" -> ") + std::to_string(SCE_NP_PORT), 0.0f, "userjoinroom");
 			port_p2p = SCE_NP_PORT;
+		}
+		g_OSD.Show(OSDType::MESSAGE_SUCCESS, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(port_p2p), 0.0f, "userjoinroom");
 		
 		const SceNpMatching2RoomMemberId member_id = notif_data->roomMemberDataInternal->memberId;
 		const SceNpId& npid = notif_data->roomMemberDataInternal->userInfo.npId;
@@ -1029,7 +1032,7 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		// Connect to Signaling Server
 		g_signaling.connect(connId, addr_p2p, port_p2p);
 	}
-	//auto ctx = get_ctx(resp.header.reqId);
+	//auto ctx = get_ctx(resp.header.uid);
 	const u32 event_key = 0;// get_event_key();
 
 	/*if (room_event_cb)
@@ -1063,10 +1066,6 @@ void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberUpdateInfo>::Create(ptr);
 	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, update_info, notif_data, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
 
-	char buffer[256];
-	snprintf(buffer, sizeof(buffer), "%s Left the room",
-		notif_data->roomMemberDataInternal->userInfo.npId.handle.data);
-	g_OSD.Show(OSDType::MESSAGE_ERROR, buffer, 3.0f);
 	NOTICE_LOG(Log::sceNet, "NOTI UserLeftRoom User %s(%d) left room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
 
 	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
@@ -1075,6 +1074,8 @@ void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 		//get_match2_event(event_key, 0, 0);
 		return;
 	}
+	auto n = GetI18NCategory(I18NCat::NETWORKING);
+	g_OSD.Show(OSDType::MESSAGE_ERROR, std::string(n->T("SH: Player Leaving")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]"), 0.0f, "userleaveroom");
 	npServer->cache.RemoveMember(notif_data->roomMemberDataInternal->memberId);
 
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
