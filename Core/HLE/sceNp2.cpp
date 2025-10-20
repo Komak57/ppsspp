@@ -963,7 +963,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 
 	INFO_LOG(Log::sceNet, "SceNpMatching2SearchRoomRequest(%08X)", req.ptr);
 	INFO_LOG(Log::sceNet, " - option:       %d", req->option);
-	INFO_LOG(Log::sceNet, " - worldId:      %d", req->worldId);
+	INFO_LOG(Log::sceNet, " - worldIndex:   %d", req->worldIndex);
 	INFO_LOG(Log::sceNet, " - lobbyId:      %d", req->lobbyId);
 	INFO_LOG(Log::sceNet, " - rangeFilter:  %d", req->rangeFilter);
 	INFO_LOG(Log::sceNet, " - flagFilter:   %d", req->flagFilter);
@@ -971,7 +971,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 	INFO_LOG(Log::sceNet, " - intFilterNum: %d", req->intFilterNum);
 	INFO_LOG(Log::sceNet, " - binFilterNum: %d", req->binFilterNum);
 	INFO_LOG(Log::sceNet, " - attrIdNum:    %d", req->attrIdNum);
-	if (!npServer->cache.GetWorld(req->worldId)) {
+	if (!npServer->cache.GetWorldFromIndex(req->worldIndex)) {
 		ERROR_LOG(Log::sceNet, " - Invalid World ID");
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
 	}
@@ -1028,9 +1028,10 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 
 	auto req = PSPPointer<SceNpMatching2CreateJoinRoomRequest>::Create(reqParamPtr);
 	//Memory::Memcpy(&req, reqParamPtr, sizeof(req));
-
+	auto world = npServer->cache.GetWorldFromIndex(req->worldIndex);
 	INFO_LOG(Log::sceNet, "SceNpMatching2CreateJoinRoomRequest(%08X)", req.ptr);
-	INFO_LOG(Log::sceNet, " - worldId:          %d", req->worldId);
+	INFO_LOG(Log::sceNet, " - worldId:          %d", world? world->worldId : -1);
+	INFO_LOG(Log::sceNet, " - worldIndex:       %d", req->worldIndex);
 	INFO_LOG(Log::sceNet, " - lobbyId:          %d", req->lobbyId);
 	INFO_LOG(Log::sceNet, " - maxSlot:          %d", req->maxSlot);
 	INFO_LOG(Log::sceNet, " - flagAttr:         %08X", req->flagAttr);
@@ -1048,7 +1049,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	// Patapon 3 requests WorldID 0. Is this suppose to be the first available world?
 	//if (req->worldId == 0)
 		//req->worldId = servers[tServer]->worlds.begin()->first;
-	if (!npServer->cache.GetWorld(req->worldId)) {
+	if (!world) {
 		ERROR_LOG(Log::sceNet, " - Invalid worldId");
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ROOM_ID), 0);
 	}
