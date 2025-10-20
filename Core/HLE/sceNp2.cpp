@@ -264,30 +264,6 @@ SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId
 	return req_id;
 }
 
-/* Thread-safe Abort Return for all Callback threads
- * @return u32 System Error Code (SCE_NP_MATCHING2_ERROR_ABORTED)
- * @note The tasks aren't stopped, they still process in the background. But, without the handler, they'll simply fail.
- */
-int abortNpMatching2Handlers() {
-
-	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
-	for (auto it = npMatching2Handlers.begin(); it != npMatching2Handlers.end(); ++it) {
-
-		u32_le args[6];
-		args[0] = it->second.ctx_id;			// ContextID
-		args[1] = 0;							// RequestId || 0 indicates aborted request
-		args[2] = it->second.event_type;		// Event
-		args[3] = SCE_NP_MATCHING2_ERROR_ABORTED;// ErrorCode || 0 is OK
-		args[4] = 0;							// Response struct
-		args[5] = it->second.cb_arg.ptr;		// Request Arguments?
-
-		// Call the function immediately
-		hleEnqueueCall(it->second.cb.ptr, 6, args);
-	}
-
-	return SCE_NP_MATCHING2_ERROR_ABORTED;
-}
-
 /* Thread-safe Event Processor for Request Callback. Relevant arguments will be replaced.
  * @param event_code Related System Request Type, matches the Handler
  * @param argc Count of the number of arguments
@@ -482,7 +458,6 @@ bool NpMatching2ProcessEvents() {
 			hleEnqueueCall(optParam->cb.ptr, event.argc, event.args);
 		return true;
 	}
-	ERROR_LOG(Log::sceNet, "NpMatching2ProcessEvents - No Handler Found for Event %s", EventToString(event.event_type).c_str());
 	return false;
 }
 
@@ -611,10 +586,6 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 
 	SceNpCommunicationPassphrase* passph = (SceNpCommunicationPassphrase*)Memory::GetCharPointer(passPhrasePtr);
 	npServer->UpdateOptions(optionFlags);
-	// TODO: Get NPID from RPCN - login(nous),password,token(from email) - RPCS3 @GalCiv
-	/*SceNpId* npid = NpGetNpId();
-	if (!npid)
-		return hleLogError(Log::sceNet, SCE_NP_MANAGER_ERROR_ID_NOT_AVAIL);*/
 
 	INFO_LOG(Log::sceNet, "%s - Title ID: %s", __FUNCTION__, npTitleId.data);
 	INFO_LOG(Log::sceNet, "%s - Title NUM: %d", __FUNCTION__, npTitleId.num);
@@ -677,14 +648,6 @@ static int sceNpMatching2ContextStart(int ctxId)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE);
 
 	int ret = npServer->GetServers(npTitleId);
-	////signaling_handler::print_interfaces();
-	//if (g_signaling.connect("fe80::be24:11ff:fed8:39c4", 3657, 21)) {
-	//	NOTICE_LOG(Log::sceNet, "Connected to Signaling Server!");
-	//}
-	//else {
-	//	ERROR_LOG(Log::sceNet, "Failed to connect to Signaling Server!");
-	//	//return notifyNpMatching2Handlers(request_id, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_CONN_NOT_FOUND));
-	//}
 
 	hleEatMicro(1000000);
 	// Returning 0x805508A6 (error code inherited from sceNpService_76867C01 which check server availability) if can't check server availability (ie. Fat Princess (US) through http://static-resource.np.community.playstation.net/np/resource/psp-title/NPWR00670_00/matching/NPWR00670_00-matching.xml using User-Agent: "PS3Community-agent/1.0.0 libhttp/1.0.0")
