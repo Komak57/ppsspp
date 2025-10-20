@@ -633,6 +633,8 @@ static int sceNetInetBind(int socket, u32 namePtr, int namelen) {
 	saddr.addr.sa_family = name->sa_family;
 	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
+	// PSP has the address in Host Order, not Network Order
+	saddr.in.sin_addr.s_addr = htonl(saddr.in.sin_addr.s_addr);
 	if (isLocalServer) {
 		getLocalIp(&saddr.in);
 	}
