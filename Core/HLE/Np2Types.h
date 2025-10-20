@@ -1161,14 +1161,15 @@ struct SceNpMatching2SignalingOptParam
 };
 
 // Option parameters for requests
+// Fat Princess allocates 16 bytes for this
 struct SceNpMatching2RequestOptParam
 {
 	PSPPointer<SceNpMatching2RequestCallback> cbFunc;
 	PSPPointer<u8> cbFuncArg; // PSPPointer<void>
-	// Discrepency between PS3 and PSP
-	//u32 timeout;
-	//u16 appReqId;
-	//u8 padding[2];
+	// Discrepency between PS3 and PSP?
+	u32 timeout;
+	u16 appReqId;
+	u8 padding[2];
 };
 
 // Room slot information
