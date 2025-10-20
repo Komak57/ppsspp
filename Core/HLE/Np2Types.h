@@ -700,6 +700,7 @@ struct NpMatching2Handler {
 struct NpMatching2Args {
 	// Now allows for optional arguments to be omitted in the sending process.
 	static const size_t MAX_ARGS = 11;
+	SceNpMatching2ContextId context_id = 1;
 	SceNpMatching2RequestId request_id; // Only REQUEST_EVENT tracks request id's
 	SceNpMatching2EventType event_type; // Everything has a matching Event code
 	//u32 cbFunc;
@@ -707,14 +708,16 @@ struct NpMatching2Args {
 	u32_le args[MAX_ARGS]; // 7 elements (excluding optional data)? or may be 11 elements (including optional data)?
 	// May be followed by optional data? since these Args usually created on the stack
 
-	NpMatching2Args(size_t argc, u32_le args[], SceNpMatching2EventType event_type) {
+	NpMatching2Args(SceNpMatching2ContextId ctxId, size_t argc, u32_le args[], SceNpMatching2EventType event_type) {
+		this->context_id = ctxId;
 		this->request_id = 0;
 		this->event_type = event_type;
 		this->argc = (argc > MAX_ARGS) ? MAX_ARGS : argc;
 		for (size_t i = 0; i < this->argc; ++i)
 			this->args[i] = args[i];
 	}
-	NpMatching2Args(SceNpMatching2RequestId request_id, size_t argc, u32_le args[], SceNpMatching2EventType event_type) {
+	NpMatching2Args(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId request_id, size_t argc, u32_le args[], SceNpMatching2EventType event_type) {
+		this->context_id = ctxId;
 		this->request_id = request_id;
 		this->event_type = event_type;
 		this->argc = (argc > MAX_ARGS) ? MAX_ARGS : argc;
@@ -734,6 +737,36 @@ struct NpMatching2Args {
 	}
 
 };
+
+#define CONTEXT_MAX_ID 7
+class NpMatching2Context {
+public:
+	NpMatching2Context() {};
+	NpMatching2Context(SceNpCommunicationId communicationId, SceNpCommunicationPassphrase passphrase, s32 optionFlags)
+		: communicationId(communicationId), passphrase(passphrase), include_onlinename(optionFlags& SCE_NP_MATCHING2_CONTEXT_OPTION_USE_ONLINENAME), include_avatarurl(optionFlags& SCE_NP_MATCHING2_CONTEXT_OPTION_USE_AVATARURL)
+	{}
+
+	static const u32 id_base = 1;
+	static const u32 id_step = 1;
+	static const u32 id_count = 255; // TODO: constant here?
+
+	std::atomic<u32> started = 0;
+	
+	SceNpCommunicationId communicationId{};
+	SceNpCommunicationPassphrase passphrase{};
+	bool include_onlinename = false, include_avatarurl = false;
+
+	std::atomic<u16> match2_event_cnt = 1;
+	std::atomic<SceNpMatching2RequestId> match2_request_cnt = 1;
+
+	//// Disable Copy
+	//NpMatching2Context(const NpMatching2Context&) = delete;
+	//NpMatching2Context& operator=(const NpMatching2Context&) = delete;
+	//// Allow Moving
+	//NpMatching2Context(NpMatching2Context&&) noexcept = default;
+	//NpMatching2Context& operator=(NpMatching2Context&&) noexcept = default;
+};
+extern SceNpMatching2ContextId signaling_ctxId;
 
 #pragma pack(push,1)
 struct SceNpMatching2ConnectionInfo {

@@ -50,8 +50,11 @@ namespace net {
 		connected = false;
 	}
 
-	u64 RPCNAgent::generate_request_id()
+	u64 RPCNAgent::generate_uid(SceNpMatching2ContextId ctxId = 0, SceNpMatching2RequestId reqId = 0)
 	{
+		if (ctxId != 0 || reqId != 0)
+			return static_cast<u64>(ctxId) << 32 | static_cast<u64>(reqId);
+
 		static u64 fallback_id = 1; // In case map is empty
 
 		if (responses.empty())
@@ -94,7 +97,7 @@ namespace net {
 	}
 
 	// Blocking wait for a specific request_id
-	RPCNResponse RPCNAgent::take_pending_request(SceNpMatching2RequestId request_id) {
+	RPCNResponse RPCNAgent::take_pending_request(u64 request_id) {
 		std::unique_lock<std::mutex> lock(buffer_mutex);
 		buffer_cv.wait(lock, [&]() {
 			return running && responses.find(request_id) != responses.end();
@@ -292,6 +295,9 @@ namespace net {
 			buf.data.insert(buf.data.end(), packet.Data() + RPCN_HEADER_SIZE, packet.Data() + packet.Length());
 			buf.stream = new vec_stream(buf.data);
 
+			SceNpMatching2ContextId ctxId = static_cast<u32>(header.uid >> 32);
+			SceNpMatching2RequestId reqId = header.uid & 0xFFFFFFFF;
+
 			std::lock_guard<std::mutex> lock(buffer_mutex);
 			switch ((PacketType)header.request) {
 			case PacketType::Reply:
@@ -309,18 +315,18 @@ namespace net {
 						ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", buf.error, PacketTypeNames[buf.error]);
 				}
 				switch ((CommandType)header.command) {
-				case CommandType::GetWorldList: GetWorldInfo_Reply(header.reqId, buf); break;
-				case CommandType::SearchRoom: SearchRoom_Reply(header.reqId, buf); break;
-				case CommandType::CreateRoom: CreateJoinRoom_Reply(header.reqId, buf); break;
-				case CommandType::JoinRoom: JoinRoom_Reply(header.reqId, buf); break;
-				case CommandType::LeaveRoom: LeaveRoom_Reply(header.reqId, buf); break;
-				case CommandType::GetRoomDataInternal: GetRoomDataInternal_Reply(header.reqId, buf); break;
-				case CommandType::SetRoomDataInternal: SetRoomDataInternal_Reply(header.reqId, buf); break;
-				case CommandType::SetRoomDataExternal: SetRoomDataExternal_Reply(header.reqId, buf); break;
-				case CommandType::SendRoomMessage: SendRoomMessage_Reply(header.reqId, buf); break;
-				case CommandType::SetUserInfo: SetUserInfo_Reply(header.reqId, buf); break;
-				case CommandType::GetRoomDataExternalList: GetRoomDataExternalList_Reply(header.reqId, buf); break;
-				default: responses[header.reqId] = std::move(buf); break; // Response is synchronous
+				case CommandType::GetWorldList: GetWorldInfo_Reply(ctxId, reqId, buf); break;
+				case CommandType::SearchRoom: SearchRoom_Reply(ctxId, reqId, buf); break;
+				case CommandType::CreateRoom: CreateJoinRoom_Reply(ctxId, reqId, buf); break;
+				case CommandType::JoinRoom: JoinRoom_Reply(ctxId, reqId, buf); break;
+				case CommandType::LeaveRoom: LeaveRoom_Reply(ctxId, reqId, buf); break;
+				case CommandType::GetRoomDataInternal: GetRoomDataInternal_Reply(ctxId, reqId, buf); break;
+				case CommandType::SetRoomDataInternal: SetRoomDataInternal_Reply(ctxId, reqId, buf); break;
+				case CommandType::SetRoomDataExternal: SetRoomDataExternal_Reply(ctxId, reqId, buf); break;
+				case CommandType::SendRoomMessage: SendRoomMessage_Reply(ctxId, reqId, buf); break;
+				case CommandType::SetUserInfo: SetUserInfo_Reply(ctxId, reqId, buf); break;
+				case CommandType::GetRoomDataExternalList: GetRoomDataExternalList_Reply(ctxId, reqId, buf); break;
+				default: responses[header.uid] = std::move(buf); break; // Response is synchronous
 				}
 				break;
 			case PacketType::Notification:
@@ -343,7 +349,7 @@ namespace net {
 					break;
 				default:
 					NOTICE_LOG(Log::sceNet, "RPCN Unknown Notification: %d", header.command);
-					notifications[header.reqId] = buf;
+					notifications[header.uid] = buf;
 				}
 				break;
 			case PacketType::ServerInfo:
@@ -559,7 +565,7 @@ namespace net {
 		packet.Write(token);
 		packet.Write((u8)0);
 
-		auto reqId = generate_request_id();
+		auto reqId = generate_uid();
 		packet.Pack(CommandType::Login, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Login Request");
@@ -601,7 +607,7 @@ namespace net {
 		packet.Write(email);
 		packet.Write((u8)0);
 
-		auto reqId = generate_request_id();
+		auto reqId = generate_uid();
 		packet.Pack(CommandType::Create, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Registration Request");
@@ -638,10 +644,10 @@ namespace net {
 		Packet packet = Packet();
 		packet.Write(this->GetCommHeader());
 
-		auto reqId = generate_request_id();
+		auto reqId = generate_uid();
 		packet.Pack(CommandType::GetServerList, reqId);
 
-		INFO_LOG(Log::sceNet, "Sending Server List Request");
+		INFO_LOG(Log::sceNet, "Sending Server List Request: %llu", reqId);
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
@@ -655,6 +661,8 @@ namespace net {
 		resp.stream = new vec_stream(resp.data, 1);
 
 		u16 num_servs = resp.stream->get<u16>();
+
+		INFO_LOG(Log::sceNet, "%d servers returned", num_servs);
 		selected = nullptr;
 		if (npServer)
 			npServer->servers.clear();
@@ -683,7 +691,7 @@ namespace net {
 	u64 RPCNAgent::GetNetworkTime() {
 		Packet packet = Packet();
 
-		auto reqId = generate_request_id();
+		auto reqId = generate_uid();
 		packet.Pack(CommandType::GetNetworkTime, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Get Network Time Request");
@@ -708,29 +716,29 @@ namespace net {
 		return tick;
 	}
 	// async
-	int RPCNAgent::GetWorldInfo(SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) {
+	int RPCNAgent::GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) {
 		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 
 		Packet packet = Packet();
 		packet.Write(this->GetCommHeader());
 		packet.Write((u16)this->selected->id);
 
-		packet.Pack(CommandType::GetWorldList, reqId);
+		packet.Pack(CommandType::GetWorldList, generate_uid(ctxId, reqId));
 
 		INFO_LOG(Log::sceNet, "Requesting World Info");
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 		//worldInfoOut->emplace(worldInfo.worldId, worldInfo);
 		return SCE_NP_MATCHING2_OKAY;
 	}
 
-	int RPCNAgent::GetWorldInfo_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
+	int RPCNAgent::GetWorldInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError)
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
 		resp.stream = new vec_stream(resp.data, 1);
 
 		// Currently under the assumption that the first byte is some error code
@@ -740,7 +748,7 @@ namespace net {
 		// First attempts for new games won't contain a world.
 		if (num_worlds == 0) {
 			ERROR_LOG(Log::sceNet, "No Worlds Returned");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD), 0);
 		}
 
 		// Allocate space for all worlds
@@ -761,7 +769,7 @@ namespace net {
 
 		if (resp.stream->is_error()) {
 			ERROR_LOG(Log::sceNet, "World Info Malformed");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD, 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD, 0);
 		}
 
 		u32 alloc = sizeof(SceNpMatching2GetWorldInfoListResponse);
@@ -769,7 +777,7 @@ namespace net {
 		response->worldNum = num_worlds;
 		response->world = worlds;
 
-		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_OKAY, response.ptr);
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_OKAY, response.ptr);
 	}
 
 	int RPCNAgent::RequestSignalingInfo(std::string npid, u32 conn_id) {
@@ -777,7 +785,7 @@ namespace net {
 		packet.Write(npid);
 		packet.Write((u8)0);
 
-		auto reqId = generate_request_id();
+		auto reqId = generate_uid();
 		packet.Pack(CommandType::RequestSignalingInfos, reqId);
 
 		INFO_LOG(Log::sceNet, "Requesting Signaling Info for %s", npid.c_str());
@@ -828,7 +836,7 @@ namespace net {
 		return SCE_NP_MATCHING2_OKAY;
 	}
 	//async
-	int RPCNAgent::SearchRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {
+	int RPCNAgent::SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntSearchFilter>>> final_intfilter_vec;
@@ -869,7 +877,7 @@ namespace net {
 
 		SearchRoomRequestBuilder s_req(builder);
 		s_req.add_option(req->option);
-		s_req.add_worldId(req->worldId);
+		s_req.add_worldId(req->worldIndex);
 		s_req.add_lobbyId(req->lobbyId);
 		s_req.add_rangeFilter_startIndex(req->rangeFilter.startIndex);
 		s_req.add_rangeFilter_max(req->rangeFilter.max);
@@ -889,24 +897,24 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		//auto reqId = generate_request_id();
-		packet.Pack(CommandType::SearchRoom, reqId);
+		//auto reqId = generate_uid();
+		packet.Pack(CommandType::SearchRoom, generate_uid(ctxId, reqId));
 
-		INFO_LOG(Log::sceNet, "Requesting Search Room for World #%d, Lobby #%d", req->worldId, req->lobbyId);
+		INFO_LOG(Log::sceNet, "Requesting Search Room for World Index #%d, Lobby #%d", req->worldIndex, req->lobbyId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
 
-	int RPCNAgent::SearchRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
+	int RPCNAgent::SearchRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError)
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
 		resp.stream = new vec_stream(resp.data, 1);
 		//                                                     20       12       0        8        6        1    
 		// NPAgent::Recv('01 1000 28000000 0100000000000000 00 14000000 0C000000 00000600 08000400 06000000 01000000')
@@ -914,7 +922,7 @@ namespace net {
 		//auto stream = new vec_stream(resp.data);
 		auto roomResp = resp.stream->get_flatbuffer<SearchRoomResponse>();
 		if (resp.stream->is_error()) {
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
 		}
 		//roomResp = _resp;
 
@@ -931,10 +939,10 @@ namespace net {
 		auto respData = PSPPointer<SceNpMatching2SearchRoomResponse>::Create(respPtr);
 		::np::SearchRoomResponse_to_SceNpMatching2SearchRoomResponse(np_memory, roomResp, respData);
 
-		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, SCE_NP_MATCHING2_OKAY, respPtr);
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, SCE_NP_MATCHING2_OKAY, respPtr);
 	}
 	//async
-	int RPCNAgent::CreateJoinRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) {
+	int RPCNAgent::CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) {
 
 		flatbuffers::FlatBufferBuilder builder(4096);
 
@@ -1098,7 +1106,7 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		packet.Pack(CommandType::CreateRoom, reqId);
+		packet.Pack(CommandType::CreateRoom, generate_uid(ctxId, reqId));
 
 		INFO_LOG(Log::sceNet, "Requesting Create Join for World #%d, Lobby #%d", req->worldId, req->lobbyId);
 
@@ -1106,28 +1114,28 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
 
-	int RPCNAgent::CreateJoinRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
+	int RPCNAgent::CreateJoinRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
 			switch ((ErrorType)resp.error) {
 			case ErrorType::Malformed:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
+				return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
 			case ErrorType::NotFound:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
+				return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
 			case ErrorType::RoomGroupMaxSlotMismatch:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_INVALID_GROUP_SLOT_NUM, "Group Max Slot Mismatch"), 0);
+				return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_INVALID_GROUP_SLOT_NUM, "Group Max Slot Mismatch"), 0);
 			case ErrorType::RoomPasswordMissing:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_INVALID_PASSWORD_SLOT_MASK, "Password Slot Mask Missing"), 0);
+				return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_INVALID_PASSWORD_SLOT_MASK, "Password Slot Mask Missing"), 0);
 			case ErrorType::RoomGroupNoJoinLabel:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL, "Group No Join Label"), 0);
+				return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL, "Group No Join Label"), 0);
 				break;
 			default:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, resp.error, "Unknown Error creating room"), 0);
+				return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, resp.error, "Unknown Error creating room"), 0);
 			}
 		}
 		resp.stream = new vec_stream(resp.data, 1);
@@ -1137,7 +1145,7 @@ namespace net {
 		//auto stream = new vec_stream(resp.data);
 		auto roomData = resp.stream->get_flatbuffer<RoomDataInternal>();
 		if (resp.stream->is_error()) {
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
 		}
 		
 		u32 infoSize = sizeof(SceNpMatching2RoomDataInternal);
@@ -1145,7 +1153,7 @@ namespace net {
 
 		if (!Memory::IsValidAddress(roomDataPtr)) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataExternal");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
 		SceNpId* npId = NpGetNpId();
@@ -1163,14 +1171,14 @@ namespace net {
 
 		if (!Memory::IsValidAddress(respPtr)) {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
 		}
 		Memory::Write_Struct(respData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
 
-		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respPtr);
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respPtr);
 	}
 	//async
-	int RPCNAgent::JoinRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) {
+	int RPCNAgent::JoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 
 		flatbuffers::Offset<flatbuffers::Vector<u8>> final_roompassword;
@@ -1199,49 +1207,49 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		packet.Pack(CommandType::JoinRoom, reqId);
+		packet.Pack(CommandType::JoinRoom, generate_uid(ctxId, reqId));
 
 		INFO_LOG(Log::sceNet, "Join Room #%d", req->roomId);
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		return SCE_NP_MATCHING2_OKAY;
 		//return forge_request_with_com_id(builder, communication_id, CommandType::CreateRoomGUI, req_id);
 	}
 
-	int RPCNAgent::JoinRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
+	int RPCNAgent::JoinRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError:
 			break;
 		case ErrorType::Malformed:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
 		case ErrorType::NotFound:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Bad Response"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Bad Response"), 0);
 		case ErrorType::RoomMissing:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room Missing"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room Missing"), 0);
 		case ErrorType::RoomAlreadyJoined:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED, "Already Joined Room"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED, "Already Joined Room"), 0);
 		case ErrorType::RoomFull:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_ROOM_FULL, "Room is Full"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_ROOM_FULL, "Room is Full"), 0);
 		case ErrorType::RoomPasswordMismatch:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH, "Incorrect Password"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH, "Incorrect Password"), 0);
 		case ErrorType::RoomGroupFull:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_GROUP_FULL, "Group is Full"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_GROUP_FULL, "Group is Full"), 0);
 		case ErrorType::RoomGroupJoinLabelNotFound:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL, "Duplicate Group Label"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_DUPLICATE_GROUP_LABEL, "Duplicate Group Label"), 0);
 		default:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, -resp.error, "Unknown Error Joining Room"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, -resp.error, "Unknown Error Joining Room"), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
 		//auto stream = new vec_stream(_resp.data);
 		auto joinRoomResp = resp.stream->get_flatbuffer<JoinRoomResponse>();
 		if (resp.stream->is_error()) {
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
 		}
 		u32 sizeof_room_resp = sizeof(SceNpMatching2JoinRoomResponse);
 		u32 roomRespPtr = np_memory.Alloc(sizeof_room_resp);
@@ -1295,10 +1303,10 @@ namespace net {
 			}
 		}
 
-		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, SCE_NP_MATCHING2_OKAY, roomRespPtr);
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, SCE_NP_MATCHING2_OKAY, roomRespPtr);
 	}
 	//async
-	int RPCNAgent::LeaveRoom(SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) {
+	int RPCNAgent::LeaveRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<PresenceOptionData> final_optdata = CreatePresenceOptionData(builder, builder.CreateVector(req->optData.data, 16), req->optData.length);
 		auto req_finished = CreateLeaveRoomRequest(builder, req->roomId, final_optdata);
@@ -1308,49 +1316,49 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		packet.Pack(CommandType::LeaveRoom, reqId);
+		packet.Pack(CommandType::LeaveRoom, generate_uid(ctxId, reqId));
 
 		INFO_LOG(Log::sceNet, "Leaving Room #%d", req->roomId);
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return notifyRequestHandler(0, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
 
-	int RPCNAgent::LeaveRoom_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
+	int RPCNAgent::LeaveRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError:
 			break;
 		case ErrorType::Malformed:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
 		case ErrorType::Invalid:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
 		case ErrorType::NotFound:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "User cannot leave a room they are not in"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "User cannot leave a room they are not in"), 0);
 		case ErrorType::RoomMissing:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "User cannot leave a room that doesn't exist"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "User cannot leave a room that doesn't exist"), 0);
 		default:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED, "Unknown Error Leaving Room"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED, "Unknown Error Leaving Room"), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
 		//memcpy(resp, &_resp.data, sizeof(u64));
 		SceNpMatching2RoomId roomId = resp.stream->get<SceNpMatching2RoomId>();
 		if (resp.stream->is_error()) {
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
 		}
 
 		// Remove room from cache
 		//npServer->cache.RemoveRoom(roomId);
 
-		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);
 	}
 	//async
-	int RPCNAgent::GetRoomDataInternal(SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req) {
+	int RPCNAgent::GetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 
 		flatbuffers::Offset<flatbuffers::Vector<u16>> final_attr_ids_vec;
@@ -1371,44 +1379,44 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		packet.Pack(CommandType::GetRoomDataInternal, reqId);
+		packet.Pack(CommandType::GetRoomDataInternal, generate_uid(ctxId, reqId));
 
 		INFO_LOG(Log::sceNet, "Requesting Room Data Internal for Room #%d", req->roomId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Unable to Send"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Unable to Send"), 0);
 		}
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
 
-	int RPCNAgent::GetRoomDataInternal_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
+	int RPCNAgent::GetRoomDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
 			int errorCode;
 			switch ((ErrorType)resp.error) {
 			case ErrorType::Malformed:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
+				return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
 			case ErrorType::NotFound:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
+				return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
 			case ErrorType::RoomMissing:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't Exist"), 0);
+				return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't Exist"), 0);
 			default:
-				return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, -resp.error, "Unknown Error"), 0);
+				return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, -resp.error, "Unknown Error"), 0);
 			}
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
 		auto roomDataInternal = resp.stream->get_flatbuffer<RoomDataInternal>();
 		if (resp.stream->is_error())
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
 
 		u32 alloc = sizeof(SceNpMatching2RoomDataInternal);
 		u32 roomInfoPtr = np_memory.Alloc(alloc);
 		if (!Memory::IsValidAddress(roomInfoPtr)) {
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomData"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomData"), 0);
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
 		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomDataInternal, room_info, NpGetNpId(), npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
@@ -1418,15 +1426,15 @@ namespace net {
 		alloc = sizeof(SceNpMatching2GetRoomDataInternalResponse);
 		u32 roomRespPtr = np_memory.Alloc(alloc);
 		if (!Memory::IsValidAddress(roomRespPtr)) {
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomResponse"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomResponse"), 0);
 		}
 		auto room_resp = PSPPointer<SceNpMatching2GetRoomDataInternalResponse>::Create(roomRespPtr);
 		room_resp->roomDataInternal = room_info;
 
-		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, SCE_NP_MATCHING2_OKAY, room_resp.ptr);
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, SCE_NP_MATCHING2_OKAY, room_resp.ptr);
 	}
 
-	int RPCNAgent::SendRoomMessage(SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req) {
+	int RPCNAgent::SendRoomMessage(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
 
@@ -1459,33 +1467,33 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		packet.Pack(CommandType::SendRoomMessage, reqId);
+		packet.Pack(CommandType::SendRoomMessage, generate_uid(ctxId, reqId));
 
 		INFO_LOG(Log::sceNet, "Sending Room #%d a Message", req->roomId);
 
 		// NPAgent::Send()
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
-			return notifyRequestHandler(reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Unable to Send"), 0);
+			return notifyRequestHandler(ctxId, reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Unable to Send"), 0);
 		}
 		return SCE_NP_MATCHING2_OKAY;
 	}
 
-	int RPCNAgent::SendRoomMessage_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
+	int RPCNAgent::SendRoomMessage_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError: break;
 		case ErrorType::RoomMissing:
-			return notifyRequestHandler(reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't exist"), 0);
+			return notifyRequestHandler(ctxId, reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't exist"), 0);
 		case ErrorType::Unauthorized:
-			return notifyRequestHandler(reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_FORBIDDEN, "Unauthorized"), 0);
+			return notifyRequestHandler(ctxId, reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_FORBIDDEN, "Unauthorized"), 0);
 		default:
-			return notifyRequestHandler(reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Unknown Error"), 0);
+			return notifyRequestHandler(ctxId, reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Unknown Error"), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
-		return notifyRequestHandler(reqId, 0, SCE_NP_MATCHING2_OKAY, 0);
+		return notifyRequestHandler(ctxId, reqId, 0, SCE_NP_MATCHING2_OKAY, 0);
 	}
 	//async
-	int RPCNAgent::SetRoomDataInternal(SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req) {
+	int RPCNAgent::SetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_binattrinternal_vec;
 		if (req->roomBinAttrInternalNum && req->roomBinAttrInternal.IsValid())
@@ -1532,7 +1540,7 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		packet.Pack(CommandType::SetRoomDataInternal, reqId);
+		packet.Pack(CommandType::SetRoomDataInternal, generate_uid(ctxId, reqId));
 
 		INFO_LOG(Log::sceNet, "Setting Room Data Internal for Room #%d", req->roomId);
 
@@ -1540,13 +1548,13 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
 
-	int RPCNAgent::SetRoomDataInternal_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
+	int RPCNAgent::SetRoomDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
 			int errorCode;
 			switch ((ErrorType)resp.error) {
@@ -1567,7 +1575,7 @@ namespace net {
 				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", resp.error);
 				break;
 			}
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
@@ -1575,10 +1583,10 @@ namespace net {
 		if (r == 0)
 			g_signaling.init_sig(self->userInfo.npId);*/
 
-		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, SCE_NP_MATCHING2_OKAY, 0);
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, SCE_NP_MATCHING2_OKAY, 0);
 	}
 	//async
-	int RPCNAgent::SetRoomDataExternal(SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req) {
+	int RPCNAgent::SetRoomDataExternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntAttr>>> final_searchintattrexternal_vec;
 		if (req->roomSearchableIntAttrExternalNum && req->roomSearchableIntAttrExternal)
@@ -1646,7 +1654,7 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		packet.Pack(CommandType::SetRoomDataExternal, reqId);
+		packet.Pack(CommandType::SetRoomDataExternal, generate_uid(ctxId, reqId));
 
 		INFO_LOG(Log::sceNet, "Setting Room Data External for Room #%d", req->roomId);
 
@@ -1660,7 +1668,7 @@ namespace net {
 		return SCE_NP_MATCHING2_OKAY;
 	}
 
-	int RPCNAgent::SetRoomDataExternal_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
+	int RPCNAgent::SetRoomDataExternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
 			int errorCode;
 			switch ((ErrorType)resp.error) {
@@ -1682,14 +1690,14 @@ namespace net {
 				break;
 			}
 			return resp.error;
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, errorCode), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, errorCode), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
 	//async
-	int RPCNAgent::SetUserInfo(SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) {
+	int RPCNAgent::SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_memberbinattr_vec;
 		if (req->userBinAttrNum && req->userBinAttr)
@@ -1710,7 +1718,7 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		packet.Pack(CommandType::SetUserInfo, reqId);
+		packet.Pack(CommandType::SetUserInfo, generate_uid(ctxId, reqId));
 
 		INFO_LOG(Log::sceNet, "Setting UserInfo for Server #%d", req->serverId);
 
@@ -1718,13 +1726,13 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
 
-	int RPCNAgent::SetUserInfo_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
+	int RPCNAgent::SetUserInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
 			int errorCode;
 			switch ((ErrorType)resp.error) {
@@ -1741,14 +1749,14 @@ namespace net {
 				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", resp.error);
 				break;
 			}
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, errorCode), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, errorCode), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
-		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, SCE_NP_MATCHING2_OKAY, 0);
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, SCE_NP_MATCHING2_OKAY, 0);
 	}
 	//async
-	int RPCNAgent::GetRoomDataExternalList(SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req) {
+	int RPCNAgent::GetRoomDataExternalList(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
 		std::vector<uint64_t> roomIds;
@@ -1769,7 +1777,7 @@ namespace net {
 		Packet packet;
 		packet.AddCommId(&builder, this->GetCommHeader().data());
 
-		packet.Pack(CommandType::GetRoomDataExternalList, reqId);
+		packet.Pack(CommandType::GetRoomDataExternalList, generate_uid(ctxId, reqId));
 
 		INFO_LOG(Log::sceNet, "Getting RoomDataExternalList for Room #%d", req->roomId);
 
@@ -1777,35 +1785,35 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send");
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
 
-	int RPCNAgent::GetRoomDataExternalList_Reply(SceNpMatching2RequestId reqId, RPCNResponse resp) {
+	int RPCNAgent::GetRoomDataExternalList_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError:
 			break;
 		case ErrorType::Malformed:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Request"), 0);
 			break;
 		case ErrorType::NotFound:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Send Failed"), 0);
 			break;
 		default:
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, -resp.error, "Unknown Error: %08x", resp.error), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, -resp.error, "Unknown Error: %08x", resp.error), 0);
 			break;
 		}
 
 		auto roomDataExternal = resp.stream->get_flatbuffer<GetRoomDataExternalListResponse>();
 		if (resp.stream->is_error())
-			return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Response"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Malformed Response"), 0);
 
 		u32 alloc = sizeof(SceNpMatching2GetRoomDataExternalListResponse);
 		auto getRoomDataExtListResponse = PSPPointer<SceNpMatching2GetRoomDataExternalListResponse>::Create(np_memory.Alloc(alloc));
 		::np::GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(np_memory, roomDataExternal, getRoomDataExtListResponse, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
 
-		return notifyRequestHandler(reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, SCE_NP_MATCHING2_OKAY, getRoomDataExtListResponse.ptr);
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, SCE_NP_MATCHING2_OKAY, getRoomDataExtListResponse.ptr);
 	}
 }

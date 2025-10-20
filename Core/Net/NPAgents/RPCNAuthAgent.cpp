@@ -149,11 +149,11 @@ namespace net {
 					else
 						ERROR_LOG(Log::sceNet, "RPCN Read Error 0x%02X: %s", buf.error, PacketTypeNames[buf.error]);
 				}
-				responses[header.reqId] = std::move(buf);
+				responses[header.uid] = std::move(buf);
 				break;
 			case PacketType::Notification:
 				NOTICE_LOG(Log::sceNet, "RPCN Unknown Notification: %d", header.command);
-				notifications[header.reqId] = buf;
+				notifications[header.uid] = buf;
 				break;
 			case PacketType::ServerInfo:
 			{
