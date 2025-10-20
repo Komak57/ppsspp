@@ -673,10 +673,10 @@ static int sceNpMatching2ContextStop(int ctxId)
 
 	// Delete all tasks
 	{
-	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
-	npMatching2Handlers.clear();
-	defaultOptParams.clear();
-	npMatching2Events.clear();
+		std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
+		npMatching2Handlers.clear();
+		defaultOptParams.clear();
+		npMatching2Events.clear();
 	}
 
 	return SCE_NP_MATCHING2_OKAY;
@@ -1041,7 +1041,13 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	INFO_LOG(Log::sceNet, " - roomBinAttrExternalNum: %d", req->roomBinAttrExternalNum);
 	//INFO_LOG(Log::sceNet, " - roomPassword:     %s", req->roomPassword->data);
 	INFO_LOG(Log::sceNet, " - groupConfigNum:   %d", req->groupConfigNum);
-	INFO_LOG(Log::sceNet, " - passwordSlotMask: %d", req->passwordSlotMask);
+	INFO_LOG(Log::sceNet, " - passwordSlotMask: %llx", (req->passwordSlotMask.IsValid() ? *req->passwordSlotMask : 0));
+	char* pwd = "EMPTY";
+	if (req->roomPassword.IsValid()) {
+		pwd = reinterpret_cast<char*>(req->roomPassword->data);
+	}
+
+	INFO_LOG(Log::sceNet, " - roomPassword:		%s", pwd);
 	INFO_LOG(Log::sceNet, " - allowedUserNum:   %d", req->allowedUserNum);
 	INFO_LOG(Log::sceNet, " - blockedUserNum:   %d", req->blockedUserNum);
 	INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternalNum: %d", req->roomMemberBinAttrInternalNum);
@@ -1380,8 +1386,8 @@ static int sceNpMatching2AbortRequest(int ctxId, u32 assignedReqIdPtr)
 	//notifyRequestHandler(ctxId, 0, it->second.event_type, SCE_NP_MATCHING2_ERROR_ABORTED, 0);
 
 
-		return SCE_NP_MATCHING2_OKAY;
-	}
+	return SCE_NP_MATCHING2_OKAY;
+}
 
 static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {

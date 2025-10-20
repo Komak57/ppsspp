@@ -1042,8 +1042,12 @@ namespace net {
 			final_binattrexternal_vec = builder.CreateVector(davec_binattrexternal);
 
 		flatbuffers::Offset<flatbuffers::Vector<u8>> final_roompassword;
+		SceNpMatching2SessionPassword* defaultPassword = new SceNpMatching2SessionPassword();
+		std::memset(defaultPassword, 0, 8);
 		if (req->roomPassword.IsValid())
 			final_roompassword = builder.CreateVector(req->roomPassword->data, 8);
+		else
+			final_roompassword = builder.CreateVector(defaultPassword->data, 8);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<GroupConfig>>> final_groupconfigs_vec;
 		if (req->groupConfigNum && req->groupConfig.IsValid())
 		{
