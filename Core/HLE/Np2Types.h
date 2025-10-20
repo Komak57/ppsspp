@@ -1088,7 +1088,7 @@ struct SceNpMatching2RoomDataExternal
 	PSPPointer<SceNpMatching2RoomDataExternal> next;
 	SceNpMatching2ServerId serverId;
 	u8 padding1[2];
-	SceNpMatching2WorldId worldId;
+	SceNpMatching2WorldId worldIndex;
 	u16 publicSlotNum;
 	u16 privateSlotNum;
 	SceNpMatching2LobbyId lobbyId;
@@ -1290,10 +1290,41 @@ struct SceNpMatching2GetRoomDataExternalListResponse
 	u32 roomDataExternalNum;
 };
 
+struct PS3NpMatching2CreateJoinRoomRequest
+{
+	SceNpMatching2WorldId worldId;
+	u8 padding1[4];
+	SceNpMatching2LobbyId lobbyId;
+	u32 maxSlot;
+	u32 flagAttr;
+	PSPPointer<SceNpMatching2BinAttr> roomBinAttrInternal;
+	u32 roomBinAttrInternalNum;
+	PSPPointer<SceNpMatching2IntAttr> roomSearchableIntAttrExternal;
+	u32 roomSearchableIntAttrExternalNum;
+	PSPPointer<SceNpMatching2BinAttr> roomSearchableBinAttrExternal;
+	u32 roomSearchableBinAttrExternalNum;
+	PSPPointer<SceNpMatching2BinAttr> roomBinAttrExternal;
+	u32 roomBinAttrExternalNum;
+	PSPPointer<SceNpMatching2SessionPassword> roomPassword;
+	PSPPointer<SceNpMatching2RoomGroupConfig> groupConfig;
+	u32 groupConfigNum;
+	PSPPointer<SceNpMatching2RoomPasswordSlotMask> passwordSlotMask;
+	PSPPointer<SceNpId> allowedUser;
+	u32 allowedUserNum;
+	PSPPointer<SceNpId> blockedUser;
+	u32 blockedUserNum;
+	PSPPointer<SceNpMatching2GroupLabel> joinRoomGroupLabel;
+	PSPPointer<SceNpMatching2BinAttr> roomMemberBinAttrInternal;
+	u32 roomMemberBinAttrInternalNum;
+	SceNpMatching2TeamId teamId;
+	u8 padding2[3];
+	PSPPointer<SceNpMatching2SignalingOptParam> sigOptParam;
+	u8 padding3[4];
+};
 // Create-and-join room request parameters
 struct SceNpMatching2CreateJoinRoomRequest
 {
-	SceNpMatching2WorldId worldId;
+	SceNpMatching2WorldId worldIndex;
 	u8 padding1[4];
 	SceNpMatching2LobbyId lobbyId;
 	u32 maxSlot;
@@ -1379,7 +1410,7 @@ struct SceNpMatching2KickoutRoomMemberRequest
 struct SceNpMatching2SearchRoomRequest
 {
 	s32 option;
-	SceNpMatching2WorldId worldId;
+	SceNpMatching2WorldId worldIndex;
 	SceNpMatching2LobbyId lobbyId;
 	SceNpMatching2RangeFilter rangeFilter;
 	SceNpMatching2FlagAttr flagFilter;
