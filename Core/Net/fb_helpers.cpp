@@ -416,7 +416,6 @@ namespace np
 				const auto fb_battr = member_data->roomMemberBinAttrInternal()->Get(b_index);
 				ScePspDateTime updateDate;
 				{
-					const u64 rtcMagicOffset = 62135596800000000ULL;
 					uint64_t ticks = fb_battr->updateDate();
 					int tz_seconds;
 #ifdef _WIN32
@@ -429,11 +428,11 @@ namespace np
 					tz_seconds = time->tm_gmtoff;
 #endif
 
-					u64 Day = 24ull * 60ull * 60ull * 1000000ull;
-					updateDate.microsecond = ticks % 1000000ull;
-					updateDate.second = ticks / 1000000ull % 60ull;
-					updateDate.minute = ticks / 1000000ull / 60ull % 60ull;
-					updateDate.hour = ticks / 1000000ull / 60ull / 60ull % 24ull;
+					u64 Day = 24ull * 60ull * 60ull * TICKS_PER_SECOND;
+					updateDate.microsecond = ticks % TICKS_PER_SECOND;
+					updateDate.second = ticks / TICKS_PER_SECOND % 60ull;
+					updateDate.minute = ticks / TICKS_PER_SECOND / 60ull % 60ull;
+					updateDate.hour = ticks / TICKS_PER_SECOND / 60ull / 60ull % 24ull;
 					s64 z = s64(ticks / Day) - s64(rtcMagicOffset / Day);
 					s64 out_y;
 					u32 out_m, out_d;
