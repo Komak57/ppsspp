@@ -221,7 +221,7 @@ static int sceNpGetOnlineId(u32 idPtr)
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_ARGUMENT, "invalid arg");
 
 	id.FillWithZero();
-	memcpy(id->data, g_Config.infraNpId.c_str(), std::min<size_t>(16, g_Config.infraNpId.length()));
+	memcpy(id->data, npServer->GetOnlineName().c_str(), std::min<size_t>(48+1, npServer->GetOnlineName().length()));
 	id.NotifyWrite("NpGetOnlineId");
 
 	return hleLogWarning(Log::sceNet, 0, "Online ID: %s", id->data);
