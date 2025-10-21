@@ -756,7 +756,6 @@ public:
 	SceNpCommunicationPassphrase passphrase{};
 	bool include_onlinename = false, include_avatarurl = false;
 
-	std::atomic<u16> match2_event_cnt = 1;
 	std::atomic<SceNpMatching2RequestId> match2_request_cnt = 1;
 
 	//// Disable Copy

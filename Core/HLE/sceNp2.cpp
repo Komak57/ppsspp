@@ -46,6 +46,7 @@ std::map<SceNpMatching2ContextId, std::unique_ptr<NpMatching2Context>> ctx;
 std::deque<NpMatching2Args> npMatching2Events;
 std::map<SceNpMatching2ContextId, NpMatching2Handler> npMatching2Handlers;
 std::map<SceNpMatching2EventType, NpMatching2Handler> defaultOptParams;
+std::atomic<u16> match2_event_cnt = 1;
 //std::recursive_mutex npMatching2SigMtx;
 //NpMatching2Handler npSignalingCallback;
 //std::unordered_map<u32, NpMatching2Handler> npSignalingHandlers;
@@ -298,7 +299,7 @@ int notifyRoomMessageHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId
 	//args[0] = ctxId	// ContextID
 	args[1] = roomId;	// RoomID
 	args[2] = 0;		// ConnId? Ignored by PSP2i
-	args[3] = ctx[ctxId]->match2_event_cnt.fetch_add(1); // param_4? Ingored by PSP2i
+	args[3] = match2_event_cnt.fetch_add(1); // param_4? Ingored by PSP2i
 	args[4] = memberId;	// MemberID
 	args[5] = requestEvent;// Event [SCE_NP_MATCHING2_ROOM_MSG_EVENT_ChatMessage / SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message]
 	args[6] = dataPtr;	// Message
@@ -321,7 +322,7 @@ int notifyRoomEventHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId r
 	u32 args[7];
 	//args[0] = ctxId	// ContextID
 	args[1] = roomId;	// RoomID
-	args[2] = ctx[ctxId]->match2_event_cnt.fetch_add(1); // ConnectionID?
+	args[2] = match2_event_cnt.fetch_add(1); // ConnectionID?
 	args[3] = memberId;	// MemberID?
 	args[4] = event;	// Event
 	args[5] = dataPtr;	// ErrorCode
@@ -727,7 +728,6 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_CALLBACK, "%s - Invalid Callback %08x", __FUNCTION__, callbackFunctionAddr);
 	}
 
-	signaling_ctxId = ctxId;
 	SetDefaultParams(ctxId, callbackFunctionAddr, callbackArgument, SCE_NP_MATCHING2_SIGNALING_EVENT);
 
 	return SCE_NP_MATCHING2_OKAY; // error returns 0x80550004
