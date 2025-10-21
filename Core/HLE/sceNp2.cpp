@@ -211,7 +211,6 @@ SceNpMatching2RequestId GenerateRequestId(SceNpMatching2ContextId ctxId, SceNpMa
 	// Matching context
 	if (context != ctx.end())
 		return context->second->match2_request_cnt.fetch_add(1);
-
 	// No matching context
 	SceNpMatching2RequestId request_id = app_req + 1;
 	while (request_id == 0 || npMatching2Handlers.find(request_id) != npMatching2Handlers.end())
@@ -603,29 +602,18 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 	DataToHexString(10, 0, passph->data, sizeof(passph->data), &datahex);
 	INFO_LOG(Log::sceNet, "%s - Passphrase: \n%s", __FUNCTION__, datahex.c_str());
 
+	// It seems ctxId need to be in the range of 1 to 7 to be valid ?
 	SceNpMatching2ContextId ctxId = 1;
 	for (ctxId = 1; ctxId <= CONTEXT_MAX_ID; ctxId++) {
 		if (ctx.find(ctxId) != ctx.end())
 			continue;
-		break;
+		ctx.emplace(ctxId, std::make_unique<NpMatching2Context>(*titleid, *passph, optionFlags));
+		Memory::Write_U16(ctxId, ctxIdPtr);
+		// TODO: Allocate & zeroed a memory of 68 bytes where npId (36 bytes) is copied to offset 8, offset 44 = 0x00026808, offset 48 = 0
+		return SCE_NP_MATCHING2_OKAY;
 	}
 
-	if (ctxId > CONTEXT_MAX_ID)
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_MAX, "Max Contexts Reached");
-
-	//ctx[ctxId] = NpMatching2Context(*titleid, *passph, optionFlags);
-	/*ctx.emplace(std::piecewise_construct,
-		std::forward_as_tuple(ctxId),
-		std::forward_as_tuple(std::make_unique<NpMatching2Context>(*titleid, *passph, optionFlags)));*/
-
-	ctx.emplace(ctxId, std::make_unique<NpMatching2Context>(*titleid, *passph, optionFlags));
-	//ctx[ctxId] = std::move(NpMatching2Context(*titleid, *passph, optionFlags));
-	// TODO: Allocate & zeroed a memory of 68 bytes where npId (36 bytes) is copied to offset 8, offset 44 = 0x00026808, offset 48 = 0
-
-	// Returning dummy Id, a 16-bit variable according to JPCSP
-	// FIXME: It seems ctxId need to be in the range of 1 to 7 to be valid ?
-	Memory::Write_U16(ctxId, ctxIdPtr);
-	return SCE_NP_MATCHING2_OKAY;
+	return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_MAX, "Max Contexts Reached");
 }
 
 static int sceNpMatching2ContextStart(int ctxId)
