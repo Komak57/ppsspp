@@ -737,7 +737,7 @@ struct NpMatching2Args {
 	}
 
 };
-
+#define DEFAULT_CONTEXT 0
 #define CONTEXT_MAX_ID 7
 class NpMatching2Context {
 public:
@@ -766,7 +766,6 @@ public:
 	//NpMatching2Context(NpMatching2Context&&) noexcept = default;
 	//NpMatching2Context& operator=(NpMatching2Context&&) noexcept = default;
 };
-extern SceNpMatching2ContextId signaling_ctxId;
 
 #pragma pack(push,1)
 struct SceNpMatching2ConnectionInfo {

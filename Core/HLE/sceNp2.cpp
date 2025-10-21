@@ -41,7 +41,6 @@ std::recursive_mutex npMatching2EvtMtx;
 SceNpAuthMemoryStat npMatching2MemStat = {};
 u32 npPoolAddr = 0;
 BlockAllocator np_memory;
-SceNpMatching2ContextId signaling_ctxId = 0;
 
 std::map<SceNpMatching2ContextId, std::unique_ptr<NpMatching2Context>> ctx;
 std::deque<NpMatching2Args> npMatching2Events;
@@ -388,7 +387,7 @@ bool NpMatching2ProcessEvents() {
 	npMatching2Events.pop_front();
 
 	NpMatching2Handler* optParam = nullptr;
-	if (event.context_id == 0) {
+	if (event.context_id == DEFAULT_CONTEXT) {
 		WARN_LOG(Log::sceNet, "NpMatching2ProcessEvents - Using Default Opt Params");
 		if (auto def = defaultOptParams.find(event.event_type); def != defaultOptParams.end())
 			optParam = &def->second;
