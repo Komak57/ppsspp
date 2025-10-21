@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <cstdint>
 #include <algorithm>
+#include <atomic>
 
 #include "Common/CommonTypes.h"
 #include "Common/Swap.h"
@@ -422,6 +423,7 @@ typedef u16 SceNpMatching2RoomNumber;
 typedef u16 SceNpMatching2RoomMemberId;
 typedef u8 SceNpMatching2RoomGroupId;
 typedef u8 SceNpMatching2TeamId;
+// a 16-bit variable according to JPCSP
 typedef u16 SceNpMatching2ContextId;
 typedef u32 SceNpMatching2RequestId;
 typedef u16 SceNpMatching2AttributeId;
