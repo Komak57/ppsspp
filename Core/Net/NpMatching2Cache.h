@@ -7,8 +7,9 @@ class Cache {
 public:
 	void clear();
 	void AddWorld(SceNpMatching2World world);
-	std::optional<SceNpMatching2World> GetWorld(SceNpMatching2WorldId worldId);
-	void RemoveWorld(SceNpMatching2WorldId worldId);
+	std::optional<SceNpMatching2World> GetWorldFromId(SceNpMatching2WorldId worldId);
+	std::optional<SceNpMatching2World> GetWorldFromIndex(SceNpMatching2WorldId worldIndex);
+	void RemoveWorld(SceNpMatching2WorldId worldIndex);
 	void AddRoom(SceNpMatching2RoomDataInternal room);
 	std::optional<SceNpMatching2RoomDataInternal> GetRoom(SceNpMatching2RoomId roomId);
 	void RemoveRoom(SceNpMatching2RoomId roomId);

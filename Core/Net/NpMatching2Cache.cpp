@@ -15,8 +15,8 @@ void Cache::AddWorld(SceNpMatching2World world) {
 	}
 	worlds.push_back(world);
 }
-// Returns matching world or std::nullopt
-std::optional<SceNpMatching2World> Cache::GetWorld(SceNpMatching2WorldId worldId) {
+// Returns matching world by Id or std::nullopt
+std::optional<SceNpMatching2World> Cache::GetWorldFromId(SceNpMatching2WorldId worldId) {
 	for (auto& world : worlds) {
 		if (world.worldId == worldId) {
 			return world;
@@ -24,10 +24,19 @@ std::optional<SceNpMatching2World> Cache::GetWorld(SceNpMatching2WorldId worldId
 	}
 	return std::nullopt;
 }
+// Returns matching world by Index or std::nullopt
+std::optional<SceNpMatching2World> Cache::GetWorldFromIndex(SceNpMatching2WorldId worldIndex) {
+	for (auto& world : worlds) {
+		if (world.worldIndex == worldIndex) {
+			return world;
+		}
+	}
+	return std::nullopt;
+}
 // Remove World by WorldId
-void Cache::RemoveWorld(SceNpMatching2WorldId worldId) {
+void Cache::RemoveWorld(SceNpMatching2WorldId worldIndex) {
 	for (auto it = worlds.begin(); it != worlds.end();) {
-		if (it->worldId == worldId) {
+		if (it->worldIndex == worldIndex) {
 			worlds.erase(it);
 			return;
 		}
