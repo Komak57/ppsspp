@@ -1575,7 +1575,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 // Fat Princess expects rtt, bandwidth, and npid in a level 4 request, suggesting this is [[fallthrough]] behavior
 static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 roomId, u32 memberId, u32 peerMemberId, u32 code, u32 connInfoPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, memberId, code, connInfoPtr, currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %d, %d, %d, %d, %d, %08x) at %08x", __FUNCTION__, ctxId, connId, roomId, memberId, peerMemberId, code, connInfoPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -1584,7 +1584,7 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 
 	if (connInfoPtr == 0 || !Memory::IsValidAddress(connInfoPtr))
 		return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
-
+	// Fat Princess marks this as 0x24
 	auto connInfo = PSPPointer<SceNpSignalingConnectionInfo>::Create(connInfoPtr);
 
 	auto member = npServer->cache.GetMember(memberId);
@@ -1603,36 +1603,48 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
 	}
 
+	// This is a union. Only the value modified will be passed to the game
 	switch (code) {
 	case SCE_NP_SIGNALING_CONN_INFO_RTT:
 		connInfo->rtt = si->rtt;
-		WARN_LOG(Log::sceNet, "Returning a RTT of %d microseconds", connInfo->rtt);
-		connInfo->address.port = htons(SCE_SIGN_PORT);
+		NOTICE_LOG(Log::sceNet, " - SCE_NP_SIGNALING_CONN_INFO_RTT:");
+		NOTICE_LOG(Log::sceNet, " - RTT: %d microseconds", connInfo->rtt);
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_BANDWIDTH:
 		connInfo->address.port = htons(SCE_SIGN_PORT);
+		NOTICE_LOG(Log::sceNet, " - SCE_NP_SIGNALING_CONN_INFO_BANDWIDTH:");
+		NOTICE_LOG(Log::sceNet, " - Bandwidth: %d", connInfo->bandwidth);
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_PEER_NPID:
 		connInfo->npId = si->npid;
+		NOTICE_LOG(Log::sceNet, " - SCE_NP_SIGNALING_CONN_INFO_PEER_NPID:");
+		NOTICE_LOG(Log::sceNet, " - NpId: %s", connInfo->npId.handle.data);
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_PEER_ADDRESS:
 		connInfo->address.port = (u16)si->port;
 		connInfo->address.addr.np_s_addr = si->addr;
+		NOTICE_LOG(Log::sceNet, " - SCE_NP_SIGNALING_CONN_INFO_PEER_ADDRESS:");
+		NOTICE_LOG(Log::sceNet, " - IP Addr: %s", ip2str(connInfo->address.addr.np_s_addr).c_str());
+		NOTICE_LOG(Log::sceNet, " - Port: %d", ntohs(connInfo->address.port));
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_MAPPED_ADDRESS:
 		connInfo->address.port = (u16)si->mapped_port;
 		connInfo->address.addr.np_s_addr = si->mapped_addr;
+		NOTICE_LOG(Log::sceNet, " - SCE_NP_SIGNALING_CONN_INFO_MAPPED_ADDRESS:");
+		NOTICE_LOG(Log::sceNet, " - IP Addr: %s", ip2str(connInfo->address.addr.np_s_addr).c_str());
+		NOTICE_LOG(Log::sceNet, " - Port: %d", connInfo->address.port);
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_PACKET_LOSS:
 		connInfo->packet_loss = 0; // HACK
+		NOTICE_LOG(Log::sceNet, " - SCE_NP_SIGNALING_CONN_INFO_PACKET_LOSS:");
+		NOTICE_LOG(Log::sceNet, " - Packet Loss: %d", connInfo->packet_loss);
 		break;
 	default:
-		return SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT;
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "Unrecognized Code %d", code);
 	}
 
 	return SCE_NP_MATCHING2_OKAY;
 }
-
 
 static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
