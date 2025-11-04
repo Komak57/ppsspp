@@ -455,6 +455,13 @@ void signaling_handler::stop_sig_nl(u32 conn_id, bool forceful)
 	if (np2P2PThreadID)
 		__KernelResumeThreadFromWait(np2P2PThreadID, 0);
 }
+
+void signaling_handler::stop_sig(u32 conn_id, bool forceful)
+{
+	std::lock_guard lock(mtx_);
+	stop_sig_nl(conn_id, forceful);
+}
+
 /*
 	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000000: 00 00 01 53 49 47 4E 03 00 00 00 9A F6 3F B0 00  ...SIGN......?..
 	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000010: 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 47  ...............G
