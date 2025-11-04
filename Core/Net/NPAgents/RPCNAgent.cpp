@@ -1355,6 +1355,10 @@ namespace net {
 
 		INFO_LOG(Log::sceNet, "Leaving Room #%d", req->roomId);
 
+		// Send Finished, RPSC3 triggers this in sceNpSignalingTerminateConnection
+		auto connId = g_signaling.get_always_conn_id(*NpGetNpId());
+		g_signaling.stop_sig_nl(connId, false);
+
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
@@ -1389,6 +1393,12 @@ namespace net {
 
 		// Remove room from cache
 		//npServer->cache.RemoveRoom(roomId);
+
+		// Execute signaling callback to update users
+		g_signaling.DisconnectUsers(roomId);
+		if (np2P2PThreadID)
+			__KernelStopThread(np2P2PThreadID, 0, "User Left Room");
+
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);
 	}
