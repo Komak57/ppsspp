@@ -1546,7 +1546,7 @@ namespace net {
 		// NPAgent::Send()
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
-			return notifyRequestHandler(ctxId, reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Unable to Send"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Unable to Send"), 0);
 		}
 		return SCE_NP_MATCHING2_OKAY;
 	}
@@ -1555,14 +1555,14 @@ namespace net {
 		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError: break;
 		case ErrorType::RoomMissing:
-			return notifyRequestHandler(ctxId, reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't exist"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't exist"), 0);
 		case ErrorType::Unauthorized:
-			return notifyRequestHandler(ctxId, reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_FORBIDDEN, "Unauthorized"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_FORBIDDEN, "Unauthorized"), 0);
 		default:
-			return notifyRequestHandler(ctxId, reqId, 0, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Unknown Error"), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Unknown Error"), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
-		return notifyRequestHandler(ctxId, reqId, 0, SCE_NP_MATCHING2_OKAY, 0);
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, SCE_NP_MATCHING2_OKAY, 0);
 	}
 	//async
 	int RPCNAgent::SetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req) {
@@ -1766,7 +1766,7 @@ namespace net {
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
-		return SCE_NP_MATCHING2_OKAY;
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, SCE_NP_MATCHING2_OKAY, 0);
 	}
 	//async
 	int RPCNAgent::SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) {
@@ -1857,7 +1857,7 @@ namespace net {
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send");
-			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
 
 		return SCE_NP_MATCHING2_OKAY;
