@@ -784,6 +784,8 @@ void signaling_handler::process_incoming_messages() {
 		INFO_LOG(Log::sceNet, "SIGSERV %d Packet Received from %s:%d(%s)", sp->command, ip2str(op_addr).c_str(), op_port, sp->npid.handle.data);
 		auto& sent_packet = sig_packet;
 		auto si = get_signaling_ptr(sp);
+		if (si == nullptr)
+			ERROR_LOG(Log::sceNet, "SigPtr for member '%s' not found.", sp->npid.handle.data);
 
 		if (sp->command == SignalingCommand::Connect || sp->command == SignalingCommand::Info) {
 			const u32 conn_id = get_always_conn_id(sp->npid);
