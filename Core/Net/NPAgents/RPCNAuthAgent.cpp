@@ -53,8 +53,11 @@ namespace net {
 		return gen_npid;
 	}
 
-	u64 RPCNAuthAgent::generate_request_id()
+	u64 RPCNAuthAgent::generate_uid(SceNpMatching2ContextId ctxId = 0, SceNpMatching2RequestId reqId = 0)
 	{
+		if (ctxId != 0 || reqId != 0)
+			return static_cast<u64>(ctxId) << 32 | static_cast<u64>(reqId);
+
 		static u64 fallback_id = 1; // In case map is empty
 
 		if (responses.empty())
@@ -133,6 +136,9 @@ namespace net {
 			buf.data.insert(buf.data.end(), packet.Data() + RPCN_HEADER_SIZE, packet.Data() + packet.Length());
 			buf.stream = new vec_stream(buf.data);
 
+			SceNpMatching2ContextId ctxId = static_cast<u32>(header.uid >> 32);
+			SceNpMatching2RequestId reqId = header.uid & 0xFFFFFFFF;
+
 			std::lock_guard<std::mutex> lock(buffer_mutex);
 			switch ((PacketType)header.request) {
 			case PacketType::Reply:
@@ -149,7 +155,10 @@ namespace net {
 					else
 						ERROR_LOG(Log::sceNet, "RPCN Read Error 0x%02X: %s", buf.error, PacketTypeNames[buf.error]);
 				}
-				responses[header.uid] = std::move(buf);
+				switch ((CommandType)header.command) {
+				case CommandType::GetWorldList: GetWorldInfo_Reply(ctxId, reqId, buf); break;
+				default: responses[header.uid] = std::move(buf); break; // Response is synchronous
+				}
 				break;
 			case PacketType::Notification:
 				NOTICE_LOG(Log::sceNet, "RPCN Unknown Notification: %d", header.command);
@@ -340,7 +349,7 @@ namespace net {
 		packet.Write(token);
 		packet.Write((u8)0);
 
-		auto reqId = generate_request_id();
+		auto reqId = generate_uid();
 		packet.Pack(CommandType::Login, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Login Request");
@@ -382,7 +391,7 @@ namespace net {
 		packet.Write(email);
 		packet.Write((u8)0);
 
-		auto reqId = generate_request_id();
+		auto reqId = generate_uid();
 		packet.Pack(CommandType::Create, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Registration Request");
@@ -408,7 +417,7 @@ namespace net {
 		packet.Write(password);
 		packet.Write((u8)0);
 
-		auto reqId = generate_request_id();
+		auto reqId = generate_uid();
 		packet.Pack(CommandType::SendToken, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Login Request");
@@ -434,7 +443,7 @@ namespace net {
 		packet.Write(email);
 		packet.Write((u8)0);
 
-		auto reqId = generate_request_id();
+		auto reqId = generate_uid();
 		packet.Pack(CommandType::SendResetToken, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Login Request");
@@ -463,7 +472,7 @@ namespace net {
 		packet.Write(password);
 		packet.Write((u8)0);
 
-		auto reqId = generate_request_id();
+		auto reqId = generate_uid();
 		packet.Pack(CommandType::ResetPassword, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Login Request");
@@ -485,7 +494,7 @@ namespace net {
 	u64 RPCNAuthAgent::GetNetworkTime() {
 		Packet packet = Packet();
 
-		auto reqId = generate_request_id();
+		auto reqId = generate_uid();
 		packet.Pack(CommandType::GetNetworkTime, reqId);
 
 		INFO_LOG(Log::sceNet, "Sending Get Network Time Request");
