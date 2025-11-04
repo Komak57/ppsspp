@@ -979,6 +979,8 @@ void signaling_handler::handle_finished(const signaling_packet* sp, std::shared_
 	sent_packet.command = SignalingCommand::FinishedAck;
 	update_ext_si_status(si, false);
 	update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TERMINATED_BY_PEER);
+	// RPCS3 handles this in sceNpSignalingDeactivateConnection
+	stop_sig(si->conn_id, false);
 	// Reply
 	INFO_LOG(Log::sceNet, "FINISHED_ACK -> P2P");
 	send_signaling_packet(sent_packet, op_addr, op_port);
