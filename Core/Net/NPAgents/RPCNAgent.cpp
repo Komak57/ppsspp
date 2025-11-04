@@ -331,6 +331,7 @@ namespace net {
 				case CommandType::SendRoomMessage: SendRoomMessage_Reply(ctxId, reqId, buf); break;
 				case CommandType::SetUserInfo: SetUserInfo_Reply(ctxId, reqId, buf); break;
 				case CommandType::GetRoomDataExternalList: GetRoomDataExternalList_Reply(ctxId, reqId, buf); break;
+					case CommandType::RequestSignalingInfos: RequestSignalingInfo_Reply(ctxId, reqId, buf); break;
 				default: responses[header.uid] = std::move(buf); break; // Response is synchronous
 				}
 				break;
@@ -798,7 +799,7 @@ namespace net {
 		packet.Write(npid);
 		packet.Write((u8)0);
 
-		auto reqId = generate_uid();
+		auto reqId = generate_uid(DEFAULT_CONTEXT, conn_id);
 		packet.Pack(CommandType::RequestSignalingInfos, reqId);
 
 		INFO_LOG(Log::sceNet, "Requesting Signaling Info for %s", npid.c_str());
@@ -808,9 +809,11 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
 		}
+		return SCE_NP_MATCHING2_OKAY;
+	}
 
-		auto resp = take_pending_request(reqId);
-		if (resp.error != (u8)ErrorType::NoError) {
+	int RPCNAgent::RequestSignalingInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId conn_id, RPCNResponse resp) {
+
 			switch ((ErrorType)resp.error)
 			{
 			case ErrorType::NotFound:
@@ -819,15 +822,14 @@ namespace net {
 				return SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND;
 			}
 			default:
-				ERROR_LOG(Log::sceNet, "Unexpected error in reply to RequestSignalingInfos: %d", resp.error);
+			ERROR_LOG(Log::sceNet, "Unexpected error in RequestSignalingInfo_Reply: %d", resp.error);
 				return SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED;
 			}
-		}
 		resp.stream = new vec_stream(resp.data, 1);
 
 		const auto* sigAddr = resp.stream->get_flatbuffer<SignalingAddr>();
 		if (resp.stream->is_error() || !sigAddr->ip()) {
-			ERROR_LOG(Log::sceNet, "Malformed reply to RequestSignalingInfos command");
+			ERROR_LOG(Log::sceNet, "Malformed RequestSignalingInfo_Reply");
 			return SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED;
 		}
 		auto vec = sigAddr->ip();
