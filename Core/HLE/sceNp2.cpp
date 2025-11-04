@@ -326,7 +326,7 @@ int notifyRoomMessageHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId
 	u32 args[8];
 	//args[0] = ctxId	// ContextID
 	args[1] = roomId;	// RoomID
-	args[2] = 0;		// ConnId? Ignored by PSP2i
+	args[2] = memberId;	// ConnId? Ignored by PSP2i
 	args[3] = match2_event_cnt.fetch_add(1); // param_4? Ingored by PSP2i
 	args[4] = memberId;	// MemberID
 	args[5] = requestEvent;// Event [SCE_NP_MATCHING2_ROOM_MSG_EVENT_ChatMessage / SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message]
