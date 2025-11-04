@@ -1462,7 +1462,7 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	// Unverified extra data?
 	netInfo->UPnPStatus = (g_Config.bEnableUPnP ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
 	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-	netInfo->port = htons(npServer->GetSigPort());
+	netInfo->port = htons(SCE_SIGN_PORT);
 
 	return SCE_NP_MATCHING2_OKAY;
 }
@@ -1541,6 +1541,8 @@ static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqI
 }
 
 static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 roomId, u32 memberId, u32 code, u32 connInfoPtr)
+		sig_port = htons(SCE_SIGN_PORT);
+		sig_port = htons(SCE_SIGN_PORT);
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, memberId, code, connInfoPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
@@ -1574,9 +1576,10 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 roomId, u32 m
 	case SCE_NP_SIGNALING_CONN_INFO_RTT:
 		connInfo->rtt = si->rtt;
 		WARN_LOG(Log::sceNet, "Returning a RTT of %d microseconds", connInfo->rtt);
+		connInfo->address.port = htons(SCE_SIGN_PORT);
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_BANDWIDTH:
-		connInfo->bandwidth = 100'000'000; // 100 MBPS HACK
+		connInfo->address.port = htons(SCE_SIGN_PORT);
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_PEER_NPID:
 		connInfo->npId = si->npid;

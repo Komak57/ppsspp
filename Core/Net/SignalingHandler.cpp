@@ -70,9 +70,9 @@ void signaling_handler::stop(const char* reason) {
 
 bool signaling_handler::create_connection() {
 	// Get the InetSocket object from the socket manager
-	auto inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
+	auto inetSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
 	if (inetSocket == nullptr) {
-		WARN_LOG(Log::sceNet, "Creating new socket for port %d", SCE_NP_PORT);
+		WARN_LOG(Log::sceNet, "Creating new socket for port %d", SCE_INTERNAL_PORT);
 		//return;
 
 		int index;
@@ -91,7 +91,7 @@ bool signaling_handler::create_connection() {
 		sockaddr_in addr{};
 		addr.sin_family = AF_INET;
 		addr.sin_addr.s_addr = INADDR_ANY;
-		addr.sin_port = ntohs(SCE_NP_PORT);
+		addr.sin_port = ntohs(SCE_INTERNAL_PORT);
 
 		if (bind(inetSocket->sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to bind new socket for listening");
@@ -107,9 +107,9 @@ bool signaling_handler::create_connection() {
 		setUDPConnReset(inetSocket->sock, false);
 
 		inetSocket->state = SocketState::UsedNetInet;
-		inetSocket->port = SCE_NP_PORT;
+		inetSocket->port = SCE_INTERNAL_PORT;
 
-		bool ok = g_PortManager.Add("UDP", SCE_NP_PORT, SCE_NP_PORT);
+		bool ok = g_PortManager.Add("UDP", SCE_INTERNAL_PORT, SCE_INTERNAL_PORT);
 	}
 	// If not running, spin up the recv thread
 	if (!running_) {
@@ -121,11 +121,11 @@ bool signaling_handler::create_connection() {
 }
 
 bool signaling_handler::destroy_connection() {
-	auto inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
+	auto inetSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
 	if (inetSocket == nullptr)
 		return true;
 	g_socketManager.Close(inetSocket);
-	g_PortManager.Remove("UDP", SCE_NP_PORT);
+	g_PortManager.Remove("UDP", SCE_INTERNAL_PORT);
 	return true;
 }
 // This function assumes addr and port are in network order
@@ -135,7 +135,7 @@ bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, sockaddr_i
 
 	std::string datahex;
 	DEBUG_HEXLOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size(), 386);
-	auto inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
+	auto inetSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
 	if (!inetSocket) {
 		ERROR_LOG(Log::sceNet, "Socket not found");
 		return false;
@@ -540,7 +540,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 			// Socket lost. Try to find it again!
 			WARN_LOG(Log::sceNet, "Reaquiring Socket for Signaling Receiver Thread");
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-			inetSocket = g_socketManager.FindSocketByPort(SCE_NP_PORT);
+			inetSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
 			continue;
 		}
 		u8 buf[1500];
@@ -1018,9 +1018,9 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		const u32 addr_p2p = htonl(result_ip);
 		u16 port_p2p = signaling_info->port();
 		auto n = GetI18NCategory(I18NCat::NETWORKING);
-		if (port_p2p == 3658) {
-			g_OSD.Show(OSDType::MESSAGE_WARNING, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(port_p2p) + std::string(" -> ") + std::to_string(SCE_NP_PORT), 0.0f, "userjoinroom");
-			port_p2p = SCE_NP_PORT;
+		if (port_p2p == SCE_SIGN_PORT) {
+			g_OSD.Show(OSDType::MESSAGE_WARNING, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(port_p2p) + std::string(" -> ") + std::to_string(SCE_INTERNAL_PORT), 0.0f, "userjoinroom");
+			port_p2p = SCE_INTERNAL_PORT;
 		}
 		g_OSD.Show(OSDType::MESSAGE_SUCCESS, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(port_p2p), 0.0f, "userjoinroom");
 		
@@ -1231,8 +1231,8 @@ void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 
 	const u32 addr_p2p = result_ip;
 	u16 port_p2p = matching_info->addr()->port();
-	if (port_p2p == 3658)
-		port_p2p = SCE_NP_PORT;
+	if (port_p2p == SCE_SIGN_PORT)
+		port_p2p = SCE_INTERNAL_PORT;
 
 	send_information_packets(addr_p2p, port_p2p, npid_p2p);
 }

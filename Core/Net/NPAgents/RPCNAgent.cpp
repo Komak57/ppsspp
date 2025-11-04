@@ -833,8 +833,8 @@ namespace net {
 			addr = getLocalIp(tls.netCtx.fd);
 
 		u16 port = sigAddr->port();
-		if (port == 3658)
-			port = SCE_NP_PORT;
+		if (port == SCE_SIGN_PORT)
+			port = SCE_INTERNAL_PORT;
 
 		g_signaling.connect(conn_id, addr, port);
 		return SCE_NP_MATCHING2_OKAY;
@@ -1309,8 +1309,8 @@ namespace net {
 
 				const u32 addr_p2p = htonl(result_ip);
 				u16 port_p2p = signaling_info->addr()->port();
-				if (port_p2p == 3658)
-					port_p2p = SCE_NP_PORT;
+				if (port_p2p == SCE_SIGN_PORT)
+					port_p2p = SCE_INTERNAL_PORT;
 
 				const SceNpMatching2RoomMemberId member_id = signaling_info->member_id();
 
