@@ -812,12 +812,14 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamP
 	if (!Memory::IsValidAddress(serverIdPtr))
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
 	// Server ID is a 16-bit variable according to JPCSP
-	SceNpMatching2ServerId serverId = Memory::Read_U16(serverIdPtr);
+	// PSP2i says this is a 16-byte request struct where only the 16-bit server id is allocated
+	auto serverReq = PSPPointer<SceNpMatching2GetServerInfoRequest>::Create(serverIdPtr);
+	//SceNpMatching2ServerId serverId = Memory::Read_U16(serverIdPtr);
 
 	// Check server status
 	//servers[serverId]->Resolve();
 
-	SceNpMatching2ServerInfo serverInfo = npServer->GetServerInfo(serverId);
+	SceNpMatching2ServerInfo serverInfo = npServer->GetServerInfo(serverReq);
 
 	u32 respSize = sizeof(SceNpMatching2GetServerInfoResponse);
 	auto serv_info_ptr = np_memory.Alloc(respSize);
@@ -828,8 +830,13 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamP
 	serv_info->server.id = serverInfo.id;
 	serv_info->server.status = serverInfo.status;
 		
-	NOTICE_LOG(Log::sceNet, " - Server ID: %d", serverInfo.id);
-	NOTICE_LOG(Log::sceNet, " - Server Status: %d", serverInfo.status);
+	NOTICE_LOG(Log::sceNet, " - Server Id: %d", serverInfo.id);
+	switch (serverInfo.status) {
+	case SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE: NOTICE_LOG(Log::sceNet, " - Server Status: Available"); break;
+	case SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE: ERROR_LOG(Log::sceNet, " - Server Status: Unavailable"); break;
+	case SCE_NP_MATCHING2_SERVER_STATUS_BUSY: ERROR_LOG(Log::sceNet, " - Server Status: Busy"); break;
+	case SCE_NP_MATCHING2_SERVER_STATUS_MAINTENANCE: ERROR_LOG(Log::sceNet, " - Server Status: Maintenance"); break;
+	}
 
 	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, SCE_NP_MATCHING2_OKAY, serv_info.ptr);
 }

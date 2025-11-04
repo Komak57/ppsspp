@@ -509,12 +509,12 @@ namespace net {
 			return false;
 		}
 
-		SceNpMatching2ServerInfo GetServerInfo(SceNpMatching2ServerId ServerID) {
+		SceNpMatching2ServerInfo GetServerInfo(PSPPointer<SceNpMatching2GetServerInfoRequest> serverReq) {
 			for (size_t i = 0; i < servers.size(); ++i)
-				if (servers[i].id == ServerID)
+				if (servers[i].id == serverReq->serverId)
 					return { servers[i].id, servers[i].status };
 
-			return { ServerID, SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE };
+			return { serverReq->serverId, SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE };
 		};
 
 		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) = 0;

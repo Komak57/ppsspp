@@ -675,9 +675,14 @@ namespace net {
 			NPServerInfo server{};
 			server.nptype = NPAgentType::RPCN;
 			server.id = resp.stream->get<SceNpMatching2ServerId>();
+			//server.num = i+1;
 			server.host = this->host_;
 			server.port = this->port_;
 			server.status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
+
+			INFO_LOG(Log::sceNet, " - ID: %d", server.id);
+			//INFO_LOG(Log::sceNet, " - Num: %d", server.num);
+			INFO_LOG(Log::sceNet, " - Availability: %d", server.status);
 
 			npServer->servers.push_back(server);
 			//serversPtr->emplace(server_id, net::CreateNPAgent(net::NPAgentType::RPCN, server_id, this->host_, this->port_, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
@@ -725,11 +730,13 @@ namespace net {
 
 		Packet packet = Packet();
 		packet.Write(this->GetCommHeader());
-		packet.Write((u16)this->selected->id);
+		// RPCN takes server_id in Big Endian
+		packet.Write(u8((this->selected->id) & 0xFF));
+		packet.Write(u8((this->selected->id >> 8) & 0xFF));
 
 		packet.Pack(CommandType::GetWorldList, generate_uid(ctxId, reqId));
 
-		INFO_LOG(Log::sceNet, "Requesting World Info");
+		INFO_LOG(Log::sceNet, "Requesting World Info for Server %d", this->selected->id);
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
