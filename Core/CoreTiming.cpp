@@ -32,6 +32,8 @@
 #include "Core/Config.h"
 #include "Core/HLE/sceKernelThread.h"
 #include "Core/MIPS/MIPS.h"
+#include "Net/NPAgent.h"
+#include "Net/SignalingHandler.h"
 
 static const int initialHz = 222000000;
 int CPU_HZ = 222000000;
@@ -39,6 +41,7 @@ int CPU_HZ = 222000000;
 // is this really necessary?
 #define INITIAL_SLICE_LENGTH 20000
 #define MAX_SLICE_LENGTH 100000000
+#define NETWORK_RESYNC_US 10000000LL
 
 namespace CoreTiming {
 
@@ -59,6 +62,9 @@ alignas(16) s64 globalTimer;
 s64 idledCycles;
 s64 lastGlobalTimeTicks;
 s64 lastGlobalTimeUs;
+s64 lastNetworkTimeTicks;
+s64 lastNetworkUpdate;
+s64 lastNetworkTimeUs;
 
 std::vector<MHzChangeCallback> mhzChangeCallbacks;
 
@@ -104,6 +110,47 @@ u64 GetGlobalTimeUs() {
 		usSinceLast = 0;
 	}
 	return lastGlobalTimeUs + usSinceLast;
+}
+
+u64 GetNetworkTimeUs() {
+	const u64 currentTicks = GetTicks();
+	s64 ticksSinceLast = currentTicks - lastNetworkTimeTicks;
+	s64 usSinceLast = cyclesToUs(ticksSinceLast);
+	if (currentTicks - lastNetworkUpdate > usToCycles(NETWORK_RESYNC_US)) {
+		u64 currentNetworkTimeUs = 0;
+		if (npAuthServer && npAuthServer->IsConnected())
+			currentNetworkTimeUs = npAuthServer->GetNetworkTime(); // - Latency is not available until npServer starts
+		else if (npServer && npServer->IsConnected())
+			currentNetworkTimeUs = npServer->GetNetworkTime() + g_signaling.GetLatencyUs();
+
+		if (currentNetworkTimeUs != 0) {
+			lastNetworkUpdate = currentTicks; // Reset Update Counter
+			lastNetworkTimeUs = currentNetworkTimeUs;
+			lastNetworkTimeTicks = currentTicks;
+			return currentNetworkTimeUs;
+		}
+	}
+	if (ticksSinceLast > UINT_MAX) {
+		// Adjust the calculated value to avoid overflow errors.
+		lastNetworkTimeUs += usSinceLast;
+		lastNetworkTimeTicks = currentTicks;
+		usSinceLast = 0;
+	}
+	return lastNetworkTimeUs + usSinceLast;
+}
+
+void InitializeNetworkTime() {
+	u64 currentNetworkTimeUs = 0;
+	if (npAuthServer && npAuthServer->IsConnected())
+		currentNetworkTimeUs = npAuthServer->GetNetworkTime(); // - Latency is not available until npServer starts
+	else if (npServer && npServer->IsConnected())
+		currentNetworkTimeUs = npServer->GetNetworkTime() + g_signaling.GetLatencyUs();
+
+	if (currentNetworkTimeUs != 0) {
+		lastNetworkTimeUs = currentNetworkTimeUs;
+		lastNetworkTimeTicks = GetTicks();
+		lastNetworkUpdate = lastNetworkTimeTicks; // Reset Update Counter
+	}
 }
 
 const Event *GetFirstEvent() {
@@ -187,6 +234,8 @@ void Init()
 	idledCycles = 0;
 	lastGlobalTimeTicks = 0;
 	lastGlobalTimeUs = 0;
+	lastNetworkTimeTicks = 0;
+	lastNetworkTimeUs = 0;
 	mhzChangeCallbacks.clear();
 	CPU_HZ = initialHz;
 }

@@ -72,6 +72,11 @@ inline s64 cyclesToUs(s64 cycles) {
 	return (cycles * 1000000) / CPU_HZ;
 }
 
+// Each "network tick" is 1/64 second = 15625 microseconds
+inline s64 usToTicks(s64 us) {
+	return (s64)(us / 15625ULL);
+}
+
 namespace CoreTiming {
 	typedef void (*MHzChangeCallback)();
 	typedef void (*TimedCallback)(u64 userdata, int cyclesLate);
@@ -89,11 +94,13 @@ namespace CoreTiming {
 	typedef LinkedListItem<BaseEvent> Event;
 
 	void Init();
+	void InitializeNetworkTime();
 	void Shutdown();
 
 	u64 GetTicks();
 	u64 GetIdleTicks();
 	u64 GetGlobalTimeUs();
+	u64 GetNetworkTimeUs();
 	u64 GetGlobalTimeUsScaled();
 
 	// Returns the event_type identifier.
