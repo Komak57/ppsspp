@@ -646,6 +646,7 @@ namespace net {
 		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
 		int GetWorldInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
 		int RequestSignalingInfo(std::string npid, u32 conn_id);
+		int RequestSignalingInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId conn_id, RPCNResponse resp);
 		int SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req);
 		int SearchRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
 		int CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req);
@@ -718,6 +719,8 @@ namespace net {
 		virtual int SendResetToken(const char* npid, const char* email) = 0;
 		virtual int ResetPassword(const char* npid, const char* token, const char* password) = 0;
 		virtual u64 GetNetworkTime() = 0;
+		virtual int GetServers(SceNpCommunicationId npTitleId) = 0;
+		virtual int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) = 0;
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
@@ -737,6 +740,31 @@ namespace net {
 		}
 		int GetConnPort() { return port_; }
 
+		SceNpMatching2ServerInfo GetServerInfo(SceNpMatching2ServerId ServerID) {
+			for (size_t i = 0; i < servers.size(); ++i)
+				if (servers[i].id == ServerID)
+					return { servers[i].id, servers[i].status };
+
+			return { ServerID, SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE };
+		};
+
+		bool SelectServer(SceNpMatching2ServerId ServerID) {
+			for (size_t i = 0; i < servers.size(); ++i) {
+				if (servers[i].id == ServerID) {
+					selected = &servers[i];
+					return true;
+				}
+			}
+			return false;
+		};
+
+	public:
+		// Holds all servers provided by GetServers
+		// <index, NPServerInfo>
+		std::vector<NPServerInfo> servers;
+		// Pointer to the selected server
+		NPServerInfo* selected = nullptr;
+
 	protected:
 		uintptr_t sock_ = -1;
 		bool cancelled = false;
@@ -752,6 +780,7 @@ namespace net {
 		std::string online_name;
 		std::string avatar_url;
 		s64 user_id;
+
 	};
 	class PSNAuthAgent : public NPAuthAgent {
 	public:
@@ -767,6 +796,8 @@ namespace net {
 		int ResetPassword(const char* npid, const char* token, const char* password);
 		u64 GetNetworkTime();
 		NPAgentType GetAuthType() const override { return NPAgentType::PSN; }
+		int GetServers(SceNpCommunicationId npTitleId);
+		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
 	};
 	class RPCNAuthAgent : public NPAuthAgent {
 	public:
@@ -782,12 +813,15 @@ namespace net {
 		int SendResetToken(const char* npid, const char* email);
 		int ResetPassword(const char* npid, const char* token, const char* password);
 		u64 GetNetworkTime();
+		int GetServers(SceNpCommunicationId npTitleId);
+		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
+		int GetWorldInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
 
 		NPAgentType GetAuthType() const override { return NPAgentType::RPCN; }
 		void start_read_thread();
 		void stop_read_thread();
 
-		u64 generate_request_id();
+		u64 generate_uid(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId);
 		std::vector<u8> GetCommHeader() {
 			std::array<char, COMMUNICATION_ID_SIZE + 1> buffer{};
 			// Format directly into buffer: 9-char ID + "_%02d"
