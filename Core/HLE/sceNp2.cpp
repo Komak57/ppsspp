@@ -1728,6 +1728,8 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
 	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
+	if (!Memory::IsValidAddress(optParam->cbFunc.ptr))
+		request_id = 0;
 	Memory::Write_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
