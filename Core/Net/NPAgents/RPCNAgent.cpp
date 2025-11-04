@@ -11,6 +11,8 @@
 #include <Core/HLE/sceNp2.h>
 #include <Core/Net/fb_helpers.h>
 #include <Data/Text/I18n.h>
+#include <Core/CoreTiming.h>
+#include <Core/Net/fb_helpers.h>
 
 using namespace std::literals::chrono_literals;
 
