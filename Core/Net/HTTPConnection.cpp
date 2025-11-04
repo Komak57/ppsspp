@@ -121,13 +121,13 @@ bool HTTPConnection::Resolve(const char* host, int port, net::DNSType type) {
 bool HTTPConnection::Connect(int connectionID, int maxTries, double timeout, bool* cancelConnect) {
 	if (tls.enabled)
 		return SSLConnect(connectionID, maxTries, timeout, cancelConnect);
-	WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+	DEBUG_LOG(Log::sceNet, "UNTESTED HTTPConnection::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 	_dbg_assert_(!tls.enabled);
 	return hleLogError(Log::sceNet, false, "HTTP Not Supported Yet");
 }
 
 bool HTTPConnection::SSLConnect(int connectionID, int maxTries, double timeout, bool* cancelConnect) {
-	WARN_LOG(Log::sceNet, "UNTESTED HTTPConnection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
+	DEBUG_LOG(Log::sceNet, "UNTESTED HTTPConnection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 	if (port <= 0) {
 		ERROR_LOG(Log::IO, "SSLConnect - Bad port");
 		lastError = SCE_HTTP_ERROR_NETWORK;
@@ -196,7 +196,7 @@ bool HTTPConnection::SSLConnect(int connectionID, int maxTries, double timeout, 
 			/*
 			 * 4. Handshake
 			 */
-			NOTICE_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
+			DEBUG_LOG(Log::sceNet, "SSLConnect - Performing the SSL/TLS handshake...");
 			start_time = std::chrono::high_resolution_clock::now();
 			while ((ret = mbedtls_ssl_handshake(&tls.sslCtx)) != 0) {
 				if (connecting == false) return false;
@@ -216,7 +216,7 @@ bool HTTPConnection::SSLConnect(int connectionID, int maxTries, double timeout, 
 			else if (duration_ms > 60)
 				WARN_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
 			else
-				NOTICE_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
+				DEBUG_LOG(Log::sceNet, "SSLConnect - Handshake took %dms", duration_ms);
 			// Fake latency
 			//std::this_thread::sleep_for(std::chrono::milliseconds(60 - duration_ms));
 			/*
@@ -237,7 +237,7 @@ bool HTTPConnection::SSLConnect(int connectionID, int maxTries, double timeout, 
 					goto retry;
 				}
 			}
-			INFO_LOG(Log::sceNet, "SSLConnect - Connection Successful");
+			DEBUG_LOG(Log::sceNet, "SSLConnect - Connection Successful");
 			connected = true;
 			// Save session for recycle
 			if (sessions.find(connectionID) != sessions.end()) {
@@ -413,7 +413,7 @@ int HTTPRequest::readData(u32 destDataPtr, u32 size) {
 	int obtained = 0;
 	// Only read if we're expecting more data
 	if (remainingLength > 0) {
-		INFO_LOG(Log::sceNet, "ReadResponseEntity - Reading %i bytes of the %i bytes remaining", pack, remainingLength);
+		DEBUG_LOG(Log::sceNet, "ReadResponseEntity - Reading %i bytes of the %i bytes remaining", pack, remainingLength);
 		int ret;
 		if (tls.enabled)
 			ret = readbuf.Read(tls.netCtx.fd, pack, &tls);
