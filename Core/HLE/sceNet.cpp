@@ -1762,7 +1762,7 @@ static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
 		uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
 		// This is the only value Phantasy Star cares about at +0x8
 		uPnPInfo->nat_status = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
-		}
+	}
 	NOTICE_LOG(Log::sceNet, " - Local Address: %s", ip2str(uPnPInfo->local_address).c_str());
 	NOTICE_LOG(Log::sceNet, " - Public Address: %s", ip2str(uPnPInfo->mapped_address).c_str());
 	NOTICE_LOG(Log::sceNet, " - NAT Type: %d", uPnPInfo->nat_status); // Only thing PSP2i cares about. 1 byte at offset +8

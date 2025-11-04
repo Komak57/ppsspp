@@ -10,6 +10,7 @@
 #include <Core/HLE/sceNetInet.cpp>
 #include <System/OSD.h>
 #include <Data/Text/I18n.h>
+#include "fb_helpers.h"
 // Used for things like 10s
 using namespace std::chrono_literals;
 
@@ -22,7 +23,8 @@ u64 signaling_handler::get_micro_timestamp(const std::chrono::steady_clock::time
 	return std::chrono::duration_cast<std::chrono::microseconds>(time_point.time_since_epoch()).count();
 }
 
-// This function assumes addr and port are in network order
+// This function assumes addr is in network order
+// and port is in host order
 void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
 	NOTICE_LOG(Log::sceNet, "Signaling Connecting to %s:%d", ip2str(addr).c_str(), port);
 	std::scoped_lock lk(mtx_);
@@ -370,7 +372,7 @@ void signaling_handler::update_si_status(std::shared_ptr<signaling_info>& si, s3
 			si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED;
 			//signal_ext_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED, CELL_OK);
 			notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
-	}
+		}
 	}
 	else if ((si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_PENDING || si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE) && new_status == SCE_NP_SIGNALING_CONN_STATUS_INACTIVE)
 	{
@@ -470,6 +472,8 @@ void signaling_handler::stop_sig(u32 conn_id, bool forceful)
 	46:41:364 user_main    I[SCENET]: Common\Log.h:181 00000040: 00 00 00 00 00 00 00 00 00 00 00                 ...........
 */
 
+// Assumes addr is in Network order
+// Assumes port is in Host order
 void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u16 port) const {
 	INFO_LOG(Log::sceNet, "send_signaling_packet(command: %d, ip: %s, port: %d)", sp.command, ip2str(addr).c_str(), port);
 	std::vector<u8> packet(sizeof(signaling_packet) + VPORT_0_HEADER_SIZE);
@@ -815,7 +819,7 @@ void signaling_handler::process_incoming_messages() {
 }
 
 void signaling_handler::handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
-	INFO_LOG(Log::sceNet, "SIGSERV: Ping");
+	INFO_LOG(Log::sceNet, "PING <- P2P");
 	/*reply = true;
 	schedule_repeat = false;
 	sent_packet.command = signal_pong;
@@ -830,7 +834,7 @@ void signaling_handler::handle_ping(const signaling_packet* sp, signaling_packet
 }
 
 void signaling_handler::handle_pong(const signaling_packet* sp, std::shared_ptr<signaling_info> si) {
-	INFO_LOG(Log::sceNet, "SIGSERV: Pong");
+	INFO_LOG(Log::sceNet, "PONG <- P2P");
 	/*update_rtt(sp->timestamp_sender);
 	reply = false;
 	schedule_repeat = false;
@@ -859,7 +863,7 @@ void signaling_handler::handle_pong(const signaling_packet* sp, std::shared_ptr<
 }
 
 void signaling_handler::handle_info(const signaling_packet* sp, std::shared_ptr<signaling_info> si, u32 op_addr, u16 op_port) {
-	INFO_LOG(Log::sceNet, "SIGSERV: Info");
+	INFO_LOG(Log::sceNet, "INFO <- P2P");
 	/*update_si_addr(si, op_addr, op_port);
 	reply = false;
 	schedule_repeat = false;*/
@@ -869,7 +873,7 @@ void signaling_handler::handle_info(const signaling_packet* sp, std::shared_ptr<
 }
 
 void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
-	INFO_LOG(Log::sceNet, "SIGSERV: Connect");
+	INFO_LOG(Log::sceNet, "CONNECT <- P2P");
 	/*reply = true;
 	schedule_repeat = true;
 	sent_packet.command = signal_connect_ack;
@@ -890,7 +894,7 @@ void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_p
 }
 
 void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
-	INFO_LOG(Log::sceNet, "SIGSERV: Connect ACK");
+	INFO_LOG(Log::sceNet, "CONNECT_ACK <- P2P");
 	/*update_rtt(sp->timestamp_sender);
 	reply = true;
 	schedule_repeat = false;
@@ -933,7 +937,7 @@ void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shar
 }
 
 void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
-	INFO_LOG(Log::sceNet, "SIGSERV: Confirm");
+	INFO_LOG(Log::sceNet, "CONFIRM <- P2P");
 	/*update_rtt(sp->timestamp_receiver);
 	reply = false;
 	schedule_repeat = false;
@@ -970,7 +974,7 @@ void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_p
 }
 
 void signaling_handler::handle_finished(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
-	INFO_LOG(Log::sceNet, "SIGSERV: Finished");
+	INFO_LOG(Log::sceNet, "FINISHED <- P2P");
 	/*reply = true;
 	schedule_repeat = false;
 	sent_packet.command = signal_finished_ack;
@@ -988,7 +992,7 @@ void signaling_handler::handle_finished(const signaling_packet* sp, std::shared_
 }
 
 void signaling_handler::handle_finished_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si) {
-	INFO_LOG(Log::sceNet, "SIGSERV: Finished ACK");
+	INFO_LOG(Log::sceNet, "FINISHED_ACK <- P2P");
 	/*reply = false;
 	schedule_repeat = false;
 	update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TERMINATED_BY_MYSELF);
@@ -1086,7 +1090,6 @@ void signaling_handler::UserLeftRoom(SceNpMatching2ContextId ctxId, SceNpMatchin
 		return;
 	}
 
-	const u32 event_key = 0;// get_event_key();
 	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
 
 	u32 _size = sizeof(SceNpMatching2RoomMemberUpdateInfo);
@@ -1224,7 +1227,7 @@ void signaling_handler::UpdatedRoomMemberDataInternal(SceNpMatching2ContextId ct
 		//notifyRoomEventHandler(ctxId, room_id, memberId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
 		return;
 	}
-
+	
 	SceNpMatching2RoomMemberId memberId = notif_data->newRoomMemberDataInternal->memberId;
 	npServer->cache.AddMember(*notif_data->newRoomMemberDataInternal);
 
@@ -1249,7 +1252,7 @@ void signaling_handler::RoomMessageReceived(SceNpMatching2ContextId ctxId, SceNp
 
 	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
 	SceNpMatching2RoomMemberId member_id = resp.stream->get<u16>();
-	NOTICE_LOG(Log::sceNet, "NOTI RoomMessageReceived(room: %d, member: %d)", room_id, member_id);
+	NOTICE_LOG(Log::sceNet, " - room: %d, member: %d)", room_id, member_id);
 
 	const auto* message_info = resp.stream->get_flatbuffer<RoomMessageInfo>();
 
@@ -1263,7 +1266,7 @@ void signaling_handler::RoomMessageReceived(SceNpMatching2ContextId ctxId, SceNp
 	u32 ptr = np_memory.Alloc(_size);
 	auto notif_data = PSPPointer<SceNpMatching2RoomMessageInfo>::Create(ptr);
 	np::RoomMessageInfo_to_SceNpMatching2RoomMessageInfo(np_memory, message_info, notif_data, _context->second->include_onlinename, _context->second->include_avatarurl);
-
+	
 	notifyRoomMessageHandler(DEFAULT_CONTEXT, room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
 }
 
@@ -1275,7 +1278,7 @@ void signaling_handler::SignalingHelper(SceNpMatching2ContextId ctxId, SceNpMatc
 
 	if (resp.stream->is_error() || !matching_info->addr() || !matching_info->npid() || !matching_info->addr()->ip())
 	{
-		ERROR_LOG(Log::sceNet, "NOTI Malformed SignalingHelper notification");
+		ERROR_LOG(Log::sceNet, " - Malformed SignalingHelper notification");
 		return;
 	}
 
