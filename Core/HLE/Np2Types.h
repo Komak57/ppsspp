@@ -1167,7 +1167,7 @@ struct SceNpMatching2InvitationData
 };
 
 // Signaling option parameter
-struct SceNpMatching2SignalingOptParam
+struct SceNpMatching2SignalingOptions
 {
 	SceNpMatching2SignalingType type;
 	SceNpMatching2SignalingFlag flag;
@@ -1356,7 +1356,7 @@ struct PS3NpMatching2CreateJoinRoomRequest
 	u32 roomMemberBinAttrInternalNum;
 	SceNpMatching2TeamId teamId;
 	u8 padding2[3];
-	PSPPointer<SceNpMatching2SignalingOptParam> sigOptParam;
+	PSPPointer<SceNpMatching2SignalingOptions> sigOptions;
 	u8 padding3[4];
 };
 // Create-and-join room request parameters
@@ -1388,7 +1388,7 @@ struct SceNpMatching2CreateJoinRoomRequest
 	u32 roomMemberBinAttrInternalNum;
 	SceNpMatching2TeamId teamId;
 	u8 padding2[3];
-	PSPPointer<SceNpMatching2SignalingOptParam> sigOptParam;
+	PSPPointer<SceNpMatching2SignalingOptions> sigOptions;
 	u8 padding3[4];
 };
 
@@ -1561,7 +1561,7 @@ struct SceNpMatching2GetRoomMemberDataInternalResponse
 struct SceNpMatching2SetSignalingOptParamRequest
 {
 	SceNpMatching2RoomId roomId;
-	SceNpMatching2SignalingOptParam sigOptParam;
+	PSPPointer<SceNpMatching2SignalingOptParam> sigOptParam;
 };
 
 // Lobby information list acquisition request parameter
@@ -1833,7 +1833,7 @@ struct SceNpMatching2LobbyInvitationInfo
 // Update information of the signaling option parameter
 struct SceNpMatching2SignalingOptParamUpdateInfo
 {
-	SceNpMatching2SignalingOptParam newSignalingOptParam;
+	SceNpMatching2SignalingOptions newSignalingOptions;
 };
 
 // Matching2 utility intilization parameters

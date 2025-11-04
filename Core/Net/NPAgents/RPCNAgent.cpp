@@ -1111,8 +1111,8 @@ namespace net {
 			final_memberbinattrinternal_vec = builder.CreateVector(davec);
 		}
 		flatbuffers::Offset<OptParam> final_optparam;
-		if (req->sigOptParam.IsValid())
-			final_optparam = CreateOptParam(builder, req->sigOptParam->type, req->sigOptParam->flag, req->sigOptParam->hubMemberId);
+		if (req->sigOptions.IsValid())
+			final_optparam = CreateOptParam(builder, req->sigOptions->type, req->sigOptions->flag, req->sigOptions->hubMemberId);
 		u64 final_passwordSlotMask = 0;
 		if (req->passwordSlotMask.IsValid())
 			final_passwordSlotMask = *req->passwordSlotMask;
