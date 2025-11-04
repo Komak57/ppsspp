@@ -295,7 +295,7 @@ u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_i
 
 	// If connection exists from prior state notify
 	if (si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE)
-		notifySignalingHandler(DEFAULT_CONTEXT, room_id, conn_id, 0, member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
+		notifySignalingHandler(DEFAULT_CONTEXT, room_id, conn_id, si->conn_status, member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
 	else
 		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_PENDING;
 
@@ -353,23 +353,27 @@ void signaling_handler::update_si_status(std::shared_ptr<signaling_info>& si, s3
 	if (si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_PENDING && new_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE)
 	{
 		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_ACTIVE;
+		si->sig_status = SCE_NP_SIGNALING_EVENT_ESTABLISHED;
 
 		//signal_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_ESTABLISHED, error_code);
-		notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_ESTABLISHED, error_code);
+		//notifySignalingHandler(DEFAULT_CONTEXT, si->conn_id, SCE_NP_SIGNALING_EVENT_ESTABLISHED, error_code);
 		//signal_sig2_callback(si->room_id, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
-		notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, 0, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
+		//notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
 
-		if (si->op_activated)
+		if (si->op_activated) {
+			si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED;
 			//signal_ext_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED, CELL_OK);
-			notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED, error_code);
+			notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
+	}
 	}
 	else if ((si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_PENDING || si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE) && new_status == SCE_NP_SIGNALING_CONN_STATUS_INACTIVE)
 	{
 		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
+		si->sig_status = SCE_NP_SIGNALING_EVENT_DEAD;
 		//signal_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_DEAD, error_code);
-		notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_DEAD, error_code);
+		//notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_DEAD, error_code);
 		//signal_sig2_callback(si->room_id, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, error_code);
-		notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, 0, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, error_code);
+		notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, error_code);
 		retire_all_packets(si);
 	}
 }
@@ -384,19 +388,23 @@ void signaling_handler::update_ext_si_status(std::shared_ptr<signaling_info>& si
 		si->op_activated = true;
 
 		if (si->conn_status != SCE_NP_SIGNALING_CONN_STATUS_ACTIVE)
+			si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_PEER_ACTIVATED;
 			//signal_ext_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_EXT_PEER_ACTIVATED, CELL_OK);
-			notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_EXT_PEER_ACTIVATED, SCE_NP_MATCHING2_OKAY);
+			//notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
 		else
+			si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED;
 			//signal_ext_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED, CELL_OK);
-			notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED, SCE_NP_MATCHING2_OKAY);
+			//notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
 	}
 	else if (!op_activated && si->op_activated)
 	{
 		si->op_activated = false;
-
+		si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_PEER_DEACTIVATED;
 		//signal_ext_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_EXT_PEER_DEACTIVATED, CELL_OK);
-		notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_EXT_PEER_DEACTIVATED, SCE_NP_MATCHING2_OKAY);
+		//notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
 	}
+
+	notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
 }
 
 void signaling_handler::DisconnectUsers(SceNpMatching2RoomId room_id)

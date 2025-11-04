@@ -46,7 +46,8 @@ static constexpr u32_le SIGNALING_VERSION = 3;
 
 struct signaling_info
 {
-	s32 conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
+	SceNpSignalingState sig_status = SCE_NP_SIGNALING_EVENT_DEAD;
+	SceNpSignalingConnectionState conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 	u32 addr = 0;
 	u16 port = 0;
 

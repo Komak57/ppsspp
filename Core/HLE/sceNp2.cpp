@@ -356,7 +356,7 @@ int notifyRoomEventHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId r
  * @param args Variable length of arguments, MAX_ARGS = 11
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
-int notifySignalingHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId room_id, u32 conn_id, u32 unknown, SceNpMatching2RoomMemberId roomMemberId, SceNpMatching2Event event, s32 errorCode) {
+int notifySignalingHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId room_id, u32 conn_id, u32 conn_state, SceNpMatching2RoomMemberId roomMemberId, SceNpMatching2Event event, s32 errorCode) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	// FIXME: Need confirmation on arguments for conn_id, room_id
@@ -364,7 +364,7 @@ int notifySignalingHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId r
 	//args[0] = ctxId;		// ContextID
 	args[1] = room_id;		// room_id?
 	args[2] = conn_id;		// conn_id?
-	args[3] = unknown;		// unknown?
+	args[3] = conn_state;	// unknown?
 	args[4] = roomMemberId;	// roomMemberId
 	args[5] = event;		// EventCode
 	args[6] = errorCode;	// ErrorCode

@@ -196,7 +196,7 @@ extern SceUID np2P2PThreadID;
 
 
 // Event types (including extended ones)
-enum
+enum SceNpSignalingState
 {
 	SCE_NP_SIGNALING_EVENT_DEAD = 0,
 	SCE_NP_SIGNALING_EVENT_ESTABLISHED = 1,
@@ -208,7 +208,7 @@ enum
 };
 
 // Connection states
-enum
+enum SceNpSignalingConnectionState : u32
 {
 	SCE_NP_SIGNALING_CONN_STATUS_INACTIVE = 0,
 	SCE_NP_SIGNALING_CONN_STATUS_PENDING = 1,
