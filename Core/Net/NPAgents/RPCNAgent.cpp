@@ -1184,6 +1184,9 @@ namespace net {
 		}
 		resp.stream = new vec_stream(resp.data, 1);
 
+		auto _context = ctx.find(ctxId);
+		if (_context == ctx.end())
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND, "Context not Found"), 0);
 		// 01 0D00 84010000 0100000000000000 00 700100002000000000001A00280026002000000018000000140010000E000000080004001A000000240000000000008400001000780000000C00000008000000000000000100000000000001020000003800000004000000DAFFFFFF000010000C000000E9118EA058FCE20068FFFFFF00005800040000000000000000000A0014000C00060008000A000000000010000C000000E9118EA058FCE20098FFFFFF000057000400000000000000010000001800000014001C000800140006000000000005000C001000140000000002100058000000000000800C000000FC118EA058FCE200010000000C00000008001000080004000800000014000000FC118EA058FCE20008000C00060008000800000000005900040000000000000000000A001000040008000C000A00000030000000240000000400000015000000687474703A2F2F44756D6D7941766174617255726C00000003000000666F78001000000052504353335F5A53675363633444377800000000
 
 		//auto stream = new vec_stream(resp.data);
@@ -1291,6 +1294,10 @@ namespace net {
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, -resp.error, "Unknown Error Joining Room"), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
+
+		auto _context = ctx.find(ctxId);
+		if (_context == ctx.end())
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND, "Context not Found"), 0);
 
 		//auto stream = new vec_stream(_resp.data);
 		auto joinRoomResp = resp.stream->get_flatbuffer<JoinRoomResponse>();
@@ -1457,6 +1464,10 @@ namespace net {
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
 		}
 		resp.stream = new vec_stream(resp.data, 1);
+
+		auto _context = ctx.find(ctxId);
+		if (_context == ctx.end())
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND, "Context not Found"), 0);
 
 		auto roomDataInternal = resp.stream->get_flatbuffer<RoomDataInternal>();
 		if (resp.stream->is_error())
@@ -1854,6 +1865,10 @@ namespace net {
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, -resp.error, "Unknown Error: %08x", resp.error), 0);
 			break;
 		}
+
+		auto _context = ctx.find(ctxId);
+		if (_context == ctx.end())
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND, "Context not Found"), 0);
 
 		auto roomDataExternal = resp.stream->get_flatbuffer<GetRoomDataExternalListResponse>();
 		if (resp.stream->is_error())
