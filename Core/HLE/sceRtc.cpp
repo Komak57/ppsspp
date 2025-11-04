@@ -39,6 +39,7 @@
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceRtc.h"
 #include <Core/Net/NPAgent.h>
+#include <Core/Net/SignalingHandler.h>
 
 
 u64 __RtcGetCurrentTick()
@@ -927,59 +928,39 @@ static int sceRtcFormatRFC3339LocalTime(u32 outPtr, u32 srcTickPtr)
 	return __RtcFormatRFC3339(outPtr, srcTickPtr, tz_seconds / 60);
 }
 
-s64 syncOffset = 0;
+s64 lastNetworkTimeUs = 0;
 // Returning anything other than 0 is usually flagged as an error
-// This function should return the time difference between
-//  local time and system time, while updating game time
-//  to match network time. It should also account for network latency
+// This function should return a value similar to GetTicks()
+// A Network Tick > 72000 can trigger a PSN Update request
 static int sceRtcGetCurrentNetworkTick(u32 timeDiffPtr)
 {
 	DEBUG_LOG(Log::sceRtc, "UNTESTED %s(%08x) at %08x", __FUNCTION__, timeDiffPtr, currentMIPS->pc);
 	auto time = PSPPointer<PSPTimeval>::Create(timeDiffPtr);
-	
-	// Get PSP RTC Clock time
-	PSPTimeval rtc_clock{};
-	__RtcTimeOfDay(&rtc_clock);
-	u64 localTime = rtc_clock.tv_sec * TICKS_PER_SECOND + rtc_clock.tv_usec + rtcMagicOffset;
-	
-	// Get System Time
-	timeval sys_clock{};
-	gettimeofday(&sys_clock, NULL);
-	u64 currentTime = sys_clock.tv_sec * TICKS_PER_SECOND + sys_clock.tv_usec + rtcMagicOffset;
 
-	// Calculate difference (drift)
-	s64 drift = (s64)currentTime - (s64)(localTime + syncOffset);
+	if (lastNetworkTimeUs == 0) {
+		CoreTiming::InitializeNetworkTime();
+		lastNetworkTimeUs = CoreTiming::GetNetworkTimeUs() - 1;
+	}
+	s64 currentNetworkTimeUs = CoreTiming::GetNetworkTimeUs();
 
-	// Update Game Time, override later
-	time->tv_sec = drift / TICKS_PER_SECOND;
-	time->tv_usec = drift % TICKS_PER_SECOND;
+	s64 deltaTimeUs = currentNetworkTimeUs - lastNetworkTimeUs;
+	// Update cached time
+	if (deltaTimeUs < 0) {
+		time->tv_sec = 0;
+		time->tv_usec = 0;
+		lastNetworkTimeUs = currentNetworkTimeUs;
+		return hleLogWarning(Log::sceRtc, 0, "Network Time Rollback Detected: %ds / %dus", time->tv_sec, time->tv_usec);
+	}
 
-	// check if we need to do a network update
-	if (std::llabs(drift) < CLOCK_DRIFT_LIMIT_USECS)
-		return 0;
+	time->tv_sec = usToTicks(deltaTimeUs) / TICKS_PER_SECOND;
+	time->tv_usec = usToTicks(deltaTimeUs) % TICKS_PER_SECOND;
+	// Some error occured
+	//_dbg_assert_msg_(deltaTimeUs < 72000, "Network Ticks exceed threshold: %llu", deltaTimeUs);
 
-	WARN_LOG(Log::sceRtc, " - Drift of %ull us", std::llabs(drift));
-
-	u64 serverTime = 0;
-	// Get time from server if connected
-	if (npAuthServer && npAuthServer->IsConnected())
-		serverTime = npAuthServer->GetNetworkTime(); // - Latency is not available until npServer starts
-	else if (npServer && npServer->IsConnected())
-		serverTime = npServer->GetNetworkTime() + npServer->GetLatencyUs();
-
-	// Didn't get the time from the server, update with Current Time
-	if (serverTime <= 0)
-		return hleLogWarning(Log::sceRtc, 0, " - Unable to get Server Time");
-
-	// Calculate new difference (drift)
-	syncOffset = (s64)serverTime - (s64)localTime;
-	drift = (s64)serverTime - (s64)(localTime + syncOffset);
-
-	// Update Game Time
-	time->tv_sec = drift / TICKS_PER_SECOND;
-	time->tv_usec = drift % TICKS_PER_SECOND;
-
-	return hleLogWarning(Log::sceRtc, 0, "Synchronized with Network Time");
+	lastNetworkTimeUs = currentNetworkTimeUs;
+	if (deltaTimeUs > 72000)
+		return hleLogWarning(Log::sceRtc, 0, "Ticks: %ds / %dus", time->tv_sec, time->tv_usec);
+	return 0;
 }
 
 const HLEFunction sceRtc[] =
