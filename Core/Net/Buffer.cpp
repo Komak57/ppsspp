@@ -201,7 +201,7 @@ namespace core {
 					switch (retval) {
 					case MBEDTLS_ERR_NET_CONN_RESET:
 					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-						WARN_LOG(Log::sceNet, "Read - Client closed connection gracefully");
+						DEBUG_LOG(Log::sceNet, "Read - Client closed connection gracefully");
 						return (int)received > 0 ? (int)received : 0;
 					case MBEDTLS_ERR_SSL_TIMEOUT:
 						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned TIMOUT");
