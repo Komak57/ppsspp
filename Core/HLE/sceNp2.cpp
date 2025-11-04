@@ -746,79 +746,6 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFuncti
 	return SCE_NP_MATCHING2_OKAY; // error returns 0x80550004
 }
 
-// PSP2i assigns unknown 0x10, 0x0c, or 0x14
-static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 unknown, u32 roomId, u32 status, u32 peerMemberId, u32 connInfoPtr, u32 ipAddrPtr, u32 portPtr) {
-	WARN_LOG(Log::sceNet, "UNIMPL %s(%d, %08X, %d, %08X, %d, 0x%08X, 0x%08X, 0x%08X) at %08x", __FUNCTION__, ctxId, unknown, roomId, status, peerMemberId, connInfoPtr, ipAddrPtr, portPtr, currentMIPS->pc);
-	if (!npMatching2Inited)
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
-
-	if (ctx.find(ctxId) == ctx.end())
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND);
-
-	SceNpMatching2ConnectionInfo* statusInfo = (SceNpMatching2ConnectionInfo*)&status;
-	NOTICE_LOG(Log::sceNet, " - Service State: %d", statusInfo->status1);
-	NOTICE_LOG(Log::sceNet, " - NPPort Status: %d", statusInfo->status2);
-	NOTICE_LOG(Log::sceNet, " - UPnP State: %d", statusInfo->status3);
-	NOTICE_LOG(Log::sceNet, " - NAT Type: %d", statusInfo->NatType);
-	/*statusInfo->status1 = SCE_NP_SERVICE_STATE_UNKNOWN;
-	statusInfo->status2 = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
-	statusInfo->status3 = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_UNKNOWN;
-	statusInfo->NatType = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;*/
-
-	if (connInfoPtr == 0 || !Memory::IsValidAddress(connInfoPtr))
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "connInfoPtr is an invalid pointer");
-
-	//auto connStatus = PSPPointer<SceNpMatching2ServerStatus>::Create(connInfoPtr);
-	//connStatus = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
-	Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connInfoPtr);
-
-	auto member = npServer->cache.GetMember(peerMemberId);
-	if (!member) {
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
-	}
-
-	/*if (strncmp(NpGetNpId()->handle.data, member->userInfo.npId.handle.data, 16) == 0) {
-		connInfo->status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
-		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_OWN_NP_ID, "Member is Self");
-	}*/
-	auto connID = g_signaling.get_conn_id_from_npid(member->userInfo.npId);
-	if (!connID) {
-		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Connection not found");
-	}
-
-	auto si = g_signaling.get_sig_infos(*connID);
-	if (!si) {
-		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
-	}
-	
-	// Write Connection Status
-	//connStatus = si->conn_status;
-	Memory::Write_U32(si->conn_status, connInfoPtr);
-
-	if (ipAddrPtr == 0 || !Memory::IsValidAddress(ipAddrPtr))
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "ipAddrPtr is an invalid pointer");
-
-	u32 addr = si->addr;
-	Memory::Write_U32(addr, ipAddrPtr);
-	NOTICE_LOG(Log::sceNet, " - IP Addr: %s", ip2str(Memory::Read_U32(ipAddrPtr)).c_str());
-
-	if (portPtr == 0 || !Memory::IsValidAddress(portPtr))
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "portPtr is an invalid pointer");
-
-	u16 port = 3658;
-	//if (port == SCE_NP_PORT)
-		//port = 3658;
-	Memory::Write_U16(htons(port), portPtr);
-	NOTICE_LOG(Log::sceNet, " - Port: %d", ntohs(Memory::Read_U16(portPtr)));
-
-	// Write IPAddress
-	/*connInfo->conn.sa_len = ip2str(si->addr).length();
-	memcpy(connInfo->conn.sa_data, ip2str(si->addr).c_str(), connInfo->conn.sa_len);
-	connInfo->conn.sa_family = 0x02;*/
-
-	return hleLogWarning(Log::sceNet, SCE_NP_MATCHING2_OKAY, "- %d", Memory::Read_U32(connInfoPtr));
-}
-
 /* Allocates the list of server Id's to memory
  * @param serverIdsPtr Pointer to where the servers should be written
  * @param maxServerIds maximum number of servers the client can receive
@@ -1547,9 +1474,106 @@ static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqI
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 roomId, u32 memberId, u32 code, u32 connInfoPtr)
+// Fat Princess assigns a local connId? here when requesting information, and then proceeds to call GetConnectionInfo
+static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32 roomId, u32 memberId, u32 peerMemberId, u32 connInfoPtr, u32 ipAddrPtr, u32 portPtr) {
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %d, %d, %d, %d, 0x%08X, 0x%08X, 0x%08X) at %08x", __FUNCTION__, ctxId, connId, roomId, memberId, peerMemberId, connInfoPtr, ipAddrPtr, portPtr, currentMIPS->pc);
+	if (!npMatching2Inited)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
+
+	if (ctx.find(ctxId) == ctx.end())
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND);
+
+	if (connInfoPtr == 0 || !Memory::IsValidAddress(connInfoPtr))
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "connInfoPtr is an invalid pointer");
+
+	if (ipAddrPtr == 0 || !Memory::IsValidAddress(ipAddrPtr))
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "ipAddrPtr is an invalid pointer");
+
+	if (portPtr == 0 || !Memory::IsValidAddress(portPtr))
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "portPtr is an invalid pointer");
+
+	//auto connStatus = PSPPointer<SceNpMatching2ServerStatus>::Create(connInfoPtr);
+	//connStatus = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
+	Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connInfoPtr);
+
+	auto _room = npServer->cache.GetRoom(roomId);
+	if (!_room)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
+
+	std::optional<SceNpMatching2RoomMemberDataInternal> member;
+	u32 sig_addr = 0;
+	u16 sig_port = 0;
+	u32 conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
+
+	if (peerMemberId != 0) {
+		member = npServer->cache.GetMember(peerMemberId);
+
+		auto connID = g_signaling.get_conn_id_from_npid(member->userInfo.npId);
+		if (!connID) {
+			return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Connection not found");
+		}
+
+		auto si = g_signaling.get_sig_infos(*connID);
+		if (!si) {
+			return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
+		}
+
+		sig_addr = si->addr;
 		sig_port = htons(SCE_SIGN_PORT);
+		conn_status = si->conn_status;
+	}
+	else if (memberId != 0) {
+		member = npServer->cache.GetMember(memberId);
+
+		auto connID = g_signaling.get_conn_id_from_npid(member->userInfo.npId);
+		if (!connID) {
+			return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Connection not found");
+		}
+
+		auto si = g_signaling.get_sig_infos(*connID);
+		if (!si) {
+			return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
+		}
+
+		sig_addr = si->addr;
 		sig_port = htons(SCE_SIGN_PORT);
+		conn_status = si->conn_status;
+	}
+	else {
+		member = *_room->memberList.me;
+		sig_addr = g_signaling.GetSigAddr();
+		sig_port = htons(g_signaling.GetSigPort());
+	}
+
+	if (!member)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
+
+
+	// Write Connection Status
+	Memory::Write_U32(conn_status, connInfoPtr);
+
+	switch (conn_status) {
+	case SCE_NP_SIGNALING_CONN_STATUS_INACTIVE:
+		NOTICE_LOG(Log::sceNet, " - INACTIVE"); break;
+	case SCE_NP_SIGNALING_CONN_STATUS_PENDING:
+		NOTICE_LOG(Log::sceNet, " - PENDING"); break;
+	case SCE_NP_SIGNALING_CONN_STATUS_ACTIVE:
+		NOTICE_LOG(Log::sceNet, " - ACTIVE"); break;
+	}
+
+	Memory::Write_U32(sig_addr, ipAddrPtr);
+	NOTICE_LOG(Log::sceNet, " - IP Addr: %s", ip2str(sig_addr).c_str());
+
+	Memory::Write_U16(sig_port, portPtr);
+	NOTICE_LOG(Log::sceNet, " - Port: %d", ntohs(sig_port));
+
+	return hleLogInfo(Log::sceNet, SCE_NP_MATCHING2_OKAY);
+}
+
+// Fat Princess assigns a connId of 0 when connStatus == 2
+// Most games appear to adhere to this rule of thumb, and rely on roomId/memberId for assigning connection details
+// Fat Princess expects rtt, bandwidth, and npid in a level 4 request, suggesting this is [[fallthrough]] behavior
+static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 roomId, u32 memberId, u32 peerMemberId, u32 code, u32 connInfoPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, memberId, code, connInfoPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
