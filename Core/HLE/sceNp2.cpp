@@ -535,11 +535,15 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 	npMatching2Events.clear();
 	npMatching2Inited = true;
 
-	// We don't need the auth agent after this.
-	if (npAuthServer && npAuthServer->IsConnected())
+	// We can't sign into the RPCN NPAgent if the AuthAgent is still connected
+	if (npAuthServer->GetAuthType() == net::NPAgentType::RPCN && npAuthServer && npAuthServer->IsConnected())
 		npAuthServer->Disconnect();
 
 	npServer = npAuthServer->CreateAgent();
+
+	// We only sign-in here if we're on RPCN
+	if (npAuthServer->GetAuthType() == net::NPAgentType::PSN)
+		return SCE_NP_MATCHING2_OKAY;
 
 	// Just in case the NPAgent is hosted on a different physical server
 	if (!npServer->Resolve()) {
@@ -553,22 +557,8 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 
 	std::string* creds = NpGetLogin();
 	int ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
-	if (ret != 0) {
-		switch ((ErrorType)ret) {
-		case ErrorType::LoginError:
-			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BUSY, "Login Error");
-		case ErrorType::LoginAlreadyLoggedIn:
-			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_ALREADY_JOINED, "User is already signed in");
-		case ErrorType::LoginInvalidUsername:
-			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER, "Invalid Login Credentials");
-		case ErrorType::LoginInvalidPassword:
-			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_PASSWORD_MISMATCH, "Invalid Login Credentials");
-		case ErrorType::LoginInvalidToken:
-			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_INVALID_TICKET, "Invalid Token");
-		default:
-			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BUSY, "Unable to Log In (%d)", ret);
-		}
-	}
+	if (ret != SCE_NP_MATCHING2_OKAY)
+		return hleLogError(Log::sceNet, ret);
 
 	// FIXME: This thread runs even when you trigger break
 	// RPCS3 has only 1 connection perpetually active
@@ -662,12 +652,15 @@ static int sceNpMatching2ContextStart(int ctxId)
 	// TODO: use sceNpGetUserProfile and check server availability using sceNpService_76867C01
 	ctx_it->second->started.store(1, std::memory_order_release);
 
-	if (!npServer || !npServer->IsConnected())
+	// PSN Calls this from a static URL, RPCN needs to be logged in
+	if (!npAuthServer && !npServer)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE);
 
-	int ret = npServer->GetServers(npTitleId);
+	int ret = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
+	if (npAuthServer->GetAuthType() == net::NPAgentType::PSN || (npAuthServer->GetAuthType() == net::NPAgentType::RPCN && npServer->IsConnected()))
+		ret = npServer->GetServers(npTitleId);
 
-	hleEatMicro(1000000);
+	//hleEatMicro(1000000);
 	// Returning 0x805508A6 (error code inherited from sceNpService_76867C01 which check server availability) if can't check server availability (ie. Fat Princess (US) through http://static-resource.np.community.playstation.net/np/resource/psp-title/NPWR00670_00/matching/NPWR00670_00-matching.xml using User-Agent: "PS3Community-agent/1.0.0 libhttp/1.0.0")
 	if (ret != 0)
 		return hleLogError(Log::sceNet, ret, "Unable to retrieve Server list");
