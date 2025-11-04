@@ -34,6 +34,7 @@
 #include "Core/HLE/sceKernelThread.h"
 #include "sceKernelMemory.h"
 #include "ErrorCodes.h"
+#include <Core/Net/SignalingHandler.h>
 
 
 std::unique_ptr<net::NPAuthAgent> npAuthServer;
@@ -357,6 +358,7 @@ void Register_sceNp()
 
 static int sceNpAuthTerm()
 {
+	DEBUG_LOG(Log::sceNet, "%s(%08x) at %08x", __FUNCTION__, currentMIPS->pc);
 	if (npAuthServer)
 		npAuthServer->Disconnect();
 	// No parameters
@@ -610,6 +612,7 @@ void Register_sceNpAuth()
 
 static int sceNpServiceTerm()
 {
+	DEBUG_LOG(Log::sceNet, "%s(%08x) at %08x", __FUNCTION__, currentMIPS->pc);
 	if (np2RPCNThreadID != 0) {
 		__KernelStopThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread stopped");
 		__KernelDeleteThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread deleted");
@@ -748,21 +751,21 @@ static int sceNpManagerSigninUpdateShutdownStart() {
 }
 
 const HLEFunction sceNpService[] = {
-	{0X00ACFAC3, &WrapI_V<sceNpServiceTerm>,					"sceNpServiceTerm",						'i', ""       },
-	{0X0F8F5821, &WrapI_UUU<sceNpServiceInit>,					"sceNpServiceInit",						'i', "xxx"    },
-	{0X5494274B, &WrapI_U<sceNpLookupCreateTransactionCtx>,		"sceNpLookupCreateTransactionCtx",		'i', "x"      },
-	{0XA670D3A3, &WrapI_I<sceNpLookupDestroyTransactionCtx>,	"sceNpLookupDestroyTransactionCtx",		'i', "i"      },
-	{0XC76F55ED, &WrapI_IUUUU<sceNpLookupTitleSmallStorage>,	"sceNpLookupTitleSmallStorage",			'i', "ixxxx"  },
-	{0XBE22EEA3, &WrapI_U<sceNpRosterCreateRequest>,			"sceNpRosterCreateRequest",				'i', "x"      },
-	{0X4E851B10, &WrapI_IUUUUUU<sceNpRosterGetFriendListEntry>,	"sceNpRosterGetFriendListEntry",		'i', "ixxxxxx"},
-	{0X5F5E32AF, &WrapI_I<sceNpRosterAbort>,					"sceNpRosterAbort",						'i', "i"      },
-	{0X66C64821, &WrapI_I<sceNpRosterDeleteRequest>,			"sceNpRosterDeleteRequest",				'i', "i"      },
-	{0X506C318D, nullptr,                                       "sceNpRosterGetBlockListEntry",         'i', "" },
-	{0X58251346, nullptr,                                       "sceNpRosterGetFriendListEntryCount",   'i', "" },
-	{0X788F2B5E, nullptr,                                       "sceNpRosterAddFriendListEntry",        'i', "" },
-	{0XA01443AA, nullptr,                                       "sceNpRosterGetBlockListEntryCount",    'i', "" },
-	{0X250488F9, nullptr,                                       "sceNpServiceGetMemoryStat",            'i', "" },
-	{0X4B4E4E71, nullptr,                                       "sceNpLookupAbortTransaction ",         'i', "" },
+	{0X00ACFAC3, &WrapI_V<sceNpServiceTerm>,						"sceNpServiceTerm",						'i', ""       },
+	{0X0F8F5821, &WrapI_UUU<sceNpServiceInit>,						"sceNpServiceInit",						'i', "xxx"    },
+	{0X5494274B, &WrapI_U<sceNpLookupCreateTransactionCtx>,			"sceNpLookupCreateTransactionCtx",		'i', "x"      },
+	{0XA670D3A3, &WrapI_I<sceNpLookupDestroyTransactionCtx>,		"sceNpLookupDestroyTransactionCtx",		'i', "i"      },
+	{0XC76F55ED, &WrapI_IUUUU<sceNpLookupTitleSmallStorage>,		"sceNpLookupTitleSmallStorage",			'i', "ixxxx"  },
+	{0XBE22EEA3, &WrapI_U<sceNpRosterCreateRequest>,				"sceNpRosterCreateRequest",				'i', "x"      },
+	{0X4E851B10, &WrapI_IUUUUUU<sceNpRosterGetFriendListEntry>,		"sceNpRosterGetFriendListEntry",		'i', "ixxxxxx"},
+	{0X5F5E32AF, &WrapI_I<sceNpRosterAbort>,						"sceNpRosterAbort",						'i', "i"      },
+	{0X66C64821, &WrapI_I<sceNpRosterDeleteRequest>,				"sceNpRosterDeleteRequest",				'i', "i"      },
+	{0X506C318D, nullptr,											"sceNpRosterGetBlockListEntry",         'i', "" },
+	{0X58251346, nullptr,											"sceNpRosterGetFriendListEntryCount",   'i', "" },
+	{0X788F2B5E, nullptr,											"sceNpRosterAddFriendListEntry",        'i', "" },
+	{0XA01443AA, nullptr,											"sceNpRosterGetBlockListEntryCount",    'i', "" },
+	{0X250488F9, nullptr,											"sceNpServiceGetMemoryStat",            'i', "" },
+	{0X4B4E4E71, nullptr,											"sceNpLookupAbortTransaction ",         'i', "" },
 	// Extracted from PSP2i Debugging - FoxLovesYou
 	{0x1da3e950, &WrapI_U<sceNpManagerSigninUpdateInitStart>,		"sceNpManagerSigninUpdateInitStart",	'i', "x"   },
 	{0x168b8de5, &WrapI_V<sceNpManagerSigninUpdateGetStatus>,		"sceNpManagerSigninUpdateGetStatus",	'i', ""   },
