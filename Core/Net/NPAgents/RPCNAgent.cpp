@@ -831,6 +831,8 @@ namespace net {
 
 			switch ((ErrorType)resp.error)
 			{
+		case ErrorType::NoError:
+			break;
 			case ErrorType::NotFound:
 			{
 				ERROR_LOG(Log::sceNet, "Signaling information was requested for a user that doesn't exist or is not online");
