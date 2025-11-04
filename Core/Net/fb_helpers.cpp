@@ -109,27 +109,32 @@ namespace np
 		if (const auto npid = user->npId(); npid)
 		{
 			NOTICE_LOG(Log::sceNet, " - NPID: %s", npid->c_str());
+			std::memset(user_info->userId.handle.data, 0, 16);
 			std::memcpy(user_info->userId.handle.data, npid->c_str(), std::min<std::size_t>(16, npid->size()));
 		}
 
 		if (const auto online_name = user->onlineName(); online_name)
 		{
 			NOTICE_LOG(Log::sceNet, " - OnlineName: %s", online_name->c_str());
+			std::memset(user_info->name.data, 0, 48);
 			std::memcpy(user_info->name.data, online_name->c_str(), std::min<std::size_t>(48, online_name->size()));
 		}
 
 		if (const auto avatar_url = user->avatarUrl(); avatar_url)
 		{
 			NOTICE_LOG(Log::sceNet, " - Avatar: %s", avatar_url->c_str());
+			std::memset(user_info->icon.data, 0, 127);
 			std::memcpy(user_info->icon.data, avatar_url->c_str(), std::min<std::size_t>(127, avatar_url->size()));
 		}
 	}
 
+	// This can sometimes recycle memory, and the NpId may contain garbage. Clean it thoroughly before writing data
 	void UserInfo_to_SceNpUserInfo2(BlockAllocator& edata, const UserInfo* user, SceNpUserInfo2* user_info, bool include_onlinename, bool include_avatarurl)
 	{
 		NOTICE_LOG(Log::sceNet, "UserInfo_to_SceNpUserInfo2()");
 		if (user->npId()) {
 			NOTICE_LOG(Log::sceNet, " - NPID: %s", user->npId()->c_str());
+			std::memset(user_info->npId.handle.data, 0, 16);
 			std::memcpy(user_info->npId.handle.data, user->npId()->c_str(), std::min<std::size_t>(16, user->npId()->size()));
 		}
 
@@ -139,6 +144,7 @@ namespace np
 			u32 alloc = sizeof(SceNpOnlineName);
 			auto ptr = PSPPointer<SceNpOnlineName>::Create(edata.Alloc(alloc));
 			user_info->onlineName = ptr;
+			std::memset(ptr->data, 0, 48);
 			std::memcpy(ptr->data, user->onlineName()->c_str(), std::min<std::size_t>(48, user->onlineName()->size()));
 		}
 		if (include_avatarurl && user->avatarUrl())
@@ -147,6 +153,7 @@ namespace np
 			u32 alloc = sizeof(SceNpAvatarUrl);
 			auto ptr = PSPPointer<SceNpAvatarUrl>::Create(edata.Alloc(alloc));
 			user_info->avatarUrl = ptr;
+			std::memset(ptr->data, 0, 127);
 			std::memcpy(ptr->data, user->avatarUrl()->c_str(), std::min<std::size_t>(127, user->avatarUrl()->size()));
 		}
 	}
