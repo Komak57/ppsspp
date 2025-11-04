@@ -151,6 +151,7 @@ public:
 	void update_ext_si_status(std::shared_ptr<signaling_info>& si, bool op_activated);
 	void DisconnectUsers(SceNpMatching2RoomId room_id);
 	void stop_sig_nl(u32 conn_id, bool forceful);
+	void stop_sig(u32 conn_id, bool forceful);
 	//void sig2_callback(u64 room_id, u16 member_id, SceNpMatching2Event event, s32 error_code) const;
 
 	// send helpers (you already have an implementation; we call into it)
@@ -162,20 +163,20 @@ public:
 
 	bool send_packet_ipv4(const std::vector<u8>& data, sockaddr_in dest) const;
 	// Signal Triggers
-	void UserJoinedRoom(net::RPCNResponse resp);
-	void UserLeftRoom(net::RPCNResponse resp);
-	void RoomDestroyed(net::RPCNResponse resp);
-	void UpdatedRoomDataInternal(net::RPCNResponse resp);
-	void UpdatedRoomMemberDataInternal(net::RPCNResponse resp);
-	void RoomMessageReceived(net::RPCNResponse resp);
-	void SignalingHelper(net::RPCNResponse resp);
+	void UserJoinedRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
+	void UserLeftRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
+	void RoomDestroyed(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
+	void UpdatedRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
+	void UpdatedRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
+	void RoomMessageReceived(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
+	void SignalingHelper(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
 	// GUI
-	void MemberJoinedRoomGUI(net::RPCNResponse resp);
-	void MemberLeftRoomGUI(net::RPCNResponse resp);
-	void RoomDisappearedGUI(net::RPCNResponse resp);
-	void RoomOwnerChangedGUI(net::RPCNResponse resp);
-	void UserKickedGUI(net::RPCNResponse resp);
-	void QuickMatchCompleteGUI(net::RPCNResponse resp);
+	void MemberJoinedRoomGUI(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
+	void MemberLeftRoomGUI(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
+	void RoomDisappearedGUI(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
+	void RoomOwnerChangedGUI(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
+	void UserKickedGUI(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
+	void QuickMatchCompleteGUI(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp);
 
 	/*void wait_for_rpcn(bool* running, bool* cancelled, std::chrono::nanoseconds duration) {
 		std::unique_lock<std::mutex> lock(rpcn_mtx_);
@@ -268,6 +269,7 @@ private:
 	// This mutex handles general Signaling variables
 	mutable std::mutex mtx_;
 
+	
 	// This mutex controls RPCN Message Packets
 	mutable std::mutex rpcn_mtx_;
 	std::condition_variable rpcn_msg_cv;
