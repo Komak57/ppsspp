@@ -764,11 +764,10 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, u32 m
 	if (!Memory::IsValidAddress(serverIdsPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	if (npServer->servers.size() == 0)
+	if (!npServer || npServer->servers.size() == 0)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND);
 
 	auto servers = PSPPointer<SceNpMatching2ServerId>::Create(serverIdsPtr);
-
 
 	u32 num_servs = std::min(static_cast<u32>(npServer->servers.size()), maxServerIds);
 
