@@ -223,11 +223,29 @@ SceNpMatching2RequestId GenerateRequestId(SceNpMatching2ContextId ctxId, SceNpMa
 //	Memory::Memcpy(address, &object, sizeof(T), tag, taglen);
 //}
 
-void SetDefaultParams(SceNpMatching2ContextId ctxId, u32 callbackFunctionAddr, u32 callbackArgument, SceNpMatching2EventType event_type) {
+void SetDefaultParams(SceNpMatching2ContextId ctxId, SceNpMatching2RoomEventOptParam roomEventOptParam, SceNpMatching2EventType event_type) {
 	NpMatching2Handler optParam{};
 	optParam.ctx_id = ctxId;
-	optParam.cb = callbackFunctionAddr;
-	optParam.cb_arg = callbackArgument;
+	optParam.cb = roomEventOptParam.cbFunc.ptr;
+	optParam.cb_arg = roomEventOptParam.cbFuncArg.ptr;
+	optParam.event_type = event_type;
+	defaultOptParams[event_type] = optParam;
+}
+
+void SetDefaultParams(SceNpMatching2ContextId ctxId, SceNpMatching2RoomMessageOptParam roomMessageOptParam, SceNpMatching2EventType event_type) {
+	NpMatching2Handler optParam{};
+	optParam.ctx_id = ctxId;
+	optParam.cb = roomMessageOptParam.cbFunc.ptr;
+	optParam.cb_arg = roomMessageOptParam.cbFuncArg.ptr;
+	optParam.event_type = event_type;
+	defaultOptParams[event_type] = optParam;
+}
+
+void SetDefaultParams(SceNpMatching2ContextId ctxId, SceNpMatching2SignalingOptParam signalingOptParam, SceNpMatching2EventType event_type) {
+	NpMatching2Handler optParam{};
+	optParam.ctx_id = ctxId;
+	optParam.cb = signalingOptParam.cbFunc.ptr;
+	optParam.cb_arg = signalingOptParam.cbFuncArg.ptr;
 	optParam.event_type = event_type;
 	defaultOptParams[event_type] = optParam;
 }
@@ -250,7 +268,7 @@ SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId
 	NpMatching2Handler handler{};
 
 	handler.ctx_id = ctxId; // double handle
-	handler.cb = optParam.cbFunc.ptr;
+	handler.cb = optParam.cbFunc;
 	handler.cb_arg = optParam.cbFuncArg.ptr;
 	handler.event_type = event_type;
 

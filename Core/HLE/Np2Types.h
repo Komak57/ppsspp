@@ -446,13 +446,13 @@ typedef u32 SceNpMatching2SignalingRequestId;
 #pragma pack(pop)
 
 // Request callback function
-using SceNpMatching2RequestCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey, s32 errorCode, u32 dataSize, PSPPointer<u8> arg); // PSPPointer<void> arg
-using SceNpMatching2RoomEventCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey, s32 errorCode, u32 dataSize, PSPPointer<u8> arg); // PSPPointer<void> arg
-using SceNpMatching2RoomMessageCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId srcMemberId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey, s32 errorCode, u32 dataSize, PSPPointer<u8> arg); // PSPPointer<void> arg
-using SceNpMatching2LobbyEventCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2LobbyId lobbyId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey, s32 errorCode, u32 dataSize, PSPPointer<u8> arg); // PSPPointer<void> arg
-using SceNpMatching2LobbyMessageCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2LobbyId lobbyId, SceNpMatching2LobbyMemberId srcMemberId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey, s32 errorCode, u32 dataSize, PSPPointer<u8> arg); // PSPPointer<void> arg
+using SceNpMatching2RequestCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2Event event, s32 errorCode, u32 dataPtr, u32 argPtr); // PSPPointer<void> arg
+using SceNpMatching2RoomEventCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2EventKey eventKey, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr, u32 argPtr); // PSPPointer<void> arg
+using SceNpMatching2RoomMessageCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, u32 unknown, SceNpMatching2EventKey eventKey, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr, u32 argPtr); // PSPPointer<void> arg
+//using SceNpMatching2LobbyEventCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2LobbyId lobbyId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey, s32 errorCode, u32 dataSize, PSPPointer<u8> arg); // PSPPointer<void> arg
+//using SceNpMatching2LobbyMessageCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2LobbyId lobbyId, SceNpMatching2LobbyMemberId srcMemberId, SceNpMatching2Event event, SceNpMatching2EventKey eventKey, s32 errorCode, u32 dataSize, PSPPointer<u8> arg); // PSPPointer<void> arg
 using SceNpMatching2SignalingCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId peerMemberId, SceNpMatching2Event event, s32 errorCode, PSPPointer<u8> arg); // PSPPointer<void> arg
-using SceNpMatching2ContextCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2Event event, SceNpMatching2EventCause eventCause, s32 errorCode, PSPPointer<u8> arg); // PSPPointer<void> arg
+//using SceNpMatching2ContextCallback = void(SceNpMatching2ContextId ctxId, SceNpMatching2Event event, SceNpMatching2EventCause eventCause, s32 errorCode, PSPPointer<u8> arg); // PSPPointer<void> arg
 
 
 enum
@@ -685,6 +685,15 @@ inline std::string EventToString(SceNpMatching2EventType event_type) {
 
 struct NpMatching2Handler {
 	SceNpMatching2ContextId ctx_id;
+	/*std::variant<
+		PSPPointer<SceNpMatching2RequestCallback>,
+		PSPPointer<SceNpMatching2RoomEventCallback>,
+		PSPPointer<SceNpMatching2RoomMessageCallback>,
+		PSPPointer<SceNpMatching2LobbyEventCallback>,
+		PSPPointer<SceNpMatching2LobbyMessageCallback>,
+		PSPPointer<SceNpMatching2SignalingCallback>,
+		PSPPointer<SceNpMatching2ContextCallback>,
+	> cb;*/
 	PSPPointer<SceNpMatching2RequestCallback> cb;
 	PSPPointer<u8> cb_arg;
 	SceNpMatching2EventType event_type;
@@ -1158,6 +1167,29 @@ struct SceNpMatching2SignalingOptParam
 	SceNpMatching2SignalingFlag flag;
 	SceNpMatching2RoomMemberId hubMemberId;
 	u8 reserved2[4];
+};
+
+// Reconstructed from PSP2i
+struct SceNpMatching2RoomEventOptParam
+{
+	PSPPointer<SceNpMatching2RoomEventCallback> cbFunc;
+	PSPPointer<u8> cbFuncArg; // PSPPointer<void>
+	u32 unk1;
+	u32 unk2;
+	u8 unused[8];
+};
+
+// Reconstructed from PSP2i
+struct SceNpMatching2RoomMessageOptParam
+{
+	PSPPointer<SceNpMatching2RoomMessageCallback> cbFunc;
+	PSPPointer<u8> cbFuncArg; // PSPPointer<void>
+};
+
+struct SceNpMatching2SignalingOptParam
+{
+	PSPPointer<SceNpMatching2SignalingCallback> cbFunc;
+	PSPPointer<u8> cbFuncArg; // PSPPointer<void>
 };
 
 // Option parameters for requests
