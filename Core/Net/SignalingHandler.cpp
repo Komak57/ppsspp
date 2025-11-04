@@ -1220,11 +1220,13 @@ void signaling_handler::UpdatedRoomMemberDataInternal(SceNpMatching2ContextId ct
 	np::RoomMemberDataInternalUpdateInfo_to_SceNpMatching2RoomMemberDataInternalUpdateInfo(np_memory, update_info, notif_data, _context->second->include_onlinename, _context->second->include_avatarurl);
 
 	auto room = npServer->cache.GetRoom(room_id);
-	if (!room)
+	if (!room) {
+		//notifyRoomEventHandler(ctxId, room_id, memberId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
 		return;
+	}
 
-	npServer->cache.AddMember(*notif_data->newRoomMemberDataInternal);
 	SceNpMatching2RoomMemberId memberId = notif_data->newRoomMemberDataInternal->memberId;
+	npServer->cache.AddMember(*notif_data->newRoomMemberDataInternal);
 
 	NOTICE_LOG(Log::sceNet, "NOTI User %s(%d) data was updated for room (%d)", notif_data->newRoomMemberDataInternal->userInfo.npId.handle.data, memberId, room_id);
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());
