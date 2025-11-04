@@ -1611,7 +1611,7 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 		NOTICE_LOG(Log::sceNet, " - RTT: %d microseconds", connInfo->rtt);
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_BANDWIDTH:
-		connInfo->address.port = htons(SCE_SIGN_PORT);
+		connInfo->bandwidth = 100'000'000; // 100 MBPS HACK
 		NOTICE_LOG(Log::sceNet, " - SCE_NP_SIGNALING_CONN_INFO_BANDWIDTH:");
 		NOTICE_LOG(Log::sceNet, " - Bandwidth: %d", connInfo->bandwidth);
 		break;
