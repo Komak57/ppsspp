@@ -259,8 +259,13 @@ void SetDefaultParams(SceNpMatching2ContextId ctxId, SceNpMatching2SignalingOptP
 SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestOptParam optParam, u32 assignedReqId, SceNpMatching2EventType event_type) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %d) at %08x", __FUNCTION__, ctxId, optParam.cbFunc.ptr, optParam.cbFuncArg.ptr, event_type, currentMIPS->pc);
 
+	if (!Memory::IsValidAddress(optParam.cbFunc.ptr)) {
+		NOTICE_LOG(Log::sceNet, "%s(count: %d) - Destroying Empty Callback for %s(%d, %d)", __FUNCTION__, npMatching2Handlers.size(), EventToString(event_type).c_str(), ctxId, assignedReqId);
+		return assignedReqId;
+	}
+
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
-	auto req_id = GenerateRequestId(ctxId, assignedReqId);
+	SceNpMatching2RequestId req_id = GenerateRequestId(ctxId, assignedReqId);
 
 	//if (!Memory::IsValidAddress(optParam.cbFunc.ptr)) {
 	//	req_id = 0; // PSP2i crashes if this isn't set to abort
@@ -272,12 +277,12 @@ SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId
 	handler.cb_arg = optParam.cbFuncArg.ptr;
 	handler.event_type = event_type;
 
+
 	// 0 defines an Aborted Request
 	npMatching2Handlers[req_id] = handler;
-	if (Memory::IsValidAddress(optParam.cbFunc.ptr))
-		NOTICE_LOG(Log::sceNet, "%s(count: %d) - Added Callback FUN_%08x(%08x) for %s", __FUNCTION__, npMatching2Handlers.size(), handler.cb, handler.cb_arg, EventToString(event_type).c_str());
-	else
-		NOTICE_LOG(Log::sceNet, "%s(count: %d) - Added Abort to Empty Callback for %s", __FUNCTION__, npMatching2Handlers.size(), EventToString(event_type).c_str());
+	NOTICE_LOG(Log::sceNet, "%s(count: %d) - Added Callback FUN_%08x(%d, %d, %08x) for %s", __FUNCTION__, npMatching2Handlers.size(), handler.cb, ctxId, req_id, handler.cb_arg, EventToString(event_type).c_str());
+	NOTICE_LOG(Log::sceNet, " - optParam = (CB: %08x, Args: %08x, Timeout: %d, AppReqId: %d)", optParam.cbFunc.ptr, optParam.cbFuncArg.ptr, optParam.timeout, optParam.appReqId);
+
 	return req_id;
 }
 
@@ -291,13 +296,19 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	u32 args[6];
-	//args[0] = ctxId	// ContextID
+	//args[0] = ctxId;	// ContextID
 	args[1] = reqId;	// RequestId || 0 indicates aborted request
 	args[2] = event;	// Event
 	args[3] = errorCode;// ErrorCode || 0 is OK
 	args[4] = dataPtr;	// Response struct
 	//args[5] = argsPtr	// Request Arguments
 
+	// Consume if the event handler has no callback
+	if (auto it = npMatching2Handlers.find(reqId); it == npMatching2Handlers.end()) {
+		NOTICE_LOG(Log::sceNet, "SceNpMatching2RequestCallback - Destroying %s_EMPTY(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_REQUEST_EVENT).c_str(),
+			ctxId, args[1], args[2], args[3], args[4], 0);
+		return 0;
+	}
 	npMatching2Events.push_back(NpMatching2Args(ctxId, reqId, 6, args, SCE_NP_MATCHING2_REQUEST_EVENT));
 
 	return 0;
