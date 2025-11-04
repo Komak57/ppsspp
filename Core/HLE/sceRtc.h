@@ -72,7 +72,7 @@ const int PSP_TIME_INVALID_SECONDS = -6;
 const int PSP_TIME_INVALID_MICROSECONDS = -7;
 
 // One Second Drift
-#define CLOCK_DRIFT_LIMIT_USECS 1000000ULL
+#define CLOCK_DRIFT_LIMIT_USECS 5000000ULL
 
 void __RtcTimeOfDay(PSPTimeval *tv);
 int32_t RtcBaseTime(int32_t *micro = nullptr);
