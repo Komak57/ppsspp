@@ -201,15 +201,15 @@ namespace net {
 		const std::chrono::nanoseconds time_since_last_ipv4_ping = now - last_ping_time_ipv4;
 		const std::chrono::nanoseconds time_since_last_ipv4_pong = now - last_pong_time_ipv4;
 		auto forge_ping_packet = [&]() -> std::vector<u8>
-			{
-				std::vector<u8> ping(13);
-				ping[0] = 1;
-				//ping.emplace(ping.begin() + 1, _user_id);
-				//ping.emplace(ping.begin() + 9, +local_addr);
-				write_to_ptr<s64_le>(ping, 1, user_id.load());
+		{
+			std::vector<u8> ping(13);
+			ping[0] = 1;
+			//ping.emplace(ping.begin() + 1, _user_id);
+			//ping.emplace(ping.begin() + 9, +local_addr);
+			write_to_ptr<s64_le>(ping, 1, user_id.load());
 			write_to_ptr<u32_le>(ping, 9, +g_signaling.local_addr_sig.load());
-				return ping;
-			};
+			return ping;
+		};
 
 		// Send a packet every 5 seconds and then every 500 ms until reply is received
 		if (time_since_last_ipv4_pong >= 5s && time_since_last_ipv4_ping > 500ms)
@@ -307,37 +307,37 @@ namespace net {
 			switch ((PacketType)header.request) {
 				ctxId = static_cast<u32>(header.uid >> 32);
 				reqId = header.uid & 0xFFFFFFFF;
-			case PacketType::Reply:
-				if (packet.Length() < RPCN_HEADER_SIZE + 1) {
-					ERROR_LOG(Log::sceNet, "RPCN Malformed Packet Length (%d)", packet.Length());
-					running = false;
-					Disconnect();
-					return;
-				}
-				buf.error = buf.stream->get<u8>();
-				if ((ErrorType)buf.error != ErrorType::NoError) {
-					if (buf.error > sizeof(PacketTypeNames))
-						ERROR_LOG(Log::sceNet, "RPCN Read Error %d: %s", buf.error, hexdata.c_str());
-					else
-						ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", buf.error, PacketTypeNames[buf.error]);
-				}
-				switch ((CommandType)header.command) {
-				case CommandType::GetWorldList: GetWorldInfo_Reply(ctxId, reqId, buf); break;
-				case CommandType::SearchRoom: SearchRoom_Reply(ctxId, reqId, buf); break;
-				case CommandType::CreateRoom: CreateJoinRoom_Reply(ctxId, reqId, buf); break;
-				case CommandType::JoinRoom: JoinRoom_Reply(ctxId, reqId, buf); break;
-				case CommandType::LeaveRoom: LeaveRoom_Reply(ctxId, reqId, buf); break;
-				case CommandType::GetRoomDataInternal: GetRoomDataInternal_Reply(ctxId, reqId, buf); break;
-				case CommandType::SetRoomDataInternal: SetRoomDataInternal_Reply(ctxId, reqId, buf); break;
-				case CommandType::SetRoomDataExternal: SetRoomDataExternal_Reply(ctxId, reqId, buf); break;
-				case CommandType::SendRoomMessage: SendRoomMessage_Reply(ctxId, reqId, buf); break;
-				case CommandType::SetUserInfo: SetUserInfo_Reply(ctxId, reqId, buf); break;
-				case CommandType::GetRoomDataExternalList: GetRoomDataExternalList_Reply(ctxId, reqId, buf); break;
+				case PacketType::Reply:
+					if (packet.Length() < RPCN_HEADER_SIZE + 1) {
+						ERROR_LOG(Log::sceNet, "RPCN Malformed Packet Length (%d)", packet.Length());
+						running = false;
+						Disconnect();
+						return;
+					}
+					buf.error = buf.stream->get<u8>();
+					if ((ErrorType)buf.error != ErrorType::NoError) {
+						if (buf.error > sizeof(PacketTypeNames))
+							ERROR_LOG(Log::sceNet, "RPCN Read Error %d: %s", buf.error, hexdata.c_str());
+						else
+							ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", buf.error, PacketTypeNames[buf.error]);
+					}
+					switch ((CommandType)header.command) {
+					case CommandType::GetWorldList: GetWorldInfo_Reply(ctxId, reqId, buf); break;
+					case CommandType::SearchRoom: SearchRoom_Reply(ctxId, reqId, buf); break;
+					case CommandType::CreateRoom: CreateJoinRoom_Reply(ctxId, reqId, buf); break;
+					case CommandType::JoinRoom: JoinRoom_Reply(ctxId, reqId, buf); break;
+					case CommandType::LeaveRoom: LeaveRoom_Reply(ctxId, reqId, buf); break;
+					case CommandType::GetRoomDataInternal: GetRoomDataInternal_Reply(ctxId, reqId, buf); break;
+					case CommandType::SetRoomDataInternal: SetRoomDataInternal_Reply(ctxId, reqId, buf); break;
+					case CommandType::SetRoomDataExternal: SetRoomDataExternal_Reply(ctxId, reqId, buf); break;
+					case CommandType::SendRoomMessage: SendRoomMessage_Reply(ctxId, reqId, buf); break;
+					case CommandType::SetUserInfo: SetUserInfo_Reply(ctxId, reqId, buf); break;
+					case CommandType::GetRoomDataExternalList: GetRoomDataExternalList_Reply(ctxId, reqId, buf); break;
 					case CommandType::RequestSignalingInfos: RequestSignalingInfo_Reply(ctxId, reqId, buf); break;
-				default: responses[header.uid] = std::move(buf); break; // Response is synchronous
+					default: responses[header.uid] = std::move(buf); break; // Response is synchronous
 				}
 				break;
-			case PacketType::Notification:
+				case PacketType::Notification:
 				{
 					auto defOptParam = defaultOptParams.find(SceNpMatching2EventType::SCE_NP_MATCHING2_ROOM_EVENT);
 					if (defOptParam != defaultOptParams.end())
@@ -770,6 +770,7 @@ namespace net {
 		// Currently under the assumption that the first byte is some error code
 		size_t offset = 1;
 		u32 num_worlds = resp.stream->get<u32>();
+		//num_worlds = 8;
 
 		// First attempts for new games won't contain a world.
 		if (num_worlds == 0) {
@@ -791,9 +792,16 @@ namespace net {
 		// Transfer WorldID
 		NOTICE_LOG(Log::sceNet, "Received %d worlds", num_worlds);
 
+		// Phantasy Star MUST start with World Index 1
+		// Patapon3 tries to interract with Index 0, which just means an error state
+		// Ace Combat similarly does this, and requires 1 server, 8 worlds
+		// Both the World Index and World ID are used in CreateJoinRoom requests
+		// RPCN requests only use the WorldID, so they must be converted prior to sending requests
+		//auto world_id = resp.stream->get<SceNpMatching2WorldId>();
 		for (u32 i = 0; i < num_worlds; ++i) {
 			worlds[i].worldId = resp.stream->get<SceNpMatching2WorldId>();
-			worlds[i].worldIndex= i + 1;
+			//worlds[i].worldId = world_id;
+			worlds[i].worldIndex= i+1;
 			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d | Index: %d", i, worlds[i].worldId, worlds[i].worldIndex);
 			npServer->cache.AddWorld(worlds[i]);
 		}
@@ -831,19 +839,19 @@ namespace net {
 
 	int RPCNAgent::RequestSignalingInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId conn_id, RPCNResponse resp) {
 
-			switch ((ErrorType)resp.error)
-			{
+		switch ((ErrorType)resp.error)
+		{
 		case ErrorType::NoError:
 			break;
-			case ErrorType::NotFound:
-			{
-				ERROR_LOG(Log::sceNet, "Signaling information was requested for a user that doesn't exist or is not online");
-				return SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND;
-			}
-			default:
+		case ErrorType::NotFound:
+		{
+			ERROR_LOG(Log::sceNet, "Signaling information was requested for a user that doesn't exist or is not online");
+			return SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND;
+		}
+		default:
 			ERROR_LOG(Log::sceNet, "Unexpected error in RequestSignalingInfo_Reply: %d", resp.error);
-				return SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED;
-			}
+			return SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED;
+		}
 		resp.stream = new vec_stream(resp.data, 1);
 
 		const auto* sigAddr = resp.stream->get_flatbuffer<SignalingAddr>();
@@ -1851,7 +1859,7 @@ namespace net {
 
 		packet.Pack(CommandType::GetRoomDataExternalList, generate_uid(ctxId, reqId));
 
-		INFO_LOG(Log::sceNet, "Getting RoomDataExternalList for Room #%d", req->roomId);
+		INFO_LOG(Log::sceNet, "Getting RoomDataExternalList for Room #%016llx", *req->roomId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
 		bool flushed = Send(&packet, 5.0, &cancelled);
@@ -1864,6 +1872,7 @@ namespace net {
 	}
 
 	int RPCNAgent::GetRoomDataExternalList_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
+		INFO_LOG(Log::sceNet, "RoomDataExternalList Response obtained");
 		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError:
 			break;
