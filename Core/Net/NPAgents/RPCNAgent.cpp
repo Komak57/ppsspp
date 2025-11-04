@@ -750,6 +750,11 @@ namespace net {
 		// First attempts for new games won't contain a world.
 		if (num_worlds == 0) {
 			ERROR_LOG(Log::sceNet, "No Worlds Returned");
+			// Retry if the server has automatic server creation
+			if (tries < RETRY_COUNT) {
+				tries++;
+				return GetWorldInfo(ctxId, reqId, this->selected->id, this->commId);
+			}
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD), 0);
 		}
 

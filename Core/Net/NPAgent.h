@@ -17,6 +17,8 @@
 #include "Core/Net/HTTPS.h"
 #include "Core/Net/NpMatching2Cache.h"
 
+#define RETRY_COUNT 1
+
 // Port used to communicate with RPCN (3657)
 const u16 SCE_RPCN_PORT = 3657;
 constexpr int RPCN_HEADER_SIZE = 15;
@@ -500,6 +502,7 @@ namespace net {
 		int Recv(Packet* packet, bool* cancelled);
 		
 		bool SelectServer(SceNpMatching2ServerId ServerID) {
+			tries = 0;
 			for (size_t i = 0; i < servers.size(); ++i) {
 				if (servers[i].id == ServerID) {
 					selected = &servers[i];
@@ -566,6 +569,7 @@ namespace net {
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
 
+		int tries = 0;
 		Cache cache;
 
 	protected:
