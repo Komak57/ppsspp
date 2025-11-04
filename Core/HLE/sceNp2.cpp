@@ -1811,7 +1811,12 @@ static int sceNpMatching2SetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 	if (!npServer)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
-	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_OKAY, "UNIMPLEMENTED"), 0);
+	auto memberList = PSPPointer<SceNpMatching2RoomMemberDataInternalList>::Create(reqParamPtr);
+	for (int i = 0; i < memberList->membersNum; i++) {
+		npServer->cache.AddMember(memberList->members[i]);
+	}
+
+	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_OKAY, "UNTESTED"), 0);
 }
 
 static int sceNpMatching2GetRoomMemberDataInternalLocal(int ctxId, u32 roomId, u32 memberId, u32 attrId, u32 attrIdNum, u32 memberPtr, u32 bufPtr, u32 bufLen)
@@ -1841,6 +1846,9 @@ static int sceNpMatching2GetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 
 	if (!npServer)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
+
+	auto memberPtr = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(reqParamPtr);
+	//auto member = npServer->cache.GetMember(memberPtr->memberId);
 
 	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_OKAY, "UNIMPLEMENTED"), 0);
 }
