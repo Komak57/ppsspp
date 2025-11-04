@@ -1104,6 +1104,14 @@ void signaling_handler::UserLeftRoom(SceNpMatching2ContextId ctxId, SceNpMatchin
 	}
 	auto n = GetI18NCategory(I18NCat::NETWORKING);
 	g_OSD.Show(OSDType::MESSAGE_ERROR, std::string(n->T("SH: Player Leaving")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]"), 0.0f, "userleaveroom");
+	// FIXME: This forces a disconnect, but the process should be a clean exit.
+	//		This happens when a user stops the emulator, but doesn't log out first
+	//		We should probably log out cleanly when emulation stops, and handle this
+	//		a different way when a sudden disconnect occurs.
+	auto conn_id = get_conn_id_from_npid(notif_data->roomMemberDataInternal->userInfo.npId);
+	if (conn_id)
+		stop_sig(conn_id.value(), true);
+
 	npServer->cache.RemoveMember(notif_data->roomMemberDataInternal->memberId);
 
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
