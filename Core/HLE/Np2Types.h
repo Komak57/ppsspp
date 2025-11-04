@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <atomic>
+#include <memory>
 
 #include "Common/CommonTypes.h"
 #include "Common/Swap.h"
@@ -18,6 +19,7 @@
 //#include "Core/HLE/sceKernelThread.h"
 #include <Core/MIPS/MIPSCodeUtils.h>
 #include <Common/Serialize/SerializeFuncs.h>
+#include <variant>
 
 
 #pragma pack(push,1)
@@ -776,6 +778,10 @@ public:
 	//NpMatching2Context(NpMatching2Context&&) noexcept = default;
 	//NpMatching2Context& operator=(NpMatching2Context&&) noexcept = default;
 };
+extern std::map<SceNpMatching2ContextId, std::unique_ptr<NpMatching2Context>> ctx;
+extern std::map<SceNpMatching2EventType, NpMatching2Handler> defaultOptParams;
+// Maintains Request ID's for Default Context events
+extern std::atomic<u16> match2_event_cnt;
 
 #pragma pack(push,1)
 struct SceNpMatching2ConnectionInfo {
