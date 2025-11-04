@@ -1621,14 +1621,14 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 		NOTICE_LOG(Log::sceNet, " - NpId: %s", connInfo->npId.handle.data);
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_PEER_ADDRESS:
-		connInfo->address.port = (u16)si->port;
+		connInfo->address.port = htons(SCE_SIGN_PORT);
 		connInfo->address.addr.np_s_addr = si->addr;
 		NOTICE_LOG(Log::sceNet, " - SCE_NP_SIGNALING_CONN_INFO_PEER_ADDRESS:");
 		NOTICE_LOG(Log::sceNet, " - IP Addr: %s", ip2str(connInfo->address.addr.np_s_addr).c_str());
 		NOTICE_LOG(Log::sceNet, " - Port: %d", ntohs(connInfo->address.port));
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_MAPPED_ADDRESS:
-		connInfo->address.port = (u16)si->mapped_port;
+		connInfo->address.port = htons(SCE_SIGN_PORT);
 		connInfo->address.addr.np_s_addr = si->mapped_addr;
 		NOTICE_LOG(Log::sceNet, " - SCE_NP_SIGNALING_CONN_INFO_MAPPED_ADDRESS:");
 		NOTICE_LOG(Log::sceNet, " - IP Addr: %s", ip2str(connInfo->address.addr.np_s_addr).c_str());
