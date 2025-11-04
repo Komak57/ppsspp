@@ -775,7 +775,7 @@ void signaling_handler::process_incoming_messages() {
 		}
 
 		auto op_addr = msg.src_addr;
-		auto op_port = ntohs(msg.src_port);
+		auto op_port = msg.src_port;
 		const auto* sp = reinterpret_cast<const signaling_packet*>(msg.data.data());
 
 		//if (!validate_signaling_packet(sp))
