@@ -298,12 +298,17 @@ using SceNpScoreValue = s64;
 
 using SceNpTime = s64;
 
+
+#pragma pack(push,1)
 struct SceNpUpnpInfo {
-	s32 uPnPStatus;
-	s32 STUNStatus;
-	s32 NATType;
-	u32 address;
+	u32 local_address;
+	u32 mapped_address;
+	u8 nat_status;
+	u8 upnp_status;
+	u8 npport_status;
+	u8 padding;
 };
+#pragma pack(pop)
 
 struct SceNpCommunicationPassphrase
 {

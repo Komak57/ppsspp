@@ -1748,27 +1748,26 @@ static int sceNetUpnpTerm() {
 static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x)", __FUNCTION__, unknownPtr);
 	auto uPnPInfo = PSPPointer<SceNpUpnpInfo>::Create(unknownPtr);
-	if (npServer) {
-		// Default to 0
-		uPnPInfo->address = 0;
-		if (npServer) {
-			uPnPInfo->address = npServer->GetSigAddr();
+
+	// Load immediate value
+	// If we wait for a valid value, it locks up the thread
+	uPnPInfo->local_address = g_signaling.local_addr_sig.load();
+	uPnPInfo->mapped_address = g_signaling.addr_sig.load();
+	uPnPInfo->upnp_status = (g_Config.bEnableUPnP ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
+	uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
+	uPnPInfo->nat_status = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
+
+
+	if (uPnPInfo->local_address != 0) {
+		uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
+		// This is the only value Phantasy Star cares about at +0x8
+		uPnPInfo->nat_status = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
 		}
-	}
-	if (uPnPInfo->address == 0) {
-		uPnPInfo->uPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_UNKNOWN;
-		uPnPInfo->STUNStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
-		uPnPInfo->NATType = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
-	}
-	else {
-		uPnPInfo->uPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
-		uPnPInfo->STUNStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-		uPnPInfo->NATType = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
-	}
-	NOTICE_LOG(Log::sceNet, " - uPnPStatus: %d", uPnPInfo->uPnPStatus);
-	NOTICE_LOG(Log::sceNet, " - STUNStatus: %d", uPnPInfo->STUNStatus);
-	NOTICE_LOG(Log::sceNet, " - NATType: %d", uPnPInfo->NATType);
-	NOTICE_LOG(Log::sceNet, " - IPAddress: %s", ip2str(uPnPInfo->address).c_str());
+	NOTICE_LOG(Log::sceNet, " - Local Address: %s", ip2str(uPnPInfo->local_address).c_str());
+	NOTICE_LOG(Log::sceNet, " - Public Address: %s", ip2str(uPnPInfo->mapped_address).c_str());
+	NOTICE_LOG(Log::sceNet, " - NAT Type: %d", uPnPInfo->nat_status); // Only thing PSP2i cares about. 1 byte at offset +8
+	NOTICE_LOG(Log::sceNet, " - uPnP Status: %d", uPnPInfo->upnp_status);
+	NOTICE_LOG(Log::sceNet, " - NPPort Status: %d", uPnPInfo->npport_status);
 
 	return hleLogWarning(Log::sceNet, 0, "UNTESTED");
 }
