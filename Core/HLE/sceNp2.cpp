@@ -456,7 +456,7 @@ bool NpMatching2ProcessEvents() {
 			event.args[7] = optParam->cb_arg.ptr;
 			_dbg_assert_(Memory::IsValidAddress(event.args[7]));
 
-			NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomMessageCallback - %s_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %08x, param_5: %08x, event: %08x, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), optParam->cb.ptr,
+			NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomMessageCallback - %s_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %d, param_5: %d, event: %d, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), optParam->cb.ptr,
 				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
 			break;
 		case SCE_NP_MATCHING2_LOBBY_EVENT:
