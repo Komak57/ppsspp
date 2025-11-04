@@ -215,7 +215,7 @@ std::shared_ptr<signaling_info> signaling_handler::get_signaling_ptr(const signa
 //}
 
 void signaling_handler::queue_signaling_packet(signaling_packet& sp, std::shared_ptr<signaling_info> si, std::chrono::steady_clock::time_point wakeup_time) {
-	INFO_LOG(Log::sceNet, "queue_signaling_packet(command: %d, ip: %s, port: %d, %d)", sp.command, ip2str(si->addr).c_str(), si->port, wakeup_time);
+	INFO_LOG(Log::sceNet, "queue_signaling_packet(command: %d, dest: %s:%d (%s), wake: %d)", sp.command, ip2str(si->addr).c_str(), si->port, si->npid.handle.data, wakeup_time);
 	queued_packet qp;
 	qp.sig_info = std::move(si);
 	qp.packet = sp;
@@ -224,10 +224,15 @@ void signaling_handler::queue_signaling_packet(signaling_packet& sp, std::shared
 
 u32 signaling_handler::get_always_conn_id(const SceNpId& npid)
 {
-	std::string npid_str(reinterpret_cast<const char*>(npid.handle.data));
+	//std::string npid_str(reinterpret_cast<const char*>(npid.handle.data));
+	char npid_buf[17]{};
+	memcpy(npid_buf, npid.handle.data, 16);
+	std::string npid_str(npid_buf);
+
 	if (npid_to_conn_id.find(npid_str) != npid_to_conn_id.end())
 		return npid_to_conn_id.at(npid_str);
 
+	WARN_LOG(Log::sceNet, "ConnID for member '%s' not found. Creating.", npid_str.c_str());
 	const u32 conn_id = cur_conn_id++;
 	npid_to_conn_id.emplace(std::move(npid_str), conn_id);
 	sig_peers.emplace(conn_id, std::make_shared<signaling_info>());
