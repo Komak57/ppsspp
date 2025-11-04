@@ -1033,8 +1033,6 @@ void signaling_handler::UserJoinedRoom(SceNpMatching2ContextId ctxId, SceNpMatch
 	// Cache new Room Member
 	npServer->cache.AddMember(*notif_data->roomMemberDataInternal);
 
-	if (np2P2PThreadID)
-		__KernelStartThread(np2P2PThreadID, 0, 0);
 	// We initiate signaling if necessary
 	if (const auto* signaling_info = notification->signaling())
 	{
