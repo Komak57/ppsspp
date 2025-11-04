@@ -61,7 +61,7 @@ bool Packet::Pack(CommandType command, u64 packet_id) {
 
 	// Transfer data from dataPtr to allocate space for HEADER
 	// Can also allocate the space in the first Write() function
-	u8 packet[1024];// = new u8[packet_size];
+	u8 packet[MAX_PACKET_SIZE];// = new u8[packet_size];
 	memcpy(packet + RPCN_HEADER_SIZE, this->dataPtr, this->data_length);
 	memset(this->dataPtr, 0, packet_size);
 	memcpy(this->dataPtr, packet, packet_size);
@@ -78,7 +78,7 @@ bool Packet::Pack(CommandType command, u64 packet_id) {
 }
 
 void Packet::Write(u8 data) {
-	if (data_length + 1 > data_size) {
+	if (data_length + 1 > MAX_PACKET_SIZE) {
 		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
 		return;
 	}
@@ -86,7 +86,7 @@ void Packet::Write(u8 data) {
 	data_length += 1;
 }
 void Packet::Write(u16 data) {
-	if (data_length + 2 > data_size) {
+	if (data_length + 2 > MAX_PACKET_SIZE) {
 		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
 		return;
 	}
@@ -95,7 +95,7 @@ void Packet::Write(u16 data) {
 	data_length += 2;
 }
 void Packet::Write(u32 data) {
-	if (data_length + 4 > data_size) {
+	if (data_length + 4 > MAX_PACKET_SIZE) {
 		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
 		return;
 	}
@@ -104,7 +104,7 @@ void Packet::Write(u32 data) {
 	data_length += 4;
 }
 void Packet::Write(u64 data) {
-	if (data_length + 8 > data_size) {
+	if (data_length + 8 > MAX_PACKET_SIZE) {
 		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
 		return;
 	}
@@ -113,7 +113,7 @@ void Packet::Write(u64 data) {
 	data_length += 8;
 }
 void Packet::Write(std::string data) {
-	if (data_length + data.length() > data_size) {
+	if (data_length + data.length() > MAX_PACKET_SIZE) {
 		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
 		return;
 	}
@@ -122,7 +122,7 @@ void Packet::Write(std::string data) {
 	data_length += data.length();
 }
 void Packet::Write(const std::vector<u8>& data) {
-	if (data_length + data.size() > data_size) {
+	if (data_length + data.size() > MAX_PACKET_SIZE) {
 		ERROR_LOG(Log::IO, "Packet::Write - insufficient buffer size");
 		return;
 	}

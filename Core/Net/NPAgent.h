@@ -276,6 +276,7 @@ struct PacketHeader {
 	u64 uid;
 };
 #pragma pack(pop)
+#define MAX_PACKET_SIZE 2048
 class Packet {
 public:
 	Packet();
@@ -302,8 +303,7 @@ public:
 	void Clear() { data_length = 0; memset(dataPtr, 0, sizeof(data_bytes)); }
 private:
 	int data_length = 0;
-	const int data_size = 1024;
-	u8 data_bytes[1024];
+	u8 data_bytes[MAX_PACKET_SIZE];
 	u8* dataPtr;
 };
 
