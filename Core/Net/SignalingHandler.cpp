@@ -283,7 +283,8 @@ u32 signaling_handler::init_sig(const SceNpId& npid)
 
 		// Request peer infos from RPCN
 		std::string npid_str(reinterpret_cast<const char*>(npid.handle.data));
-		npServer->RequestSignalingInfo(npid_str, conn_id);
+		if (npServer->RequestSignalingInfo(npid_str, conn_id) < 0)
+			ERROR_LOG(Log::sceNet, "SIGSERV: RPCN Request Failed");
 	}
 
 	return conn_id;
