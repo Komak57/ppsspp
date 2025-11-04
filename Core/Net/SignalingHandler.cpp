@@ -506,7 +506,7 @@ void signaling_handler::send_information_packets(u32 addr, u16 port, const SceNp
 	sent_packet.command = SignalingCommand::Info;
 
 	INFO_LOG(Log::sceNet, "INFO -> P2P");
-	send_signaling_packet(sent_packet, addr, port);
+	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_INFO_DELAY);
 	if (np2P2PThreadID)
 		__KernelResumeThreadFromWait(np2P2PThreadID, 0);
