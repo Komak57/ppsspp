@@ -1226,6 +1226,11 @@ namespace net {
 		}
 		Memory::Write_Struct(respData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
 
+		if (np2P2PThreadID)
+			__KernelStartThread(np2P2PThreadID, 0, 0);
+		// RPCS3 triggers this in sceNpSignalingActivateConnection
+		//g_signaling.init_sig(*NpGetNpId());
+
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respPtr);
 	}
 	//async
@@ -1320,6 +1325,11 @@ namespace net {
 		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, joinRoomResp->room_data(), room_info, npId, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
 		// Cache room_info
 		npServer->cache.AddRoom(*room_info);
+
+		if (np2P2PThreadID)
+			__KernelStartThread(np2P2PThreadID, 0, 0);
+		// RPCS3 triggers this in sceNpSignalingActivateConnection
+		//g_signaling.init_sig(*NpGetNpId());
 
 		// We initiate signaling if necessary
 		if (const auto* signaling_data = joinRoomResp->signaling_data())
