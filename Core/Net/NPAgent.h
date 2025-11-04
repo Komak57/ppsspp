@@ -542,18 +542,7 @@ namespace net {
 		virtual void stop_read_thread() = 0;
 
 		bool IsConnected() { return connected; }
-		//u8 GetStatus();
-		//int GetID() { return ID; }
-		void UpdateOptions(s32 optionFlags) {
-			include_onlinename = optionFlags & SCE_NP_MATCHING2_CONTEXT_OPTION_USE_ONLINENAME;
-			include_avatarurl = optionFlags & SCE_NP_MATCHING2_CONTEXT_OPTION_USE_AVATARURL;
-		}
-		bool IncludeOnlineName() {
-			return include_onlinename;
-		}
-		bool IncludeAvatarUrl() {
-			return include_avatarurl;
-		}
+
 		std::string GetOnlineName() {
 			return online_name;
 		}
@@ -566,27 +555,6 @@ namespace net {
 		u32 GetConnAddr() {
 			struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(conn->ai_addr);
 			return addr->sin_addr.s_addr;
-		}
-		u32 GetLocalAddr() {
-			std::unique_lock<std::mutex> lock(sig_mutex);
-			if (local_addr_sig.load() == 0)
-				sigv.wait_for(lock, std::chrono::seconds(10), [&] { return local_addr_sig.load() != 0; });
-			return local_addr_sig.load();
-		}
-		u32 GetSigAddr() {
-			std::unique_lock<std::mutex> lock(sig_mutex);
-			if (addr_sig.load() == 0)
-				sigv.wait_for(lock, std::chrono::seconds(10), [&] { return addr_sig.load() != 0; });
-			return addr_sig.load();
-		}
-		u16 GetSigPort() {
-			std::unique_lock<std::mutex> lock(sig_mutex);
-			if (port_sig.load() == 0)
-				sigv.wait_for(lock, std::chrono::seconds(10), [&] { return port_sig.load() != 0; });
-			return port_sig.load();
-		}
-		u64 GetLatencyUs() {
-			return latency.load();
 		}
 	public:
 		// Holds all servers provided by GetServers
@@ -617,11 +585,6 @@ namespace net {
 		std::atomic<s64> user_id;
 
 		std::mutex sig_mutex;
-		std::condition_variable sigv;
-		std::atomic<u32> addr_sig;
-		std::atomic<u16> port_sig;
-		std::atomic<u32> local_addr_sig = 0;
-		std::atomic<u64> latency = 0;
 
 		std::chrono::steady_clock::time_point last_ping_time_ipv4{}, last_pong_time_ipv4{};
 		std::chrono::steady_clock::time_point last_ping_time_ipv6{}, last_pong_time_ipv6{};

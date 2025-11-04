@@ -48,11 +48,15 @@ struct signaling_info
 {
 	SceNpSignalingState sig_status = SCE_NP_SIGNALING_EVENT_DEAD;
 	SceNpSignalingConnectionState conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
+	// Network Order
 	u32 addr = 0;
+	// Host Order
 	u16 port = 0;
 
 	// User seen from that peer
+	// Network Order
 	u32 mapped_addr = 0;
+	// Host Order
 	u16 mapped_port = 0;
 
 	// For handler
@@ -196,6 +200,44 @@ public:
 		}
 		return msgs;
 	}
+
+	// Returns Local Address in Network Order
+	u32 GetLocalAddr() {
+		std::unique_lock<std::mutex> lock(rpcn_mtx_);
+		if (local_addr_sig.load() == 0)
+			sigv.wait_for(lock, std::chrono::seconds(5), [&] { return local_addr_sig.load() != 0; });
+		return local_addr_sig.load();
+	}
+
+	// Returns Signaling Address in Network Order
+	u32 GetSigAddr() {
+		std::unique_lock<std::mutex> lock(rpcn_mtx_);
+		if (addr_sig.load() == 0)
+			sigv.wait_for(lock, std::chrono::seconds(5), [&] { return addr_sig.load() != 0; });
+		return addr_sig.load();
+	}
+
+	// Returns Signaling Port in Network Order
+	u16 GetSigPort() {
+		std::unique_lock<std::mutex> lock(rpcn_mtx_);
+		if (port_sig.load() == 0)
+			sigv.wait_for(lock, std::chrono::seconds(5), [&] { return port_sig.load() != 0; });
+		return port_sig.load();
+	}
+
+	u64 GetLatencyUs() {
+		return latency.load();
+	}
+
+	// Public and Private addresses
+	std::condition_variable sigv;
+	// Network Order
+	std::atomic<u32> addr_sig;
+	// Host Order
+	std::atomic<u16> port_sig;
+	// Network Order
+	std::atomic<u32> local_addr_sig = 0;
+	std::atomic<u64> latency = 0;
 private:
 	void recv_loop(InetSocket* inetSocket);
 	std::vector<signaling_message> get_sign_msgs();

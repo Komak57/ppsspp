@@ -142,14 +142,15 @@ namespace net {
 				const u32 new_addr_sig = read_from_ptr<u32_le>(&msg[0]);
 				const u16 new_port_sig = read_from_ptr<u16_le>(&msg[4]);
 				const u32 old_addr_sig = addr_sig;
-				const u16 old_port_sig = port_sig;
-				latency = std::chrono::duration_cast<std::chrono::microseconds>(now - last_ping_time_ipv4).count() / 2;
+				const u32 old_addr_sig = g_signaling.addr_sig;
+				const u16 old_port_sig = g_signaling.port_sig;
+				g_signaling.latency = std::chrono::duration_cast<std::chrono::microseconds>(now - last_ping_time_ipv4).count() / 2;
 
 				if (new_addr_sig != old_addr_sig)
 				{
 					{
 						std::lock_guard<std::mutex> lock(sig_mutex);
-						addr_sig = new_addr_sig;
+						g_signaling.addr_sig = new_addr_sig;
 					}
 					/*char buffer[256];
 					snprintf(buffer, sizeof(buffer), "Signaling Connected at %s:%d",
@@ -162,7 +163,7 @@ namespace net {
 					if (old_addr_sig == 0)
 					{
 						// wake thread
-						sigv.notify_one();
+						g_signaling.sigv.notify_one();
 					}
 				}
 
@@ -170,13 +171,13 @@ namespace net {
 				{
 					{
 						std::lock_guard<std::mutex> lock(sig_mutex);
-						port_sig = new_port_sig;
+						g_signaling.port_sig = new_port_sig;
 					}
 					NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", ntohs(new_port_sig));
 					if (old_port_sig == 0)
 					{
 						// wake thread
-						sigv.notify_one();
+						g_signaling.sigv.notify_one();
 					}
 				}
 
@@ -206,7 +207,7 @@ namespace net {
 				//ping.emplace(ping.begin() + 1, _user_id);
 				//ping.emplace(ping.begin() + 9, +local_addr);
 				write_to_ptr<s64_le>(ping, 1, user_id.load());
-				write_to_ptr<u32_be>(ping, 9, +local_addr_sig.load());
+			write_to_ptr<u32_le>(ping, 9, +g_signaling.local_addr_sig.load());
 				return ping;
 			};
 
@@ -516,25 +517,15 @@ namespace net {
 				connected = true;
 				conn = std::move(possible);
 
-				// Obtain the IP address of the RPCN server
-				// This will either be
-				// - the public IP of the server if connecting over the internet
-				// - the local IP of the server if connecteing over LAN
+				// Obtain our local IP address related to our connection to the RPCN server
 				client_addr_size = sizeof(client_addr);
 				if (getsockname(tls.netCtx.fd, reinterpret_cast<struct sockaddr*>(&client_addr), &client_addr_size) != 0)
 				{
 					ERROR_LOG(Log::sceNet, "Failed to get the client address from the socket!");
 				}
-
-				local_addr_sig = ntohl(client_addr.sin_addr.s_addr);
-
+				g_signaling.local_addr_sig.store(client_addr.sin_addr.s_addr);
 				// Start reading data
 				start_read_thread();
-				// Get Version Info
-				/*ret = Recv(&packet);
-				if (ret < 0) {
-					ERROR_LOG(Log::sceNet, "Unable to retrieve Version info.");
-				}*/
 				return true;
 			sslretry:
 				INFO_LOG(Log::sceNet, "Connect - Connection Failed, retrying");
@@ -837,7 +828,7 @@ namespace net {
 
 		u32 addr = htonl(result_ip);
 		if (addr == 0)
-			addr = getLocalIp(tls.netCtx.fd);
+			addr = g_signaling.local_addr_sig.load();
 
 		u16 port = sigAddr->port();
 		if (port == SCE_SIGN_PORT)

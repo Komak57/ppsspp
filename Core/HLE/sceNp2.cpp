@@ -1400,8 +1400,8 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
 
 	// FIXME: Use npServer->local_addr_sig
-	netInfo->localAddr = npServer->GetLocalAddr();	// Local  IP
-	netInfo->mappedAddr = npServer->GetSigAddr();	// Public IP
+	netInfo->localAddr = g_signaling.GetLocalAddr();	// Local  IP
+	netInfo->mappedAddr = g_signaling.GetSigAddr();		// Public IP
 	// Pure speculation
 	//si->conn_status
 	netInfo->natStatus = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
