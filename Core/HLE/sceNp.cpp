@@ -314,6 +314,8 @@ static int sceNpGetMyLanguages(u32 langListPtr)
 
 // Conflicting Information. PSPSDK suggests this uses SceNpUserInfo2, but PPSSPP originally used SceNpUserInformation
 // Fat Princess allocates 216 bytes for this
+// PSN pulls from http://getprof.fi.np.community.playstation.net/basic_view/func/get_profile
+// - with POST_DATA <?xml version="1.0" encoding="utf-8"?><profile platform="psp2" sv="3.74"><jid>YourNpIdHere@a9.fi.np.playstation.net</jid><avatar size="m" /></profile>
 static int sceNpGetUserProfile(u32 profilePtr)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x)", __FUNCTION__, profilePtr);
