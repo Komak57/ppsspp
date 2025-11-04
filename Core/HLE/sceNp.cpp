@@ -710,6 +710,43 @@ static int sceNpRosterDeleteRequest(s32 rosterId) {
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 
+static int sceNpManagerSigninUpdateInitStart(u32 paramPtr) {
+	WARN_LOG(Log::sceNet, "UNIMPL %s(%08x) at %08x", __FUNCTION__, paramPtr, currentMIPS->pc);
+
+	if (npAuthServer->GetAuthType() != net::NPAgentType::PSN)
+		return 0;
+
+	return hleLogError(Log::sceNet, 0, "UNIMPL");
+}
+
+// sceNpManagerSigninUpdateGetStatus returns 0-2, SceNpManagerSigninUpdateParam error can trigger on return 2
+static int sceNpManagerSigninUpdateGetStatus() {
+	WARN_LOG(Log::sceNet, "UNIMPL %s() at %08x", __FUNCTION__, currentMIPS->pc);
+	if (npAuthServer->GetAuthType() != net::NPAgentType::PSN)
+		return 2;
+
+	if (!npServer->Connect()) {
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Could not connect.");
+	}
+
+	std::string* creds = NpGetLogin();
+	int ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
+
+	/* 0 == Network Busy
+	*  1 == Network Busy
+	*/
+	return hleLogError(Log::sceNet, 2, "UNIMPL");
+}
+
+static int sceNpManagerSigninUpdateShutdownStart() {
+	WARN_LOG(Log::sceNet, "UNIMPL %s() at %08x", __FUNCTION__, currentMIPS->pc);
+
+	if (npAuthServer->GetAuthType() != net::NPAgentType::PSN)
+		return 0;
+
+	return hleLogError(Log::sceNet, 0, "UNIMPL");
+}
+
 const HLEFunction sceNpService[] = {
 	{0X00ACFAC3, &WrapI_V<sceNpServiceTerm>,					"sceNpServiceTerm",						'i', ""       },
 	{0X0F8F5821, &WrapI_UUU<sceNpServiceInit>,					"sceNpServiceInit",						'i', "xxx"    },
@@ -726,6 +763,10 @@ const HLEFunction sceNpService[] = {
 	{0XA01443AA, nullptr,                                       "sceNpRosterGetBlockListEntryCount",    'i', "" },
 	{0X250488F9, nullptr,                                       "sceNpServiceGetMemoryStat",            'i', "" },
 	{0X4B4E4E71, nullptr,                                       "sceNpLookupAbortTransaction ",         'i', "" },
+	// Extracted from PSP2i Debugging - FoxLovesYou
+	{0x1da3e950, &WrapI_U<sceNpManagerSigninUpdateInitStart>,		"sceNpManagerSigninUpdateInitStart",	'i', "x"   },
+	{0x168b8de5, &WrapI_V<sceNpManagerSigninUpdateGetStatus>,		"sceNpManagerSigninUpdateGetStatus",	'i', ""   },
+	{0x78802d5f, &WrapI_V<sceNpManagerSigninUpdateShutdownStart>,	"sceNpManagerSigninUpdateShutdownStart",'i', ""   },
 };
 
 void Register_sceNpService()
