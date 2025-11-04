@@ -813,7 +813,42 @@ static int sceNetInetShutdown(int socket, int how) {
 	}
 
 	int retVal = shutdown(inetSock->sock, hostHow);  // no translation
-	return hleLogInfo(Log::sceNet, retVal);
+	if (retVal < 0) {
+#ifdef PPSSPP_PLATFORM_WINDOWS
+		auto err = WSAGetLastError();
+		switch (err) {
+		case WSANOTINITIALISED:
+			return hleLogError(Log::sceNet, ERROR_NET_WLAN_DEVICE_NOT_READY, "Socket Not Initialized");
+		case WSAENETDOWN:
+			return hleLogError(Log::sceNet, ERROR_NET_WLAN_INTERNAL_FAIL, "Network Failure");
+		case WSAENOTSOCK:
+			return hleLogError(Log::sceNet, ERROR_NET_WLAN_INVALID_ARG, "Invalid Argument");
+		case WSAEINPROGRESS:
+			return hleLogError(Log::sceNet, ERROR_NET_WLAN_DEVICE_NOT_READY, "Socket Is Busy");
+		case WSAEINTR:
+			return hleLogWarning(Log::sceNet, 0, "Socket Interrupted");
+		case WSAEWOULDBLOCK:
+			return hleLogWarning(Log::sceNet, 0, "Non-Blocking Socket");
+		case WSAENOTCONN:
+			return hleLogWarning(Log::sceNet, 0, "Socket Not Connected");
+		default:
+			return hleLogWarning(Log::sceNet, 0, "Unhandled Error: %d", err);
+		}
+#else
+		int err = errno;
+		switch (err) {
+		case EBADF:
+		case EINVAL:
+		case ENOTSOCK:
+			return hleLogError(Log::sceNet, ERROR_NET_WLAN_INVALID_ARG, "Invalid Argument");
+		case ENOTCONN:
+			return hleLogError(Log::sceNet, ERROR_NET_WLAN_DEVICE_NOT_READY, "Socket Not Initialized");
+		default:
+			return hleLogWarning(Log::sceNet, 0, "Unhandled Error: %d", err);
+		}
+#endif
+	}
+	return hleLogInfo(Log::sceNet, 0);
 }
 
 static int sceNetInetSocketAbort(int socket) {
