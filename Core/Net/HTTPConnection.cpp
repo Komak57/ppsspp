@@ -23,7 +23,7 @@ HTTPTemplate::HTTPTemplate(const char* userAgent, int httpVer, int autoProxyConf
 	this->autoProxyConf = (SceHttpProxyMode)autoProxyConf;
 }
 HTTPTemplate::~HTTPTemplate() {
-	WARN_LOG(Log::sceNet, "HTTPTemplate::~HTTPTemplate()");
+	DEBUG_LOG(Log::HTTP, "HTTPTemplate::~HTTPTemplate()");
 }
 
 int HTTPTemplate::addRequestHeader(const char* name, const char* value, u32 mode) {
@@ -81,7 +81,7 @@ void HTTPConnection::DestroySession(int connectionID) {
 }
 
 HTTPConnection::~HTTPConnection() {
-	WARN_LOG(Log::sceNet, "HTTPConnection::~HTTPConnection(templateID: %i)", this->templateID);
+	DEBUG_LOG(Log::HTTP, "HTTPConnection::~HTTPConnection(templateID: %i)", this->templateID);
 	// NOTE: Do not clean up and free SSL resources here. The entire parent collapses on destruction.
 	// Instead, clean up these in sceHttpDeleteConnection
 }
@@ -189,7 +189,7 @@ bool HTTPConnection::SSLConnect(int connectionID, int maxTries, double timeout, 
 
 			// Reload Session
 			if (sessions.find(connectionID) != sessions.end() && sessions[connectionID].hasSession) {
-				NOTICE_LOG(Log::HTTP, "HTTPRequest::HTTPRequest() - Re-Enabling TLS Session");
+				DEBUG_LOG(Log::HTTP, "HTTPRequest::HTTPRequest() - Re-Enabling TLS Session");
 				mbedtls_ssl_set_session(&tls.sslCtx, sessions[connectionID].session);
 			}
 
@@ -280,7 +280,7 @@ HTTPRequest::HTTPRequest(int connectionID, int method, const char* url, u64 cont
 }
 
 HTTPRequest::~HTTPRequest() {
-	WARN_LOG(Log::HTTP, "HTTPRequest::~HTTPRequest(connectionID: %i)", this->connectionID);
+	DEBUG_LOG(Log::HTTP, "HTTPRequest::~HTTPRequest(connectionID: %i)", this->connectionID);
 	abortRequest();
 	if (handthread.joinable())
 		handthread.join();
