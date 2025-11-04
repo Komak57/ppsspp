@@ -1021,15 +1021,7 @@ void signaling_handler::UserJoinedRoom(SceNpMatching2ContextId ctxId, SceNpMatch
 	// We initiate signaling if necessary
 	if (const auto* signaling_info = notification->signaling())
 	{
-		// register_ip()
-		auto vec = signaling_info->ip();
-		const u32 result_ip =
-			static_cast<u32>(vec->Get(0)) << 24 |
-			static_cast<u32>(vec->Get(1)) << 16 |
-			static_cast<u32>(vec->Get(2)) << 8 |
-			static_cast<u32>(vec->Get(3));
-
-		const u32 addr_p2p = htonl(result_ip);
+		const u32 addr_p2p = RegisterIp(signaling_info->ip());
 		u16 port_p2p = signaling_info->port();
 		auto n = GetI18NCategory(I18NCat::NETWORKING);
 		if (port_p2p == SCE_SIGN_PORT) {
@@ -1267,19 +1259,12 @@ void signaling_handler::SignalingHelper(SceNpMatching2ContextId ctxId, SceNpMatc
 	memset(&npid_p2p, 0, sizeof(npid_p2p));
 	memcpy(&npid_p2p, matching_info->npid(), std::min<size_t>(16, matching_info->npid()->Length()));
 
-	auto vec = matching_info->addr()->ip();
-	NOTICE_LOG(Log::sceNet, " - IP at %d.%d.%d.%d", vec->Get(0), vec->Get(1), vec->Get(2), vec->Get(3));
-	const u32_be result_ip =
-		static_cast<u32>(vec->Get(0)) << 24 |
-		static_cast<u32>(vec->Get(1)) << 16 |
-		static_cast<u32>(vec->Get(2)) << 8 |
-		static_cast<u32>(vec->Get(3));
-
-	const u32 addr_p2p = result_ip;
+	const u32 addr_p2p = RegisterIp(matching_info->addr()->ip());
 	u16 port_p2p = matching_info->addr()->port();
 	if (port_p2p == SCE_SIGN_PORT)
 		port_p2p = SCE_INTERNAL_PORT;
 
+	NOTICE_LOG(Log::sceNet, " - IP at %s", ip2str(addr_p2p));
 	send_information_packets(addr_p2p, port_p2p, npid_p2p);
 }
 

@@ -4,6 +4,9 @@
 #include "Core/np2_structs_generated.h"
 #include "Core/Util/BlockAllocator.h"
 
+//u32 RegisterIpv6(const std::array<u8, 16>& ipv6_addr);
+u32 RegisterIp(const flatbuffers::Vector<u8>* vec);
+
 namespace np
 {
 	void BinAttr_to_SceNpMatching2BinAttr(BlockAllocator& edata, const BinAttr* bin_attr, SceNpMatching2BinAttr* binattr_info);

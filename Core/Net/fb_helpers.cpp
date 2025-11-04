@@ -6,6 +6,32 @@
 #include <Core/Config.h>
 #include <Core/HLE/sceRtc.h>
 
+u32 RegisterIp(const flatbuffers::Vector<u8>* vec) {
+	if (vec->size() == 4)
+	{
+		// 3-0 is Big-Endian (Network Order)
+		const u32 ip = static_cast<u32>(vec->Get(3)) << 24 | static_cast<u32>(vec->Get(2)) << 16 |
+			static_cast<u32>(vec->Get(1)) << 8 | static_cast<u32>(vec->Get(0));
+
+		u32 result_ip = ip;
+
+		return result_ip;
+	}
+	/*else if (vec->size() == 16)
+	{
+		std::array<u8, 16> ipv6_addr{};
+		std::memcpy(ipv6_addr.data(), vec->Data(), 16);
+
+		return RegisterIpv6(ipv6_addr);
+	}*/
+	else
+	{
+		ERROR_LOG(Log::sceNet, "Received ip address with size = %d", vec->size());
+	}
+	return 0;
+}
+
+
 namespace np
 {
 	void BinAttr_to_SceNpMatching2BinAttr(BlockAllocator& edata, const BinAttr* bin_attr, SceNpMatching2BinAttr* binattr_info)

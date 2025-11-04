@@ -832,14 +832,8 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Malformed RequestSignalingInfo_Reply");
 			return SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED;
 		}
-		auto vec = sigAddr->ip();
-		const u32 result_ip =
-			static_cast<u32>(vec->Get(0)) << 24 |
-			static_cast<u32>(vec->Get(1)) << 16 |
-			static_cast<u32>(vec->Get(2)) << 8 |
-			static_cast<u32>(vec->Get(3));
 
-		u32 addr = htonl(result_ip);
+		u32 addr = RegisterIp(sigAddr->ip());
 		if (addr == 0)
 			addr = g_signaling.local_addr_sig.load();
 
@@ -1311,14 +1305,7 @@ namespace net {
 				const auto* signaling_info = signaling_data->Get(i);
 				//ensure(signaling_info->addr());
 
-				auto vec = signaling_info->addr()->ip();
-				const u32 result_ip =
-					static_cast<u32>(vec->Get(0)) << 24 |
-					static_cast<u32>(vec->Get(1)) << 16 |
-					static_cast<u32>(vec->Get(2)) << 8 |
-					static_cast<u32>(vec->Get(3));
-
-				const u32 addr_p2p = htonl(result_ip);
+				const u32 addr_p2p = RegisterIp(signaling_info->addr()->ip());
 				u16 port_p2p = signaling_info->addr()->port();
 				if (port_p2p == SCE_SIGN_PORT)
 					port_p2p = SCE_INTERNAL_PORT;
