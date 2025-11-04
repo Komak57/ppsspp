@@ -139,9 +139,10 @@ namespace net {
 			if (msg.size() == 6)
 			{
 				DEBUG_LOG(Log::sceNet, "RPCN Signal Pong Received");
+				// Pull addr in Network Order
 				const u32 new_addr_sig = read_from_ptr<u32_le>(&msg[0]);
-				const u16 new_port_sig = read_from_ptr<u16_le>(&msg[4]);
-				const u32 old_addr_sig = addr_sig;
+				// Pull port in Host Order
+				const u16 new_port_sig = read_from_ptr<u16_be>(&msg[4]);
 				const u32 old_addr_sig = g_signaling.addr_sig;
 				const u16 old_port_sig = g_signaling.port_sig;
 				g_signaling.latency = std::chrono::duration_cast<std::chrono::microseconds>(now - last_ping_time_ipv4).count() / 2;
@@ -152,12 +153,9 @@ namespace net {
 						std::lock_guard<std::mutex> lock(sig_mutex);
 						g_signaling.addr_sig = new_addr_sig;
 					}
-					/*char buffer[256];
-					snprintf(buffer, sizeof(buffer), "Signaling Connected at %s:%d",
-						ip2str(new_addr_sig).c_str(), ntohs(new_port_sig));
-					g_OSD.Show(OSDType::MESSAGE_SUCCESS, buffer, 3.0f);*/
+
 					auto n = GetI18NCategory(I18NCat::NETWORKING);
-					g_OSD.Show(OSDType::MESSAGE_SUCCESS, std::string(n->T("SH: Connected")) + std::string(" [") + ip2str(new_addr_sig) + std::string("]:") + std::to_string(ntohs(new_port_sig)), 0.0f, "userjoinroom");
+					g_OSD.Show(OSDType::MESSAGE_SUCCESS, std::string(n->T("SH: Connected")) + std::string(" [") + ip2str(new_addr_sig) + std::string("]:") + std::to_string(new_port_sig), 0.0f, "userjoinroom");
 
 					NOTICE_LOG(Log::sceNet, "New P2P IP: %s", ip2str(new_addr_sig).c_str());
 					if (old_addr_sig == 0)
@@ -173,7 +171,7 @@ namespace net {
 						std::lock_guard<std::mutex> lock(sig_mutex);
 						g_signaling.port_sig = new_port_sig;
 					}
-					NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", ntohs(new_port_sig));
+					NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", new_port_sig);
 					if (old_port_sig == 0)
 					{
 						// wake thread
