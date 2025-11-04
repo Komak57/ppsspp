@@ -1000,7 +1000,7 @@ void signaling_handler::UserJoinedRoom(SceNpMatching2ContextId ctxId, SceNpMatch
 	u32 _size = sizeof(SceNpMatching2RoomMemberUpdateInfo);
 	u32 ptr = np_memory.Alloc(_size);
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberUpdateInfo>::Create(ptr);
-	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, notification->update_info(), notif_data, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
+	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, notification->update_info(), notif_data, _context->second->include_onlinename, _context->second->include_avatarurl);
 
 	/*char buffer[256];
 	snprintf(buffer, sizeof(buffer), "%s Joined the room",
@@ -1077,7 +1077,7 @@ void signaling_handler::UserLeftRoom(SceNpMatching2ContextId ctxId, SceNpMatchin
 	u32 _size = sizeof(SceNpMatching2RoomMemberUpdateInfo);
 	u32 ptr = np_memory.Alloc(_size);
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberUpdateInfo>::Create(ptr);
-	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, update_info, notif_data, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
+	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, update_info, notif_data, _context->second->include_onlinename, _context->second->include_avatarurl);
 
 	NOTICE_LOG(Log::sceNet, "NOTI UserLeftRoom User %s(%d) left room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
 
@@ -1152,7 +1152,7 @@ void signaling_handler::UpdatedRoomDataInternal(SceNpMatching2ContextId ctxId, S
 	u32 ptr = np_memory.Alloc(_size);
 	auto notif_data = PSPPointer<SceNpMatching2RoomDataInternalUpdateInfo>::Create(ptr);
 	SceNpId* npId = NpGetNpId();
-	np::RoomDataInternalUpdateInfo_to_SceNpMatching2RoomDataInternalUpdateInfo(np_memory, update_info, notif_data, npId, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
+	np::RoomDataInternalUpdateInfo_to_SceNpMatching2RoomDataInternalUpdateInfo(np_memory, update_info, notif_data, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
 
 	//np_cache.insert_room(notif_data->newRoomDataInternal.get_ptr());
 	npServer->cache.AddRoom(*notif_data->newRoomDataInternal);
@@ -1194,7 +1194,7 @@ void signaling_handler::UpdatedRoomMemberDataInternal(SceNpMatching2ContextId ct
 	u32 _size = sizeof(SceNpMatching2RoomMemberDataInternalUpdateInfo);
 	u32 ptr = np_memory.Alloc(_size);
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberDataInternalUpdateInfo>::Create(ptr);
-	np::RoomMemberDataInternalUpdateInfo_to_SceNpMatching2RoomMemberDataInternalUpdateInfo(np_memory, update_info, notif_data, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
+	np::RoomMemberDataInternalUpdateInfo_to_SceNpMatching2RoomMemberDataInternalUpdateInfo(np_memory, update_info, notif_data, _context->second->include_onlinename, _context->second->include_avatarurl);
 
 	auto room = npServer->cache.GetRoom(room_id);
 	if (!room)
@@ -1237,8 +1237,7 @@ void signaling_handler::RoomMessageReceived(SceNpMatching2ContextId ctxId, SceNp
 	u32 _size = sizeof(SceNpMatching2RoomMessageInfo);
 	u32 ptr = np_memory.Alloc(_size);
 	auto notif_data = PSPPointer<SceNpMatching2RoomMessageInfo>::Create(ptr);
-
-	np::RoomMessageInfo_to_SceNpMatching2RoomMessageInfo(np_memory, message_info, notif_data, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
+	np::RoomMessageInfo_to_SceNpMatching2RoomMessageInfo(np_memory, message_info, notif_data, _context->second->include_onlinename, _context->second->include_avatarurl);
 
 	notifyRoomMessageHandler(DEFAULT_CONTEXT, room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
 }

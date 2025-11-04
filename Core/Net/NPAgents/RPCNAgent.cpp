@@ -1206,7 +1206,7 @@ namespace net {
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
 		SceNpId* npId = NpGetNpId();
-		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomData, room_info, npId, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
+		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomData, room_info, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
 
 		auto world = npServer->cache.GetWorldFromId(room_info->worldId);
 		room_info->worldId = world->worldIndex;
@@ -1322,7 +1322,7 @@ namespace net {
 		room_resp->roomDataInternal = room_info;
 
 		SceNpId* npId = NpGetNpId();
-		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, joinRoomResp->room_data(), room_info, npId, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
+		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, joinRoomResp->room_data(), room_info, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
 		// Cache room_info
 		npServer->cache.AddRoom(*room_info);
 
@@ -1491,7 +1491,7 @@ namespace net {
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomData"), 0);
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
-		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomDataInternal, room_info, NpGetNpId(), npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
+		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomDataInternal, room_info, NpGetNpId(), _context->second->include_onlinename, _context->second->include_avatarurl);
 		// Cache the new Room Info
 		npServer->cache.AddRoom(*room_info);
 
@@ -1888,7 +1888,7 @@ namespace net {
 
 		u32 alloc = sizeof(SceNpMatching2GetRoomDataExternalListResponse);
 		auto getRoomDataExtListResponse = PSPPointer<SceNpMatching2GetRoomDataExternalListResponse>::Create(np_memory.Alloc(alloc));
-		::np::GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(np_memory, roomDataExternal, getRoomDataExtListResponse, npServer->IncludeOnlineName(), npServer->IncludeAvatarUrl());
+		::np::GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(np_memory, roomDataExternal, getRoomDataExtListResponse, _context->second->include_onlinename, _context->second->include_avatarurl);
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, SCE_NP_MATCHING2_OKAY, getRoomDataExtListResponse.ptr);
 	}
