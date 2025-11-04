@@ -1595,7 +1595,7 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 	// Fat Princess marks this as 0x24
 	auto connInfo = PSPPointer<SceNpSignalingConnectionInfo>::Create(connInfoPtr);
 
-	auto member = npServer->cache.GetMember(memberId);
+	auto member = npServer->cache.GetMember(peerMemberId);
 
 	if (!member)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
