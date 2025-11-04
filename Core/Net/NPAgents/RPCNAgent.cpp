@@ -305,6 +305,8 @@ namespace net {
 
 			std::lock_guard<std::mutex> lock(buffer_mutex);
 			switch ((PacketType)header.request) {
+				ctxId = static_cast<u32>(header.uid >> 32);
+				reqId = header.uid & 0xFFFFFFFF;
 			case PacketType::Reply:
 				if (packet.Length() < RPCN_HEADER_SIZE + 1) {
 					ERROR_LOG(Log::sceNet, "RPCN Malformed Packet Length (%d)", packet.Length());
@@ -335,21 +337,27 @@ namespace net {
 				}
 				break;
 			case PacketType::Notification:
+				{
+					auto defOptParam = defaultOptParams.find(SceNpMatching2EventType::SCE_NP_MATCHING2_ROOM_EVENT);
+					if (defOptParam != defaultOptParams.end())
+						ctxId = defOptParam->second.ctx_id;
+					reqId = GenerateRequestId(ctxId, 0);
+				}
 				switch ((NotificationType)header.command) {
-				case NotificationType::UserJoinedRoom: g_signaling.UserJoinedRoom(buf); break;
-				case NotificationType::RoomMessageReceived: g_signaling.RoomMessageReceived(buf); break;
-				case NotificationType::UserLeftRoom: g_signaling.UserLeftRoom(buf); break;
-				case NotificationType::RoomDestroyed:g_signaling.RoomDestroyed(buf); break;
-				case NotificationType::UpdatedRoomDataInternal: g_signaling.UpdatedRoomDataInternal(buf); break;
-				case NotificationType::UpdatedRoomMemberDataInternal: g_signaling.UpdatedRoomMemberDataInternal(buf); break;
-				case NotificationType::SignalingHelper: g_signaling.SignalingHelper(buf); break;
+				case NotificationType::UserJoinedRoom: g_signaling.UserJoinedRoom(ctxId, reqId, buf); break;
+				case NotificationType::RoomMessageReceived: g_signaling.RoomMessageReceived(ctxId, reqId, buf); break;
+				case NotificationType::UserLeftRoom: g_signaling.UserLeftRoom(ctxId, reqId, buf); break;
+				case NotificationType::RoomDestroyed:g_signaling.RoomDestroyed(ctxId, reqId, buf); break;
+				case NotificationType::UpdatedRoomDataInternal: g_signaling.UpdatedRoomDataInternal(ctxId, reqId, buf); break;
+				case NotificationType::UpdatedRoomMemberDataInternal: g_signaling.UpdatedRoomMemberDataInternal(ctxId, reqId, buf); break;
+				case NotificationType::SignalingHelper: g_signaling.SignalingHelper(ctxId, reqId, buf); break;
 					// GUI
-				case NotificationType::MemberJoinedRoomGUI: g_signaling.MemberJoinedRoomGUI(buf); break;
-				case NotificationType::MemberLeftRoomGUI: g_signaling.MemberLeftRoomGUI(buf); break;
-				case NotificationType::RoomDisappearedGUI: g_signaling.RoomDisappearedGUI(buf); break;
-				case NotificationType::RoomOwnerChangedGUI: g_signaling.RoomOwnerChangedGUI(buf); break;
-				case NotificationType::UserKickedGUI: g_signaling.UserKickedGUI(buf); break;
-				case NotificationType::QuickMatchCompleteGUI: g_signaling.QuickMatchCompleteGUI(buf); break;
+				case NotificationType::MemberJoinedRoomGUI: g_signaling.MemberJoinedRoomGUI(ctxId, reqId, buf); break;
+				case NotificationType::MemberLeftRoomGUI: g_signaling.MemberLeftRoomGUI(ctxId, reqId, buf); break;
+				case NotificationType::RoomDisappearedGUI: g_signaling.RoomDisappearedGUI(ctxId, reqId, buf); break;
+				case NotificationType::RoomOwnerChangedGUI: g_signaling.RoomOwnerChangedGUI(ctxId, reqId, buf); break;
+				case NotificationType::UserKickedGUI: g_signaling.UserKickedGUI(ctxId, reqId, buf); break;
+				case NotificationType::QuickMatchCompleteGUI: g_signaling.QuickMatchCompleteGUI(ctxId, reqId, buf); break;
 					ERROR_LOG(Log::sceNet, "Unhandled GUI Notification: %s", NotificationTypeNames[header.command]);
 					break;
 				default:

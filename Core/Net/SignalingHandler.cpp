@@ -982,10 +982,16 @@ void signaling_handler::handle_finished_ack(const signaling_packet* sp, std::sha
 	// Don't Schedule Repeat
 }
 
-void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
+void signaling_handler::UserJoinedRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
 	auto notification = resp.stream->get_flatbuffer<NotificationUserJoinedRoom>();
 	if (resp.stream->is_error()) {
 		ERROR_LOG(Log::sceNet, "NOTI Malformed UserJoinedRoom notification");
+		return;
+	}
+
+	auto _context = ctx.find(ctxId);
+	if (_context == ctx.end()) {
+		ERROR_LOG(Log::sceNet, "Default Context not Found");
 		return;
 	}
 
@@ -1055,8 +1061,15 @@ void signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	notifyRoomEventHandler(DEFAULT_CONTEXT, room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, notif_data.ptr);
 }
 
-void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
-	WARN_LOG(Log::sceNet, "NOTI UserLeftRoom UNTESTED");
+void signaling_handler::UserLeftRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
+	WARN_LOG(Log::sceNet, "NOTI UserLeftRoom(%d, %d, RPCNResponse)", ctxId, reqId);
+
+	auto _context = ctx.find(ctxId);
+	if (_context == ctx.end()) {
+		ERROR_LOG(Log::sceNet, "Default Context not Found");
+		return;
+	}
+
 	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
 	const auto* update_info = resp.stream->get_flatbuffer<RoomMemberUpdateInfo>();
 
@@ -1091,8 +1104,14 @@ void signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	notifyRoomEventHandler(DEFAULT_CONTEXT, room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, notif_data.ptr);
 }
 
-void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
-	ERROR_LOG(Log::sceNet, "NOTI RoomDestroyed UNINPLEMENTED");
+void signaling_handler::RoomDestroyed(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
+	WARN_LOG(Log::sceNet, "NOTI RoomDestroyed(%d, %d, RPCNResponse)", ctxId, reqId);
+
+	auto _context = ctx.find(ctxId);
+	if (_context == ctx.end()) {
+		ERROR_LOG(Log::sceNet, "Default Context not Found");
+		return;
+	}
 
 	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
 	const auto* update_info = resp.stream->get_flatbuffer<RoomUpdateInfo>();
@@ -1119,8 +1138,14 @@ void signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 	notifyRoomEventHandler(DEFAULT_CONTEXT, room_id, 0, SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, notif_data.ptr);
 }
 
-void signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
-	ERROR_LOG(Log::sceNet, "NOTI UpdatedRoomDataInternal UNINPLEMENTED");
+void signaling_handler::UpdatedRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
+	WARN_LOG(Log::sceNet, "NOTI UpdatedRoomDataInternal(%d, %d, RPCNResponse)", ctxId, reqId);
+
+	auto _context = ctx.find(ctxId);
+	if (_context == ctx.end()) {
+		ERROR_LOG(Log::sceNet, "Default Context not Found");
+		return;
+	}
 
 	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
 	const auto* update_info = resp.stream->get_flatbuffer<RoomDataInternalUpdateInfo>();
@@ -1156,8 +1181,14 @@ void signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 	notifyRoomEventHandler(DEFAULT_CONTEXT, room_id, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal, notif_data.ptr);
 }
 
-void signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
-	ERROR_LOG(Log::sceNet, "NOTI UpdatedRoomMemberDataInternal UNINPLEMENTED");
+void signaling_handler::UpdatedRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
+	WARN_LOG(Log::sceNet, "NOTI UpdatedRoomMemberDataInternal(%d, %d, RPCNResponse)", ctxId, reqId);
+
+	auto _context = ctx.find(ctxId);
+	if (_context == ctx.end()) {
+		ERROR_LOG(Log::sceNet, "Default Context not Found");
+		return;
+	}
 
 	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
 	const auto* update_info = resp.stream->get_flatbuffer<RoomMemberDataInternalUpdateInfo>();
@@ -1186,8 +1217,15 @@ void signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	notifyRoomEventHandler(DEFAULT_CONTEXT, room_id, memberId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
 }
 
-void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
+void signaling_handler::RoomMessageReceived(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
+	WARN_LOG(Log::sceNet, "NOTI RoomMessageReceived(%d, %d, RPCNResponse)", ctxId, reqId);
 	// 0000000000000010 0090 00000014 00000000000E0014000000070008000C0010000E00000000000001700000006800000004000000580000000500000000000000903D9B08A0F1FF090C79A6089078A6086889A30878A89B0860F4FF09D0F4FF09B01815090000000060F4FF0980F3FF0978567609EFBEADDED06DA60840547609B0181509B46CA308A51894038C6EA608040004000400000000000000
+
+	auto _context = ctx.find(ctxId);
+	if (_context == ctx.end()) {
+		ERROR_LOG(Log::sceNet, "Default Context not Found");
+		return;
+	}
 
 	resp.stream = new vec_stream(resp.data);
 	//auto noti = new vec_stream(resp.data);
@@ -1200,7 +1238,7 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 
 	if (resp.stream->is_error())
 	{
-		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomMessageReceived notification");
+		ERROR_LOG(Log::sceNet, " - Malformed RoomMessageReceived notification");
 		return;
 	}
 
@@ -1213,8 +1251,8 @@ void signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 	notifyRoomMessageHandler(DEFAULT_CONTEXT, room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
 }
 
-void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
-	ERROR_LOG(Log::sceNet, "NOTI SignalingHelper UNINPLEMENTED");
+void signaling_handler::SignalingHelper(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
+	WARN_LOG(Log::sceNet, "NOTI SignalingHelper(%d, %d, RPCNResponse)", ctxId, reqId);
 	resp.stream = new vec_stream(resp.data);
 
 	const auto* matching_info = resp.stream->get_flatbuffer<MatchingSignalingInfo>();
@@ -1246,32 +1284,32 @@ void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 }
 
 // GUI
-void signaling_handler::MemberJoinedRoomGUI(net::RPCNResponse resp) {
+void signaling_handler::MemberJoinedRoomGUI(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI MemberJoinedRoomGUI UNINPLEMENTED");
 	auto noti = resp.stream;
 }
 
-void signaling_handler::MemberLeftRoomGUI(net::RPCNResponse resp) {
+void signaling_handler::MemberLeftRoomGUI(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI MemberLeftRoomGUI UNINPLEMENTED");
 	auto noti = resp.stream;
 }
 
-void signaling_handler::RoomDisappearedGUI(net::RPCNResponse resp) {
+void signaling_handler::RoomDisappearedGUI(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI RoomDisappearedGUI UNINPLEMENTED");
 	auto noti = resp.stream;
 }
 
-void signaling_handler::RoomOwnerChangedGUI(net::RPCNResponse resp) {
+void signaling_handler::RoomOwnerChangedGUI(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI RoomOwnerChangedGUI UNINPLEMENTED");
 	auto noti = resp.stream;
 }
 
-void signaling_handler::UserKickedGUI(net::RPCNResponse resp) {
+void signaling_handler::UserKickedGUI(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI UserKickedGUI UNINPLEMENTED");
 	auto noti = resp.stream;
 }
 
-void signaling_handler::QuickMatchCompleteGUI(net::RPCNResponse resp) {
+void signaling_handler::QuickMatchCompleteGUI(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
 	ERROR_LOG(Log::sceNet, "NOTI QuickMatchCompleteGUI UNINPLEMENTED");
 	auto noti = resp.stream;
 }
