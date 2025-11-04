@@ -960,15 +960,15 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 	if (Memory::IsValidAddress(roomEventCbPtr)) {
-		u32 roomEventCb = Memory::Read_U32(roomEventCbPtr);
-		if (Memory::IsValidAddress(roomEventCb))
-			SetDefaultParams(ctxId, roomEventCb, optParam->cbFuncArg.ptr, SCE_NP_MATCHING2_ROOM_EVENT);
+		auto roomEventCb = PSPPointer<SceNpMatching2RoomEventOptParam>::Create(roomEventCbPtr);
+		if (Memory::IsValidAddress(roomEventCb->cbFunc.ptr) && Memory::IsValidAddress(roomEventCb->cbFuncArg.ptr))
+			SetDefaultParams(ctxId, *roomEventCb, SCE_NP_MATCHING2_ROOM_EVENT);
 	}
 
 	if (Memory::IsValidAddress(roomMessageCbPtr)) {
-		u32 roomMessageCb = Memory::Read_U32(roomMessageCbPtr);
-		if (Memory::IsValidAddress(roomMessageCb))
-			SetDefaultParams(ctxId, roomMessageCb, optParam->cbFuncArg.ptr, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
+		auto roomMessageCb = PSPPointer<SceNpMatching2RoomMessageOptParam>::Create(roomMessageCbPtr);
+		if (Memory::IsValidAddress(roomMessageCb->cbFunc.ptr) && Memory::IsValidAddress(roomMessageCb->cbFuncArg.ptr))
+			SetDefaultParams(ctxId, *roomMessageCb, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
 	}
 
 	auto req = PSPPointer<SceNpMatching2CreateJoinRoomRequest>::Create(reqParamPtr);
@@ -1038,11 +1038,17 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u
 	if (!npServer)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
-	if (Memory::IsValidAddress(roomEventCbPtr))
-		SetDefaultParams(ctxId, Memory::Read_U32(roomEventCbPtr), optParam->cbFuncArg.ptr, SCE_NP_MATCHING2_ROOM_EVENT);
+	if (Memory::IsValidAddress(roomEventCbPtr)) {
+		auto roomEventCb = PSPPointer<SceNpMatching2RoomEventOptParam>::Create(roomEventCbPtr);
+		if (Memory::IsValidAddress(roomEventCb->cbFunc.ptr) && Memory::IsValidAddress(roomEventCb->cbFuncArg.ptr))
+			SetDefaultParams(ctxId, *roomEventCb, SCE_NP_MATCHING2_ROOM_EVENT);
+	}
 
-	if (Memory::IsValidAddress(roomMessageCbPtr))
-		SetDefaultParams(ctxId, Memory::Read_U32(roomMessageCbPtr), optParam->cbFuncArg.ptr, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
+	if (Memory::IsValidAddress(roomMessageCbPtr)) {
+		auto roomMessageCb = PSPPointer<SceNpMatching2RoomMessageOptParam>::Create(roomMessageCbPtr);
+		if (Memory::IsValidAddress(roomMessageCb->cbFunc.ptr) && Memory::IsValidAddress(roomMessageCb->cbFuncArg.ptr))
+			SetDefaultParams(ctxId, *roomMessageCb, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
+	}
 
 	auto req = PSPPointer<SceNpMatching2JoinRoomRequest>::Create(reqParamPtr);
 
@@ -1255,8 +1261,8 @@ static int sceNpMatching2SetDefaultRequestOptParam(int ctxId, u32 optParam)
 	if (!Memory::IsValidAddress(optParam) || !Memory::IsValidAddress(optParam))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParam);
-	SetDefaultParams(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_REQUEST_EVENT);
+	auto signalingOptParams = PSPPointer<SceNpMatching2SignalingOptParam>::Create(optParam);
+	SetDefaultParams(ctxId, *signalingOptParams, SCE_NP_MATCHING2_REQUEST_EVENT);
 
 	return SCE_NP_MATCHING2_OKAY;
 }
@@ -1348,8 +1354,8 @@ static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 op
 	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	auto opt = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SetDefaultParams(ctxId, opt->cbFunc.ptr, opt->cbFuncArg.ptr, SCE_NP_MATCHING2_SIGNALING_EVENT);
+	auto signalingOptParams = PSPPointer<SceNpMatching2SignalingOptParam>::Create(optParamPtr);
+	SetDefaultParams(ctxId, *signalingOptParams, SCE_NP_MATCHING2_SIGNALING_EVENT);
 
 	return SCE_NP_MATCHING2_OKAY;
 }
@@ -1368,12 +1374,12 @@ static int sceNpMatching2GetSignalingOptParamLocal(int ctxId, u32 roomId, u32 op
 	if (!Memory::IsValidAddress(roomId) || !Memory::IsValidAddress(optParamPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	auto optPtr = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
+	auto optPtr = PSPPointer<SceNpMatching2SignalingOptParam>::Create(optParamPtr);
 
 	if (defaultOptParams.find(SCE_NP_MATCHING2_SIGNALING_EVENT) == defaultOptParams.end())
 		return SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND;
 	auto sigParam = defaultOptParams[SCE_NP_MATCHING2_SIGNALING_EVENT];
-	optPtr->cbFunc = sigParam.cb;
+	optPtr->cbFunc = sigParam.cb.ptr;
 	optPtr->cbFuncArg = sigParam.cb_arg;
 
 	return SCE_NP_MATCHING2_OKAY;
