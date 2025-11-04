@@ -631,7 +631,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 				{
 					signaling_message msg;
 					msg.src_addr = src.sin_addr.s_addr;
-					msg.src_port = src.sin_port;
+					msg.src_port = ntohs(src.sin_port);
 					msg.data = std::move(vport_0_data);
 					INFO_HEXLOG(Log::sceNet, "recv_loop::SIGSERV", reinterpret_cast<const char*>(msg.data.data()), msg.data.size(), 386);
 
