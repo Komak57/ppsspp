@@ -3,6 +3,9 @@
 #include <Common/File/FileDescriptor.h>
 #include <TimeUtil.h>
 #include <chrono>
+#include <Core/CoreTiming.h>
+#include <Core/HLE/sceNp2.h>
+#include <Core/Net/SignalingHandler.h>
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN
 	RPCNAuthAgent::RPCNAuthAgent(std::string host, int port) {
@@ -239,6 +242,8 @@ namespace net {
 			connected = false;
 		}
 
+		sockaddr_in client_addr;
+		socklen_t client_addr_size;
 
 		auto start_time = std::chrono::high_resolution_clock::now();
 		auto end_time = std::chrono::high_resolution_clock::now();
@@ -326,6 +331,14 @@ namespace net {
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful. TLS: %s, Cipher: %s", mbedtls_ssl_get_version(&tls.sslCtx), mbedtls_ssl_get_ciphersuite(&tls.sslCtx));
 				connected = true;
 				conn = std::move(possible);
+
+				// Obtain our local IP address related to our connection to the RPCN server
+				client_addr_size = sizeof(client_addr);
+				if (getsockname(tls.netCtx.fd, reinterpret_cast<struct sockaddr*>(&client_addr), &client_addr_size) != 0)
+				{
+					ERROR_LOG(Log::sceNet, "Failed to get the client address from the socket!");
+				}
+				g_signaling.local_addr_sig.store(client_addr.sin_addr.s_addr);
 				// Start reading data
 				start_read_thread();
 
