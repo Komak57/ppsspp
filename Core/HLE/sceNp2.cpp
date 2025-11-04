@@ -613,23 +613,6 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 	memcpy(&npTitleId, titleid, sizeof(SceNpCommunicationId));
 
 	SceNpCommunicationPassphrase* passph = (SceNpCommunicationPassphrase*)Memory::GetCharPointer(passPhrasePtr);
-	npServer->UpdateOptions(optionFlags);
-
-	INFO_LOG(Log::sceNet, "%s - Title ID: %s", __FUNCTION__, npTitleId.data);
-	INFO_LOG(Log::sceNet, "%s - Title NUM: %d", __FUNCTION__, npTitleId.num);
-	//INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npid->handle.data);
-	INFO_LOG(Log::sceNet, "%s - User ID: %d", __FUNCTION__, npServer->GetUserID());
-	INFO_LOG(Log::sceNet, "%s - Login ID: %s", __FUNCTION__, g_Config.infraNpId.c_str());
-	INFO_LOG(Log::sceNet, "%s - Use Online ID: %s", __FUNCTION__, (npServer->IncludeOnlineName() ? "YES" : "NO"));
-	INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npServer->GetOnlineName().c_str());
-	INFO_LOG(Log::sceNet, "%s - Use Avatar: %s", __FUNCTION__, (npServer->IncludeAvatarUrl() ? "YES" : "NO"));
-	INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, npServer->GetAvatarURL().c_str());
-	std::string datahex;
-	/*DataToHexString(npid->opt, sizeof(npid->opt), &datahex);
-	INFO_LOG(Log::sceNet, "%s - Options?: %s", __FUNCTION__, datahex.c_str());
-	datahex.clear();*/
-	DataToHexString(10, 0, passph->data, sizeof(passph->data), &datahex);
-	INFO_LOG(Log::sceNet, "%s - Passphrase: \n%s", __FUNCTION__, datahex.c_str());
 
 	// It seems ctxId need to be in the range of 1 to 7 to be valid ?
 	SceNpMatching2ContextId ctxId = 1;
@@ -637,6 +620,24 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 		if (ctx.find(ctxId) != ctx.end())
 			continue;
 		ctx.emplace(ctxId, std::make_unique<NpMatching2Context>(*titleid, *passph, optionFlags));
+
+		INFO_LOG(Log::sceNet, "%s - Context ID: %d", __FUNCTION__, ctxId);
+	INFO_LOG(Log::sceNet, "%s - Title ID: %s", __FUNCTION__, npTitleId.data);
+	INFO_LOG(Log::sceNet, "%s - Title NUM: %d", __FUNCTION__, npTitleId.num);
+	//INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npid->handle.data);
+		INFO_LOG(Log::sceNet, "%s - User ID: %d", __FUNCTION__, npAuthServer->GetUserID());
+	INFO_LOG(Log::sceNet, "%s - Login ID: %s", __FUNCTION__, g_Config.infraNpId.c_str());
+		INFO_LOG(Log::sceNet, "%s - Use Online ID: %s", __FUNCTION__, (ctx[ctxId]->include_onlinename ? "YES" : "NO"));
+		INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npAuthServer->GetOnlineName().c_str());
+		INFO_LOG(Log::sceNet, "%s - Use Avatar: %s", __FUNCTION__, (ctx[ctxId]->include_avatarurl ? "YES" : "NO"));
+		INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, npAuthServer->GetAvatarURL().c_str());
+	std::string datahex;
+	/*DataToHexString(npid->opt, sizeof(npid->opt), &datahex);
+	INFO_LOG(Log::sceNet, "%s - Options?: %s", __FUNCTION__, datahex.c_str());
+	datahex.clear();*/
+	DataToHexString(10, 0, passph->data, sizeof(passph->data), &datahex);
+	INFO_LOG(Log::sceNet, "%s - Passphrase: \n%s", __FUNCTION__, datahex.c_str());
+
 		Memory::Write_U16(ctxId, ctxIdPtr);
 		// TODO: Allocate & zeroed a memory of 68 bytes where npId (36 bytes) is copied to offset 8, offset 44 = 0x00026808, offset 48 = 0
 		return SCE_NP_MATCHING2_OKAY;
