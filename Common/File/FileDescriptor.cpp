@@ -30,13 +30,13 @@ bool WaitUntilReady(int fd, double timeout, bool for_write) {
 
 	if (rval < 0) {
 		// Error calling select.
-		return -1;
+		return false;
 	} else if (rval == 0) {
 		// Timeout.
-		return 0;
+		return false;
 	} else {
 		// Socket is ready.
-		return 1;
+		return true;
 	}
 }
 
