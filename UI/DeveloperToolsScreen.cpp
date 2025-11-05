@@ -458,12 +458,12 @@ void DeveloperToolsScreen::CreateNetworkTab(UI::LinearLayout *list) {
 	// Note: Intensionally didn't use translation here, until we move these to the
 	// regular settings after the code is merged.
 	list->Add(new ItemHeader("RPCN Login"));
-	PopupTextInputChoice *usernameChoice = list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.infraNpId, di->T("Username"), "", 64, screenManager()));
+	PopupTextInputChoice *usernameChoice = list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sInfraNpId, di->T("Username"), "", 64, screenManager()));
 	usernameChoice->SetRestriction(StringRestriction::AlphaNumUnderscore, 3);
-	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.infraPassword, di->T("Password"), "", 64, screenManager()))->SetPasswordDisplay();
-	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.infraToken, "Token", "", 64, screenManager()))->SetPasswordDisplay();
-	list->Add(new CheckBox(&g_Config.infraAutoSignIn, dev->T("Auto Sign-In")));
-	list->Add(new CheckBox(&g_Config.infraRememberPwd, dev->T("Remember Password")));
+	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sInfraPassword, di->T("Password"), "", 64, screenManager()))->SetPasswordDisplay();
+	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sInfraToken, "Token", "", 64, screenManager()))->SetPasswordDisplay();
+	list->Add(new CheckBox(&g_Config.bInfraAutoSignIn, dev->T("Auto Sign-In")));
+	list->Add(new CheckBox(&g_Config.bInfraRememberPwd, dev->T("Remember Password")));
 
 	// This is shared between RemoteISO and the remote debugger.
 	PopupSliderChoice *portChoice = new PopupSliderChoice(&g_Config.iRemoteISOPort, 0, 65535, 0, ri->T("Local Server Port", "Local Server Port"), 100, screenManager());

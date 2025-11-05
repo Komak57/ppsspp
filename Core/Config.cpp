@@ -625,10 +625,10 @@ static std::string DefaultInfrastructureUsername() {
 	// If the user has already picked a Nickname that satisfies the rules and is not "PPSSPP",
 	// let's use that.
 	// NOTE: This type of dependency means that network settings must be AFTER system settings in sections[].
-	if (g_Config.infraNpId != "PPSSPP" &&
-		!g_Config.infraNpId.empty() &&
-		g_Config.infraNpId == SanitizeString(g_Config.infraNpId, StringRestriction::AlphaNumUnderscore, 3, 16)) {
-		return g_Config.infraNpId;
+	if (g_Config.sInfraNpId != "PPSSPP" &&
+		!g_Config.sInfraNpId.empty() &&
+		g_Config.sInfraNpId == SanitizeString(g_Config.sInfraNpId, StringRestriction::AlphaNumUnderscore, 3, 16)) {
+		return g_Config.sInfraNpId;
 	}
 
 	// Otherwise let's leave it empty, which will result in login failure and a warning.

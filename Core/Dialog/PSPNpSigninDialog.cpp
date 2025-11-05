@@ -193,7 +193,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 		switch (stage) {
 		case SigninStage::INIT:
 			// Check Flags for AutoLogin
-			if (g_Config.infraNpId.empty() || g_Config.infraPassword.empty() || g_Config.infraToken.empty() || !g_Config.infraAutoSignIn)
+			if (g_Config.sInfraNpId.empty() || g_Config.sInfraPassword.empty() || g_Config.sInfraToken.empty() || !g_Config.bInfraAutoSignIn)
 				Transition(SigninStage::LOGIN_FORM, true);
 			else
 				Transition(SigninStage::AUTO_LOGIN, true);
@@ -426,7 +426,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 					runOnce = false;
 					std::string* creds = NpGetLogin();
 					if (server->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str()) != 0) {
-						g_Config.infraToken = ""; // Reset the Token to force re-entry
+						g_Config.sInfraToken = ""; // Reset the Token to force re-entry
 						failMessage = "Authentication Failed. Retry?";
 						Transition(SigninStage::FAIL);
 						break;
@@ -445,7 +445,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			break;
 		case SigninStage::FAIL:
 			// Disable Token to force re-aquire ?
-			//g_Config.infraToken = "";
+			//g_Config.sInfraToken = "";
 			// Reset all forms
 			InitForms();
 			DrawLogo();
@@ -509,11 +509,11 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 			std::string LoginType = "Username";
 			if (server->GetAuthType() == net::NPAgentType::PSN)
 				LoginType = "E-mail Address";
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, LoginType, g_Config.infraNpId, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, LoginType, g_Config.sInfraNpId, false,
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
-				g_Config.infraNpId = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
-				g_Config.infraToken = "";
+				g_Config.sInfraNpId = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
+				g_Config.sInfraToken = "";
 			},
 				[&]() {
 				// Failure callback
@@ -528,11 +528,11 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 		if (IsButtonPressed(downButtonFlag))
 			selected[(u8)stage] = (u8)SigninSelected::AUTOLOGIN;
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", g_Config.infraPassword, true,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", g_Config.sInfraPassword, true,
 				[&](const std::string& value, int) {
 				// Success callback
-				g_Config.infraPassword = value;
-				g_Config.infraToken = "";
+				g_Config.sInfraPassword = value;
+				g_Config.sInfraToken = "";
 			},
 				[&]() {
 				// Failure callback
@@ -547,9 +547,9 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 		if (IsButtonPressed(downButtonFlag))
 			selected[(u8)stage] = (u8)SigninSelected::REMEMBERME;
 		if (IsButtonPressed(okButtonFlag)) {
-			g_Config.infraAutoSignIn = !g_Config.infraAutoSignIn;
-			if (g_Config.infraAutoSignIn)
-				g_Config.infraRememberPwd = true;
+			g_Config.bInfraAutoSignIn = !g_Config.bInfraAutoSignIn;
+			if (g_Config.bInfraAutoSignIn)
+				g_Config.bInfraRememberPwd = true;
 		}
 		break;
 	case SigninSelected::REMEMBERME:
@@ -559,9 +559,9 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 		if (IsButtonPressed(downButtonFlag))
 			selected[(u8)stage] = (u8)SigninSelected::SIGNIN;
 		if (IsButtonPressed(okButtonFlag)) {
-			g_Config.infraRememberPwd = !g_Config.infraRememberPwd;
-			if (!g_Config.infraRememberPwd)
-				g_Config.infraAutoSignIn = false;
+			g_Config.bInfraRememberPwd = !g_Config.bInfraRememberPwd;
+			if (!g_Config.bInfraRememberPwd)
+				g_Config.bInfraAutoSignIn = false;
 		}
 		break;
 	case SigninSelected::SIGNIN:
@@ -572,13 +572,13 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 			selected[(u8)stage] = (u8)SigninSelected::FORGOTPSWD;
 		if (IsButtonPressed(okButtonFlag)) {
 			// Sanity Check
-			if (g_Config.infraNpId.empty() || g_Config.infraPassword.empty())
+			if (g_Config.sInfraNpId.empty() || g_Config.sInfraPassword.empty())
 				break;
-			if (g_Config.infraToken.empty()) {
-				System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Token", g_Config.infraToken, true,
+			if (g_Config.sInfraToken.empty()) {
+				System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Token", g_Config.sInfraToken, true,
 					[&](const std::string& value, int) {
 					// Success callback
-					g_Config.infraToken = value;
+					g_Config.sInfraToken = value;
 					startTime = now;
 					Transition(SigninStage::CONNECT_REQUEST);
 				},
@@ -609,16 +609,16 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 		PPGeDrawText(di->T("PSN"), 240, 5, centerAligned);
 		PPGeDrawText(di->T("Sign-In ID (E-mail Address)"), 70, 50, leftAligned);
 	}
-	DrawInputBox(g_Config.infraNpId, 70, 70, 405, 90, CalcFadedColor(0x40000000), leftAligned);
+	DrawInputBox(g_Config.sInfraNpId, 70, 70, 405, 90, CalcFadedColor(0x40000000), leftAligned);
 	PPGeDrawText(di->T("Password"), 70, 95, leftAligned);
-	DrawInputBox(g_Config.infraPassword, 70, 115, 405, 135, CalcFadedColor(0x40000000), leftAligned, true);
+	DrawInputBox(g_Config.sInfraPassword, 70, 115, 405, 135, CalcFadedColor(0x40000000), leftAligned, true);
 	{
-		ImageID autoSignInChkBox = g_Config.infraAutoSignIn ? ImageID("I_CROSS") : ImageID("I_SQUARE");
+		ImageID autoSignInChkBox = g_Config.bInfraAutoSignIn ? ImageID("I_CROSS") : ImageID("I_SQUARE");
 		PPGeDrawImage(autoSignInChkBox, 70, 145, 20, 20, leftAligned);
 	}
 	PPGeDrawText(di->T("Sign In Automatically (Auto Sign-In)"), 90, 145, leftAligned);
 	{
-		ImageID savePswdChkBox = g_Config.infraRememberPwd ? ImageID("I_CROSS") : ImageID("I_SQUARE");
+		ImageID savePswdChkBox = g_Config.bInfraRememberPwd ? ImageID("I_CROSS") : ImageID("I_SQUARE");
 		PPGeDrawImage(savePswdChkBox, 70, 170, 20, 20, leftAligned);
 	}
 	PPGeDrawText(di->T("Save Password"), 90, 170, leftAligned);
