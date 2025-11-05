@@ -19,9 +19,11 @@
 
 #include <functional>
 
-#include "UI/MiscScreens.h"
+#include "UI/BaseScreens.h"
 #include "Common/UI/UIScreen.h"
 #include "Common/File/Path.h"
+
+#include "UI/GameInfoCache.h"
 
 class NoticeView;
 
@@ -31,7 +33,7 @@ class NoticeView;
 // Uses GameInfoCache heavily to implement the functionality.
 // Should possibly merge this with the PauseScreen.
 
-class GameScreen : public UIDialogScreenWithGameBackground {
+class GameScreen : public UIBaseDialogScreen {
 public:
 	GameScreen(const Path &gamePath, bool inGame);
 	~GameScreen();
@@ -46,44 +48,25 @@ protected:
 	void CreateViews() override;
 
 private:
-	UI::Choice *AddOtherChoice(UI::Choice *choice);
-
 	// Event handlers
-	UI::EventReturn OnPlay(UI::EventParams &e);
-	UI::EventReturn OnGameSettings(UI::EventParams &e);
-	UI::EventReturn OnDeleteSaveData(UI::EventParams &e);
-	UI::EventReturn OnDeleteGame(UI::EventParams &e);
-	UI::EventReturn OnSwitchBack(UI::EventParams &e);
-	UI::EventReturn OnRemoveFromRecent(UI::EventParams &e);
-	UI::EventReturn OnCreateConfig(UI::EventParams &e);
-	UI::EventReturn OnDeleteConfig(UI::EventParams &e);
-	UI::EventReturn OnCwCheat(UI::EventParams &e);
-	UI::EventReturn OnSetBackground(UI::EventParams &e);
-	UI::EventReturn OnDoCRC32(UI::EventParams& e);
+	void OnPlay(UI::EventParams &e);
+	void OnGameSettings(UI::EventParams &e);
+	void OnDeleteSaveData(UI::EventParams &e);
+	void OnDeleteGame(UI::EventParams &e);
+	void OnSwitchBack(UI::EventParams &e);
+	void OnRemoveFromRecent(UI::EventParams &e);
+	void OnCreateConfig(UI::EventParams &e);
+	void OnDeleteConfig(UI::EventParams &e);
+	void OnCwCheat(UI::EventParams &e);
+	void OnSetBackground(UI::EventParams &e);
 
-	// As we load metadata in the background, we need to be able to update these after the fact.
-	UI::TextView *tvTitle_ = nullptr;
-	UI::TextView *tvGameSize_ = nullptr;
-	UI::TextView *tvSaveDataSize_ = nullptr;
-	UI::TextView *tvInstallDataSize_ = nullptr;
-	UI::TextView *tvRegion_ = nullptr;
-	UI::TextView *tvPlayTime_ = nullptr;
-	UI::TextView *tvCRC_ = nullptr;
-	UI::TextView *tvID_ = nullptr;
-	UI::Button *tvCRCCopy_ = nullptr;
-	NoticeView *tvVerified_ = nullptr;
-
-	UI::Choice *btnGameSettings_ = nullptr;
-	UI::Choice *btnCreateGameConfig_ = nullptr;
-	UI::Choice *btnDeleteGameConfig_ = nullptr;
-	UI::Choice *btnDeleteSaveData_ = nullptr;
-	UI::Choice *btnSetBackground_ = nullptr;
-
-	UI::Choice *btnCalcCRC_ = nullptr;
-
-	std::vector<UI::Choice *> otherChoices_;
 	std::string CRC32string;
 
 	bool isHomebrew_ = false;
 	bool inGame_ = false;
+
+	// Keep track of progressive loading of metadata.
+	GameInfoFlags knownFlags_ = GameInfoFlags::EMPTY;
+
+	bool knownHasCRC_ = false;
 };

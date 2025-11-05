@@ -13,6 +13,7 @@
 #include "Common/Log.h"
 #include "Common/TimeUtil.h"
 #include "Common/LogReporting.h"
+#include "Common/Render/AtlasGen.h"
 
 UIContext::UIContext() {
 	fontStyle_ = new UI::FontStyle();
@@ -39,31 +40,26 @@ void UIContext::Init(Draw::DrawContext *thin3d, Draw::Pipeline *uipipe, Draw::Pi
 	textDrawer_ = TextDrawer::Create(thin3d);  // May return nullptr if no implementation is available for this platform.
 }
 
-void UIContext::setUIAtlas(const std::string &name) {
-	_dbg_assert_(!name.empty());
-	UIAtlas_ = name;
-}
-
 void UIContext::BeginFrame() {
 	frameStartTime_ = time_now_d();
-	if (!uitexture_ || UIAtlas_ != lastUIAtlas_) {
-		uitexture_ = CreateTextureFromFile(draw_, UIAtlas_.c_str(), ImageFileType::ZIM, false);
-		lastUIAtlas_ = UIAtlas_;
-		if (!fontTexture_) {
-#if PPSSPP_PLATFORM(WINDOWS) || PPSSPP_PLATFORM(ANDROID)
-			// Don't bother with loading font_atlas.zim
-#else
-			fontTexture_ = CreateTextureFromFile(draw_, "font_atlas.zim", ImageFileType::ZIM, false);
-#endif
-			if (!fontTexture_) {
-				// Load the smaller ascii font only, like on Android. For debug ui etc.
-				fontTexture_ = CreateTextureFromFile(draw_, "asciifont_atlas.zim", ImageFileType::ZIM, false);
-				if (!fontTexture_) {
-					WARN_LOG(Log::System, "Failed to load font_atlas.zim or asciifont_atlas.zim");
-				}
-			}
+	if (atlasInvalid_ || !uitexture_) {
+		if (uitexture_) {
+			uitexture_->Release();
 		}
+		AtlasData data = atlasProvider_(draw_, AtlasChoice::General, 1.0f / g_display.dpi_scale_x);
+		uitexture_ = data.texture;
+		_dbg_assert_(uitexture_);
+		ui_draw2d.SetAtlas(data.atlas);
+		atlasInvalid_ = false;
 	}
+
+	if (!fontTexture_) {
+		AtlasData data = atlasProvider_(draw_, AtlasChoice::Font, 1.0f / g_display.dpi_scale_x);
+		fontTexture_ = data.texture;
+		_dbg_assert_(fontTexture_);
+		ui_draw2d.SetFontAtlas(data.atlas);
+	}
+
 	uidrawbuffer_->SetCurZ(0.0f);
 	ActivateTopScissor();
 }
@@ -141,22 +137,26 @@ Bounds UIContext::GetScissorBounds() {
 		return bounds_;
 }
 
-Bounds UIContext::GetLayoutBounds() const {
+Bounds UIContext::GetLayoutBounds(bool ignoreBottomInset) const {
 	Bounds bounds = GetBounds();
 
 	float left = System_GetPropertyFloat(SYSPROP_DISPLAY_SAFE_INSET_LEFT);
 	float right = System_GetPropertyFloat(SYSPROP_DISPLAY_SAFE_INSET_RIGHT);
 	float top = System_GetPropertyFloat(SYSPROP_DISPLAY_SAFE_INSET_TOP);
 	float bottom = System_GetPropertyFloat(SYSPROP_DISPLAY_SAFE_INSET_BOTTOM);
+	if (ignoreBottomInset) {
+		bottom = 0.0f;
+	}
 
-	// ILOG("Insets: %f %f %f %f", left, right, top, bottom);
+	// Note that we ignore bottom here, to let lists etc. extend to the bottom of the screen.
+	// However, we will add the same space to the bottom of scrolled lists, so that you don't have to
+	// touch things below the safe inset.
 
 	// Adjust left edge to compensate for cutouts (notches) if any.
 	bounds.x += left;
 	bounds.w -= (left + right);
 	bounds.y += top;
 	bounds.h -= (top + bottom);
-
 	return bounds;
 }
 

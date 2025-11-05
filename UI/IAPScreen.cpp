@@ -1,11 +1,13 @@
 // NOTE: This currently only used on iOS, to present the availablility of getting PPSSPP Gold through IAP.
 
-#include "UI/IAPScreen.h"
-#include "UI/OnScreenDisplay.h"
-#include "UI/MiscScreens.h"
 #include "Common/System/System.h"
+#include "Common/System/Request.h"
 #include "Common/Data/Text/I18n.h"
 #include "Common/System/OSD.h"
+#include "Common/Render/DrawBuffer.h"
+#include "UI/IAPScreen.h"
+#include "UI/OnScreenDisplay.h"
+#include "UI/MiscViews.h"
 
 void IAPScreen::CreateViews() {
 	using namespace UI;
@@ -13,7 +15,7 @@ void IAPScreen::CreateViews() {
 	auto di = GetI18NCategory(I18NCat::DIALOG);
 	auto mm = GetI18NCategory(I18NCat::MAINMENU);
 
-	const bool vertical = UseVerticalLayout();
+	const bool vertical = UsePortraitLayout();
 
 	root_ = new LinearLayout(vertical ? ORIENT_VERTICAL : ORIENT_HORIZONTAL, new LayoutParams(FILL_PARENT, FILL_PARENT));
 	
@@ -27,7 +29,7 @@ void IAPScreen::CreateViews() {
 	root_->Add(leftColumnContainer);
 
 	ViewGroup *appTitle = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
-	appTitle->Add(new ShinyIcon(ImageID("I_ICONGOLD"), new LinearLayoutParams(64, 64)));
+	appTitle->Add(new ShinyIcon(ImageID("I_ICON_GOLD"), new LinearLayoutParams(64, 64)));
 	appTitle->Add(new TextView("PPSSPP Gold", new LinearLayoutParams(1.0f, G_VCENTER)));
 
 	leftColumnItems->Add(appTitle);
@@ -49,7 +51,7 @@ void IAPScreen::CreateViews() {
 
 	if (!bought) {
 		Choice *buyButton = rightColumnItems->Add(new Choice(mm->T("Buy PPSSPP Gold")));
-		buyButton->SetIcon(ImageID("I_ICONGOLD"), 0.5f);
+		buyButton->SetIcon(ImageID("I_ICON_GOLD"), 0.5f);
 		buyButton->SetShine(true);
 		const int requesterToken = GetRequesterToken();
 		buyButton->OnClick.Add([this, requesterToken](UI::EventParams &) {
@@ -63,14 +65,12 @@ void IAPScreen::CreateViews() {
 				WARN_LOG(Log::System, "Purchase failed or cancelled!");
 			});
 			// TODO: What do we do here?
-			return UI::EVENT_DONE;
 		});
 	}
 
 	Choice *moreInfo = rightColumnItems->Add(new Choice(di->T("More info")));
 	moreInfo->OnClick.Add([](UI::EventParams &) {
 		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://www.ppsspp.org/buygold_ios");
-		return UI::EVENT_DONE;
 	});
 
 	Choice *backButton = rightColumnItems->Add(new Choice(di->T("Back")));
@@ -89,7 +89,6 @@ void IAPScreen::CreateViews() {
 		}, []() {
 			WARN_LOG(Log::System, "Failed restoring purchases");
 		});
-		return UI::EVENT_DONE;
 	});
 	rightColumnItems->Add(restorePurchases);
 }

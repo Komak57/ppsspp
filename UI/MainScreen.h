@@ -18,11 +18,13 @@
 #pragma once
 
 #include <functional>
+#include <string_view>
 
 #include "Common/File/Path.h"
 #include "Common/UI/UIScreen.h"
 #include "Common/UI/ViewGroup.h"
-#include "UI/MiscScreens.h"
+#include "Common/UI/TabHolder.h"
+#include "UI/BaseScreens.h"
 #include "Common/File/PathBrowser.h"
 
 enum GameBrowserFlags {
@@ -36,7 +38,8 @@ enum class BrowseFlags {
 	ARCHIVES = 4,
 	PIN = 8,
 	HOMEBREW_STORE = 16,
-	STANDARD = 1 | 2 | 4 | 8,
+	UPLOAD_BUTTON = 32,
+	STANDARD = 1 | 2 | 4 | 8 | 32,
 };
 ENUM_CLASS_BITOPS(BrowseFlags);
 
@@ -74,21 +77,20 @@ protected:
 private:
 	bool IsCurrentPathPinned();
 	std::vector<Path> GetPinnedPaths() const;
-	std::string GetBaseName(const std::string &path) const;
 
-	UI::EventReturn GameButtonClick(UI::EventParams &e);
-	UI::EventReturn GameButtonHoldClick(UI::EventParams &e);
-	UI::EventReturn GameButtonHighlight(UI::EventParams &e);
-	UI::EventReturn NavigateClick(UI::EventParams &e);
-	UI::EventReturn LayoutChange(UI::EventParams &e);
-	UI::EventReturn LastClick(UI::EventParams &e);
-	UI::EventReturn BrowseClick(UI::EventParams &e);
-	UI::EventReturn StorageClick(UI::EventParams &e);
-	UI::EventReturn OnHomeClick(UI::EventParams &e);
-	UI::EventReturn PinToggleClick(UI::EventParams &e);
-	UI::EventReturn GridSettingsClick(UI::EventParams &e);
-	UI::EventReturn OnRecentClear(UI::EventParams &e);
-	UI::EventReturn OnHomebrewStore(UI::EventParams &e);
+	void GameButtonClick(UI::EventParams &e);
+	void GameButtonHoldClick(UI::EventParams &e);
+	void GameButtonHighlight(UI::EventParams &e);
+	void NavigateClick(UI::EventParams &e);
+	void LayoutChange(UI::EventParams &e);
+	void LastClick(UI::EventParams &e);
+	void BrowseClick(UI::EventParams &e);
+	void StorageClick(UI::EventParams &e);
+	void OnHomeClick(UI::EventParams &e);
+	void PinToggleClick(UI::EventParams &e);
+	void GridSettingsClick(UI::EventParams &e);
+	void OnRecentClear(UI::EventParams &e);
+	void OnHomebrewStore(UI::EventParams &e);
 
 	enum class SearchState {
 		MATCH,
@@ -116,7 +118,7 @@ private:
 
 class RemoteISOBrowseScreen;
 
-class MainScreen : public UIScreenWithBackground {
+class MainScreen : public UIBaseScreen {
 public:
 	MainScreen();
 	~MainScreen();
@@ -132,6 +134,11 @@ public:
 
 protected:
 	void CreateViews() override;
+	void CreateRecentTab();
+	GameBrowser *CreateBrowserTab(const Path &path, std::string_view title, std::string_view howToTitle, std::string_view howToUri, BrowseFlags browseFlags, bool *bGridView, float *scrollPos);
+	UI::ViewGroup *CreateLogoView(bool portrait, UI::LayoutParams *layoutParams);
+	void CreateMainButtons(UI::ViewGroup *parent, bool vertical);
+
 	void DrawBackground(UIContext &dc) override;
 	void update() override;
 	void sendMessage(UIMessage message, const char *value) override;
@@ -139,18 +146,18 @@ protected:
 
 	bool DrawBackgroundFor(UIContext &dc, const Path &gamePath, float progress);
 
-	UI::EventReturn OnGameSelected(UI::EventParams &e);
-	UI::EventReturn OnGameSelectedInstant(UI::EventParams &e);
-	UI::EventReturn OnGameHighlight(UI::EventParams &e);
+	void OnGameSelected(UI::EventParams &e);
+	void OnGameSelectedInstant(UI::EventParams &e);
+	void OnGameHighlight(UI::EventParams &e);
 	// Event handlers
-	UI::EventReturn OnLoadFile(UI::EventParams &e);
-	UI::EventReturn OnGameSettings(UI::EventParams &e);
-	UI::EventReturn OnCredits(UI::EventParams &e);
-	UI::EventReturn OnPPSSPPOrg(UI::EventParams &e);
-	UI::EventReturn OnForums(UI::EventParams &e);
-	UI::EventReturn OnExit(UI::EventParams &e);
-	UI::EventReturn OnAllowStorage(UI::EventParams &e);
-	UI::EventReturn OnFullScreenToggle(UI::EventParams &e);
+	void OnLoadFile(UI::EventParams &e);
+	void OnGameSettings(UI::EventParams &e);
+	void OnCredits(UI::EventParams &e);
+	void OnPPSSPPOrg(UI::EventParams &e);
+	void OnForums(UI::EventParams &e);
+	void OnExit(UI::EventParams &e);
+	void OnAllowStorage(UI::EventParams &e);
+	void OnFullScreenToggle(UI::EventParams &e);
 
 	UI::TabHolder *tabHolder_ = nullptr;
 	UI::Button *fullscreenButton_ = nullptr;
@@ -166,7 +173,6 @@ protected:
 	bool lockBackgroundAudio_ = false;
 	bool lastVertical_ = false;
 	bool confirmedTemporary_ = false;
-	UI::ScrollView *scrollAllGames_ = nullptr;
 	bool searchKeyModifier_ = false;
 	bool searchChanged_ = false;
 	std::string searchFilter_;
@@ -174,7 +180,7 @@ protected:
 	friend class RemoteISOBrowseScreen;
 };
 
-class UmdReplaceScreen : public UIDialogScreenWithBackground {
+class UmdReplaceScreen : public UIBaseDialogScreen {
 public:
 	const char *tag() const override { return "UmdReplace"; }
 
@@ -183,8 +189,8 @@ protected:
 	void update() override;
 
 private:
-	UI::EventReturn OnGameSelected(UI::EventParams &e);
-	UI::EventReturn OnGameSettings(UI::EventParams &e);
+	void OnGameSelected(UI::EventParams &e);
+	void OnGameSettings(UI::EventParams &e);
 };
 
 class GridSettingsPopupScreen : public PopupScreen {
@@ -196,9 +202,9 @@ public:
 	const char *tag() const override { return "GridSettings"; }
 
 private:
-	UI::EventReturn GridPlusClick(UI::EventParams &e);
-	UI::EventReturn GridMinusClick(UI::EventParams &e);
-	UI::EventReturn OnRecentClearClick(UI::EventParams &e);
+	void GridPlusClick(UI::EventParams &e);
+	void GridMinusClick(UI::EventParams &e);
+	void OnRecentClearClick(UI::EventParams &e);
 	const float MAX_GAME_GRID_SCALE = 3.0f;
 	const float MIN_GAME_GRID_SCALE = 0.8f;
 };

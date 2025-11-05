@@ -1,4 +1,6 @@
 #include <algorithm>
+#include "Common/System/System.h"
+#include "Common/System/Display.h"
 #include "Common/UI/Context.h"
 #include "Common/UI/ScrollView.h"
 #include "Common/Data/Text/I18n.h"
@@ -208,12 +210,28 @@ bool ScrollView::Touch(const TouchInput &input) {
 	}
 }
 
+float ScrollView::ChildSize() const {
+	float extraSpace = 0.0f;
+
+	if (orientation_ == ORIENT_VERTICAL) {
+		if (bounds_.y2() >= g_display.dp_yres - 1) {
+			extraSpace = System_GetPropertyFloat(SYSPROP_DISPLAY_SAFE_INSET_BOTTOM);
+		}
+	}
+
+	if (views_.empty()) {
+		// Avoid division by zero. This shouldn't happen, anyway.
+		return 1.0f;
+	}
+	return std::max(0.01f, views_[0]->GetBounds().GetSize(orientation_) + extraSpace);
+}
+
 ScrollView::Bob ScrollView::ComputeBob() const {
 	Bob bob{};
 	if (views_.empty()) {
 		return bob;
 	}
-	float childHeight = std::max(0.01f, views_[0]->GetBounds().h);
+	const float childHeight = ChildSize();
 	float scrollMax = std::max(0.0f, childHeight - bounds_.h);
 	float ratio = bounds_.h / childHeight;
 
@@ -239,6 +257,23 @@ void ScrollView::Draw(UIContext &dc) {
 	// For debugging layout issues, this can be useful.
 	// dc.FillRect(Drawable(0x60FF00FF), bounds_);
 	views_[0]->Draw(dc);
+
+	// If not anchored at the top of the screen exactly, and not scrolled to the top,
+	// draw a subtle drop shadow to indicate scrollability.
+	if (bounds_.y > 0.0f && orientation_ == ORIENT_VERTICAL) {
+		float radius = 20.0f;
+
+		Bounds shadowBounds = bounds_;
+		shadowBounds.x -= radius;
+		shadowBounds.w += radius * 2;
+		shadowBounds.y -= radius * 2;
+		shadowBounds.h = radius * 2;
+
+		float fade = std::clamp(scrollPos_ * 0.1f, 0.0f, 0.6f);
+
+		dc.DrawRectDropShadow(shadowBounds, radius, fade);
+	}
+
 	dc.PopScissor();
 
 	// Vertical scroll bob. We don't support a horizontal yet.
@@ -387,9 +422,9 @@ float ScrollView::HardClampedScrollPos(float pos) const {
 	if (!views_.size() || bounds_.h == 0.0f) {
 		return 0.0f;
 	}
-	float childSize = orientation_ == ORIENT_VERTICAL ? views_[0]->GetBounds().h : views_[0]->GetBounds().w;
-	float containerSize = (orientation_ == ORIENT_VERTICAL ? bounds_.h : bounds_.w);
-	float scrollMax = std::max(0.0f, childSize - containerSize);
+	const float childSize = ChildSize();
+	const float containerSize = bounds_.GetSize(orientation_);
+	const float scrollMax = std::max(0.0f, childSize - containerSize);
 	return Clamp(pos, 0.0f, scrollMax);
 }
 
@@ -398,8 +433,8 @@ float ScrollView::ClampedScrollPos(float pos) {
 		return 0.0f;
 	}
 
-	float childSize = orientation_ == ORIENT_VERTICAL ? views_[0]->GetBounds().h : views_[0]->GetBounds().w;
-	float containerSize = (orientation_ == ORIENT_VERTICAL ? bounds_.h : bounds_.w);
+	float childSize = ChildSize();
+	float containerSize = bounds_.GetSize(orientation_);
 	float scrollMax = std::max(0.0f, childSize - containerSize);
 
 	Gesture gesture = orientation_ == ORIENT_VERTICAL ? GESTURE_DRAG_VERTICAL : GESTURE_DRAG_HORIZONTAL;
@@ -431,8 +466,8 @@ float ScrollView::ClampedScrollPos(float pos) {
 }
 
 void ScrollView::ScrollToBottom() {
-	float childHeight = views_[0]->GetBounds().h;
-	float scrollMax = std::max(0.0f, childHeight - bounds_.h);
+	const float childSize = ChildSize();
+	const float scrollMax = std::max(0.0f, childSize - bounds_.GetSize(orientation_));
 	scrollPos_ = scrollMax;
 	scrollTarget_ = scrollMax;
 }
@@ -440,14 +475,7 @@ void ScrollView::ScrollToBottom() {
 bool ScrollView::CanScroll() const {
 	if (!views_.size())
 		return false;
-	switch (orientation_) {
-	case ORIENT_VERTICAL:
-		return views_[0]->GetBounds().h > bounds_.h;
-	case ORIENT_HORIZONTAL:
-		return views_[0]->GetBounds().w > bounds_.w;
-	default:
-		return false;
-	}
+	return ChildSize() > bounds_.GetSize(orientation_);
 }
 
 void ScrollView::GetLastScrollPosition(float &x, float &y) {
@@ -535,14 +563,13 @@ std::string ListView::DescribeText() const {
 	return DescribeListOrdered(u->T("List:"));
 }
 
-EventReturn ListView::OnItemCallback(int num, EventParams &e) {
+void ListView::OnItemCallback(int num, EventParams &e) {
 	EventParams ev{};
 	ev.v = nullptr;
 	ev.a = num;
 	adaptor_->SetSelected(num);
 	OnChoice.Trigger(ev);
 	CreateAllItems();
-	return EVENT_DONE;
 }
 
 View *ChoiceListAdaptor::CreateItemView(int index, ImageID *optionalImageID) {
@@ -553,12 +580,10 @@ View *ChoiceListAdaptor::CreateItemView(int index, ImageID *optionalImageID) {
 	return choice;
 }
 
-bool ChoiceListAdaptor::AddEventCallback(View *view, std::function<EventReturn(EventParams &)> callback) {
+void ChoiceListAdaptor::AddEventCallback(View *view, std::function<void(EventParams &)> callback) {
 	Choice *choice = (Choice *)view;
 	choice->OnClick.Add(callback);
-	return EVENT_DONE;
 }
-
 
 View *StringVectorListAdaptor::CreateItemView(int index, ImageID *optionalImageID) {
 	Choice *choice = new Choice(items_[index], "", index == selected_);
@@ -568,10 +593,9 @@ View *StringVectorListAdaptor::CreateItemView(int index, ImageID *optionalImageI
 	return choice;
 }
 
-bool StringVectorListAdaptor::AddEventCallback(View *view, std::function<EventReturn(EventParams &)> callback) {
+void StringVectorListAdaptor::AddEventCallback(View *view, std::function<void(EventParams &)> callback) {
 	Choice *choice = (Choice *)view;
 	choice->OnClick.Add(callback);
-	return EVENT_DONE;
 }
 
 }  // namespace

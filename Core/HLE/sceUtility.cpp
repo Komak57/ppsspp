@@ -25,6 +25,7 @@
 #include "Common/Serialize/SerializeFuncs.h"
 #include "Common/Serialize/SerializeMap.h"
 #include "Common/Serialize/SerializeSet.h"
+#include "Common/File/VFS/VFS.h"
 #include "Core/Config.h"
 #include "Core/CoreTiming.h"
 #include "Core/HLE/HLE.h"
@@ -241,6 +242,72 @@ static void UtilityVolatileUnlock(u64 userdata, int cyclesLate) {
 	PSPDialog *dialog = CurrentDialog(currentDialogType);
 	if (dialog)
 		dialog->FinishVolatile();
+}
+
+// Applies the Auto setting if set. Returns an enum value from PSP_SYSTEMPARAM_LANGUAGE_*.
+const std::map<std::string, std::pair<std::string, int>, std::less<>> &GetLangValuesMapping() {
+	static std::map<std::string, std::pair<std::string, int>, std::less<>> langValuesMapping_;
+
+	static const std::map<std::string_view, int> langCodeMapping = {
+		{"JAPANESE", PSP_SYSTEMPARAM_LANGUAGE_JAPANESE},
+		{"ENGLISH", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH},
+		{"FRENCH", PSP_SYSTEMPARAM_LANGUAGE_FRENCH},
+		{"SPANISH", PSP_SYSTEMPARAM_LANGUAGE_SPANISH},
+		{"GERMAN", PSP_SYSTEMPARAM_LANGUAGE_GERMAN},
+		{"ITALIAN", PSP_SYSTEMPARAM_LANGUAGE_ITALIAN},
+		{"DUTCH", PSP_SYSTEMPARAM_LANGUAGE_DUTCH},
+		{"PORTUGUESE", PSP_SYSTEMPARAM_LANGUAGE_PORTUGUESE},
+		{"RUSSIAN", PSP_SYSTEMPARAM_LANGUAGE_RUSSIAN},
+		{"KOREAN", PSP_SYSTEMPARAM_LANGUAGE_KOREAN},
+		{"CHINESE_TRADITIONAL", PSP_SYSTEMPARAM_LANGUAGE_CHINESE_TRADITIONAL},
+		{"CHINESE_SIMPLIFIED", PSP_SYSTEMPARAM_LANGUAGE_CHINESE_SIMPLIFIED},
+	};
+
+	if (!langValuesMapping_.empty()) {
+		return langValuesMapping_;
+	}
+
+	// Lazy-load the mapping.
+	IniFile mapping;
+	mapping.LoadFromVFS(g_VFS, "langregion.ini");
+	std::vector<std::string> keys;
+	mapping.GetKeys("LangRegionNames", keys);
+
+	const Section *langRegionNames = mapping.GetOrCreateSection("LangRegionNames");
+	const Section *systemLanguage = mapping.GetOrCreateSection("SystemLanguage");
+
+	for (size_t i = 0; i < keys.size(); i++) {
+		std::string langName;
+		if (!langRegionNames->Get(keys[i], &langName)) {
+			continue;
+		}
+		std::string langCode = "ENGLISH";
+		int iLangCode = PSP_SYSTEMPARAM_LANGUAGE_ENGLISH;
+		if (systemLanguage->Get(keys[i], &langCode)) {
+			const auto iter = langCodeMapping.find(langCode);
+			if (iter != langCodeMapping.end()) {
+				iLangCode = iter->second;
+			}
+		}
+		langValuesMapping_[keys[i]] = std::make_pair(langName, iLangCode);
+	}
+
+	return langValuesMapping_;
+}
+
+int GetPSPLanguage() {
+	if (g_Config.iLanguage == -1) {
+		const auto &langValuesMapping = GetLangValuesMapping();
+		auto iter = langValuesMapping.find(g_Config.sLanguageIni);
+		if (iter != langValuesMapping.end()) {
+			return iter->second.second;
+		} else {
+			// Fallback to English
+			return PSP_SYSTEMPARAM_LANGUAGE_ENGLISH;
+		}
+	} else {
+		return g_Config.iLanguage;
+	}
 }
 
 void __UtilityInit() {
@@ -532,8 +599,8 @@ bool __UtilityModuleGetMemoryRange(int moduleID, u32 *startPtr, u32 *sizePtr) {
 	return true;
 }
 
-static int LoadModuleInternal(u32 module);
-static int UnloadModuleInternal(u32 module);
+static int LoadModuleInternal(u32 module, bool av);
+static int UnloadModuleInternal(u32 module, bool av);
 
 // Same as sceUtilityLoadModule, just limited in categories.
 // It seems this just loads module 0x300 + module & 0xFF..
@@ -543,7 +610,7 @@ static u32 sceUtilityLoadAvModule(u32 module) {
 		return hleLogError(Log::sceUtility, SCE_ERROR_AV_MODULE_BAD_ID);
 	}
 
-	int result = LoadModuleInternal(0x300 | module);
+	int result = LoadModuleInternal(0x300 | module, true);
 	return hleDelayResult(hleLogDebugOrError(Log::sceUtility, result), "utility av module loaded", 25000);
 }
 
@@ -553,12 +620,12 @@ static u32 sceUtilityUnloadAvModule(u32 module) {
 		return hleLogError(Log::sceUtility, SCE_ERROR_AV_MODULE_BAD_ID);
 	}
 
-	int result = UnloadModuleInternal(0x300 | module);
+	int result = UnloadModuleInternal(0x300 | module, true);
 	return hleDelayResult(hleLogDebugOrError(Log::sceUtility, result), "utility av module unloaded", 800);
 }
 
 static u32 sceUtilityLoadModule(u32 module) {
-	int result = LoadModuleInternal(module);
+	int result = LoadModuleInternal(module, false);
 	// TODO: Each module has its own timing, technically, but this is a low-end.
 	if (module == 0x3FF) {
 		return hleDelayResult(hleLogDebugOrError(Log::sceUtility, result), "utility module loaded", 130);
@@ -568,7 +635,7 @@ static u32 sceUtilityLoadModule(u32 module) {
 }
 
 static u32 sceUtilityUnloadModule(u32 module) {
-	int result = UnloadModuleInternal(module);
+	int result = UnloadModuleInternal(module, false);
 	// TODO: Each module has its own timing, technically, but this is a low-end.
 	if (module == 0x3FF) {
 		return hleDelayResult(hleLogDebugOrError(Log::sceUtility, result), "utility module unloaded", 110);
@@ -577,14 +644,14 @@ static u32 sceUtilityUnloadModule(u32 module) {
 	}
 }
 
-static int LoadModuleInternal(u32 module) {
+static int LoadModuleInternal(u32 module, bool av) {
 	const ModuleLoadInfo *info = __UtilityModuleInfo(module);
 	if (!info) {
-		return SCE_ERROR_MODULE_BAD_ID;
+		return av ? SCE_ERROR_AV_MODULE_BAD_ID : SCE_ERROR_MODULE_BAD_ID;
 	}
 
 	if (currentlyLoadedModules.find(module) != currentlyLoadedModules.end()) {
-		return SCE_ERROR_MODULE_ALREADY_LOADED;
+		return av ? SCE_ERROR_AV_MODULE_ALREADY_LOADED : SCE_ERROR_MODULE_ALREADY_LOADED;
 	}
 
 	// Some games, like Kamen Rider Climax Heroes OOO, require an error if dependencies aren't loaded yet.
@@ -608,15 +675,15 @@ static int LoadModuleInternal(u32 module) {
 	return 0;
 }
 
-static int UnloadModuleInternal(u32 module) {
+static int UnloadModuleInternal(u32 module, bool av) {
 	const ModuleLoadInfo *info = __UtilityModuleInfo(module);
 	if (!info) {
-		return SCE_ERROR_MODULE_BAD_ID;
+		return av ? SCE_ERROR_AV_MODULE_BAD_ID : SCE_ERROR_MODULE_BAD_ID;
 	}
 
 	auto iter = currentlyLoadedModules.find(module);
 	if (iter == currentlyLoadedModules.end()) {
-		return SCE_ERROR_MODULE_NOT_LOADED;
+		return av ? SCE_ERROR_AV_MODULE_NOT_LOADED : SCE_ERROR_MODULE_NOT_LOADED;
 	}
 	if (iter->second != 0) {
 		userMemory.Free(iter->second);
@@ -1200,7 +1267,7 @@ static u32 sceUtilityGetSystemParamInt(u32 id, u32 destaddr) {
 		param = g_Config.bDayLightSavings?PSP_SYSTEMPARAM_DAYLIGHTSAVINGS_SAVING:PSP_SYSTEMPARAM_DAYLIGHTSAVINGS_STD;
 		break;
 	case PSP_SYSTEMPARAM_ID_INT_LANGUAGE:
-		param = g_Config.GetPSPLanguage();
+		param = GetPSPLanguage();
 		if (PSP_CoreParameter().compat.flags().EnglishOrJapaneseOnly) {
 			if (param != PSP_SYSTEMPARAM_LANGUAGE_ENGLISH && param != PSP_SYSTEMPARAM_LANGUAGE_JAPANESE) {
 				param = PSP_SYSTEMPARAM_LANGUAGE_ENGLISH;

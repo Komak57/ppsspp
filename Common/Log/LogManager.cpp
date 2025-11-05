@@ -93,6 +93,7 @@ static const char * const g_logTypeNames[] = {
 	"PRINTF",
 	"TEXREPLACE",
 	"DEBUGGER",
+	"GEDEBUGGER",
 	"UI",
 	"IAP",
 	"SCEAUDIO",
@@ -198,7 +199,7 @@ void LogManager::SetFileLogPath(const Path &filename) {
 		fclose(fp_);
 	}
 
-	if (!filename.empty()) {
+	if (!filename.empty() && (outputs_ & LogOutput::File)) {
 		logFilename_ = Path(filename);
 		File::CreateFullPath(logFilename_.NavigateUp());
 		fp_ = File::OpenCFile(logFilename_, "at");
@@ -218,10 +219,11 @@ void LogManager::SaveConfig(Section *section) {
 
 void LogManager::LoadConfig(const Section *section) {
 	for (int i = 0; i < (int)Log::NUMBER_OF_LOGS; i++) {
-		bool enabled = false;
-		int level = 0;
-		section->Get((std::string(g_logTypeNames[i]) + "Enabled"), &enabled, true);
-		section->Get((std::string(g_logTypeNames[i]) + "Level"), &level, (int)LogLevel::LERROR);
+		// Defaults. Get now doesn't write the output if it fails.
+		bool enabled = true;
+		int level = (int)LogLevel::LERROR;
+		section->Get((std::string(g_logTypeNames[i]) + "Enabled"), &enabled);
+		section->Get((std::string(g_logTypeNames[i]) + "Level"), &level);
 		g_log[i].enabled = enabled;
 		g_log[i].level = (LogLevel)level;
 	}

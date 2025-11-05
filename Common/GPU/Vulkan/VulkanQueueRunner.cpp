@@ -174,7 +174,6 @@ bool VulkanQueueRunner::InitDepthStencilBuffer(VkCommandBuffer cmd, VulkanBarrie
 	return true;
 }
 
-
 void VulkanQueueRunner::DestroyBackBuffers() {
 	if (depth_.view) {
 		vulkan_->Delete().QueueDeleteImageView(depth_.view);
@@ -366,6 +365,9 @@ void VulkanQueueRunner::RunSteps(std::vector<VKRStep *> &steps, int curFrame, Fr
 			break;
 		case VKRStepType::RENDER_SKIP:
 			break;
+		default:
+			UNREACHABLE();
+			break;
 		}
 
 		if (profile && profile->timestampsEnabled && profile->timestampDescriptions.size() + 1 < MAX_TIMESTAMP_QUERIES) {
@@ -548,10 +550,10 @@ void VulkanQueueRunner::ApplyMGSHack(std::vector<VKRStep *> &steps) {
 					if (rc.offset.y < minScissorY) {
 						minScissorY = rc.offset.y;
 					}
-					if (rc.offset.x + rc.extent.width > maxScissorX) {
+					if (rc.offset.x + (int)rc.extent.width > maxScissorX) {
 						maxScissorX = rc.offset.x + rc.extent.width;
 					}
-					if (rc.offset.y + rc.extent.height > maxScissorY) {
+					if (rc.offset.y + (int)rc.extent.height > maxScissorY) {
 						maxScissorY = rc.offset.y + rc.extent.height;
 					}
 					break;
@@ -813,6 +815,7 @@ void VulkanQueueRunner::ApplyRenderPassMerge(std::vector<VKRStep *> &steps) {
 					break;
 				default:
 					// We added a new step?  Might be unsafe.
+					_dbg_assert_(false);
 					goto done_fb;
 				}
 			}
@@ -1239,7 +1242,7 @@ void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer c
 			break;
 
 		default:
-			ERROR_LOG(Log::G3D, "Unimpl queue command");
+			UNREACHABLE();
 			break;
 		}
 	}

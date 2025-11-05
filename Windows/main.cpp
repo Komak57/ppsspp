@@ -66,9 +66,7 @@
 
 #include "UI/GameInfoCache.h"
 #include "Windows/resource.h"
-#include "Windows/DinputDevice.h"
-#include "Windows/XinputDevice.h"
-#include "Windows/HidInputDevice.h"
+#include "Windows/InputDevice.h"
 #include "Windows/MainWindow.h"
 #include "Windows/Debugger/Debugger_Disasm.h"
 #include "Windows/Debugger/Debugger_MemoryDlg.h"
@@ -117,6 +115,7 @@ static std::string langRegion;
 static std::string osName;
 static std::string osVersion;
 static std::string gpuDriverVersion;
+static std::string computerName;
 
 static std::string restartArgs;
 
@@ -255,6 +254,17 @@ std::string System_GetProperty(SystemProperty prop) {
 		return PPSSPP_GIT_VERSION;
 	case SYSPROP_USER_DOCUMENTS_DIR:
 		return Path(W32Util::UserDocumentsPath()).ToString();  // this'll reverse the slashes.
+	case SYSPROP_COMPUTER_NAME:
+		if (computerName.empty()) {
+			wchar_t nameBuf[MAX_COMPUTERNAME_LENGTH + 1];
+			DWORD size = ARRAY_SIZE(nameBuf);
+			if (GetComputerNameW(nameBuf, &size)) {
+				computerName = ConvertWStringToUTF8(std::wstring(nameBuf, size));
+			} else {
+				computerName = "(N/A)";
+			}
+		}
+		return computerName;
 	default:
 		return "";
 	}
@@ -435,6 +445,8 @@ bool System_GetPropertyBool(SystemProperty prop) {
 #else
 		return false;
 #endif
+	case SYSPROP_HAS_ACCELEROMETER:
+		return true;  // for debugging
 	default:
 		return false;
 	}
@@ -540,9 +552,9 @@ void System_Notify(SystemNotification notification) {
 	case SystemNotification::SUSTAINED_PERF_CHANGE:
 	case SystemNotification::ROTATE_UPDATED:
 	case SystemNotification::TEST_JAVA_EXCEPTION:
-		break;
 	case SystemNotification::AUDIO_MODE_CHANGED:
 	case SystemNotification::APP_SWITCH_MODE_CHANGED:
+	case SystemNotification::UI_STATE_CHANGED:
 		break;
 	}
 }
@@ -687,7 +699,7 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		return true;
 	}
 	case SystemRequestType::BROWSE_FOR_FOLDER:
-	{
+		// Launch on a thread to avoid blocking the main thread. Can feel slow.
 		std::thread([=] {
 			SetCurrentThreadName("BrowseForFolder");
 			std::string folder = W32Util::BrowseForFolder2(MainWindow::GetHWND(), param1, param2);
@@ -698,10 +710,13 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 			}
 		}).detach();
 		return true;
-	}
 
 	case SystemRequestType::SHOW_FILE_IN_FOLDER:
-		W32Util::ShowFileInFolder(param1);
+		// Launch on a thread to avoid blocking the main thread. Can feel slow.
+		std::thread([=] {
+			SetCurrentThreadName("ShowFileInFolder");
+			W32Util::ShowFileInFolder(param1);
+		}).detach();
 		return true;
 
 	case SystemRequestType::TOGGLE_FULLSCREEN_STATE:
@@ -737,6 +752,9 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 
 			icoPath = iconFolder / (info->id + ".ico");
 			if (!File::Exists(icoPath)) {
+				// NOTE: This simply wraps raw PNG data in an ICO container, which works fine for Windows.
+				// However, this doesn't allow us to modify the aspect ratio - it gets displayed as a square, even though it isn't.
+				// So ideally we should re-encode.
 				if (!W32Util::CreateICOFromPNGData((const uint8_t *)info->icon.data.data(), info->icon.data.size(), icoPath)) {
 					ERROR_LOG(Log::System, "ICO creation failed");
 					icoPath.clear();
@@ -1137,10 +1155,6 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 		MainWindow::Minimize();
 	}
 
-	//add first XInput device to respond
-	g_InputManager.AddDevice(new XinputDevice());
-	g_InputManager.AddDevice(new DInputMetaDevice());
-	g_InputManager.AddDevice(new HidInputDevice());
 	// Emu thread (and render thread, if any) is always running!
 	// Only OpenGL uses an externally managed render thread (due to GL's single-threaded context design). Vulkan
 	// manages its own render thread.

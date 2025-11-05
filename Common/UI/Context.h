@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdint>
 #include <string>
+#include <functional>
 
 #include "Common/Math/geom2d.h"
 #include "Common/Math/lin/vec3.h"
@@ -42,6 +43,18 @@ struct UITransform {
 	Lin::Vec3 scale;
 	float alpha;
 };
+
+enum class AtlasChoice : int {
+	General,
+	Font,
+};
+
+struct AtlasData {
+	Atlas *atlas;
+	Draw::Texture *texture;
+};
+
+typedef std::function<AtlasData(Draw::DrawContext *, AtlasChoice, float dpiScale)> UIAtlasProviderFunc;
 
 class UIContext {
 public:
@@ -100,7 +113,7 @@ public:
 	// in dps, like dp_xres and dp_yres
 	void SetBounds(const Bounds &b) { bounds_ = b; }
 	const Bounds &GetBounds() const { return bounds_; }
-	Bounds GetLayoutBounds() const;
+	Bounds GetLayoutBounds(bool ignoreBottomInset = false) const;
 	Draw::DrawContext *GetDrawContext() { return draw_; }
 	const UI::Theme &GetTheme() const {
 		return *theme;
@@ -111,14 +124,16 @@ public:
 	void PopTransform();
 	Bounds TransformBounds(const Bounds &bounds);
 
-	void setUIAtlas(const std::string &name);
-
-	// TODO: Move to private.
-	const UI::Theme *theme;
-
+	void SetTheme(const UI::Theme *theme) { this->theme = theme; }
+	void SetAtlasProvider(UIAtlasProviderFunc func) { atlasProvider_ = func; }
+	void InvalidateAtlas() {
+		atlasInvalid_ = true;  // will cause it to be reloaded on the next frame.
+	}
 private:
 	Draw::DrawContext *draw_ = nullptr;
 	Bounds bounds_;
+
+	const UI::Theme *theme = nullptr;
 
 	double frameStartTime_ = 0.0;
 
@@ -138,6 +153,6 @@ private:
 	std::vector<Bounds> scissorStack_;
 	std::vector<UITransform> transformStack_;
 
-	std::string lastUIAtlas_;
-	std::string UIAtlas_ = "ui_atlas.zim";
+	UIAtlasProviderFunc atlasProvider_{};
+	bool atlasInvalid_ = true;
 };

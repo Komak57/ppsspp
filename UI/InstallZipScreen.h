@@ -24,11 +24,11 @@
 #include "Common/UI/View.h"
 #include "Common/UI/UIScreen.h"
 
-#include "UI/MiscScreens.h"
+#include "UI/BaseScreens.h"
 
 class SavedataView;
 
-class InstallZipScreen : public UIDialogScreenWithBackground {
+class InstallZipScreen : public UIBaseDialogScreen {
 public:
 	InstallZipScreen(const Path &zipPath);
 	void update() override;
@@ -40,8 +40,8 @@ protected:
 	void CreateViews() override;
 
 private:
-	UI::EventReturn OnInstall(UI::EventParams &params);
-	UI::EventReturn OnPlay(UI::EventParams &params);
+	void OnInstall(UI::EventParams &params);
+	void OnPlay(UI::EventParams &params);
 
 	UI::Choice *installChoice_ = nullptr;
 	UI::Choice *playChoice_ = nullptr;

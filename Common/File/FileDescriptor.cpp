@@ -12,65 +12,7 @@
 
 namespace fd_util {
 
-// Slow as hell and should only be used for prototyping.
-// Reads from a socket, up to an '\n'. This means that if the line ends
-// with '\r', the '\r' will be returned.
-size_t ReadLine(int fd, char *vptr, size_t buf_size) {
-	char *buffer = vptr;
-	size_t n;
-	for (n = 1; n < buf_size; n++) {
-		char c;
-		size_t rc;
-		if ((rc = read(fd, &c, 1)) == 1) {
-			*buffer++ = c;
-			if (c == '\n')
-				break;
-		} else if (rc == 0) {
-			if (n == 1)
-				return 0;
-			else
-				break;
-		} else {
-			if (errno == EINTR)
-				continue;
-			_assert_msg_(false, "Error in Readline()");
-		}
-	}
-
-	*buffer = 0;
-	return n;
-}
-
-// Misnamed, it just writes raw data in a retry loop.
-size_t WriteLine(int fd, const char *vptr, size_t n) {
-	const char *buffer = vptr;
-	size_t nleft = n;
-
-	while (nleft > 0) {
-		int nwritten;
-		if ((nwritten = (int)write(fd, buffer, (unsigned int)nleft)) <= 0) {
-			if (errno == EINTR)
-				nwritten = 0;
-			else
-				_assert_msg_(false, "Error in Writeline()");
-		}
-		nleft  -= nwritten;
-		buffer += nwritten;
-	}
-
-	return n;
-}
-
-size_t WriteLine(int fd, const char *buffer) {
-	return WriteLine(fd, buffer, strlen(buffer));
-}
-
-size_t Write(int fd, const std::string &str) {
-	return WriteLine(fd, str.c_str(), str.size());
-}
-
-int WaitUntilReady(int fd, double timeout, bool for_write) {
-	DEBUG_LOG(Log::sceNet, "HTTP WaitUntilReady");
+bool WaitUntilReady(int fd, double timeout, bool for_write) {
 	struct timeval tv;
 	tv.tv_sec = (long)floor(timeout);
 	tv.tv_usec = (long)((timeout - floor(timeout)) * 1000000.0);
@@ -165,7 +107,8 @@ std::string GetLocalIP(int sock) {
 	} server_addr;
 	memset(&server_addr, 0, sizeof(server_addr));
 	socklen_t len = sizeof(server_addr);
-	if (getsockname(sock, (struct sockaddr *)&server_addr, &len) == 0) {
+	int retval = getsockname(sock, (struct sockaddr *)&server_addr, &len);
+	if (retval == 0) {
 		char temp[64]{};
 
 		// We clear the port below for WSAAddressToStringA.
@@ -184,17 +127,24 @@ std::string GetLocalIP(int sock) {
 		wchar_t wtemp[sizeof(temp)];
 		DWORD len = (DWORD)sizeof(temp);
 		// Windows XP doesn't support inet_ntop.
-		if (WSAAddressToStringW((struct sockaddr *)&server_addr, sizeof(server_addr), nullptr, wtemp, &len) == 0) {
+		HRESULT result = WSAAddressToStringW((struct sockaddr *)&server_addr, sizeof(server_addr), nullptr, wtemp, &len);
+		if (result == 0) {
 			return ConvertWStringToUTF8(wtemp);
+		} else {
+			return "";
 		}
 #else
 		const char *result = inet_ntop(server_addr.sa.sa_family, addr, temp, sizeof(temp));
 		if (result) {
 			return result;
+		} else {
+			return "";
 		}
 #endif
+	} else {
+		WARN_LOG(Log::IO, "GetLocalIP: getsockname failed with error %d (%s)", retval, strerror(retval));
+		return "";
 	}
-	return "";
 }
 
 }  // fd_util

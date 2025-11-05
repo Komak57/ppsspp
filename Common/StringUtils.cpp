@@ -16,7 +16,7 @@
 // http://code.google.com/p/dolphin-emu/
 
 #include <cstring>
-
+#include <unordered_set>
 #include "ppsspp_config.h"
 
 #ifdef _WIN32
@@ -62,10 +62,6 @@ size_t truncate_cpy(char *dest, size_t destSize, std::string_view src) {
 		dest[src.size()] = 0;
 		return src.size();
 	}
-}
-
-const char* safe_string(const char* s) {
-	return s ? s : "(null)";
 }
 
 long parseHexLong(const std::string &s) {
@@ -246,38 +242,6 @@ bool CharArrayFromFormatV(char* out, int outsize, const char* format, va_list ar
 	}
 }
 
-bool SplitPath(const std::string& full_path, std::string* _pPath, std::string* _pFilename, std::string* _pExtension)
-{
-	if (full_path.empty())
-		return false;
-
-	size_t dir_end = full_path.find_last_of("/"
-	// windows needs the : included for something like just "C:" to be considered a directory
-#ifdef _WIN32
-		":"
-#endif
-	);
-	if (std::string::npos == dir_end)
-		dir_end = 0;
-	else
-		dir_end += 1;
-
-	size_t fname_end = full_path.rfind('.');
-	if (fname_end < dir_end || std::string::npos == fname_end)
-		fname_end = full_path.size();
-
-	if (_pPath)
-		*_pPath = full_path.substr(0, dir_end);
-
-	if (_pFilename)
-		*_pFilename = full_path.substr(dir_end, fname_end - dir_end);
-
-	if (_pExtension)
-		*_pExtension = full_path.substr(fname_end);
-
-	return true;
-}
-
 std::string LineNumberString(const std::string &str) {
 	std::stringstream input(str);
 	std::stringstream output;
@@ -291,7 +255,7 @@ std::string LineNumberString(const std::string &str) {
 	return output.str();
 }
 
-std::string IndentString(const std::string &str, const std::string &sep, bool skipFirst) {
+std::string IndentString(const std::string &str, std::string_view sep, bool skipFirst) {
 	std::stringstream input(str);
 	std::stringstream output;
 	std::string line;
@@ -350,8 +314,7 @@ void DataToHexString(const uint8_t *data, size_t size, std::string *output, bool
 	buffer.TakeAll(output);
 }
 
-// FIXME: Use DEBUG_HEXLOG instead
-void DataToHexString(int indent, uint32_t startAddr, const uint8_t* data, size_t size, std::string* output) {
+void DataToHexString(int indent, uint32_t startAddr, const uint8_t* data, size_t size, std::string *output) {
 	Buffer buffer;
 	size_t i = 0;
 	for (; i < size; i++) {
@@ -381,8 +344,7 @@ void DataToHexString(int indent, uint32_t startAddr, const uint8_t* data, size_t
 	buffer.TakeAll(output);
 }
 
-std::string StringFromFormat(const char* format, ...)
-{
+std::string StringFromFormat(const char* format, ...) {
 	va_list args;
 	std::string temp;
 #ifdef _WIN32
@@ -421,27 +383,7 @@ std::string StringFromInt(int value) {
 	return temp;
 }
 
-// Turns "  hej " into "hej". Also handles tabs.
-std::string StripSpaces(const std::string &str) {
-	const size_t s = str.find_first_not_of(" \t\r\n");
-	if (std::string::npos != s)
-		return str.substr(s, str.find_last_not_of(" \t\r\n") - s + 1);
-	else
-		return "";
-}
-
-// "\"hello\"" is turned to "hello"
-// This one assumes that the string has already been space stripped in both
-// ends, as done by StripSpaces above, for example.
-std::string StripQuotes(const std::string& s)
-{
-	if (s.size() && '\"' == s[0] && '\"' == *s.rbegin())
-		return s.substr(1, s.size() - 2);
-	else
-		return s;
-}
-
-// Turns "  hej " into "hej". Also handles tabs.
+// Turns "  hej " into "hej". Also handles tabs and line breaks.
 std::string_view StripSpaces(std::string_view str) {
 	const size_t s = str.find_first_not_of(" \t\r\n");
 	if (std::string::npos != s)
@@ -478,7 +420,17 @@ void SplitString(std::string_view str, const char delim, std::vector<std::string
 	}
 }
 
-void SplitString(std::string_view str, const char delim, std::vector<std::string> &output) {
+bool SplitStringOnce(std::string_view str, std::string_view *firstPart, std::string_view *secondPart, char delim) {
+	size_t pos = str.find(delim);
+	if (pos == std::string_view::npos) {
+		return false;
+	}
+	*firstPart = str.substr(0, pos);
+	*secondPart = str.substr(pos + 1);
+	return true;
+}
+
+void SplitString(std::string_view str, const char delim, std::vector<std::string> &output, bool trimOutput) {
 	size_t next = 0;
 	size_t pos = 0;
 	while (pos < str.length()) {
@@ -487,6 +439,9 @@ void SplitString(std::string_view str, const char delim, std::vector<std::string
 			break;
 		}
 		output.emplace_back(str.substr(next, delimPos - next));
+		if (trimOutput) {
+			output.back() = StripSpaces(output.back());
+		}
 		next = delimPos + 1;
 		pos = delimPos + 1;
 	}
@@ -495,6 +450,11 @@ void SplitString(std::string_view str, const char delim, std::vector<std::string
 		output.emplace_back(str);
 	} else if (next < str.length()) {
 		output.emplace_back(str.substr(next));
+	} else {
+		return;
+	}
+	if (trimOutput) {
+		output.back() = StripSpaces(output.back());
 	}
 }
 
@@ -641,4 +601,42 @@ std::string ApplySafeSubstitutions(std::string_view format, int i1, int i2, int 
 		}
 	}
 	return output;
+}
+
+void MakeUnique(std::vector<std::string> &v) {
+	std::unordered_set<std::string> seen;
+	std::vector<std::string> result;
+	result.reserve(v.size()); // minimize reallocations
+	for (const auto &s : v) {
+		if (seen.insert(s).second) {
+			// insert returns {iterator, bool}
+			// bool == true if it was newly inserted (didn't already exist)
+			result.push_back(s);
+		}
+	}
+	v.swap(result);
+}
+
+size_t SplitSearch(std::string_view needle, std::string_view part1, std::string_view part2) {
+	if (part1.find(needle) != std::string_view::npos) {
+		// Easy case, found in part1.
+		return part1.find(needle);
+	}
+	size_t part1Size = part1.size();
+	size_t maxOverlap = std::min(needle.size() - 1, part1Size);
+	for (size_t overlap = maxOverlap; overlap > 0; overlap--) {
+		if (part1.substr(part1Size - overlap) == needle.substr(0, overlap)) {
+			// Found an overlap.
+			size_t remaining = needle.size() - overlap;
+			if (part2.substr(0, remaining) == needle.substr(overlap)) {
+				return part1Size - overlap;
+			}
+		}
+	}
+	// Now, check if it's found in part2 instead.
+	size_t posInPart2 = part2.find(needle);
+	if (posInPart2 != std::string_view::npos) {
+		return part1Size + posInPart2;
+	}
+	return std::string_view::npos;
 }

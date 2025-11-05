@@ -122,6 +122,7 @@ PermissionStatus System_GetPermissionStatus(SystemPermission permission);
 void System_AskForPermission(SystemPermission permission);
 
 // This will get muddy with multi-screen support :/ But this will always be the type of the main device.
+// These are the return values from System_GetPropertyInt(SYSPROP_DEVICE_TYPE).
 enum SystemDeviceType {
 	DEVICE_TYPE_MOBILE = 0,  // phones and pads
 	DEVICE_TYPE_TV = 1,  // Android TV and similar
@@ -144,6 +145,7 @@ enum SystemProperty {
 	SYSPROP_CLIPBOARD_TEXT,
 	SYSPROP_GPUDRIVER_VERSION,
 	SYSPROP_BUILD_VERSION,
+	SYSPROP_COMPUTER_NAME,
 
 	// Separate SD cards or similar.
 	// Need hacky solutions to get at this.
@@ -232,6 +234,7 @@ enum SystemProperty {
 	SYSPROP_HAS_TRASH_BIN,
 
 	SYSPROP_USE_IAP,
+	SYSPROP_SUPPORTS_SHARE_TEXT,
 };
 
 enum class SystemNotification {
@@ -311,7 +314,7 @@ bool System_AudioRecordingIsAvailable();
 bool System_AudioRecordingState();
 
 // This will be changed to take an enum. Replacement for the old NativeMessageReceived.
-void System_PostUIMessage(UIMessage message, const std::string &param = "");
+void System_PostUIMessage(UIMessage message, std::string_view param = "");
 
 // For these functions, most platforms will use the implementation provided in UI/AudioCommon.cpp,
 // no need to implement separately.

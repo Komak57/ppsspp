@@ -642,3 +642,119 @@ void ConvertBGRA5551ToABGR1555(u16 *dst, const u16 *src, u32 numPixels) {
 		dst[i] = (c >> 15) | (c << 1);
 	}
 }
+
+static inline u32 premul_pixel_scalar(u32 px) {
+	u32 r = (px) & 0xFFu;
+	u32 g = (px >> 8) & 0xFFu;
+	u32 b = (px >> 16) & 0xFFu;
+	u32 a = (px >> 24) & 0xFFu;
+
+	if (a == 255) return px; // already fully opaque
+	if (a == 0)  return (a << 24); // transparent (r,g,b = 0)
+
+	// Use (c*a + 128) * 257 >> 16  to approximate (c*a)/255 with good rounding
+	u32 ra = ((r * a + 128) * 257) >> 16;
+	u32 ga = ((g * a + 128) * 257) >> 16;
+	u32 ba = ((b * a + 128) * 257) >> 16;
+
+	return (a << 24) | (ba << 16) | (ga << 8) | ra;
+}
+
+void ConvertRGBA8888ToPremulAlpha(u32 *dst, const u32 *src, u32 numPixels) {
+	if (!dst || !src || numPixels == 0)
+		return;
+
+	u32 i = 0;
+
+#if PPSSPP_ARCH(SSE2)
+	// SSE2 path: process 4 pixels at a time (16 bytes)
+	for (; i + 3 < numPixels; i += 4)
+	{
+		// Load 4 pixels.
+		__m128i s = _mm_loadu_si128((const __m128i*)(src + i)); // 16 bytes
+		// Expand to 16bit lanes.
+		__m128i l = _mm_unpacklo_epi8(s, _mm_set1_epi16(0));
+		__m128i h = _mm_unpackhi_epi8(s, _mm_set1_epi16(0));
+		// Extract alpha.
+		__m128i a = _mm_srli_epi32(s, 24); // [a0, 0,a1, 0,a2, 0,a3, 0] in 16bit lanes
+		a = _mm_shufflehi_epi16(_mm_shufflelo_epi16(a, 160), 160); // [a0,a0,a1,a1,a2,a2,a3,a3]
+		// NOTE: alternative to the above line: a = _mm_xor_si128(a, _mm_slli_epi32(a, 16));
+		__m128i al = _mm_unpacklo_epi16(a, a); // [a0,a0,a0,a0,a1,a1,a1,a1]
+		__m128i ah = _mm_unpackhi_epi16(a, a); // [a2,a2,a2,a2,a3,a3,a3,a3]
+		// Setup multipliers ([a,a,a,a] -> [a,a,a,255]).
+		al = _mm_or_si128(al, _mm_setr_epi16(0, 0, 0, 255, 0, 0, 0, 255));
+		ah = _mm_or_si128(ah, _mm_setr_epi16(0, 0, 0, 255, 0, 0, 0, 255));
+		// Compute round(c*a/255.0) using Jim Blinn's trick from
+		// "Three Wrongs Make a Right":
+		//     unsigned x = c*a + 128;
+		//     x += x>>8;
+		//     return x>>8; // <-- correctly-rounded result
+		// All computations fit inside 16 bits (for 0 <= c,a <= 255).
+		// NOTE: an alternative for v = v/255 is v = (v*32897>>16)>>7,
+		// which maps nicely to _mm_mulhi_epu16, but maybe not to NEON.
+		// Low part.
+		l = _mm_add_epi16(_mm_mullo_epi16(l, al), _mm_set1_epi16(128));
+		l = _mm_srli_epi16(_mm_add_epi16(l, _mm_srli_epi16(l, 8)), 8);
+		// High part.
+		h = _mm_add_epi16(_mm_mullo_epi16(h, ah), _mm_set1_epi16(128));
+		h = _mm_srli_epi16(_mm_add_epi16(h, _mm_srli_epi16(h, 8)), 8);
+		// Combine parts.
+		__m128i d = _mm_packus_epi16(l, h);
+		// Store result.
+		_mm_storeu_si128((__m128i*)(dst + i), d);
+	}
+#elif PPSSPP_ARCH(ARM_NEON)
+	// NEON path (4 pixels per iteration)
+	for (; i + 3 < numPixels; i += 4)
+	{
+		// load 4 pixels as bytes
+		uint8x16_t v = vld1q_u8((const uint8_t*)(src + i)); // R0,G0,B0,A0, R1,G1,B1,A1, ...
+
+		// widen to 16-bit lanes
+		uint16x8_t lo16 = vmovl_u8(vget_low_u8(v));   // R0,G0,B0,A0, R1,G1,B1,A1
+		uint16x8_t hi16 = vmovl_u8(vget_high_u8(v));  // R2,G2,B2,A2, R3,G3,B3,A3
+
+		// read alphas directly from src memory
+		const uint8_t* s = (const uint8_t*)src + i * 4;
+		const uint16_t a0 = s[3];
+		const uint16_t a1 = s[7];
+		const uint16_t a2 = s[11];
+		const uint16_t a3 = s[15];
+
+		// build alpha vectors (MSVC-friendly, compact)
+		uint16x4_t lo = vdup_n_u16(a0);          // R0,G0,B0,A0
+		lo = vset_lane_u16(255u, lo, 3);        // A-lane = 256
+		uint16x4_t hi = vdup_n_u16(a1);         // R1,G1,B1,A1
+		hi = vset_lane_u16(255u, hi, 3);        // A-lane = 256
+		uint16x8_t alpha_lo = vcombine_u16(lo, hi);
+
+		lo = vdup_n_u16(a2);                     // R2,G2,B2,A2
+		lo = vset_lane_u16(255u, lo, 3);
+		hi = vdup_n_u16(a3);                     // R3,G3,B3,A3
+		hi = vset_lane_u16(255u, hi, 3);
+		uint16x8_t alpha_hi = vcombine_u16(lo, hi);
+
+		// Multiply 16-bit lanes: result fits in 16-bit (truncate shift)
+		uint16x8_t prod_lo = vmulq_u16(lo16, alpha_lo);
+		uint16x8_t prod_hi = vmulq_u16(hi16, alpha_hi);
+		// Apply Jim Blinn's trick.
+		prod_lo = vaddq_u16(prod_lo , vdupq_n_u16(128));
+		prod_hi = vaddq_u16(prod_hi , vdupq_n_u16(128));
+		prod_lo = vaddq_u16(prod_lo , vshrq_n_u16(prod_lo, 8));
+		prod_hi = vaddq_u16(prod_hi , vshrq_n_u16(prod_hi, 8));
+		uint16x8_t res_lo = vshrq_n_u16(prod_lo, 8);
+		uint16x8_t res_hi = vshrq_n_u16(prod_hi, 8);
+
+		// narrow to bytes
+		uint8x16_t out = vcombine_u8(vqmovn_u16(res_lo), vqmovn_u16(res_hi));
+
+		// store 4 pixels
+		vst1q_u8((uint8_t*)(dst + i), out);
+	}
+#endif // NEON
+
+	// Scalar fallback for remaining pixels (or if above SIMD not present)
+	for (; i < numPixels; ++i) {
+		dst[i] = premul_pixel_scalar(src[i]);
+	}
+}

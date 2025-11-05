@@ -93,6 +93,7 @@ bool LoadParamSFOFromDisc() {
 		std::vector<u8> paramsfo;
 		pspFileSystem.ReadEntireFile(sfoPath, paramsfo);
 		if (g_paramSFO.ReadSFO(paramsfo)) {
+			g_paramSFORaw = g_paramSFO;
 			return true;
 		}
 	}
@@ -146,6 +147,7 @@ bool LoadParamSFOFromPBP(FileLoader *fileLoader) {
 			// Carefully parse param SFO for PBP files.
 			ParamSFOData paramSFO;
 			if (paramSFO.ReadSFO(sfoData)) {
+				g_paramSFORaw = paramSFO;
 				std::string title = paramSFO.GetValueString("TITLE");
 				if (g_paramSFO.GetValueString("TITLE").empty() && !title.empty()) {
 					g_paramSFO.SetValue("TITLE", title, (int)title.size());
@@ -166,6 +168,8 @@ bool LoadParamSFOFromPBP(FileLoader *fileLoader) {
 				bool regionCheck = region != 'A' && region != 'E' && region != 'H' && region != 'I' && region != 'J' && region != 'K' && region != 'U' && region != 'X';
 				bool systemVerCheck = !systemVer.empty() && systemVer[0] >= '5';
 				if ((formatCheck || regionCheck || discTotalCheck || systemVerCheck) && !discID.empty()) {
+					// This is NOT a homebrew, so we set the ID. Otherwise it'll later be generated
+					// on the first access. This is kinda backwards and weird.
 					g_paramSFO.SetValue("DISC_ID", discID, (int)discID.size());
 					std::string ver = paramSFO.GetValueString("DISC_VERSION");
 					if (ver.empty())
@@ -257,7 +261,6 @@ bool Load_PSP_ISO(FileLoader *fileLoader, std::string *error_string) {
 		return false;
 	}
 
-	//in case we didn't go through EmuScreen::boot
 	g_Config.loadGameConfig(id, g_paramSFO.GetValueString("TITLE"));
 	System_PostUIMessage(UIMessage::CONFIG_LOADED);
 	INFO_LOG(Log::Loader, "Loading %s...", bootpath.c_str());

@@ -39,6 +39,7 @@ namespace Draw {
 // A GameInfo object can also represent a piece of savedata.
 
 enum class GameInfoFlags {
+	EMPTY = 0x00,
 	FILE_TYPE = 0x01,  // Don't need to specify this, always included.
 	PARAM_SFO = 0x02,
 	ICON = 0x04,
@@ -145,7 +146,7 @@ public:
 	std::string id_version;
 	int disc_total = 0;
 	int disc_number = 0;
-	GameRegion region = GameRegion::OTHER;
+	GameRegion region = GameRegion::UNKNOWN;
 	IdentifiedFileType fileType;
 	bool hasConfig = false;
 
@@ -194,13 +195,12 @@ public:
 	// redrawing the UI often. Only set flags to GAMEINFO_WANTBG or WANTSND if you really want them 
 	// because they're big. bgTextures and sound may be discarded over time as well.
 	// NOTE: This never returns null, so you don't need to check for that. Do check Ready() flags though.
-	std::shared_ptr<GameInfo> GetInfo(Draw::DrawContext *draw, const Path &gamePath, GameInfoFlags wantFlags);
+	std::shared_ptr<GameInfo> GetInfo(Draw::DrawContext *draw, const Path &gamePath, GameInfoFlags wantFlags, GameInfoFlags *outHasFlags = nullptr);
 	void FlushBGs();  // Gets rid of all BG textures. Also gets rid of bg sounds.
 
 	void CancelAll();
 
 private:
-	void Init();
 	void Shutdown();
 
 	// Maps ISO path to info. Need to use shared_ptr as we can return these pointers - 

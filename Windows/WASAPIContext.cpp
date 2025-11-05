@@ -12,6 +12,7 @@
 
 #include "Common/Data/Encoding/Utf8.h"
 #include "Common/Log.h"
+#include "Common/Thread/ThreadUtil.h"
 #include "WASAPIContext.h"
 
 using Microsoft::WRL::ComPtr;
@@ -218,14 +219,14 @@ bool WASAPIContext::InitOutputDevice(std::string_view uniqueId, LatencyMode late
 				} else if (result == S_FALSE) {
 					// We got another format. Meh, let's just use what we got.
 					if (closestMatch) {
-						WARN_LOG(Log::Audio, "Didn't get the format we wanted, but got: %d ch=%d", closestMatch->nSamplesPerSec, closestMatch->nChannels);
+						WARN_LOG(Log::Audio, "Didn't get the format we wanted, but got: %lu ch=%d", closestMatch->nSamplesPerSec, closestMatch->nChannels);
 						CoTaskMemFree(closestMatch);
 					} else {
 						WARN_LOG(Log::Audio, "Failed to fall back to two channels. Using workarounds.");
 					}
 					createBuffer = true;
 				} else {
-					WARN_LOG(Log::Audio, "Got other error %08x", result);
+					WARN_LOG(Log::Audio, "Got other error %08lx", result);
 					_dbg_assert_(!closestMatch);
 				}
 			} else {
@@ -308,6 +309,8 @@ void WASAPIContext::FrameUpdate(bool allowAutoChange) {
 }
 
 void WASAPIContext::AudioLoop() {
+	SetCurrentThreadName("WASAPIAudioLoop");
+
 	DWORD taskID = 0;
 	HANDLE mmcssHandle = nullptr;
 	if (latencyMode_ == LatencyMode::Aggressive) {
@@ -323,7 +326,7 @@ void WASAPIContext::AudioLoop() {
 		audioClient_->GetBufferSize(&available);
 	}
 
-	AudioFormat format = Classify(format_);
+	const AudioFormat format = Classify(format_);
 	const int nChannels = format_->nChannels;
 
 	while (running_) {
@@ -345,12 +348,14 @@ void WASAPIContext::AudioLoop() {
 		if (framesToWrite > 0 && SUCCEEDED(renderClient_->GetBuffer(framesToWrite, &buffer))) {
 			if (!tempBuf_) {
 				// Mix directly to the output buffer, avoiding a copy.
-				callback_(reinterpret_cast<float *>(buffer), framesToWrite, format_->nSamplesPerSec, userdata_);
+				if (buffer) {
+					callback_(reinterpret_cast<float *>(buffer), framesToWrite, format_->nSamplesPerSec, userdata_);
+				}
 			} else {
 				// We decided previously that we need conversion, so mix to our temp buffer...
 				callback_(tempBuf_, framesToWrite, format_->nSamplesPerSec, userdata_);
 				// .. and convert according to format (we support multi-channel float and s16)
-				if (format == AudioFormat::S16) {
+				if (format == AudioFormat::S16 && buffer) {
 					// Need to convert.
 					s16 *dest = reinterpret_cast<s16 *>(buffer);
 					for (UINT32 i = 0; i < framesToWrite; i++) {
@@ -367,7 +372,7 @@ void WASAPIContext::AudioLoop() {
 							}
 						}
 					}
-				} else if (format == AudioFormat::Float) {
+				} else if (format == AudioFormat::Float && buffer) {
 					// We have a non-2 number of channels (since we're in the tempBuf_ 'if'), so we contract/expand.
 					float *dest = reinterpret_cast<float *>(buffer);
 					for (UINT32 i = 0; i < framesToWrite; i++) {

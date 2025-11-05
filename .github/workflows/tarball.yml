@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         submodules: recursive
 
@@ -32,8 +32,6 @@ jobs:
         find $PKGNAME/ext -name '*.dylib' -delete || true
         find $PKGNAME/ext -name '*.lib' -delete || true
         find $PKGNAME/ext -name '*.so.*' -delete || true
-        find $PKGNAME/dx9sdk -name '*.lib' -delete || true
-        find $PKGNAME/dx9sdk -name '*.dll' -delete || true
         rm -rf $PKGNAME/ext/rapidjson/thirdparty/gtest || true
         sed -i "s;unknown;${VERSION};" $PKGNAME/git-version.cmake || true
         TARBALL=$PKGNAME.tar.xz
@@ -41,7 +39,7 @@ jobs:
         echo "tarball=$TARBALL" >> $GITHUB_OUTPUT
 
     - name: Upload tarball
-      uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+      uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2.3.3
       with:
         files: ${{ steps.archive.outputs.tarball }}
         token: ${{ secrets.GITHUB_TOKEN }}

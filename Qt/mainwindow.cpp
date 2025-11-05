@@ -1,6 +1,5 @@
 // Qt Desktop UI: works on Linux, Windows and Mac OSX
 #include "ppsspp_config.h"
-#include "mainwindow.h"
 
 #include <QApplication>
 #include <QDesktopServices>
@@ -8,6 +7,8 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QMessageBox>
+
+#include "mainwindow.h"
 
 #include "Common/System/Display.h"
 #include "Common/System/NativeApp.h"
@@ -28,12 +29,12 @@ MainWindow::MainWindow(QWidget *parent, bool fullscreen) :
 	lastUIState(UISTATE_MENU)
 {
 #if defined(ASSETS_DIR)
-	if (QFile::exists(ASSETS_DIR "icon_regular_72.png"))
-		setWindowIcon(QIcon(ASSETS_DIR "icon_regular_72.png"));
+	if (QFile::exists(ASSETS_DIR "ui_images/icon.png"))
+		setWindowIcon(QIcon(ASSETS_DIR "ui_images/icon.png"));
 	else
-		setWindowIcon(QIcon(qApp->applicationDirPath() + "/assets/icon_regular_72.png"));
+		setWindowIcon(QIcon(qApp->applicationDirPath() + "/assets/ui_images/icon.png"));
 #else
-	setWindowIcon(QIcon(qApp->applicationDirPath() + "/assets/icon_regular_72.png"));
+	setWindowIcon(QIcon(qApp->applicationDirPath() + "/assets/ui_images/icon.png"));
 #endif
 
 	SetGameTitle("");
@@ -98,7 +99,6 @@ void MainWindow::updateMenus()
 	updateMenuGroupInt(displayRotationGroup, g_Config.iInternalScreenRotation);
 	updateMenuGroupInt(renderingResolutionGroup, g_Config.iInternalResolution);
 	updateMenuGroupInt(frameSkippingGroup, g_Config.iFrameSkip);
-	updateMenuGroupInt(frameSkippingTypeGroup, g_Config.iFrameSkipType);
 	updateMenuGroupInt(textureFilteringGroup, g_Config.iTexFiltering);
 	updateMenuGroupInt(screenScalingFilterGroup, g_Config.iDisplayFilter);
 	updateMenuGroupInt(textureScalingLevelGroup, g_Config.iTexScalingLevel);
@@ -130,7 +130,7 @@ void MainWindow::loadAct()
 	{
 		QFileInfo info(filename);
 		g_Config.currentDirectory = Path(info.absolutePath().toStdString());
-		System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, filename.toStdString().c_str());
+		System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, filename.toStdString());
 	}
 }
 
@@ -625,10 +625,6 @@ void MainWindow::createMenus()
 	frameSkippingGroup = new MenuActionGroup(this, frameSkippingMenu, SLOT(frameSkippinGroup_triggered(QAction *)),
 		QStringList() << "&Off" << "&1" << "&2" << "&3" << "&4" << "&5" << "&6" << "&7" << "&8",
 		QList<int>() << 0 << 1 << 2 << 3 << 4 << 5 << 6 << 7 << 8);
-	MenuTree* frameSkippingTypeMenu = new MenuTree(this, gameSettingsMenu, QT_TR_NOOP("Frame skipping type"));
-	frameSkippingTypeGroup = new MenuActionGroup(this, frameSkippingTypeMenu, SLOT(frameSkippingTypeGroup_triggered(QAction *)),
-		QStringList() << "Skip number of frames" << "Skip percent of FPS",
-		QList<int>() << 0 << 1);
 	MenuTree* textureFilteringMenu = new MenuTree(this, gameSettingsMenu, QT_TR_NOOP("Te&xture filtering"));
 	textureFilteringGroup = new MenuActionGroup(this, textureFilteringMenu, SLOT(textureFilteringGroup_triggered(QAction *)),
 		QStringList() << "&Auto" << "&Nearest" << "&Linear" << "Auto Max &Quality",

@@ -26,6 +26,7 @@
 #include "Common/Profiler/Profiler.h"
 
 #include "Common/GraphicsContext.h"
+#include "Common/Thread/ThreadUtil.h"
 #include "Common/Log.h"
 #include "Core/Core.h"
 #include "Core/Config.h"
@@ -190,7 +191,7 @@ void Core_StateProcessed() {
 void Core_WaitInactive() {
 	while (Core_IsActive() && !GPUStepping::IsStepping()) {
 		std::unique_lock<std::mutex> guard(m_hInactiveMutex);
-		m_InactiveCond.wait(guard);
+		m_InactiveCond.wait_for(guard, std::chrono::seconds(1));
 	}
 }
 

@@ -272,10 +272,10 @@ bool TextDrawerCocoa::DrawStringBitmap(std::vector<uint8_t> &bitmapData, TextStr
 			for (int x = 0; x < entry.bmWidth; x++) {
 				uint32_t color = bitmap[bmWidth * y + x];
 				if (fullColor) {
-					bitmapData32[entry.bmWidth * y + x] = color;
+					bitmapData32[entry.bmWidth * y + x] = RGBAToPremul8888(color);
 				} else {
 					// Don't know why we'd end up here, but let's support it.
-					bitmapData32[entry.bmWidth * y + x] = (color << 24) | 0xFFFFFF;
+					bitmapData32[entry.bmWidth * y + x] = AlphaToPremul8888(color);
 				}
 			}
 		}
@@ -285,8 +285,8 @@ bool TextDrawerCocoa::DrawStringBitmap(std::vector<uint8_t> &bitmapData, TextStr
 		uint16_t *bitmapData16 = (uint16_t *)&bitmapData[0];
 		for (int y = 0; y < entry.bmHeight; y++) {
 			for (int x = 0; x < entry.bmWidth; x++) {
-				uint8_t bAlpha = (uint8_t)((bitmap[bmWidth * y + x] & 0xff) >> 4);
-				bitmapData16[entry.bmWidth * y + x] = (bAlpha) | 0xfff0;
+				uint8_t bAlpha = (uint8_t)(bitmap[bmWidth * y + x] & 0xff);
+				bitmapData16[entry.bmWidth * y + x] = AlphaToPremul4444(bAlpha);
 			}
 		}
 	} else if (texFormat == Draw::DataFormat::A4R4G4B4_UNORM_PACK16) {
@@ -295,8 +295,8 @@ bool TextDrawerCocoa::DrawStringBitmap(std::vector<uint8_t> &bitmapData, TextStr
 		uint16_t *bitmapData16 = (uint16_t *)&bitmapData[0];
 		for (int y = 0; y < entry.bmHeight; y++) {
 			for (int x = 0; x < entry.bmWidth; x++) {
-				uint8_t bAlpha = (uint8_t)((bitmap[bmWidth * y + x] & 0xff) >> 4);
-				bitmapData16[entry.bmWidth * y + x] = (bAlpha << 12) | 0x0fff;
+				uint8_t bAlpha = (uint8_t)(bitmap[bmWidth * y + x] & 0xff);
+				bitmapData16[entry.bmWidth * y + x] = AlphaToPremul4444(bAlpha);
 			}
 		}
 	} else if (texFormat == Draw::DataFormat::R8_UNORM) {

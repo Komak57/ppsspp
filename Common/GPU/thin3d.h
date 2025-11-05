@@ -577,14 +577,17 @@ struct PipelineDesc {
 	const Slice<SamplerDef> samplers;
 };
 
+// Not normally used as a bitfield, but useful as a capability flag.
 enum class PresentMode {
 	FIFO = 1,
 	IMMEDIATE = 2,
 	MAILBOX = 4,
-	FIFO_RELAXED = 8,  // Vulkan only
-	FIFO_LATEST_READY = 16,  // Vulkan only
 };
 ENUM_CLASS_BITOPS(PresentMode);
+
+inline bool PresentationModeBlocks(PresentMode mode) {
+	return mode & PresentMode::FIFO;
+}
 
 struct DeviceCaps {
 	GPUVendor vendor;
@@ -646,6 +649,7 @@ enum class TextureSwizzle {
 	DEFAULT,
 	R8_AS_ALPHA,
 	R8_AS_GRAYSCALE,
+	R8_AS_PREMUL_ALPHA,
 };
 
 struct TextureDesc {
@@ -854,9 +858,9 @@ public:
 	virtual void BeginFrame(DebugFlags debugFlags) = 0;
 	virtual void EndFrame() = 0;
 
-	// vblanks is only relevant in FIFO present mode.
-	// NOTE: Not all backends support vblanks > 1. Some backends also can't change presentation mode immediately.
-	virtual void Present(PresentMode presentMode, int vblanks) = 0;
+	// Some backends also can't change presentation mode immediately.
+	virtual void Present(PresentMode presentMode) = 0;
+	virtual PresentMode GetCurrentPresentMode() const = 0;
 
 	// This should be avoided as much as possible, in favor of clearing when binding a render target, which is native
 	// on Vulkan.

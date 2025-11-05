@@ -642,11 +642,6 @@ BEGIN
             MENUITEM "&7",                                  ID_OPTIONS_FRAMESKIP_7
             MENUITEM "&8",                                  ID_OPTIONS_FRAMESKIP_8
         END
-        POPUP "Frame Skipping Type",                        ID_OPTIONS_FRAMESKIPTYPE_MENU
-        BEGIN
-            MENUITEM "Skip Number of Frames",               ID_OPTIONS_FRAMESKIPTYPE_COUNT
-            MENUITEM "Skip Percent of FPS",                 ID_OPTIONS_FRAMESKIPTYPE_PRCNT
-        END
         POPUP "Texture Filtering",                          ID_OPTIONS_TEXTUREFILTERING_MENU
         BEGIN
             MENUITEM "Auto",                                ID_OPTIONS_TEXTUREFILTERING_AUTO
@@ -688,7 +683,14 @@ BEGIN
 
     POPUP "Help",                                       ID_HELP_MENU
     BEGIN
+        MENUITEM "www.ppsspp.org",                      ID_HELP_OPENWEBSITE
+        MENUITEM "PPSSPP Forums",                       ID_HELP_OPENFORUM
+        MENUITEM "Buy PPSSPP Gold",                     ID_HELP_BUYGOLD
         MENUITEM "", 0, MFT_SEPARATOR
+        MENUITEM "GitHub",                              ID_HELP_GITHUB
+        MENUITEM "Discord",                             ID_HELP_DISCORD
+        MENUITEM "", 0, MFT_SEPARATOR
+        MENUITEM "About PPSSPP...",                     ID_HELP_ABOUT
     END
 END
 

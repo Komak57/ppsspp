@@ -28,9 +28,9 @@ class Path;
 
 class ParamSFOData {
 public:
-	void SetValue(const std::string &key, unsigned int value, int max_size);
-	void SetValue(const std::string &key, const std::string &value, int max_size);
-	void SetValue(const std::string &key, const u8 *value, unsigned int size, int max_size);
+	void SetValue(std::string_view key, unsigned int value, int max_size);
+	void SetValue(std::string_view key, std::string_view value, int max_size);
+	void SetValue(std::string_view key, const u8 *value, unsigned int size, int max_size);
 
 	int GetValueInt(std::string_view key) const;
 	std::string GetValueString(std::string_view key) const;  // Common keys: "TITLE", "DISC_VERSION"
@@ -61,7 +61,6 @@ public:
 	bool IsValid() const { return !values.empty(); }
 	void Clear();
 
-private:
 	enum ValueType {
 		VT_INT,
 		VT_UTF8,
@@ -85,6 +84,21 @@ private:
 		}
 	};
 
+	// ImDebugger access to the map.
+	const std::map<std::string, ValueData, std::less<>> &Values() {
+		return values;
+	}
+
+	static const char *ValueTypeToString(ValueType t) {
+		switch (t) {
+		case ParamSFOData::VT_INT: return "INT";
+		case ParamSFOData::VT_UTF8: return "UTF8";
+		case ParamSFOData::VT_UTF8_SPE: return "UTF8_SPE";
+		default: return "N/A";
+		}
+	}
+
+private:
 	std::map<std::string, ValueData, std::less<>> values;
 };
 
@@ -100,8 +114,11 @@ enum class GameRegion {
 	ASIA,
 	KOREA,
 	COUNT,
-	HOMEBREW = COUNT,  // Like other but we actually know it's homebrew.
-	OTHER,
+	HOMEBREW = COUNT,
+	UNKNOWN,
+	INTERNAL,
+	TEST,
+	DIAGNOSTIC,
 };
 
 GameRegion DetectGameRegionFromID(std::string_view id_version);

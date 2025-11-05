@@ -26,7 +26,7 @@
 #include "Common/UI/View.h"
 #include "Common/UI/ViewGroup.h"
 
-#include "UI/MiscScreens.h"
+#include "UI/BaseScreens.h"
 #include "UI/GameInfoCache.h"
 #include "UI/TabbedDialogScreen.h"
 
@@ -56,7 +56,7 @@ private:
 	static bool ByDate(const UI::View *, const UI::View *);
 
 	void Refresh();
-	UI::EventReturn SavedataButtonClick(UI::EventParams &e);
+	void SavedataButtonClick(UI::EventParams &e);
 
 	SavedataSortOption sortOption_ = SavedataSortOption::FILENAME;
 	UI::ViewGroup *gameList_ = nullptr;
@@ -67,10 +67,10 @@ private:
 	bool searchPending_ = false;
 };
 
-class SavedataScreen : public TabbedUIDialogScreenWithGameBackground {
+class SavedataScreen : public UITabbedBaseDialogScreen {
 public:
 	// gamePath can be empty, in that case this screen will show all savedata in the save directory.
-	SavedataScreen(const Path &gamePath) : TabbedUIDialogScreenWithGameBackground(gamePath) {}
+	SavedataScreen(const Path &gamePath) : UITabbedBaseDialogScreen(gamePath) {}
 	~SavedataScreen();
 
 	void dialogFinished(const Screen *dialog, DialogResult result) override;
@@ -85,8 +85,8 @@ protected:
 	bool ShowSearchControls() const override { return false; }
 
 private:
-	UI::EventReturn OnSavedataButtonClick(UI::EventParams &e);
-	UI::EventReturn OnSearch(UI::EventParams &e);
+	void OnSavedataButtonClick(UI::EventParams &e);
+	void OnSearch(UI::EventParams &e);
 
 	void CreateSavedataTab(UI::ViewGroup *savedata);
 	void CreateSavestateTab(UI::ViewGroup *savestate);

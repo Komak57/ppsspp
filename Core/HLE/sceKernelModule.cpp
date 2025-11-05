@@ -1352,11 +1352,11 @@ static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 load
 			if (Memory::IsValid4AlignedRange(scanStart, scanEnd - scanStart)) {
 				// Skip the exports and imports sections, they're not code.
 				if (scanEnd >= std::min(modinfo->libent, modinfo->libstub)) {
-					insertSymbols = MIPSAnalyst::ScanForFunctions(scanStart, std::min(modinfo->libent, modinfo->libstub) - 4, insertSymbols);
+					insertSymbols = MIPSAnalyst::ScanForFunctions(scanStart, std::min(modinfo->libent, modinfo->libstub), insertSymbols);
 					scanStart = std::min(modinfo->libentend, modinfo->libstubend);
 				}
 				if (scanEnd >= std::max(modinfo->libent, modinfo->libstub)) {
-					insertSymbols = MIPSAnalyst::ScanForFunctions(scanStart, std::max(modinfo->libent, modinfo->libstub) - 4, insertSymbols);
+					insertSymbols = MIPSAnalyst::ScanForFunctions(scanStart, std::max(modinfo->libent, modinfo->libstub), insertSymbols);
 					scanStart = std::max(modinfo->libentend, modinfo->libstubend);
 				}
 				insertSymbols = MIPSAnalyst::ScanForFunctions(scanStart, scanEnd, insertSymbols);
@@ -2327,10 +2327,10 @@ void __KernelReturnFromModuleFunc() {
 					}
 				}
 				if (plugin_waiting_module->startingPlugins.empty()) {
-					INFO_LOG(Log::sceModule, "Resuming LoadExec thread 0x%x", module->pluginWaitingThread);
+					INFO_LOG(Log::sceModule, "Resuming LoadExec thread %d", module->pluginWaitingThread);
 					__KernelResumeThreadFromWait(module->pluginWaitingThread, 0);
 				} else {
-					INFO_LOG(Log::sceModule, "LoadExec thread 0x%x still waiting for %ld plugin(s)", module->pluginWaitingThread, plugin_waiting_module->startingPlugins.size());
+					INFO_LOG(Log::sceModule, "LoadExec thread %d still waiting for %d plugin(s)", module->pluginWaitingThread, (int)plugin_waiting_module->startingPlugins.size());
 				}
 			}
 		}

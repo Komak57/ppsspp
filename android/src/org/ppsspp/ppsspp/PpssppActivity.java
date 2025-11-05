@@ -1,8 +1,9 @@
 package org.ppsspp.ppsspp;
 
-import android.annotation.TargetApi;
+import androidx.annotation.Keep;
+
+import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -10,9 +11,6 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
-import android.os.StatFs;
-import android.os.storage.StorageVolume;
-import android.provider.MediaStore;
 import android.util.Log;
 import android.system.StructStatVfs;
 import android.system.Os;
@@ -25,7 +23,6 @@ import androidx.annotation.RequiresApi;
 import androidx.documentfile.provider.DocumentFile;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 import java.io.File;
 
@@ -84,6 +81,7 @@ public class PpssppActivity extends NativeActivity {
 				e.printStackTrace();
 			}
 
+			// We don't call super.onCreate, we just bail in an ugly way.
 			System.exit(-1);
 			return;
 		}
@@ -91,22 +89,20 @@ public class PpssppActivity extends NativeActivity {
 		// In case app launched from homescreen shortcut, get shortcut parameter
 		// using Intent extra string. Intent extra will be null if launch normal
 		// (from app drawer or file explorer).
-		String param = parseIntent(getIntent());
-		if (param != null) {
-			Log.i(TAG, "Found Shortcut Parameter in data, passing on: " + param);
-			super.setShortcutParam(param);
+		String shortcutParam = parseIntent(getIntent());
+		if (shortcutParam != null) {
+			Log.i(TAG, "Found Shortcut Parameter in data, passing on: " + shortcutParam);
+			super.setShortcutParam(shortcutParam);
 		}
 		super.onCreate(savedInstanceState);
 	}
 
 	private static String parseIntent(Intent intent) {
-		// String action = intent.getAction();
 		Uri data = intent.getData();
 		if (data != null) {
 			String path = data.toString();
 			// Do some unescaping. Not really sure why needed.
 			return "\"" + path.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
-			// Toast.makeText(getApplicationContext(), path, Toast.LENGTH_SHORT).show();
 		} else {
 			String param = intent.getStringExtra(SHORTCUT_EXTRA_KEY);
 			String args = intent.getStringExtra(ARGS_EXTRA_KEY);
@@ -124,6 +120,7 @@ public class PpssppActivity extends NativeActivity {
 
 	@Override
 	public void onNewIntent(Intent intent) {
+		super.onNewIntent(intent);
 		String value = parseIntent(intent);
 		if (value != null) {
 			// TODO: Actually send a command to the native code to launch the new game.
@@ -135,17 +132,23 @@ public class PpssppActivity extends NativeActivity {
 
 	// called by the C++ code through JNI. Dispatch anything we can't directly handle
 	// on the gfx thread to the UI thread.
+	@Keep
+	@SuppressWarnings("unused")
 	public void postCommand(String command, String parameter) {
 		final String cmd = command;
 		final String param = parameter;
 		runOnUiThread(new Runnable() {
 			@Override
 			public void run() {
-				processCommand(cmd, param);
+				if (!processCommand(cmd, param)) {
+					Log.e(TAG, "processCommand failed: cmd: '" + cmd + "' param: '" + param + "'");
+				}
 			}
 		});
 	}
 
+	@Keep
+	@SuppressWarnings("unused")
 	public String getDebugString(String str) {
 		if (str.equals("InputDevice")) {
 			return getInputDeviceDebugString();
@@ -154,11 +157,12 @@ public class PpssppActivity extends NativeActivity {
 		}
 	}
 
-	@TargetApi(Build.VERSION_CODES.HONEYCOMB_MR1)
-	public int openContentUri(String uriString, String mode) {
+	@Keep
+	@SuppressWarnings("unused")
+	public static int openContentUri(Activity activity, String uriString, String mode) {
 		try {
 			Uri uri = Uri.parse(uriString);
-			try (ParcelFileDescriptor filePfd = getContentResolver().openFileDescriptor(uri, mode)) {
+			try (ParcelFileDescriptor filePfd = activity.getContentResolver().openFileDescriptor(uri, mode)) {
 				if (filePfd == null) {
 					// I'd expect an exception to happen before we get here, so this is probably
 					// never reached.
@@ -179,7 +183,6 @@ public class PpssppActivity extends NativeActivity {
 		}
 	}
 
-	@TargetApi(Build.VERSION_CODES.KITKAT)
 	private static final String[] columns = new String[] {
 		DocumentsContract.Document.COLUMN_DISPLAY_NAME,
 		DocumentsContract.Document.COLUMN_SIZE,
@@ -188,8 +191,7 @@ public class PpssppActivity extends NativeActivity {
 		DocumentsContract.Document.COLUMN_LAST_MODIFIED
 	};
 
-	@TargetApi(Build.VERSION_CODES.KITKAT)
-	private String cursorToString(Cursor c) {
+	private static String cursorToString(Cursor c) {
 		final int flags = c.getInt(2);
 		// Filter out any virtual or partial nonsense.
 		// There's a bunch of potentially-interesting flags here btw,
@@ -211,8 +213,7 @@ public class PpssppActivity extends NativeActivity {
 		return str + size + "|" + documentName + "|" + lastModified;
 	}
 
-	@TargetApi(Build.VERSION_CODES.LOLLIPOP)
-	private long directorySizeRecursion(Uri uri) {
+	private static long directorySizeRecursion(Activity activity, Uri uri) {
 		Cursor c = null;
 		try {
 			// Log.i(TAG, "recursing into " + uri.toString());
@@ -221,7 +222,7 @@ public class PpssppActivity extends NativeActivity {
 					DocumentsContract.Document.COLUMN_SIZE,
 					DocumentsContract.Document.COLUMN_MIME_TYPE,  // check for MIME_TYPE_DIR
 			};
-			final ContentResolver resolver = getContentResolver();
+			final ContentResolver resolver = activity.getContentResolver();
 			final String documentId = DocumentsContract.getDocumentId(uri);
 			final Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(uri, documentId);
 			c = resolver.query(childrenUri, columns, null, null, null);
@@ -249,7 +250,7 @@ public class PpssppActivity extends NativeActivity {
 			c = null;
 
 			for (Uri childUri : childDirs) {
-				long dirSize = directorySizeRecursion(childUri);
+				long dirSize = directorySizeRecursion(activity, childUri);
 				if (dirSize >= 0) {
 					sizeSum += dirSize;
 				} else {
@@ -266,11 +267,12 @@ public class PpssppActivity extends NativeActivity {
 		}
 	}
 
-	@TargetApi(Build.VERSION_CODES.LOLLIPOP)
-	public long computeRecursiveDirectorySize(String uriString) {
+	@Keep
+	@SuppressWarnings("unused")
+	public static long computeRecursiveDirectorySize(Activity activity, String uriString) {
 		try {
 			Uri uri = Uri.parse(uriString);
-			return directorySizeRecursion(uri);
+			return directorySizeRecursion(activity, uri);
 		}
 		catch (Exception e) {
 			Log.e(TAG, "computeRecursiveSize exception: " + e);
@@ -282,49 +284,51 @@ public class PpssppActivity extends NativeActivity {
 	// TODO: Replace with a proper query:
 	// * https://stackoverflow.com/q
 	// uestions/42186820/documentfile-is-very-slow
-	@TargetApi(Build.VERSION_CODES.LOLLIPOP)
-	public String[] listContentUriDir(String uriString) {
-		Cursor c = null;
+	@Keep
+	@SuppressWarnings("unused")
+	public static String[] listContentUriDir(Activity activity, String uriString) {
 		try {
 			Uri uri = Uri.parse(uriString);
-			final ContentResolver resolver = getContentResolver();
+			final ContentResolver resolver = activity.getContentResolver();
 			final Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
-					uri, DocumentsContract.getDocumentId(uri));
+				uri, DocumentsContract.getDocumentId(uri));
 			final ArrayList<String> listing = new ArrayList<>();
 
-			String selection = null;
-			String[] selectionArgs = null;
-			c = resolver.query(childrenUri, columns, null, null, null);
-			if (c == null) {
-				return new String[]{ "X" };
-			}
-			while (c.moveToNext()) {
-				String str = cursorToString(c);
-				if (str != null) {
-					listing.add(str);
+			String[] projection = {
+				DocumentsContract.Document.COLUMN_DISPLAY_NAME,   // index 0
+				DocumentsContract.Document.COLUMN_SIZE,           // index 1
+				DocumentsContract.Document.COLUMN_FLAGS,          // index 2
+				DocumentsContract.Document.COLUMN_MIME_TYPE,      // index 3
+				DocumentsContract.Document.COLUMN_LAST_MODIFIED   // index 4
+			};
+
+			try (Cursor c = resolver.query(childrenUri, projection, null, null, null)) {
+				if (c == null) {
+					return new String[]{"X"};
+				}
+				while (c.moveToNext()) {
+					String str = cursorToString(c);
+					if (str != null) {
+						listing.add(str);
+					}
 				}
 			}
-			// Is ArrayList weird or what?
-			String[] strings = new String[listing.size()];
-			return listing.toArray(strings);
+
+			return listing.toArray(new String[0]);
 		} catch (IllegalArgumentException e) {
-			// Due to sloppy exception handling in resolver.query, we get this wrapping
-			// a FileNotFoundException if the directory doesn't exist.
-			return new String[]{ "X" };
+			return new String[]{"X"};
 		} catch (Exception e) {
 			Log.e(TAG, "listContentUriDir exception: " + e);
-			return new String[]{ "X" };
-		} finally {
-			if (c != null) {
-				c.close();
-			}
+			return new String[]{"X"};
 		}
 	}
 
-	public int contentUriCreateDirectory(String rootTreeUri, String dirName) {
+	@Keep
+	@SuppressWarnings("unused")
+	public static int contentUriCreateDirectory(Activity activity, String rootTreeUri, String dirName) {
 		try {
 			Uri uri = Uri.parse(rootTreeUri);
-			DocumentFile documentFile = DocumentFile.fromTreeUri(this, uri);
+			DocumentFile documentFile = DocumentFile.fromTreeUri(activity, uri);
 			if (documentFile != null) {
 				DocumentFile createdDir = documentFile.createDirectory(dirName);
 				return createdDir != null ? STORAGE_ERROR_SUCCESS : STORAGE_ERROR_UNKNOWN;
@@ -338,12 +342,15 @@ public class PpssppActivity extends NativeActivity {
 		}
 	}
 
-	public int contentUriCreateFile(String rootTreeUri, String fileName) {
+	@Keep
+	@SuppressWarnings("unused")
+	public static int contentUriCreateFile(Activity activity, String rootTreeUri, String fileName) {
 		try {
 			Uri uri = Uri.parse(rootTreeUri);
-			DocumentFile documentFile = DocumentFile.fromTreeUri(this, uri);
+			DocumentFile documentFile = DocumentFile.fromTreeUri(activity, uri);
 			if (documentFile != null) {
 				// TODO: Check the file extension and choose MIME type appropriately.
+				// Or actually, let's not bother.
 				DocumentFile createdFile = documentFile.createFile("application/octet-stream", fileName);
 				return createdFile != null ? STORAGE_ERROR_SUCCESS : STORAGE_ERROR_UNKNOWN;
 			} else {
@@ -356,13 +363,15 @@ public class PpssppActivity extends NativeActivity {
 		}
 	}
 
-	public int contentUriRemoveFile(String fileName) {
+	@Keep
+	public static int contentUriRemoveFile(Activity activity, String fileName) {
 		try {
 			Uri uri = Uri.parse(fileName);
-			DocumentFile documentFile = DocumentFile.fromSingleUri(this, uri);
+			DocumentFile documentFile = DocumentFile.fromSingleUri(activity, uri);
 			if (documentFile != null) {
 				return documentFile.delete() ? STORAGE_ERROR_SUCCESS : STORAGE_ERROR_UNKNOWN;
 			} else {
+				// This can return null on old Android versions (that we no longer supports).
 				return STORAGE_ERROR_UNKNOWN;
 			}
 		} catch (Exception e) {
@@ -373,12 +382,14 @@ public class PpssppActivity extends NativeActivity {
 
 	// NOTE: The destination is the parent directory! This means that contentUriCopyFile
 	// cannot rename things as part of the operation.
-	@TargetApi(Build.VERSION_CODES.N)
-	public int contentUriCopyFile(String srcFileUri, String dstParentDirUri) {
+	@RequiresApi(Build.VERSION_CODES.N)
+	@Keep
+	@SuppressWarnings("unused")
+	public static int contentUriCopyFile(Activity activity, String srcFileUri, String dstParentDirUri) {
 		try {
 			Uri srcUri = Uri.parse(srcFileUri);
 			Uri dstParentUri = Uri.parse(dstParentDirUri);
-			return DocumentsContract.copyDocument(getContentResolver(), srcUri, dstParentUri) != null ? STORAGE_ERROR_SUCCESS : STORAGE_ERROR_UNKNOWN;
+			return DocumentsContract.copyDocument(activity.getContentResolver(), srcUri, dstParentUri) != null ? STORAGE_ERROR_SUCCESS : STORAGE_ERROR_UNKNOWN;
 		} catch (Exception e) {
 			Log.e(TAG, "contentUriCopyFile exception: " + e);
 			return STORAGE_ERROR_UNKNOWN;
@@ -387,14 +398,16 @@ public class PpssppActivity extends NativeActivity {
 
 	// NOTE: The destination is the parent directory! This means that contentUriCopyFile
 	// cannot rename things as part of the operation.
-	@TargetApi(Build.VERSION_CODES.N_MR1)
-	public int contentUriMoveFile(String srcFileUri, String srcParentDirUri, String dstParentDirUri) {
+	@RequiresApi(Build.VERSION_CODES.N_MR1)
+	@Keep
+	@SuppressWarnings("unused")
+	public static int contentUriMoveFile(Activity activity, String srcFileUri, String srcParentDirUri, String dstParentDirUri) {
 		try {
 			Uri srcUri = Uri.parse(srcFileUri);
 			Uri srcParentUri = Uri.parse(srcParentDirUri);
 			Uri dstParentUri = Uri.parse(dstParentDirUri);
 			Log.i(TAG, "DocumentsContract.moveDocument");
-			int result = DocumentsContract.moveDocument(getContentResolver(), srcUri, srcParentUri, dstParentUri) != null ? STORAGE_ERROR_SUCCESS : STORAGE_ERROR_UNKNOWN;
+			int result = DocumentsContract.moveDocument(activity.getContentResolver(), srcUri, srcParentUri, dstParentUri) != null ? STORAGE_ERROR_SUCCESS : STORAGE_ERROR_UNKNOWN;
 			Log.i(TAG, "DocumentsContract.moveDocument done");
 			return result;
 		} catch (Exception e) {
@@ -403,14 +416,15 @@ public class PpssppActivity extends NativeActivity {
 		}
 	}
 
-	@TargetApi(Build.VERSION_CODES.LOLLIPOP)
-	public int contentUriRenameFileTo(String fileUri, String newName) {
+	@Keep
+	@SuppressWarnings("unused")
+	public static int contentUriRenameFileTo(Activity activity, String fileUri, String newName) {
 		try {
 			Uri uri = Uri.parse(fileUri);
 			// Due to a design flaw, we can't use DocumentFile.renameTo().
 			// Instead we use the DocumentsContract API directly.
 			// See https://stackoverflow.com/questions/37168200/android-5-0-new-sd-card-access-api-documentfile-renameto-unsupportedoperation.
-			Uri newUri = DocumentsContract.renameDocument(getContentResolver(), uri, newName);
+			Uri newUri = DocumentsContract.renameDocument(activity.getContentResolver(), uri, newName);
 			// NOTE: we don't use the returned newUri for anything right now.
 			return STORAGE_ERROR_SUCCESS;
 		} catch (Exception e) {
@@ -423,9 +437,7 @@ public class PpssppActivity extends NativeActivity {
 	private static void closeQuietly(AutoCloseable closeable) {
 		if (closeable != null) {
 			try {
-				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-					closeable.close();
-				}
+				closeable.close();
 			} catch (RuntimeException rethrown) {
 				throw rethrown;
 			} catch (Exception ignored) {
@@ -435,12 +447,13 @@ public class PpssppActivity extends NativeActivity {
 
 	// Probably slightly faster than contentUriGetFileInfo.
 	// Smaller difference now than before I changed that one to a query...
-	@TargetApi(Build.VERSION_CODES.KITKAT)
-	public boolean contentUriFileExists(String fileUri) {
+	@Keep
+	@SuppressWarnings("unused")
+	public static boolean contentUriFileExists(Activity activity, String fileUri) {
 		Cursor c = null;
 		try {
 			Uri uri = Uri.parse(fileUri);
-			c = getContentResolver().query(uri, new String[] { DocumentsContract.Document.COLUMN_DOCUMENT_ID }, null, null, null);
+			c = activity.getContentResolver().query(uri, new String[] { DocumentsContract.Document.COLUMN_DOCUMENT_ID }, null, null, null);
 			if (c != null) {
 				return c.getCount() > 0;
 			} else {
@@ -450,21 +463,23 @@ public class PpssppActivity extends NativeActivity {
 			// Log.w(TAG, "Failed query: " + e);
 			return false;
 		} finally {
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-				closeQuietly(c);
-			} else if (c != null) {
-				c.close();
-			}
+			closeQuietly(c);
 		}
 	}
 
-	public String contentUriGetFileInfo(String fileName) {
-		Cursor c = null;
-		try {
-			Uri uri = Uri.parse(fileName);
-			final ContentResolver resolver = getContentResolver();
-			c = resolver.query(uri, columns, null, null, null);
-			if (c != null && c.moveToNext()) {
+	@Keep
+	@SuppressWarnings("unused")
+	public static String contentUriGetFileInfo(Activity activity, String fileName) {
+		String[] projection = {
+			DocumentsContract.Document.COLUMN_DISPLAY_NAME,   // index 0
+			DocumentsContract.Document.COLUMN_SIZE,           // index 1
+			DocumentsContract.Document.COLUMN_FLAGS,          // index 2
+			DocumentsContract.Document.COLUMN_MIME_TYPE,      // index 3
+			DocumentsContract.Document.COLUMN_LAST_MODIFIED   // index 4
+		};
+
+		try (Cursor c = activity.getContentResolver().query(Uri.parse(fileName), projection, null, null, null)) {
+			if (c != null && c.moveToFirst()) {
 				return cursorToString(c);
 			} else {
 				return null;
@@ -472,10 +487,6 @@ public class PpssppActivity extends NativeActivity {
 		} catch (Exception e) {
 			Log.e(TAG, "contentUriGetFileInfo exception: " + e);
 			return null;
-		} finally {
-			if (c != null) {
-				c.close();
-			}
 		}
 	}
 
@@ -484,11 +495,13 @@ public class PpssppActivity extends NativeActivity {
 	// let's just not bother with that for now.
 	// NOTE: This is really super slow!
 	@RequiresApi(Build.VERSION_CODES.M)
-	public long contentUriGetFreeStorageSpaceSlow(Uri uri) {
+	@Keep
+	@SuppressWarnings("unused")
+	public static long contentUriGetFreeStorageSpaceSlow(Activity activity, Uri uri) {
 		try {
-			ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "r");
+			ParcelFileDescriptor pfd = activity.getContentResolver().openFileDescriptor(uri, "r");
 			if (pfd == null) {
-				Log.w(TAG, "Failed to get free storage space from URI: " + uri.toString());
+				Log.w(TAG, "Failed to get free storage space from URI: " + uri);
 				return -1;
 			}
 			StructStatVfs stats = Os.fstatvfs(pfd.getFileDescriptor());
@@ -503,35 +516,36 @@ public class PpssppActivity extends NativeActivity {
 		}
 	}
 
-	public long contentUriGetFreeStorageSpace(String str) {
-		Uri uri = Uri.parse(str);
-		if (uri == null) {
-			Log.e(TAG, "Failed to parse uri " + str);
-			return -1;
-		}
-
+	@Keep
+	@SuppressWarnings("unused")
+	public static long contentUriGetFreeStorageSpace(Activity activity, String str) {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-			return contentUriGetFreeStorageSpaceSlow(uri);
+			Uri uri = Uri.parse(str);
+			return contentUriGetFreeStorageSpaceSlow(activity, uri);
 		}
 
 		// Too early Android version
 		return -1;
 	}
 
-	@TargetApi(Build.VERSION_CODES.O)
-	public long filePathGetFreeStorageSpace(String filePath) {
+	@RequiresApi(Build.VERSION_CODES.O)
+	@Keep
+	@SuppressWarnings("unused")
+	public static long filePathGetFreeStorageSpace(Activity activity, String filePath) {
 		try {
-			StorageManager storageManager = getApplicationContext().getSystemService(StorageManager.class);
+			StorageManager storageManager = activity.getApplicationContext().getSystemService(StorageManager.class);
 			File file = new File(filePath);
 			UUID volumeUUID = storageManager.getUuidForPath(file);
 			return storageManager.getAllocatableBytes(volumeUUID);
-		}  catch (Exception e) {
+		} catch (Exception e) {
 			Log.e(TAG, "filePathGetFreeStorageSpace exception: " + e);
 			return -1;
 		}
 	}
 
-	public boolean isExternalStoragePreservedLegacy() {
+	@Keep
+	@SuppressWarnings("unused")
+	public static boolean isExternalStoragePreservedLegacy() {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
 			// In 29 and later, we can check whether we got preserved storage legacy.
 			return Environment.isExternalStorageLegacy();

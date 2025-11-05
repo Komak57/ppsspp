@@ -98,7 +98,6 @@ struct JNIEnv {};
 #include "Core/HLE/sceUsbCam.h"
 #include "Core/HLE/sceUsbGps.h"
 #include "Common/CPUDetect.h"
-#include "Common/Log.h"
 #include "UI/GameInfoCache.h"
 
 #include "app-android.h"
@@ -179,7 +178,6 @@ static jobject nativeActivity;
 static std::atomic<bool> exitRenderLoop;
 static std::atomic<bool> renderLoopRunning;
 static bool renderer_inited = false;
-static std::mutex renderLock;
 
 static bool sustainedPerfSupported = false;
 
@@ -260,7 +258,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *pjvm, void *reserved) {
 
 // Only used in OpenGL mode.
 static void EmuThreadFunc() {
-	SetCurrentThreadName("EmuThread");
+	SetCurrentThreadName("Entering EmuThread");
 
 	// Name the thread in the JVM, because why not (might result in better debug output in Play Console).
 	// TODO: Do something clever with getEnv() and stored names from SetCurrentThreadName?
@@ -299,10 +297,7 @@ static void EmuThreadFunc() {
 	// We just call the update/render loop here.
 	emuThreadState = (int)EmuThreadState::RUNNING;
 	while (emuThreadState != (int)EmuThreadState::QUIT_REQUESTED) {
-		{
-			std::lock_guard<std::mutex> renderGuard(renderLock);
-			NativeFrame(graphicsContext);
-		}
+		NativeFrame(graphicsContext);
 
 		std::lock_guard<std::mutex> guard(frameCommandLock);
 		if (!nativeActivity) {
@@ -315,16 +310,13 @@ static void EmuThreadFunc() {
 		ProcessFrameCommands(env);
 	}
 
-	INFO_LOG(Log::System, "QUIT_REQUESTED found, left EmuThreadFunc loop. Setting state to STOPPED.");
+	INFO_LOG(Log::System, "emuThreadState was set to QUIT_REQUESTED, left EmuThreadFunc loop. Setting state to STOPPED.");
 	emuThreadState = (int)EmuThreadState::STOPPED;
 
 	NativeShutdownGraphics();
 
-	// Also ask the main thread to stop, so it doesn't hang waiting for a new frame.
-	graphicsContext->StopThread();
-
 	gJvm->DetachCurrentThread();
-	INFO_LOG(Log::System, "Leaving emu thread");
+	INFO_LOG(Log::System, "Leaving EmuThread");
 }
 
 static void EmuThreadStart() {
@@ -347,9 +339,9 @@ static void EmuThreadJoin() {
 	INFO_LOG(Log::System, "EmuThreadJoin - joined");
 }
 
-static void PushCommand(std::string cmd, std::string param) {
+static void PushCommand(std::string_view cmd, std::string_view param) {
 	std::lock_guard<std::mutex> guard(frameCommandLock);
-	frameCommands.push(FrameCommand(std::move(cmd), std::move(param)));
+	frameCommands.emplace(std::string(cmd), std::string(param));
 }
 
 // Android implementation of callbacks to the Java part of the app
@@ -482,6 +474,8 @@ bool System_GetPropertyBool(SystemProperty prop) {
 		return (androidVersion >= 21) && (deviceType != DEVICE_TYPE_VR);  // when ACTION_OPEN_DOCUMENT_TREE was added
 	case SYSPROP_SUPPORTS_OPEN_FILE_IN_EDITOR:
 		return false;  // Update if we add support in FileUtil.cpp: OpenFileInEditor
+	case SYSPROP_SUPPORTS_SHARE_TEXT:
+		return true;
 	case SYSPROP_APP_GOLD:
 #ifdef GOLD
 		return true;
@@ -562,11 +556,11 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeActivity_registerCallbacks(JNIEnv *
 	_dbg_assert_(getDebugString);
 
 	Android_RegisterStorageCallbacks(env, obj);
-	Android_StorageSetNativeActivity(nativeActivity);
+	Android_StorageSetActivity(nativeActivity);
 }
 
 extern "C" void Java_org_ppsspp_ppsspp_NativeActivity_unregisterCallbacks(JNIEnv *env, jobject obj) {
-	Android_StorageSetNativeActivity(nullptr);
+	Android_StorageSetActivity(nullptr);
 	env->DeleteGlobalRef(nativeActivity);
 	nativeActivity = nullptr;
 }
@@ -698,7 +692,6 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_init
 	EARLY_LOG("NativeApp.init() -- begin");
 	PROFILE_INIT();
 
-	std::lock_guard<std::mutex> guard(renderLock);
 	renderer_inited = false;
 	exitRenderLoop = false;
 	androidVersion = jAndroidVersion;
@@ -766,6 +759,7 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_init
 		}
 	}
 
+	// TODO: We should be able to do the Vulkan init in parallel with NativeInit.
 	NativeInit((int)args.size(), &args[0], user_data_path.c_str(), externalStorageDir.c_str(), cacheDir.c_str());
 
 	bFirstResume = true;
@@ -881,17 +875,19 @@ bool System_AudioRecordingState() {
 }
 
 extern "C" void Java_org_ppsspp_ppsspp_NativeApp_resume(JNIEnv *, jclass) {
-	INFO_LOG(Log::System, "NativeApp.resume() - resuming audio");
+	INFO_LOG(Log::System, "NativeApp.resume() - begin");
 	AndroidAudio_Resume(g_audioState);
 
 	System_PostUIMessage(UIMessage::APP_RESUMED, bFirstResume ? "first" : "");
 
 	bFirstResume = false;
+	INFO_LOG(Log::System, "NativeApp.resume() - end");
 }
 
 extern "C" void Java_org_ppsspp_ppsspp_NativeApp_pause(JNIEnv *, jclass) {
-	INFO_LOG(Log::System, "NativeApp.pause() - pausing audio");
+	INFO_LOG(Log::System, "NativeApp.pause() - begin");
 	AndroidAudio_Pause(g_audioState);
+	INFO_LOG(Log::System, "NativeApp.pause() - end");
 }
 
 extern "C" void Java_org_ppsspp_ppsspp_NativeApp_shutdown(JNIEnv *, jclass) {
@@ -900,29 +896,31 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_shutdown(JNIEnv *, jclass) {
 	if (renderer_inited && useCPUThread && graphicsContext) {
 		// Only used in Java EGL path.
 
-		// We can't lock renderLock here because the emu thread will be in NativeFrame
-		// which locks renderLock already, and only gets out once we call ThreadFrame()
-		// in a loop before, to empty the queue.
 		EmuThreadStop("shutdown");
+		// NOTE: We know that the GLSurfaceView render thread is stopped here, since we now
+		// correctly call GLSurfaceView.onPause/onResume. However, there may still be queued frames.
+		// We can't join until we've cleared the queue by calling ThreadFrame.
+
+		// Now we know that more frames won't be coming in.
+
 		INFO_LOG(Log::System, "BeginAndroidShutdown");
-		graphicsContext->BeginAndroidShutdown();
+		graphicsContext->BeginAndroidShutdown();  // Makes sure we don't actually perform draws.
+
 		// Now, it could be that we had some frames queued up. Get through them.
 		// We're on the render thread, so this is synchronous.
-		do {
-			INFO_LOG(Log::System, "Executing graphicsContext->ThreadFrame to clear buffers");
-		} while (graphicsContext->ThreadFrame());
+		graphicsContext->ThreadFrameUntilCondition([]() -> bool {
+			return emuThreadState == (int)EmuThreadState::STOPPED;
+		});
 		graphicsContext->ThreadEnd();
+
+		EmuThreadJoin();
+
 		INFO_LOG(Log::System, "ThreadEnd called.");
 		graphicsContext->ShutdownFromRenderThread();
 		INFO_LOG(Log::System, "Graphics context now shut down from NativeApp_shutdown");
-
-		INFO_LOG(Log::System, "Joining emuthread");
-		EmuThreadJoin();
 	}
 
 	{
-		std::lock_guard<std::mutex> guard(renderLock);
-
 		if (graphicsContext) {
 			INFO_LOG(Log::G3D, "Shutting down renderer");
 			graphicsContext->Shutdown();
@@ -939,7 +937,7 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_shutdown(JNIEnv *, jclass) {
 
 	{
 		std::lock_guard<std::mutex> guard(frameCommandLock);
-		while (frameCommands.size())
+		while (!frameCommands.empty())
 			frameCommands.pop();
 	}
 	INFO_LOG(Log::System, "NativeApp.shutdown() -- end");
@@ -965,8 +963,9 @@ extern "C" jboolean Java_org_ppsspp_ppsspp_NativeRenderer_displayInit(JNIEnv * e
 		graphicsContext->BeginAndroidShutdown();
 		INFO_LOG(Log::G3D, "BeginAndroidShutdown. Looping until emu thread done...");
 		// Skipping GL calls here because the old context is lost.
-		while (graphicsContext->ThreadFrame()) {
-		}
+		graphicsContext->ThreadFrameUntilCondition([]() -> bool {
+			return emuThreadState == (int)EmuThreadState::STOPPED;
+		});
 		INFO_LOG(Log::G3D, "Joining emu thread");
 		EmuThreadJoin();
 
@@ -1162,7 +1161,7 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeRenderer_displayRender(JNIEnv *env,
 		return;
 
 	// This is the "GPU thread". Call ThreadFrame.
-	if (!graphicsContext || !graphicsContext->ThreadFrame()) {
+	if (!graphicsContext || !graphicsContext->ThreadFrame(true)) {
 		return;
 	}
 
@@ -1624,7 +1623,6 @@ extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeActivity_requestExitVulkanR
 	_assert_(g_renderLoopThread.joinable());
 	exitRenderLoop = true;
 	g_renderLoopThread.join();
-	_assert_(!g_renderLoopThread.joinable());
 	g_renderLoopThread = std::thread();
 }
 
@@ -1678,7 +1676,6 @@ static void VulkanEmuThread(ANativeWindow *wnd) {
 
 		while (!exitRenderLoop) {
 			{
-				std::lock_guard<std::mutex> renderGuard(renderLock);
 				NativeFrame(graphicsContext);
 			}
 			{
@@ -1705,44 +1702,60 @@ static void VulkanEmuThread(ANativeWindow *wnd) {
 	WARN_LOG(Log::G3D, "Render loop function exited.");
 }
 
-// NOTE: This is defunct and not working, due to how the Android storage functions currently require
-// a PpssppActivity specifically and we don't have one here.
-extern "C" jstring Java_org_ppsspp_ppsspp_ShortcutActivity_queryGameName(JNIEnv * env, jclass, jstring jpath) {
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_org_ppsspp_ppsspp_ShortcutActivity_queryGameInfo(JNIEnv * env, jclass, jobject activity, jstring jpath) {
+
+	jobject activityRef = nullptr;
+
 	bool teardownThreadManager = false;
+	// Maybe we should just check nativeActivity instead.
 	if (!g_threadManager.IsInitialized()) {
-		INFO_LOG(Log::System, "No thread manager - initializing one");
-		// Need a thread manager.
 		teardownThreadManager = true;
 		g_threadManager.Init(1, 1);
+		g_logManager.SetOutputsEnabled(LogOutput::Stdio);
+		g_logManager.SetAllLogLevels(LogLevel::LDEBUG);
+		activityRef = env->NewGlobalRef(activity);
+		Android_StorageSetActivity(activityRef);
+		Android_RegisterStorageCallbacks(env, activityRef);
+		INFO_LOG(Log::System, "No thread manager - initializing one");
 	}
 
 	Path path = Path(GetJavaString(env, jpath));
+	INFO_LOG(Log::System, "queryGameInfo(%s)", path.c_str());
 
-	INFO_LOG(Log::System, "queryGameName(%s)", path.c_str());
-
-	std::string result;
+	std::string gameName;
+	jbyteArray gameIcon = nullptr;
 
 	GameInfoCache *cache = new GameInfoCache();
-	std::shared_ptr<GameInfo> info = cache->GetInfo(nullptr, path, GameInfoFlags::PARAM_SFO);
-	// Wait until it's done: this is synchronous, unfortunately.
+	std::shared_ptr<GameInfo> info = cache->GetInfo(nullptr, path, GameInfoFlags::PARAM_SFO | GameInfoFlags::ICON);
+
 	if (info) {
 		INFO_LOG(Log::System, "GetInfo successful, waiting");
-		while (!info->Ready(GameInfoFlags::PARAM_SFO)) {
-			sleep_ms(1, "info-poll");
+
+		// Wait for both name and icon
+		int attempts = 1000;
+		while ((!info->Ready(GameInfoFlags::PARAM_SFO) || !info->Ready(GameInfoFlags::ICON)) && attempts > 0) {
+			sleep_ms(1, "info-icon-poll");
+			attempts--;
 		}
 		INFO_LOG(Log::System, "Done waiting");
+
 		if (info->fileType != IdentifiedFileType::UNKNOWN) {
-			result = info->GetTitle();
-
-			// Pretty arbitrary, but the home screen will often truncate titles.
-			// Let's remove "The " from names since it's common in English titles.
-			if (result.length() > strlen("The ") && startsWithNoCase(result, "The ")) {
-				result = result.substr(strlen("The "));
+			// Get the game title
+			gameName = info->GetTitle();
+			if (gameName.length() > strlen("The ") && startsWithNoCase(gameName, "The ")) {
+				gameName = gameName.substr(strlen("The "));
 			}
+			INFO_LOG(Log::System, "Got name: '%s'", gameName.c_str());
 
-			INFO_LOG(Log::System, "queryGameName: Got '%s'", result.c_str());
+			// Get the game icon if available
+			if (info->Ready(GameInfoFlags::ICON) && !info->icon.data.empty()) {
+				INFO_LOG(Log::System, "Got icon");
+				gameIcon = env->NewByteArray((jsize)info->icon.data.size());
+				env->SetByteArrayRegion(gameIcon, 0, (jsize)info->icon.data.size(), (const jbyte *)info->icon.data.data());
+			}
 		} else {
-			INFO_LOG(Log::System, "queryGameName: Filetype unknown");
+			INFO_LOG(Log::System, "Failed to query game info");
 		}
 	} else {
 		INFO_LOG(Log::System, "No info from cache");
@@ -1750,63 +1763,25 @@ extern "C" jstring Java_org_ppsspp_ppsspp_ShortcutActivity_queryGameName(JNIEnv 
 	delete cache;
 
 	if (teardownThreadManager) {
+		g_logManager.SetOutputsEnabled((LogOutput)0);
+		Android_UnregisterStorageCallbacks(env);
+		Android_StorageSetActivity(nullptr);
 		g_threadManager.Teardown();
 	}
 
-	return env->NewStringUTF(result.c_str());
-}
+	// Construct a Java Object[] with two entries: name (String), icon (byte[])
+	jobjectArray result = env->NewObjectArray(2, env->FindClass("java/lang/Object"), nullptr);
 
+	jstring jname = env->NewStringUTF(gameName.c_str());
+	env->SetObjectArrayElement(result, 0, jname);
+	env->DeleteLocalRef(jname);
 
-extern "C"
-JNIEXPORT jbyteArray JNICALL
-Java_org_ppsspp_ppsspp_ShortcutActivity_queryGameIcon(JNIEnv * env, jclass clazz, jstring jpath) {
-	bool teardownThreadManager = false;
-	if (!g_threadManager.IsInitialized()) {
-		INFO_LOG(Log::System, "No thread manager - initializing one");
-		// Need a thread manager.
-		teardownThreadManager = true;
-		g_threadManager.Init(1, 1);
+	if (gameIcon != nullptr) {
+		env->SetObjectArrayElement(result, 1, gameIcon);
+		env->DeleteLocalRef(gameIcon);
 	}
-	// TODO: implement requestIcon()
-
-	Path path = Path(GetJavaString(env, jpath));
-
-	INFO_LOG(Log::System, "queryGameIcon(%s)", path.c_str());
-
-	jbyteArray result = nullptr;
-
-	GameInfoCache *cache = new GameInfoCache();
-	std::shared_ptr<GameInfo> info = cache->GetInfo(nullptr, path, GameInfoFlags::ICON);
-	// Wait until it's done: this is synchronous, unfortunately.
-	if (info) {
-		INFO_LOG(Log::System, "GetInfo successful, waiting");
-        int attempts = 1000;
-        while (!info->Ready(GameInfoFlags::ICON)) {
-            sleep_ms(1, "icon-poll");
-            attempts--;
-            if (!attempts) {
-                break;
-            }
-        }
-        INFO_LOG(Log::System, "Done waiting");
-        if (info->Ready(GameInfoFlags::ICON)) {
-            if (!info->icon.data.empty()) {
-                INFO_LOG(Log::System, "requestIcon: Got icon");
-                result = env->NewByteArray((jsize)info->icon.data.size());
-                env->SetByteArrayRegion(result, 0, (jsize)info->icon.data.size(), (const jbyte *)info->icon.data.data());
-            }
-        } else {
-            INFO_LOG(Log::System, "requestIcon: Filetype unknown");
-        }
-    } else {
-        INFO_LOG(Log::System, "No info from cache");
-    }
-
-    delete cache;
-
-    if (teardownThreadManager) {
-        g_threadManager.Teardown();
-    }
-
-    return result;
+	if (activityRef) {
+		env->DeleteGlobalRef(activityRef);
+	}
+	return result;
 }

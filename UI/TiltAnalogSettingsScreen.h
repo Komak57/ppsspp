@@ -19,22 +19,26 @@
 
 #include "Common/Math/math_util.h"
 #include "Common/UI/View.h"
-#include "MiscScreens.h"
+#include "SimpleDialogScreen.h"
 
 class JoystickHistoryView;
 class GamepadView;
 
-class TiltAnalogSettingsScreen : public UIDialogScreenWithGameBackground {
+class TiltAnalogSettingsScreen : public UITwoPaneBaseDialogScreen {
 public:
-	TiltAnalogSettingsScreen(const Path &gamePath) : UIDialogScreenWithGameBackground(gamePath) {}
+	TiltAnalogSettingsScreen(const Path &gamePath) : UITwoPaneBaseDialogScreen(gamePath) {}
 
-	void CreateViews() override;
+	void CreateSettingsViews(UI::LinearLayout *parent) override;
+	void CreateContentViews(UI::LinearLayout *parent) override;
+	std::string_view GetTitle() const override;
+
 	void update() override;
 	const char *tag() const override { return "TiltAnalogSettings"; }
 
 private:
-	UI::EventReturn OnCalibrate(UI::EventParams &e);
-	
+	void OnCalibrate(UI::EventParams &e);
+	void CreateCalibrationView(UI::ViewGroup *parent, UI::LayoutParams *layoutParams);
+
 	Lin::Vec3 down_{};
 	JoystickHistoryView *tilt_ = nullptr;
 };

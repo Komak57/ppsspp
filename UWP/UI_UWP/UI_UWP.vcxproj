@@ -86,7 +86,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\..\UI\AudioCommon.h" />
+    <ClInclude Include="..\..\UI\Background.h" />
     <ClInclude Include="..\..\UI\BackgroundAudio.h" />
+    <ClInclude Include="..\..\UI\BaseScreens.h" />
     <ClInclude Include="..\..\UI\ChatScreen.h" />
     <ClInclude Include="..\..\UI\ControlMappingScreen.h" />
     <ClInclude Include="..\..\UI\CustomButtonMappingScreen.h" />
@@ -107,11 +109,14 @@
     <ClInclude Include="..\..\UI\ImDebugger\ImDebugger.h" />
     <ClInclude Include="..\..\UI\ImDebugger\ImDisasmView.h" />
     <ClInclude Include="..\..\UI\ImDebugger\ImGe.h" />
+    <ClInclude Include="..\..\UI\ImDebugger\ImJitViewer.h" />
     <ClInclude Include="..\..\UI\ImDebugger\ImMemView.h" />
     <ClInclude Include="..\..\UI\ImDebugger\ImStructViewer.h" />
     <ClInclude Include="..\..\UI\InstallZipScreen.h" />
     <ClInclude Include="..\..\UI\JitCompareScreen.h" />
     <ClInclude Include="..\..\UI\JoystickHistoryView.h" />
+    <ClInclude Include="..\..\UI\MiscViews.h" />
+    <ClInclude Include="..\..\UI\SystemInfoScreen.h" />
     <ClInclude Include="..\..\UI\TabbedDialogScreen.h" />
     <ClInclude Include="..\..\UI\RetroAchievementScreens.h" />
     <ClInclude Include="..\..\UI\Theme.h" />
@@ -129,12 +134,16 @@
     <ClInclude Include="..\..\UI\TiltAnalogSettingsScreen.h" />
     <ClInclude Include="..\..\UI\TouchControlLayoutScreen.h" />
     <ClInclude Include="..\..\UI\TouchControlVisibilityScreen.h" />
+    <ClInclude Include="..\..\UI\UIAtlas.h" />
+    <ClInclude Include="..\..\UI\UploadScreen.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\UI\AudioCommon.cpp" />
+    <ClCompile Include="..\..\UI\Background.cpp" />
     <ClCompile Include="..\..\UI\BackgroundAudio.cpp" />
+    <ClCompile Include="..\..\UI\BaseScreens.cpp" />
     <ClCompile Include="..\..\UI\ChatScreen.cpp" />
     <ClCompile Include="..\..\UI\ControlMappingScreen.cpp" />
     <ClCompile Include="..\..\UI\CustomButtonMappingScreen.cpp" />
@@ -155,12 +164,16 @@
     <ClCompile Include="..\..\UI\ImDebugger\ImDebugger.cpp" />
     <ClCompile Include="..\..\UI\ImDebugger\ImDisasmView.cpp" />
     <ClCompile Include="..\..\UI\ImDebugger\ImGe.cpp" />
+    <ClCompile Include="..\..\UI\ImDebugger\ImJitViewer.cpp" />
     <ClCompile Include="..\..\UI\ImDebugger\ImMemView.cpp" />
     <ClCompile Include="..\..\UI\ImDebugger\ImStructViewer.cpp" />
     <ClCompile Include="..\..\UI\InstallZipScreen.cpp" />
     <ClCompile Include="..\..\UI\JitCompareScreen.cpp" />
     <ClCompile Include="..\..\UI\JoystickHistoryView.cpp" />
+    <ClCompile Include="..\..\UI\MiscViews.cpp" />
+    <ClCompile Include="..\..\UI\SystemInfoScreen.cpp" />
     <ClCompile Include="..\..\UI\TabbedDialogScreen.cpp" />
+    <ClCompile Include="..\..\UI\SimpleDialogScreen.cpp" />
     <ClCompile Include="..\..\UI\RetroAchievementScreens.cpp" />
     <ClCompile Include="..\..\UI\Theme.cpp" />
     <ClCompile Include="..\..\UI\MainScreen.cpp" />
@@ -178,6 +191,8 @@
     <ClCompile Include="..\..\UI\TiltAnalogSettingsScreen.cpp" />
     <ClCompile Include="..\..\UI\TouchControlLayoutScreen.cpp" />
     <ClCompile Include="..\..\UI\TouchControlVisibilityScreen.cpp" />
+    <ClCompile Include="..\..\UI\UIAtlas.cpp" />
+    <ClCompile Include="..\..\UI\UploadScreen.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>

@@ -689,6 +689,18 @@
       <Filter>Audio</Filter>
     </ClInclude>
     <ClInclude Include="LoongArch64Emitter.h" />
+    <ClInclude Include="Render\AtlasGen.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ext\nanosvg\src\nanosvg.h">
+      <Filter>ext\nanosvg</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ext\nanosvg\src\nanosvgrast.h">
+      <Filter>ext\nanosvg</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\TabHolder.h">
+      <Filter>UI</Filter>
+    </ClInclude>
     <ClInclude Include="..\ext\mbedtls.h">
       <Filter>ext\mbedtls</Filter>
     </ClInclude>
@@ -1293,6 +1305,12 @@
       <Filter>ext\imgui</Filter>
     </ClCompile>
     <ClCompile Include="LoongArch64Emitter.cpp" />
+    <ClCompile Include="Render\AtlasGen.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\TabHolder.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Crypto">
@@ -1420,6 +1438,9 @@
     </Filter>
     <Filter Include="Audio">
       <UniqueIdentifier>{92746a51-33a9-4a00-af10-3538322f04f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ext\nanosvg">
+      <UniqueIdentifier>{da5bd3c2-d1d9-4e8f-972f-9e53e2a34049}</UniqueIdentifier>
     </Filter>
     <Filter Include="ext\mbedtls">
       <UniqueIdentifier>{0f5b4410-75fa-42e3-a89f-e793dac8168b}</UniqueIdentifier>

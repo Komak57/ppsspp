@@ -18,6 +18,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <map>
 #include <vector>
 
@@ -58,6 +59,8 @@ public:
 private:
 	std::map<std::string, PlayTime> tracker_;
 };
+
+struct ConfigSetting;
 
 struct Config {
 public:
@@ -125,7 +128,7 @@ public:
 	bool bAutoSaveSymbolMap;
 	bool bCompressSymbols;
 	bool bCacheFullIsoInRam;
-	int iRemoteISOPort;
+	int iRemoteISOPort; // Also used for serving a local remote debugger.
 	std::string sLastRemoteISOServer;
 	int iLastRemoteISOPort;
 	bool bRemoteISOManual;
@@ -134,6 +137,7 @@ public:
 	std::string sRemoteISOSharedDir;
 	int iRemoteISOShareType;
 	bool bRemoteDebuggerOnStartup;
+	bool bRemoteDebuggerLocal;
 	bool bRemoteTab;
 	bool bMemStickInserted;
 	int iMemStickSizeGB;
@@ -168,8 +172,13 @@ public:
 	bool bCameraMirrorHorizontal;
 	int iDisplayFramerateMode;  // enum DisplayFramerateMode. Android-only.
 	int iDisplayRefreshRate = 60;
-	int iVulkanPresentationMode;
+
+	// These two combined choose the presentation mode.
+	// vsync = false: Immediate
+	// vsync = true, low latency present = true: Mailbox
+	// vsync = true, low latency present = false: FIFO
 	bool bVSync;
+	bool bLowLatencyPresent;
 
 	bool bSoftwareRendering;
 	bool bSoftwareRenderingJit;
@@ -202,8 +211,6 @@ public:
 	bool bShowImDebugger;
 
 	int iFrameSkip;
-	int iFrameSkipType;
-	int iFastForwardMode; // See FastForwardMode in ConfigValues.h.
 	bool bAutoFrameSkip;
 
 	bool bEnableCardboardVR; // Cardboard Master Switch
@@ -256,6 +263,8 @@ public:
 	int iCwCheatRefreshIntervalMs;
 	float fCwCheatScrollPosition;
 	float fGameListScrollPosition;
+	float fHomebrewScrollPosition;
+	float fRemoteScrollPosition;
 	int iBloomHack; //0 = off, 1 = safe, 2 = balanced, 3 = aggressive
 	int iSkipGPUReadbackMode;  // 0 = off, 1 = skip, 2 = to texture
 	int iSplineBezierQuality; // 0 = low , 1 = Intermediate , 2 = High
@@ -346,10 +355,11 @@ public:
 	// 0 - no tilt, 1 - analog stick, 2 - D-Pad, 3 - Action Buttons (Tri, Cross, Square, Circle)
 	int iTiltInputType;
 
-	// The three tabs.
+	// The four tabs (including Remote last)
 	bool bGridView1;
 	bool bGridView2;
 	bool bGridView3;
+	bool bGridView4;
 
 	// Right analog binding
 	int iRightAnalogUp;
@@ -493,11 +503,11 @@ public:
 	bool bAllowSpeedControlWhileConnected;  // Useful in some games but not recommended.
 
 	// PSN revival servers (actual code in development by FoxLovesYou from Discord)
-	std::string infraNpId;
-	std::string infraPassword;
-	std::string infraToken;  // This will be set by a login mechanism
-	bool infraRememberPwd;
-	bool infraAutoSignIn;
+	std::string sInfraNpId;
+	std::string sInfraPassword;
+	std::string sInfraToken;  // This will be set by a login mechanism
+	bool bInfraRememberPwd;
+	bool bInfraAutoSignIn;
 
 	bool bEnableWlan;
 	std::map<std::string, std::string> mHostToAlias;  // Local DNS database stored in ini file
@@ -618,7 +628,7 @@ public:
 	void Load(const char *iniFileName = nullptr, const char *controllerIniFilename = nullptr);
 	bool Save(const char *saveReason);
 	void Reload();
-	void RestoreDefaults(RestoreSettingsBits whatToRestore);
+	void RestoreDefaults(RestoreSettingsBits whatToRestore, bool log = false);
 
 	//per game config managment, should maybe be in it's own class
 	void changeGameSpecific(const std::string &gameId = "", const std::string &title = "");
@@ -649,30 +659,26 @@ public:
 		return bFullScreen;
 	}
 
-	const std::map<std::string, std::pair<std::string, int>, std::less<>> &GetLangValuesMapping();
 	bool LoadAppendedConfig();
-	void SetAppendedConfigIni(const Path &path);
+	void SetAppendedConfigIni(const Path &path) { appendedConfigFileName_ = path; }
 	void UpdateAfterSettingAutoFrameSkip();
 	void NotifyUpdatedCpuCore();
-
-	// Applies the Auto setting if set. Returns an enum value from PSP_SYSTEMPARAM_LANGUAGE_*.
-	int GetPSPLanguage();
 
 	PlayTimeTracker &TimeTracker() { return playTimeTracker_; }
 
 protected:
 	void LoadStandardControllerIni();
-	void LoadLangValuesMapping();
 
 	void PostLoadCleanup(bool gameSpecific);
 	void PreSaveCleanup(bool gameSpecific);
 	void PostSaveCleanup(bool gameSpecific);
 
+	static std::map<const void*, const ConfigSetting *> &getPtrLUT();
+
 private:
 	bool reload_ = false;
 	std::string gameId_;
 	std::string gameIdTitle_;
-	std::map<std::string, std::pair<std::string, int>, std::less<>> langValuesMapping_;
 	PlayTimeTracker playTimeTracker_;
 	Path iniFilename_;
 	Path controllerIniFilename_;
@@ -680,6 +686,9 @@ private:
 	Path appendedConfigFileName_;
 	// A set make more sense, but won't have many entry, and I dont want to include the whole std::set header here
 	std::vector<std::string> appendedConfigUpdatedGames_;
+
+	// TODO: Remove hack.
+	friend struct ConfigSetting;
 };
 
 std::string CreateRandMAC();

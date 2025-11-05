@@ -21,6 +21,7 @@
 #include "Common/UI/Context.h"
 #include "Common/UI/ViewGroup.h"
 #include "Common/UI/IconCache.h"
+#include "Common/UI/ScrollView.h"
 #include "Common/Render/DrawBuffer.h"
 
 #include "Common/Log.h"
@@ -192,7 +193,7 @@ void HttpImageFileView::Draw(UIContext &dc) {
 	}
 
 	if (HasFocus()) {
-		dc.FillRect(dc.theme->itemFocusedStyle.background, bounds_.Expand(3));
+		dc.FillRect(dc.GetTheme().itemFocusedStyle.background, bounds_.Expand(3));
 	}
 
 	// TODO: involve sizemode
@@ -254,7 +255,7 @@ private:
 class ProductView : public UI::LinearLayout {
 public:
 	ProductView(const StoreEntry &entry)
-		: LinearLayout(UI::ORIENT_VERTICAL), entry_(entry) {
+		: LinearLayout(ORIENT_VERTICAL), entry_(entry) {
 		CreateViews();
 	}
 
@@ -264,9 +265,9 @@ public:
 
 private:
 	void CreateViews();
-	UI::EventReturn OnInstall(UI::EventParams &e);
-	UI::EventReturn OnCancel(UI::EventParams &e);
-	UI::EventReturn OnLaunchClick(UI::EventParams &e);
+	void OnInstall(UI::EventParams &e);
+	void OnCancel(UI::EventParams &e);
+	void OnLaunchClick(UI::EventParams &e);
 
 	bool IsGameInstalled() const {
 		return g_GameManager.IsGameInstalled(entry_.file);
@@ -311,7 +312,6 @@ void ProductView::CreateViews() {
 		uninstallButton_ = new Button(st->T("Uninstall"));
 		Add(uninstallButton_)->OnClick.Add([=](UI::EventParams &e) {
 			g_GameManager.UninstallGameOnThread(entry_.file);
-			return UI::EVENT_DONE;
 		});
 		// Add(new TextView(st->T("Installed")));  // Not really needed
 	}
@@ -338,7 +338,6 @@ void ProductView::CreateViews() {
 		horiz->Add(new Button(di->T("More info"), new LinearLayoutParams(0.0, G_VCENTER)))->OnClick.Add([this](UI::EventParams) {
 			std::string url = StringFromFormat("https://www.ppsspp.org/docs/reference/homebrew-store-distribution/#%s", entry_.file.c_str());
 			System_LaunchUrl(LaunchUrlType::BROWSER_URL, url.c_str());
-			return UI::EVENT_DONE;
 		});
 	}
 	if (!entry_.websiteURL.empty()) {
@@ -359,7 +358,6 @@ void ProductView::CreateViews() {
 		}
 		Add(new Button(buttonText))->OnClick.Add([this](UI::EventParams) {
 			System_LaunchUrl(LaunchUrlType::BROWSER_URL, entry_.websiteURL.c_str());
-			return UI::EVENT_DONE;
 		});
 	}
 }
@@ -393,7 +391,7 @@ std::string ProductView::DownloadURL() const {
 	}
 }
 
-UI::EventReturn ProductView::OnInstall(UI::EventParams &e) {
+void ProductView::OnInstall(UI::EventParams &e) {
 	std::string fileUrl = DownloadURL();
 	if (installButton_) {
 		installButton_->SetEnabled(false);
@@ -403,18 +401,16 @@ UI::EventReturn ProductView::OnInstall(UI::EventParams &e) {
 	}
 	INFO_LOG(Log::System, "Triggering install of '%s'", fileUrl.c_str());
 	g_GameManager.DownloadAndInstall(fileUrl);
-	return UI::EVENT_DONE;
 }
 
-UI::EventReturn ProductView::OnCancel(UI::EventParams &e) {
+void ProductView::OnCancel(UI::EventParams &e) {
 	g_GameManager.CancelDownload();
-	return UI::EVENT_DONE;
 }
 
-UI::EventReturn ProductView::OnLaunchClick(UI::EventParams &e) {
+void ProductView::OnLaunchClick(UI::EventParams &e) {
 	if (g_GameManager.GetState() != GameManagerState::IDLE) {
 		// Button should have been disabled. Just a safety check.
-		return UI::EVENT_DONE;
+		return;
 	}
 
 	Path pspGame = GetSysDirectory(DIRECTORY_GAME);
@@ -424,7 +420,6 @@ UI::EventReturn ProductView::OnLaunchClick(UI::EventParams &e) {
 	e2.s = path.ToString();
 	// Insta-update - here we know we are already on the right thread.
 	OnClickLaunch.Trigger(e2);
-	return UI::EVENT_DONE;
 }
 
 StoreScreen::StoreScreen() {
@@ -442,7 +437,7 @@ StoreScreen::~StoreScreen() {
 
 // Handle async download tasks
 void StoreScreen::update() {
-	UIDialogScreenWithBackground::update();
+	UIBaseDialogScreen::update();
 
 	g_DownloadManager.Update();
 
@@ -511,21 +506,15 @@ void StoreScreen::ParseListing(const std::string &json) {
 	}
 }
 
-void StoreScreen::CreateViews() {
+std::string_view StoreScreen::GetTitle() const {
+	auto mm = GetI18NCategory(I18NCat::MAINMENU);
+	return mm->T("PPSSPP Homebrew Store");
+}
+
+void StoreScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	using namespace UI;
 
-	root_ = new LinearLayout(ORIENT_VERTICAL);
-	
 	auto di = GetI18NCategory(I18NCat::DIALOG);
-	auto mm = GetI18NCategory(I18NCat::MAINMENU);
-
-	// Top bar
-	LinearLayout *topBar = root_->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, 64.0f)));
-	topBar->Add(new Choice(di->T("Back"), new LinearLayoutParams(WRAP_CONTENT, FILL_PARENT)))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
-	titleText_ = new TextView(mm->T("PPSSPP Homebrew Store"), ALIGN_VCENTER, false, new LinearLayoutParams(WRAP_CONTENT, FILL_PARENT));
-	titleText_->SetTextColor(screenManager()->getUIContext()->GetTheme().itemDownStyle.fgColor);
-	topBar->Add(titleText_);
-	topBar->SetBG(screenManager()->getUIContext()->GetTheme().itemDownStyle.background);
 
 	LinearLayout *content;
 	if (connectionError_ || loading_) {
@@ -534,9 +523,7 @@ void StoreScreen::CreateViews() {
 		content->Add(new TextView(loading_ ? std::string(st->T("Loading...")) : StringFromFormat("%s: %d", st->T_cstr("Connection Error"), resultCode_)));
 		if (!loading_) {
 			content->Add(new Button(di->T("Retry")))->OnClick.Handle(this, &StoreScreen::OnRetry);
-
 		}
-		content->Add(new Button(di->T("Back")))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
 
 		scrollItemView_ = nullptr;
 		productPanel_ = nullptr;
@@ -568,7 +555,7 @@ void StoreScreen::CreateViews() {
 			lastSelectedName_.clear();
 		}
 	}
-	root_->Add(content);
+	parent->Add(content);
 }
 
 ProductItemView *StoreScreen::GetSelectedItem() {
@@ -584,10 +571,10 @@ ProductItemView *StoreScreen::GetSelectedItem() {
 	return nullptr;
 }
 
-UI::EventReturn StoreScreen::OnGameSelected(UI::EventParams &e) {
+void StoreScreen::OnGameSelected(UI::EventParams &e) {
 	ProductItemView *item = static_cast<ProductItemView *>(e.v);
 	if (!item)
-		return UI::EVENT_DONE;
+		return;
 
 	productPanel_->Clear();
 	ProductView *productView = new ProductView(item->GetEntry());
@@ -598,18 +585,15 @@ UI::EventReturn StoreScreen::OnGameSelected(UI::EventParams &e) {
 	if (previousItem && previousItem != item)
 		previousItem->Release();
 	lastSelectedName_ = item->GetEntry().name;
-	return UI::EVENT_DONE;
 }
 
-UI::EventReturn StoreScreen::OnGameLaunch(UI::EventParams &e) {
+void StoreScreen::OnGameLaunch(UI::EventParams &e) {
 	std::string path = e.s;
 	screenManager()->switchScreen(new EmuScreen(Path(path)));
-	return UI::EVENT_DONE;
 }
 
-UI::EventReturn StoreScreen::OnRetry(UI::EventParams &e) {
+void StoreScreen::OnRetry(UI::EventParams &e) {
 	RecreateViews();
-	return UI::EVENT_DONE;
 }
 
 std::string StoreScreen::GetTranslatedString(const json::JsonGet json, const std::string &key, const char *fallback) const {

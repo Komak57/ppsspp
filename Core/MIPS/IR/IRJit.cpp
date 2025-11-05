@@ -294,21 +294,20 @@ int IRBlockCache::GetBlockNumFromIRArenaOffset(int offset) const {
 			high = mid - 1;
 		}
 	}
-
-#ifndef _DEBUG
-	// Then, in debug builds, cross check the result.
+	return found;
+#if 1
 	return found;
 #else
-	// TODO: Optimize if we need to call this often.
+	// Cross check the result. This is not fast so normally not enabled. Called a lot when IR_PROFILING is on.
 	for (int i = 0; i < (int)blocks_.size(); i++) {
 		if (blocks_[i].GetIRArenaOffset() == offset) {
 			_dbg_assert_(i == found);
 			return i;
 		}
 	}
-#endif
 	_dbg_assert_(found == -1);
 	return -1;
+#endif
 }
 
 std::vector<int> IRBlockCache::FindInvalidatedBlockNumbers(u32 address, u32 lengthInBytes) {
@@ -461,6 +460,9 @@ JitBlockDebugInfo IRBlockCache::GetBlockDebugInfo(int blockNum) const {
 	uint32_t start, size;
 	ir.GetRange(&start, &size);
 	debugInfo.originalAddress = start;  // TODO
+	if (!Memory::IsValid4AlignedAddress(start)) {
+		return debugInfo;
+	}
 
 	debugInfo.origDisasm.reserve(((start + size) - start) / 4);
 	for (u32 addr = start; addr < start + size; addr += 4) {

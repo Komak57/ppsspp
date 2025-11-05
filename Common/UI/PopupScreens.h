@@ -50,7 +50,7 @@ protected:
 	UI::ListView *listView_ = nullptr;
 
 private:
-	UI::EventReturn OnListChoice(UI::EventParams &e);
+	void OnListChoice(UI::EventParams &e);
 
 	std::function<void(int)> callback_;
 	bool showButtons_ = false;
@@ -98,10 +98,10 @@ public:
 	Event OnChange;
 
 private:
-	EventReturn OnDecrease(EventParams &params);
-	EventReturn OnIncrease(EventParams &params);
-	EventReturn OnTextChange(EventParams &params);
-	EventReturn OnSliderChange(EventParams &params);
+	void OnDecrease(EventParams &params);
+	void OnIncrease(EventParams &params);
+	void OnTextChange(EventParams &params);
+	void OnSliderChange(EventParams &params);
 	void OnCompleted(DialogResult result) override;
 	void UpdateTextBox();
 	Slider *slider_ = nullptr;
@@ -132,10 +132,10 @@ public:
 	Event OnChange;
 
 private:
-	EventReturn OnIncrease(EventParams &params);
-	EventReturn OnDecrease(EventParams &params);
-	EventReturn OnTextChange(EventParams &params);
-	EventReturn OnSliderChange(EventParams &params);
+	void OnIncrease(EventParams &params);
+	void OnDecrease(EventParams &params);
+	void OnTextChange(EventParams &params);
+	void OnSliderChange(EventParams &params);
 	void OnCompleted(DialogResult result) override;
 	void UpdateTextBox();
 	UI::SliderFloat *slider_ = nullptr;
@@ -236,6 +236,10 @@ public:
 		return hidden_.find(c) != hidden_.end();
 	}
 
+	void SetPreOpenCallback(std::function<void(PopupMultiChoice *)> callback) {
+		preOpenCallback_ = callback;
+	}
+
 	UI::Event OnChoice;
 
 protected:
@@ -248,7 +252,7 @@ protected:
 	void UpdateText();
 
 private:
-	UI::EventReturn HandleClick(UI::EventParams &e);
+	void HandleClick(UI::EventParams &e);
 
 	void ChoiceCallback(int num);
 	virtual bool PostChoiceCallback(int num) { return true; }
@@ -259,6 +263,9 @@ private:
 	bool restoreFocus_ = false;
 	std::set<int> hidden_;
 	std::map<int, ImageID> icons_;
+
+	std::function<void(PopupMultiChoice *)> preOpenCallback_;
+	bool callbackExecuted_ = false;
 };
 
 // Allows passing in a dynamic vector of strings. Saves the string.
@@ -347,8 +354,8 @@ protected:
 	std::string ValueText() const override;
 
 private:
-	EventReturn HandleClick(EventParams &e);
-	EventReturn HandleChange(EventParams &e);
+	void HandleClick(EventParams &e);
+	void HandleChange(EventParams &e);
 
 	int *value_;
 	int minValue_;
@@ -388,8 +395,8 @@ protected:
 	std::string ValueText() const override;
 
 private:
-	EventReturn HandleClick(EventParams &e);
-	EventReturn HandleChange(EventParams &e);
+	void HandleClick(EventParams &e);
+	void HandleChange(EventParams &e);
 	float *value_;
 	float minValue_;
 	float maxValue_;
@@ -420,8 +427,8 @@ protected:
 	std::string ValueText() const override;
 
 private:
-	EventReturn HandleClick(EventParams &e);
-	EventReturn HandleChange(EventParams &e);
+	void HandleClick(EventParams &e);
+	void HandleChange(EventParams &e);
 	RequesterToken token_;
 	ScreenManager *screenManager_;
 	std::string *value_;

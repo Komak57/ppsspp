@@ -65,6 +65,7 @@
 #include "UI/ImDebugger/ImDebugger.h"
 #include "UI/ImDebugger/ImGe.h"
 #include "UI/AudioCommon.h"
+#include "UI/GameInfoCache.h"
 
 extern bool g_TakeScreenshot;
 static ImVec4 g_normalTextColor;
@@ -470,6 +471,130 @@ void DrawThreadView(ImConfig &cfg, ImControl &control) {
 
 		ImGui::EndTable();
 	}
+	ImGui::End();
+}
+
+void DrawParamSFO(ImConfig &cfg, ImControl &control) {
+	ImGui::SetNextWindowSize(ImVec2(420, 300), ImGuiCond_FirstUseEver);
+	if (!ImGui::Begin("PARAMS.SFO", &cfg.paramSFOOpen)) {
+		ImGui::End();
+		return;
+	}
+
+	auto renderParamSFOTable = [](ParamSFOData &data) {
+		const auto &map = data.Values();
+		if (System_GetPropertyBool(SYSPROP_HAS_TEXT_CLIPBOARD) && ImGui::Button("Copy to clipboard")) {
+			char buffer[4096];
+			StringWriter w(buffer);
+			for (auto &[key, value] : map) {
+				switch (value.type) {
+				case ParamSFOData::VT_UTF8:
+					w.F("%s: %s\n", key.c_str(), value.s_value.c_str());
+					break;
+				case ParamSFOData::VT_UTF8_SPE:
+					w.F("%s: %d raw bytes\n", key.c_str(), (int)value.s_value.size());
+					break;
+				case ParamSFOData::VT_INT:
+					w.F("%s: %d\n", key.c_str(), value.i_value);
+					break;
+				default:
+					break;
+				}
+			}
+			System_CopyStringToClipboard(w.as_view());
+		}
+
+		if (ImGui::BeginTable("paramsfo", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH | ImGuiTableFlags_Resizable)) {
+			ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 120.f);
+			ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 50.f);
+			ImGui::TableHeadersRow();
+
+			for (auto &[key, value] : map) {
+				ImGui::TableNextRow();
+				ImGui::PushID(key.c_str());
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", key.c_str());
+				ImGui::TableNextColumn();
+				switch (value.type) {
+				case ParamSFOData::VT_UTF8:
+					ImGui::Text("%s", value.s_value.c_str());
+					break;
+				case ParamSFOData::VT_UTF8_SPE:
+					ImGui::Text("%d raw bytes", (int)value.s_value.size());
+					break;
+				case ParamSFOData::VT_INT:
+					ImGui::Text("%d", value.i_value);
+					break;
+				default:
+					ImGui::TextUnformatted("N/A");
+					break;
+				}
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", ParamSFOData::ValueTypeToString(value.type));
+				ImGui::PopID();
+			}
+
+			ImGui::EndTable();
+		}
+	};
+
+	if (ImGui::BeginTabBar("ParamSFOTabs")) {
+		if (ImGui::BeginTabItem("Active")) {
+			renderParamSFOTable(g_paramSFO);
+			ImGui::EndTabItem();
+		}
+		if (ImGui::BeginTabItem("Original")) {
+			renderParamSFOTable(g_paramSFORaw);
+			ImGui::EndTabItem();
+		}
+		if (ImGui::BeginTabItem("GameInfo")) {
+			Path path = PSP_CoreParameter().fileToStart;
+			std::shared_ptr<GameInfo> info = g_gameInfoCache->GetInfo(nullptr, path, GameInfoFlags::PARAM_SFO);
+
+			if (info && ImGui::BeginTable("paramsfo", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH | ImGuiTableFlags_Resizable)) {
+				ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 140.0f);
+				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 270.0f);
+
+				ImGui::TableHeadersRow();
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted("Title");
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(info->GetTitle());
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted("Path");
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(path.ToVisualString());
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted("Detected type");
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(IdentifiedFileTypeToString(info->fileType));
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted("Detected region");
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(GameRegionToString(info->region));
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted("HasConfig");
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(BoolStr(info->hasConfig));
+
+				ImGui::EndTable();
+			}
+			ImGui::EndTabItem();
+		}
+		ImGui::EndTabBar();
+	}
+
 	ImGui::End();
 }
 
@@ -1439,6 +1564,60 @@ void DrawAudioChannels(ImConfig &cfg, ImControl &control) {
 	ImGui::End();
 }
 
+void ImLogWindow::Draw(ImConfig &cfg) {
+	ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
+	if (!ImGui::Begin("Log", &cfg.logOpen)) {
+		ImGui::End();
+		return;
+	}
+
+	const RingbufferLog &ring = g_logManager.GetRingbuffer();
+
+	// Options menu
+	if (ImGui::BeginPopup("Options")) {
+		ImGui::Checkbox("Auto-scroll", &AutoScroll);
+		ImGui::EndPopup();
+	}
+
+	// Main window
+	if (ImGui::Button("Options"))
+		ImGui::OpenPopup("Options");
+	ImGui::SameLine();
+	bool copy = ImGui::Button("Copy");
+	ImGui::Separator();
+
+	if (ImGui::BeginChild("scrolling", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar)) {
+		if (copy)
+			ImGui::LogToClipboard();
+
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+
+		ImGuiListClipper clipper;
+		clipper.Begin(ring.GetCount());
+		while (clipper.Step()) {
+			for (int line_no = clipper.DisplayStart; line_no < clipper.DisplayEnd; line_no++) {
+				int n = ring.GetCount() - 1 - line_no;
+
+				const std::string_view line = ring.TextAt(n);
+				const LogLevel level = ring.LevelAt(n);
+				const u32 color = 0xFF000000 | LogManager::GetLevelColor(level);
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
+				ImGui::TextUnformatted(line);
+				ImGui::PopStyleColor();
+			}
+		}
+		clipper.End();
+		ImGui::PopStyleVar();
+
+		// Keep up at the bottom of the scroll region if we were already at the bottom at the beginning of the frame.
+		// Using a scrollbar or mouse-wheel will take away from the bottom edge.
+		if (AutoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 20)
+			ImGui::SetScrollHereY(1.0f);
+	}
+	ImGui::EndChild();
+	ImGui::End();
+}
+
 void DrawLogConfig(ImConfig &cfg) {
 	if (!ImGui::Begin("Logs", &cfg.logConfigOpen)) {
 		ImGui::End();
@@ -1853,7 +2032,7 @@ static void DrawSymbols(const MIPSDebugInterface *debug, ImConfig &cfg, ImContro
 ImWatchWindow::ImWatchWindow() {}
 
 void ImWatchWindow::Draw(ImConfig &cfg, ImControl &control, MIPSDebugInterface *mipsDebug) {
-	if (!ImGui::Begin("Watch", &cfg.atracToolOpen) || !g_symbolMap) {
+	if (!ImGui::Begin("Watch", &cfg.watchOpen) || !g_symbolMap) {
 		ImGui::End();
 		return;
 	}
@@ -1898,7 +2077,7 @@ void ImWatchWindow::Draw(ImConfig &cfg, ImControl &control, MIPSDebugInterface *
 				}
 				bool confirmed = ImGui::InputText("##edit", editBuffer_, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
 				// Filter for only enter presses
-				confirmed = confirmed && ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter);
+				confirmed = confirmed && (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter));
 				if (confirmed || ImGui::IsItemDeactivated()) {
 					watch.SetExpression(editBuffer_, mipsDebug);
 					editingWatchIndex_ = -1;
@@ -1934,7 +2113,7 @@ void ImWatchWindow::Draw(ImConfig &cfg, ImControl &control, MIPSDebugInterface *
 					break;
 				case WatchFormat::FLOAT:
 					memcpy(&valuef, &value, sizeof(valuef));
-					ImGui::Text("%f", value);
+					ImGui::Text("%f", static_cast<float>(value));
 					break;
 				case WatchFormat::STR:
 					if (Memory::IsValidAddress(value)) {
@@ -2114,6 +2293,9 @@ ImDebugger::ImDebugger() {
 	reqToken_ = g_requestManager.GenerateRequesterToken();
 	cfg_.LoadConfig(ConfigPath());
 	g_normalTextColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+
+	// Just enable ring buffer logging here, it's cheap (but needed for the log window)
+	g_logManager.EnableOutput(LogOutput::RingBuffer);
 }
 
 ImDebugger::~ImDebugger() {
@@ -2212,6 +2394,7 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUDebugInterface *gpuDebu
 			ImGui::MenuItem("Callstacks", nullptr, &cfg_.callstackOpen);
 			ImGui::MenuItem("Breakpoints", nullptr, &cfg_.breakpointsOpen);
 			ImGui::MenuItem("Watch", nullptr, &cfg_.watchOpen);
+			ImGui::MenuItem("JIT viewer", nullptr, &cfg_.jitViewerOpen);
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Symbols")) {
@@ -2307,9 +2490,12 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUDebugInterface *gpuDebu
 		}
 		if (ImGui::BeginMenu("Tools")) {
 			ImGui::MenuItem("Lua Console", nullptr, &cfg_.luaConsoleOpen);
-			ImGui::MenuItem("Debug stats", nullptr, &cfg_.debugStatsOpen);
-			ImGui::MenuItem("Struct viewer", nullptr, &cfg_.structViewerOpen);
+			ImGui::MenuItem("Log", nullptr, &cfg_.logOpen);
 			ImGui::MenuItem("Log channels", nullptr, &cfg_.logConfigOpen);
+			ImGui::MenuItem("Debug stats", nullptr, &cfg_.debugStatsOpen);
+			ImGui::Separator();
+			ImGui::MenuItem("ParamSFO viewer", nullptr, &cfg_.paramSFOOpen);
+			ImGui::MenuItem("Struct viewer", nullptr, &cfg_.structViewerOpen);
 			ImGui::MenuItem("Atrac Tool", nullptr, &cfg_.atracToolOpen);
 			ImGui::EndMenu();
 		}
@@ -2431,6 +2617,14 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUDebugInterface *gpuDebu
 		DrawLogConfig(cfg_);
 	}
 
+	if (cfg_.logOpen) {
+		logWindow_.Draw(cfg_);
+	}
+
+	if (cfg_.jitViewerOpen) {
+		jitViewer_.Draw(cfg_, control);
+	}
+
 	if (cfg_.displayOpen) {
 		DrawDisplayWindow(cfg_, gpuDebug->GetFramebufferManagerCommon());
 	}
@@ -2441,6 +2635,10 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUDebugInterface *gpuDebu
 
 	if (cfg_.structViewerOpen) {
 		structViewer_.Draw(cfg_, control, mipsDebug);
+	}
+
+	if (cfg_.paramSFOOpen) {
+		DrawParamSFO(cfg_, control);
 	}
 
 	if (cfg_.geDebuggerOpen) {
@@ -2598,7 +2796,9 @@ public:
 		if (save_) {
 			section_->Set(key, *value);
 		} else {
-			section_->Get(key, value, defaultValue);
+			if (!section_->Get(key, value)) {
+				*value = defaultValue;
+			}
 		}
 	}
 private:
@@ -2610,7 +2810,7 @@ void ImConfig::SyncConfig(IniFile *ini, bool save) {
 	Syncer sync(save);
 	sync.SetSection(ini->GetOrCreateSection("Windows"));
 	sync.Sync("disasmOpen", &disasmOpen, true);
-	sync.Sync("demoOpen ", &demoOpen, false);
+	sync.Sync("demoOpen", &demoOpen, false);
 	sync.Sync("gprOpen", &gprOpen, false);
 	sync.Sync("fprOpen", &fprOpen, false);
 	sync.Sync("vfpuOpen", &vfpuOpen, false);
@@ -2644,11 +2844,14 @@ void ImConfig::SyncConfig(IniFile *ini, bool save) {
 	sync.Sync("internalsOpen", &internalsOpen, false);
 	sync.Sync("sasAudioOpen", &sasAudioOpen, false);
 	sync.Sync("logConfigOpen", &logConfigOpen, false);
+	sync.Sync("logOpen", &logOpen, false);
 	sync.Sync("luaConsoleOpen", &luaConsoleOpen, false);
 	sync.Sync("utilityModulesOpen", &utilityModulesOpen, false);
 	sync.Sync("memDumpOpen", &memDumpOpen, false);
 	sync.Sync("watchOpen", &watchOpen, false);
+	sync.Sync("paramSFOOpen", &paramSFOOpen, false);
 	sync.Sync("atracToolOpen", &atracToolOpen, false);
+	sync.Sync("jitViewerOpen", &jitViewerOpen, false);
 	for (int i = 0; i < 4; i++) {
 		char name[64];
 		snprintf(name, sizeof(name), "memory%dOpen", i + 1);

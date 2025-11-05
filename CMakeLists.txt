@@ -184,6 +184,7 @@ option(USE_VULKAN_DISPLAY_KHR "Enable or disable full screen display of Vulkan" 
 option(USING_QT_UI "Set to ON if you wish to use the Qt frontend wrapper" ${USING_QT_UI})
 option(MOBILE_DEVICE "Set to ON when targeting a mobile device" ${MOBILE_DEVICE})
 option(HEADLESS "Set to OFF to not generate the PPSSPPHeadless target" ${HEADLESS})
+option(ATLAS_TOOL "Set to OFF to not generate the ATLAS_TOOL target" ${ATLAS_TOOL})
 option(UNITTEST "Set to ON to generate the unittest target" ${UNITTEST})
 option(SIMULATOR "Set to ON when targeting an x86 simulator of an ARM platform" ${SIMULATOR})
 option(LIBRETRO "Set to ON to generate the libretro target" OFF)
@@ -192,7 +193,6 @@ option(USE_LIBNX "Set to ON to build for Switch(libnx)" OFF)
 option(USE_FFMPEG "Build with FFMPEG support" ON)
 option(USE_DISCORD "Build with Discord support" ON)
 option(USE_MINIUPNPC "Build with miniUPnPc support" ON)
-option(USE_ARMIPS "Build with armips support in API/debuggerdebugger" ON)
 option(USE_SYSTEM_SNAPPY "Dynamically link against system snappy" ${USE_SYSTEM_SNAPPY})
 option(USE_SYSTEM_FFMPEG "Dynamically link against system FFMPEG" ${USE_SYSTEM_FFMPEG})
 option(USE_SYSTEM_LIBZIP "Dynamically link against system libzip" ${USE_SYSTEM_LIBZIP})
@@ -836,6 +836,8 @@ add_library(Common STATIC
 	Common/Net/WebsocketServer.h
 	Common/Profiler/Profiler.cpp
 	Common/Profiler/Profiler.h
+	Common/Render/AtlasGen.cpp
+	Common/Render/AtlasGen.h
 	Common/Render/TextureAtlas.cpp
 	Common/Render/TextureAtlas.h
 	Common/Render/DrawBuffer.cpp
@@ -891,6 +893,8 @@ add_library(Common STATIC
 	Common/UI/ViewGroup.h
 	Common/UI/ScrollView.cpp
 	Common/UI/ScrollView.h
+	Common/UI/TabHolder.cpp
+	Common/UI/TabHolder.h
 	Common/UI/PopupScreens.cpp
 	Common/UI/PopupScreens.h
 	Common/BitScan.h
@@ -1071,7 +1075,6 @@ else()
 		ext/zlib/inflate.h
 		ext/zlib/inftrees.c
 		ext/zlib/inftrees.h
-		ext/zlib/make_vms.com
 		ext/zlib/trees.c
 		ext/zlib/trees.h
 		ext/zlib/uncompr.c
@@ -1351,11 +1354,14 @@ elseif(IOS AND NOT LIBRETRO)
 		ios/main.mm
 		ios/AppDelegate.mm
 		ios/AppDelegate.h
+		ios/SceneDelegate.mm
+		ios/SceneDelegate.h
 		ios/DisplayManager.h
 		ios/DisplayManager.mm
 		ios/Controls.h
 		ios/Controls.mm
 		ios/ViewControllerCommon.h
+		ios/ViewControllerCommon.mm
 		ios/ViewController.mm
 		ios/ViewController.h
 		ios/ViewControllerMetal.mm
@@ -1550,12 +1556,18 @@ list(APPEND NativeAppSource
 	UI/ImDebugger/ImMemView.h
 	UI/ImDebugger/ImStructViewer.cpp
 	UI/ImDebugger/ImStructViewer.h
+	UI/ImDebugger/ImJitViewer.cpp
+	UI/ImDebugger/ImJitViewer.h
 	UI/DiscordIntegration.cpp
 	UI/NativeApp.cpp
 	UI/BackgroundAudio.h
 	UI/BackgroundAudio.cpp
+	UI/Background.h
+	UI/Background.cpp
 	UI/ChatScreen.h
 	UI/ChatScreen.cpp
+	UI/BaseScreens.h
+	UI/BaseScreens.cpp
 	UI/DebugOverlay.cpp
 	UI/DebugOverlay.h
 	UI/DevScreens.cpp
@@ -1572,8 +1584,12 @@ list(APPEND NativeAppSource
 	UI/MainScreen.cpp
 	UI/MiscScreens.h
 	UI/MiscScreens.cpp
+	UI/MiscViews.h
+	UI/MiscViews.cpp
 	UI/PauseScreen.h
 	UI/PauseScreen.cpp
+	UI/SimpleDialogScreen.h
+	UI/SimpleDialogScreen.cpp
 	UI/TabbedDialogScreen.h
 	UI/TabbedDialogScreen.cpp
 	UI/GameScreen.h
@@ -1606,8 +1622,12 @@ list(APPEND NativeAppSource
 	UI/ReportScreen.cpp
 	UI/SavedataScreen.h
 	UI/SavedataScreen.cpp
+	UI/SystemInfoScreen.h
+	UI/SystemInfoScreen.cpp
 	UI/Store.h
 	UI/Store.cpp
+	UI/UploadScreen.h
+	UI/UploadScreen.cpp
 	UI/CwCheatScreen.h
 	UI/CwCheatScreen.cpp
 	UI/InstallZipScreen.h
@@ -1622,6 +1642,8 @@ list(APPEND NativeAppSource
 	UI/CustomButtonMappingScreen.cpp
 	UI/Theme.h
 	UI/Theme.cpp
+	UI/UIAtlas.h
+	UI/UIAtlas.cpp
 	UI/RetroAchievementScreens.cpp
 	UI/RetroAchievementScreens.h
 )
@@ -2155,7 +2177,7 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/Dialog/SavedataParam.h
 	Core/ELF/ElfReader.cpp
 	Core/ELF/ElfReader.h
-	Core/ELF/ElfTypes.h
+	Core/ELF/PSPElfTypes.h
 	Core/ELF/PBPReader.cpp
 	Core/ELF/PBPReader.h
 	Core/ELF/PrxDecrypter.cpp
@@ -2502,11 +2524,7 @@ if(ANDROID)
 	endif()
 endif()
 
-if(USE_ARMIPS)
-	set(CoreExtraLibs ${CoreExtraLibs} armips)
-else()
-	add_compile_definitions(NO_ARMIPS=1)
-endif()
+set(CoreExtraLibs ${CoreExtraLibs} armips)
 
 # needed for VK_USE_PLATFORM_XCB_KHR only
 #if(VULKAN AND NOT WIN32)
@@ -2793,11 +2811,10 @@ set(BigFontAssets
 )
 
 set(NativeAssets
-	assets/ui_atlas.zim
-	assets/ui_atlas.meta
 	assets/asciifont_atlas.zim
 	assets/asciifont_atlas.meta
 	assets/debugger
+	assets/upload
 	assets/lang
 	assets/shaders
 	assets/themes
@@ -2820,10 +2837,12 @@ set(NativeAssets
 	assets/sfx_toggle_on.wav
 	assets/sfx_achievement_unlocked.wav
 	assets/sfx_leaderbord_submitted.wav
-	source_assets/image/logo.png
-	source_assets/image/icon_regular_72.png
 )
 
+file(GLOB UIImages CONFIGURE_DEPENDS
+    assets/ui_images/*.png
+    assets/ui_images/*.svg
+)
 
 if(HEADLESS)
 	set(HeadlessSource
@@ -2899,6 +2918,17 @@ if(UNITTEST)
 	add_test(shadergen PPSSPPUnitTest ShaderGenerators)
 endif()
 
+if(ATLAS_TOOL)
+	include_directories(ext/freetype/include)
+
+	set(AtlasToolSource
+		ext/native/tools/atlastool.cpp
+	)
+	add_executable(AtlasTool ${AtlasToolSource})
+	target_link_libraries(AtlasTool ${LinkCommon} freetype)
+	setup_target_project(AtlasTool atlastool)
+endif()
+
 if(LIBRETRO)
 	add_subdirectory(libretro)
 endif()
@@ -2928,27 +2958,30 @@ if(TargetBin)
 		file(GLOB_RECURSE SHADER_FILES assets/shaders/*)
 		file(GLOB_RECURSE THEME_FILE assets/themes/*)
 		file(GLOB_RECURSE DEBUGGER_FILES assets/debugger/*)
+		file(GLOB_RECURSE WEB_UPLOAD_FILES assets/upload/*)
 		file(GLOB_RECURSE VFPU_FILES assets/vfpu/*)
 
 		if(NOT IOS)
 			set_source_files_properties(${BigFontAssets} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets")
 			set_source_files_properties(${NativeAssets} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets")
+			set_source_files_properties(${UIImages} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets/ui_images")
 			set_source_files_properties(${FLASH0_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets/flash0/font")
 			set_source_files_properties(${LANG_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets/lang")
 			set_source_files_properties(${SHADER_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets/shaders")
 			set_source_files_properties(${THEME_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets/themes")
 			set_source_files_properties(${DEBUGGER_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets/debugger")
+			set_source_files_properties(${WEB_UPLOAD_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets/upload")
 			set_source_files_properties(${VFPU_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets/vfpu")
 		endif()
 
 		if(IOS)
 			set(AssetCatalog "${CMAKE_SOURCE_DIR}/ios/assets.xcassets")
-			add_executable(${TargetBin} MACOSX_BUNDLE ${NativeAssets} ${BigFontAssets} ${AssetCatalog} ${SHADER_FILES} ${THEME_FILE} ${DEBUGGER_FILES} ${FLASH0_FILES} ${LANG_FILES} ${NativeAppSource} "ios/Settings.bundle" "ios/Launch Screen.storyboard")
+			add_executable(${TargetBin} MACOSX_BUNDLE ${NativeAssets} ${BigFontAssets} ${UIImages} ${AssetCatalog} ${SHADER_FILES} ${THEME_FILE} ${DEBUGGER_FILES} ${WEB_UPLOAD_FILES} ${FLASH0_FILES} ${LANG_FILES} ${NativeAppSource} "ios/Settings.bundle" "ios/Launch Screen.storyboard")
 			if(NOT IOS_APP_STORE)
 				file(INSTALL "${CMAKE_SOURCE_DIR}/ext/vulkan/iOS/Frameworks/libMoltenVK.dylib" DESTINATION "${CMAKE_BINARY_DIR}/PPSSPP.app/Frameworks/")
 			endif()
 		else()
-			add_executable(${TargetBin} MACOSX_BUNDLE ${ICON_PATH_ABS} ${NativeAssets} ${BigFontAssets} ${SHADER_FILES} ${THEME_FILE} ${DEBUGGER_FILES} ${FLASH0_FILES} ${LANG_FILES} ${NativeAppSource})
+			add_executable(${TargetBin} MACOSX_BUNDLE ${ICON_PATH_ABS} ${NativeAssets} ${BigFontAssets} ${UIImages} ${SHADER_FILES} ${THEME_FILE} ${DEBUGGER_FILES} ${WEB_UPLOAD_FILES} ${FLASH0_FILES} ${LANG_FILES} ${NativeAppSource})
 			file(INSTALL "${CMAKE_SOURCE_DIR}/ext/vulkan/macOS/Frameworks/libMoltenVK.dylib" DESTINATION "${CMAKE_BINARY_DIR}/${TargetBin}.app/Contents/Frameworks/")
 			if(USING_QT_UI)
 				add_custom_command(TARGET ${TargetBin} POST_BUILD COMMAND /bin/bash "${CMAKE_SOURCE_DIR}/Qt/macbundle.sh" "${CMAKE_BINARY_DIR}/PPSSPPQt.app")
@@ -2976,12 +3009,13 @@ endif()
 if(NOT ANDROID)
 	file(INSTALL ${BigFontAssets} DESTINATION assets)
 	file(INSTALL ${NativeAssets} DESTINATION assets)
+	file(INSTALL ${UIImages} DESTINATION assets/ui_images)
 	file(INSTALL assets/flash0 DESTINATION assets)
 endif()
 # packaging and code signing
 if(IOS AND NOT LIBRETRO)
 	if(IOS_APP_STORE)
-		set(DEPLOYMENT_TARGET 12.0)
+		set(DEPLOYMENT_TARGET 13.0)
 	else()
 		set(DEPLOYMENT_TARGET 11.0)
 	endif()

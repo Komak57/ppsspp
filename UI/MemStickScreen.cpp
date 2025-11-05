@@ -39,6 +39,7 @@
 #include "Common/File/DiskFree.h"
 
 #include "Common/Thread/ThreadManager.h"
+#include "Common/UI/ScrollView.h"
 
 #include "Core/Config.h"
 #include "Core/Reporting.h"
@@ -48,7 +49,7 @@
 
 #include "UI/MemStickScreen.h"
 #include "UI/MainScreen.h"
-#include "UI/MiscScreens.h"
+#include "UI/BaseScreens.h"
 #include "UI/OnScreenDisplay.h"
 
 static std::string FormatSpaceString(int64_t space) {
@@ -277,23 +278,20 @@ void MemStickScreen::CreateViews() {
 	INFO_LOG(Log::System, "MemStickScreen: initialSetup=%d", (int)initialSetup_);
 }
 
-UI::EventReturn MemStickScreen::OnHelp(UI::EventParams &params) {
+void MemStickScreen::OnHelp(UI::EventParams &params) {
 	// I'm letting the old redirect handle this one, as the target is within /docs on the website,
 	// and that structure may change a bit.
 	System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://www.ppsspp.org/guide_storage.html");
-
-	return UI::EVENT_DONE;
 }
 
-UI::EventReturn MemStickScreen::OnChoiceClick(UI::EventParams &params) {
+void MemStickScreen::OnChoiceClick(UI::EventParams &params) {
 	// Change the confirm button to match the choice,
 	// and change the text that we show.
 	RecreateViews();
-	return UI::EVENT_DONE;
 }
 
 
-UI::EventReturn MemStickScreen::OnConfirmClick(UI::EventParams &params) {
+void MemStickScreen::OnConfirmClick(UI::EventParams &params) {
 	switch (choice_) {
 	case CHOICE_SET_MANUAL:
 		return SetFolderManually(params);
@@ -304,10 +302,9 @@ UI::EventReturn MemStickScreen::OnConfirmClick(UI::EventParams &params) {
 	case CHOICE_BROWSE_FOLDER:
 		return Browse(params);
 	}
-	return UI::EVENT_DONE;
 }
 
-UI::EventReturn MemStickScreen::SetFolderManually(UI::EventParams &params) {
+void MemStickScreen::SetFolderManually(UI::EventParams &params) {
 	// The old way, from before scoped storage. Write in the full path.
 #if PPSSPP_PLATFORM(ANDROID) || PPSSPP_PLATFORM(SWITCH)
 	auto sy = GetI18NCategory(I18NCat::SYSTEM);
@@ -369,10 +366,9 @@ UI::EventReturn MemStickScreen::SetFolderManually(UI::EventParams &params) {
 		screenManager()->push(new ConfirmMemstickMoveScreen(pendingMemStickFolder, false));
 	});
 #endif
-	return UI::EVENT_DONE;
 }
 
-UI::EventReturn MemStickScreen::UseInternalStorage(UI::EventParams &params) {
+void MemStickScreen::UseInternalStorage(UI::EventParams &params) {
 #if PPSSPP_PLATFORM(UWP)
 	Path pendingMemStickFolder = g_Config.internalDataDirectory;
 #else
@@ -397,10 +393,9 @@ UI::EventReturn MemStickScreen::UseInternalStorage(UI::EventParams &params) {
 		// User chose the same directory it's already in. Let's just bail.
 		TriggerFinish(DialogResult::DR_OK);
 	}
-	return UI::EVENT_DONE;
 }
 
-UI::EventReturn MemStickScreen::UseStorageRoot(UI::EventParams &params) {
+void MemStickScreen::UseStorageRoot(UI::EventParams &params) {
 	Path pendingMemStickFolder = Path(g_externalDir);
 
 	if (initialSetup_) {
@@ -419,10 +414,9 @@ UI::EventReturn MemStickScreen::UseStorageRoot(UI::EventParams &params) {
 		// User chose the same directory it's already in. Let's just bail.
 		TriggerFinish(DialogResult::DR_OK);
 	}
-	return UI::EVENT_DONE;
 }
 
-UI::EventReturn MemStickScreen::Browse(UI::EventParams &params) {
+void MemStickScreen::Browse(UI::EventParams &params) {
 	auto mm = GetI18NCategory(I18NCat::MAINMENU);
 	System_BrowseForFolder(GetRequesterToken(), mm->T("Choose folder"), g_Config.memStickDirectory, [=](const std::string &value, int) {
 		Path pendingMemStickFolder = Path(value);
@@ -441,7 +435,6 @@ UI::EventReturn MemStickScreen::Browse(UI::EventParams &params) {
 	}, [=]() {
 		errorNoticeView_->SetVisibility(UI::V_VISIBLE);
 	});
-	return UI::EVENT_DONE;
 }
 
 void MemStickScreen::dialogFinished(const Screen *dialog, DialogResult result) {
@@ -455,7 +448,7 @@ void MemStickScreen::dialogFinished(const Screen *dialog, DialogResult result) {
 }
 
 void MemStickScreen::update() {
-	UIDialogScreenWithBackground::update();
+	UIBaseDialogScreen::update();
 	if (done_) {
 		TriggerFinish(DialogResult::DR_OK);
 		done_ = false;
@@ -563,20 +556,19 @@ void ConfirmMemstickMoveScreen::CreateViews() {
 		leftColumn->Add(new Choice(di->T("OK")))->OnClick.Handle(this, &ConfirmMemstickMoveScreen::OnConfirm);
 		leftColumn->Add(new Choice(di->T("Back")))->OnClick.Add([this](UI::EventParams &params) {
 			if (moveDataTask_ && !moveDataTask_->Poll()) {
-				return UI::EVENT_DONE;
+				return;
 			}
-			return UIScreen::OnBack(params);
+			UIScreen::OnBack(params);
 		});
 	}
 }
 
-UI::EventReturn ConfirmMemstickMoveScreen::OnMoveDataClick(UI::EventParams &params) {
+void ConfirmMemstickMoveScreen::OnMoveDataClick(UI::EventParams &params) {
 	RecreateViews();
-	return UI::EVENT_DONE;
 }
 
 void ConfirmMemstickMoveScreen::update() {
-	UIDialogScreenWithBackground::update();
+	UIBaseDialogScreen::update();
 	auto ms = GetI18NCategory(I18NCat::MEMSTICK);
 
 	if (moveDataTask_) {
@@ -613,7 +605,7 @@ void ConfirmMemstickMoveScreen::update() {
 	}
 }
 
-UI::EventReturn ConfirmMemstickMoveScreen::OnConfirm(UI::EventParams &params) {
+void ConfirmMemstickMoveScreen::OnConfirm(UI::EventParams &params) {
 	// Transfer all the files in /PSP from the original directory.
 	// Should probably be done on a background thread so we can show some UI.
 	// So we probably need another screen for this with a progress bar..
@@ -634,8 +626,6 @@ UI::EventReturn ConfirmMemstickMoveScreen::OnConfirm(UI::EventParams &params) {
 	} else {
 		FinishFolderMove();
 	}
-
-	return UI::EVENT_DONE;
 }
 
 void ConfirmMemstickMoveScreen::FinishFolderMove() {

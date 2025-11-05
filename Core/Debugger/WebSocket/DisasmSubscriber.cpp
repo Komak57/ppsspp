@@ -52,11 +52,10 @@ protected:
 
 DebuggerSubscriber *WebSocketDisasmInit(DebuggerEventHandlerMap &map) {
 	auto p = new WebSocketDisasmState();
-	map["memory.base"] = std::bind(&WebSocketDisasmState::Base, p, std::placeholders::_1);
-	map["memory.disasm"] = std::bind(&WebSocketDisasmState::Disasm, p, std::placeholders::_1);
-	map["memory.searchDisasm"] = std::bind(&WebSocketDisasmState::SearchDisasm, p, std::placeholders::_1);
-	map["memory.assemble"] = std::bind(&WebSocketDisasmState::Assemble, p, std::placeholders::_1);
-
+	map["memory.base"] = [p](DebuggerRequest &req) { p->Base(req); };
+	map["memory.disasm"] = [p](DebuggerRequest &req) { p->Disasm(req); };
+	map["memory.searchDisasm"] = [p](DebuggerRequest &req) { p->SearchDisasm(req); };
+	map["memory.assemble"] = [p](DebuggerRequest &req) { p->Assemble(req); };
 	return p;
 }
 
@@ -479,8 +478,10 @@ void WebSocketDisasmState::Assemble(DebuggerRequest &req) {
 	if (!req.ParamString("code", &code))
 		return;
 
-	if (!MIPSAsm::MipsAssembleOpcode(code.c_str(), currentDebugMIPS, address))
-		return req.Fail(StringFromFormat("Could not assemble: %s", MIPSAsm::GetAssembleError().c_str()));
+	std::string error;
+	if (!MipsAssembleOpcode(code, currentDebugMIPS, address, &error)) {
+		return req.Fail(StringFromFormat("Could not assemble: %s", error.c_str()));
+	}
 
 	JsonWriter &json = req.Respond();
 	Reporting::NotifyDebugger();

@@ -324,6 +324,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/GPU/ShaderTranslation.cpp \
   $(SRC)/Common/Render/ManagedTexture.cpp \
   $(SRC)/Common/Render/DrawBuffer.cpp \
+  $(SRC)/Common/Render/AtlasGen.cpp \
   $(SRC)/Common/Render/TextureAtlas.cpp \
   $(SRC)/Common/Render/Text/draw_text.cpp \
   $(SRC)/Common/Render/Text/draw_text_android.cpp \
@@ -364,6 +365,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/UI/View.cpp \
   $(SRC)/Common/UI/ViewGroup.cpp \
   $(SRC)/Common/UI/ScrollView.cpp \
+  $(SRC)/Common/UI/TabHolder.cpp \
   $(SRC)/Common/UI/PopupScreens.cpp \
   $(SRC)/Common/Serialize/Serializer.cpp \
   $(SRC)/Common/ArmCPUDetect.cpp \
@@ -858,6 +860,7 @@ LIBZSTD_FILES := \
   $(SRC)/ext/zstd/lib/compress/zstd_lazy.c \
   $(SRC)/ext/zstd/lib/compress/zstd_ldm.c \
   $(SRC)/ext/zstd/lib/compress/zstd_opt.c \
+  $(SRC)/ext/zstd/lib/compress/zstd_preSplit.c \
   $(SRC)/ext/zstd/lib/compress/zstdmt_compress.c \
   $(SRC)/ext/zstd/lib/decompress/huf_decompress.c \
   $(SRC)/ext/zstd/lib/decompress/zstd_ddict.c \
@@ -893,6 +896,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/ImDebugger/ImConsole.cpp \
   $(SRC)/UI/ImDebugger/ImDisasmView.cpp \
   $(SRC)/UI/ImDebugger/ImMemView.cpp \
+  $(SRC)/UI/ImDebugger/ImJitViewer.cpp \
   $(SRC)/UI/ImDebugger/ImStructViewer.cpp \
   $(SRC)/UI/AudioCommon.cpp \
   $(SRC)/UI/BackgroundAudio.cpp \
@@ -905,18 +909,22 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/EmuScreen.cpp \
   $(SRC)/UI/MainScreen.cpp \
   $(SRC)/UI/TabbedDialogScreen.cpp \
+  $(SRC)/UI/SimpleDialogScreen.cpp \
   $(SRC)/UI/MemStickScreen.cpp \
   $(SRC)/UI/IAPScreen.cpp \
   $(SRC)/UI/MiscScreens.cpp \
+  $(SRC)/UI/MiscViews.cpp \
   $(SRC)/UI/RemoteISOScreen.cpp \
   $(SRC)/UI/ReportScreen.cpp \
   $(SRC)/UI/PauseScreen.cpp \
   $(SRC)/UI/SavedataScreen.cpp \
   $(SRC)/UI/Store.cpp \
+  $(SRC)/UI/SystemInfoScreen.cpp \
   $(SRC)/UI/GamepadEmu.cpp \
   $(SRC)/UI/JoystickHistoryView.cpp \
   $(SRC)/UI/GameInfoCache.cpp \
   $(SRC)/UI/GameScreen.cpp \
+  $(SRC)/UI/UploadScreen.cpp \
   $(SRC)/UI/ControlMappingScreen.cpp \
   $(SRC)/UI/GameSettingsScreen.cpp \
   $(SRC)/UI/DeveloperToolsScreen.cpp \
@@ -924,6 +932,8 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/TiltAnalogSettingsScreen.cpp \
   $(SRC)/UI/TouchControlLayoutScreen.cpp \
   $(SRC)/UI/TouchControlVisibilityScreen.cpp \
+  $(SRC)/UI/BaseScreens.cpp \
+  $(SRC)/UI/Background.cpp \
   $(SRC)/UI/CwCheatScreen.cpp \
   $(SRC)/UI/InstallZipScreen.cpp \
   $(SRC)/UI/JitCompareScreen.cpp \
@@ -931,6 +941,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/ProfilerDraw.cpp \
   $(SRC)/UI/NativeApp.cpp \
   $(SRC)/UI/Theme.cpp \
+  $(SRC)/UI/UIAtlas.cpp \
   $(SRC)/UI/CustomButtonMappingScreen.cpp \
   $(SRC)/UI/RetroAchievementScreens.cpp
 

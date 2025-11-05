@@ -87,7 +87,7 @@
 #include "Common/VR/PPSSPPVR.h"
 #include "Common/Thread/ThreadManager.h"
 #include "Common/Audio/AudioBackend.h"
-
+#include "Common/UI/PopupScreens.h"
 #include "Core/ControlMapper.h"
 #include "Core/Config.h"
 #include "Core/ConfigValues.h"
@@ -117,6 +117,7 @@
 #include "GPU/GPUCommon.h"
 #include "GPU/Common/PresentationCommon.h"
 #include "UI/AudioCommon.h"
+#include "UI/Background.h"
 #include "UI/BackgroundAudio.h"
 #include "UI/ControlMappingScreen.h"
 #include "UI/DevScreens.h"
@@ -131,6 +132,7 @@
 #include "UI/OnScreenDisplay.h"
 #include "UI/RemoteISOScreen.h"
 #include "UI/Theme.h"
+#include "UI/UIAtlas.h"
 
 #if defined(USING_QT_UI)
 #include <QFontDatabase>
@@ -475,10 +477,10 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 #elif PPSSPP_PLATFORM(IOS)
 	g_Config.defaultCurrentDirectory = g_Config.internalDataDirectory;
 	g_Config.memStickDirectory = DarwinFileSystemServices::appropriateMemoryStickDirectoryToUse();
-	g_Config.flash0Directory = Path(std::string(external_dir)) / "flash0";
+	g_Config.flash0Directory = Path(external_dir) / "flash0";
 #elif PPSSPP_PLATFORM(MAC)
 	g_Config.memStickDirectory = DarwinFileSystemServices::appropriateMemoryStickDirectoryToUse();
-	g_Config.flash0Directory = Path(std::string(external_dir)) / "flash0";
+	g_Config.flash0Directory = Path(external_dir) / "flash0";
 #elif PPSSPP_PLATFORM(SWITCH)
 	g_Config.memStickDirectory = g_Config.internalDataDirectory / "config/ppsspp";
 	g_Config.flash0Directory = g_Config.internalDataDirectory / "assets/flash0";
@@ -580,7 +582,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 				if (!strncmp(argv[i], "--log=", strlen("--log=")) && strlen(argv[i]) > strlen("--log="))
 					fileToLog = argv[i] + strlen("--log=");
 				if (!strncmp(argv[i], "--state=", strlen("--state=")) && strlen(argv[i]) > strlen("--state="))
-					stateToLoad = Path(std::string(argv[i] + strlen("--state=")));
+					stateToLoad = Path(argv[i] + strlen("--state="));
 				if (!strncmp(argv[i], "--escape-exit", strlen("--escape-exit")))
 					g_Config.bPauseExitsEmulator = true;
 				if (!strncmp(argv[i], "--pause-menu-exit", strlen("--pause-menu-exit")))
@@ -600,7 +602,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 				if (!strcmp(argv[i], "--developertools"))
 					gotoDeveloperTools = true;
 				if (!strncmp(argv[i], "--appendconfig=", strlen("--appendconfig=")) && strlen(argv[i]) > strlen("--appendconfig=")) {
-					g_Config.SetAppendedConfigIni(Path(std::string(argv[i] + strlen("--appendconfig="))));
+					g_Config.SetAppendedConfigIni(Path(argv[i] + strlen("--appendconfig=")));
 					g_Config.LoadAppendedConfig();
 				}
 				break;
@@ -672,6 +674,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 	}
 
 	if (forceLogLevel) {
+		NOTICE_LOG(Log::System, "Setting log level to %d due to command line override", (int)logLevel);
 		g_logManager.SetAllLogLevels(logLevel);
 	}
 
@@ -841,14 +844,16 @@ bool NativeInitGraphics(GraphicsContext *graphicsContext) {
 	ui_draw2d.SetFontAtlas(GetFontAtlas());
 
 	uiContext = new UIContext();
-	uiContext->theme = GetTheme();
-	UpdateTheme(uiContext);
+	uiContext->SetTheme(GetTheme());
+	uiContext->SetAtlasProvider(&AtlasProvider);
+	UpdateTheme();
 
 	ui_draw2d.Init(g_draw, texColorPipeline);
 
 	uiContext->Init(g_draw, texColorPipeline, colorPipeline, &ui_draw2d);
-	if (uiContext->Text())
+	if (uiContext->Text()) {
 		uiContext->Text()->SetFont("Tahoma", 20, 0);
+	}
 
 	g_screenManager->setUIContext(uiContext);
 	g_screenManager->setPostRenderCallback(&CallbackPostRender, nullptr);
@@ -916,7 +921,7 @@ bool CreateGlobalPipelines() {
 	}
 
 	InputLayout *inputLayout = ui_draw2d.CreateInputLayout(g_draw);
-	BlendState *blendNormal = g_draw->CreateBlendState({ true, 0xF, BlendFactor::SRC_ALPHA, BlendFactor::ONE_MINUS_SRC_ALPHA });
+	BlendState *blendNormal = g_draw->CreateBlendState({ true, 0xF, BlendFactor::ONE, BlendFactor::ONE_MINUS_SRC_ALPHA });
 	DepthStencilState *depth = g_draw->CreateDepthStencilState({ false, false, Comparison::LESS });
 	RasterState *rasterNoCull = g_draw->CreateRasterState({});
 
@@ -953,7 +958,7 @@ bool CreateGlobalPipelines() {
 }
 
 void NativeShutdownGraphics() {
-	INFO_LOG(Log::System, "NativeShutdownGraphics");
+	INFO_LOG(Log::System, "NativeShutdownGraphics begin");
 
 	if (g_screenManager) {
 		g_screenManager->deviceLost();
@@ -1001,7 +1006,7 @@ void NativeShutdownGraphics() {
 		texColorPipeline = nullptr;
 	}
 
-	INFO_LOG(Log::System, "NativeShutdownGraphics done");
+	INFO_LOG(Log::System, "NativeShutdownGraphics end");
 }
 
 static void TakeScreenshot(Draw::DrawContext *draw) {
@@ -1176,7 +1181,8 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 	if (g_Config.bGpuLogProfiler)
 		debugFlags |= Draw::DebugFlags::PROFILE_SCOPES;
 
-	g_frameTiming.Reset(g_draw);
+	// Can be overridden by sceDisplay which may pass true for the second argument.
+	g_frameTiming.ComputePresentMode(g_draw, false);
 
 	g_draw->BeginFrame(debugFlags);
 
@@ -1203,9 +1209,7 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 		ClearFailedGPUBackends();
 	}
 
-	int interval;
-	Draw::PresentMode presentMode = ComputePresentMode(g_draw, &interval);
-	g_draw->Present(presentMode, interval);
+	g_draw->Present(g_frameTiming.PresentMode());
 
 	if (resized) {
 		INFO_LOG(Log::G3D, "Resized flag set - recalculating bounds");
@@ -1246,12 +1250,27 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 		g_BackgroundAudio.Play();
 
 		float refreshRate = System_GetPropertyFloat(SYSPROP_DISPLAY_REFRESH_RATE);
-		// Simple throttling to not burn the GPU in the menu.
-		// TODO: This is only necessary in MAILBOX or IMMEDIATE presentation modes.
-		double diffTime = time_now_d() - startTime;
-		int sleepTime = (int)(1000.0 / refreshRate) - (int)(diffTime * 1000.0);
-		if (sleepTime > 0)
-			sleep_ms(sleepTime, "fallback-throttle");
+		static double lastTime = 0.0;
+		if (lastTime > 0.0) {
+			double now = time_now_d();
+			// Simple throttling to not burn the GPU in the menu.
+			// TODO: This should move into NativeFrame.
+			double diffTime = now - lastTime;
+			int sleepTimeUs = (int)(1000000 * ((1.0 / refreshRate) - diffTime));
+			// printf("sleep: %0.3f ms (diff: %0.3f) %f\n", (double)sleepTimeUs / 1000, diffTime * 1000.0, refreshRate);
+
+			// If presentation mode is FIFO, we don't need to sleep a lot, we'll be throttled by
+			// presentation. But still, let's sleep a bit.
+			// Actually, for some reason this increases latency a lot, to the degree that the UI
+			// gets hard to use.. Commenting out for now.
+			// if (g_frameTiming.PresentMode() == Draw::PresentMode::FIFO) {
+			//    sleepTimeUs = std::min(2000, sleepTimeUs); // 2 ms
+			// }
+
+			if (sleepTimeUs > 0)
+				sleep_us(sleepTimeUs, "fallback-throttle");
+		}
+		lastTime = time_now_d();
 	}
 }
 
@@ -1508,11 +1527,11 @@ void NativeAccelerometer(float tiltX, float tiltY, float tiltZ) {
 	HLEPlugins::PluginDataAxis[JOYSTICK_AXIS_ACCELEROMETER_Z] = tiltZ;
 }
 
-void System_PostUIMessage(UIMessage message, const std::string &value) {
+void System_PostUIMessage(UIMessage message, std::string_view param) {
 	std::lock_guard<std::mutex> lock(g_pendingMutex);
 	PendingMessage pendingMessage;
 	pendingMessage.message = message;
-	pendingMessage.value = value;
+	pendingMessage.value = param;
 	pendingMessages.push_back(pendingMessage);
 }
 
@@ -1536,6 +1555,8 @@ bool NativeIsRestarting() {
 }
 
 void NativeShutdown() {
+	INFO_LOG(Log::System, "NativeShutdown begin");
+
 	Achievements::Shutdown();
 
 	if (g_Config.bAchievementsEnable) {
@@ -1554,15 +1575,9 @@ void NativeShutdown() {
 
 	g_Config.Save("NativeShutdown");
 
-	INFO_LOG(Log::System, "NativeShutdown called");
-
 	g_i18nrepo.LogMissingKeys();
 
 	ShutdownWebServer();
-
-#if PPSSPP_PLATFORM(ANDROID)
-	System_ExitApp();
-#endif
 
 	__UPnPShutdown();
 
@@ -1581,12 +1596,13 @@ void NativeShutdown() {
 
 	g_threadManager.Teardown();
 
-#if !(PPSSPP_PLATFORM(ANDROID) || PPSSPP_PLATFORM(IOS))
+#if !PPSSPP_PLATFORM(IOS)
 	System_ExitApp();
 #endif
 
 	// Previously we did exit() here on Android but that makes it hard to do things like restart on backend change.
 	// I think we handle most globals correctly or correct-enough now.
+	INFO_LOG(Log::System, "NativeShutdown end");
 }
 
 // In the future, we might make this more sophisticated, such as storing in the app private directory on Android.

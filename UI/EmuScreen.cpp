@@ -84,10 +84,11 @@ using namespace std::placeholders;
 #include "UI/GamepadEmu.h"
 #include "UI/PauseScreen.h"
 #include "UI/MainScreen.h"
+#include "UI/Background.h"
 #include "UI/EmuScreen.h"
 #include "UI/DevScreens.h"
 #include "UI/GameInfoCache.h"
-#include "UI/MiscScreens.h"
+#include "UI/BaseScreens.h"
 #include "UI/ControlMappingScreen.h"
 #include "UI/DisplayLayoutScreen.h"
 #include "UI/GameSettingsScreen.h"
@@ -455,7 +456,7 @@ EmuScreen::~EmuScreen() {
 	SetExtraAssertInfo(nullptr);
 	SetAssertCancelCallback(nullptr, nullptr);
 
-	g_logManager.EnableOutput(LogOutput::RingBuffer);
+	g_logManager.DisableOutput(LogOutput::RingBuffer);
 
 #ifndef MOBILE_DEVICE
 	if (g_Config.bDumpFrames && startDumping_)
@@ -710,7 +711,7 @@ static void ShowFpsLimitNotice() {
 
 	char temp[51];
 	snprintf(temp, sizeof(temp), "%d%%", (int)((float)fpsLimit / 60.0f * 100.0f));
-	g_OSD.Show(OSDType::STATUS_ICON, temp, "", "I_FASTFORWARD", 1.5f, "altspeed");
+	g_OSD.Show(OSDType::STATUS_ICON, temp, "", "I_FAST_FORWARD", 1.5f, "altspeed");
 	g_OSD.SetFlags("altspeed", OSDMessageFlags::Transparent);
 }
 
@@ -1253,7 +1254,6 @@ void EmuScreen::CreateViews() {
 			Memory::MemFault_IgnoreLastCrash();
 			coreState = CoreState::CORE_RUNNING_CPU;
 		}
-		return UI::EVENT_DONE;
 	});
 	resumeButton_->SetVisibility(V_GONE);
 
@@ -1262,21 +1262,18 @@ void EmuScreen::CreateViews() {
 		if (coreState == CoreState::CORE_RUNTIME_ERROR) {
 			System_PostUIMessage(UIMessage::REQUEST_GAME_RESET);
 		}
-		return UI::EVENT_DONE;
 	});
 	resetButton_->SetVisibility(V_GONE);
 
 	backButton_ = buttons->Add(new Button(di->T("Back")));
 	backButton_->OnClick.Add([this](UI::EventParams &) {
 		this->pauseTrigger_ = true;
-		return UI::EVENT_DONE;
 	});
 	backButton_->SetVisibility(V_GONE);
 
 	cardboardDisableButton_ = root_->Add(new Button(sc->T("Cardboard VR OFF"), new AnchorLayoutParams(bounds.centerX(), NONE, NONE, 30, true)));
 	cardboardDisableButton_->OnClick.Add([](UI::EventParams &) {
 		g_Config.bEnableCardboardVR = false;
-		return UI::EVENT_DONE;
 	});
 	cardboardDisableButton_->SetVisibility(V_GONE);
 	cardboardDisableButton_->SetScale(0.65f);  // make it smaller - this button can be in the way otherwise.
@@ -1338,7 +1335,6 @@ void EmuScreen::CreateViews() {
 			loadingBG->SetVisibility(V_GONE);
 			loadingSpinner->SetVisibility(V_GONE);
 		}
-		return EVENT_DONE;
 	});
 	// Will become visible along with the loadingView.
 	loadingBG->SetVisibility(V_INVISIBLE);
@@ -1362,15 +1358,14 @@ void EmuScreen::deviceRestored(Draw::DrawContext *draw) {
 	}
 }
 
-UI::EventReturn EmuScreen::OnDevTools(UI::EventParams &params) {
+void EmuScreen::OnDevTools(UI::EventParams &params) {
 	DevMenuScreen *devMenu = new DevMenuScreen(gamePath_, I18NCat::DEVELOPER);
 	if (params.v)
 		devMenu->SetPopupOrigin(params.v);
 	screenManager()->push(devMenu);
-	return UI::EVENT_DONE;
 }
 
-UI::EventReturn EmuScreen::OnChat(UI::EventParams &params) {
+void EmuScreen::OnChat(UI::EventParams &params) {
 	if (chatButton_ != nullptr && chatButton_->GetVisibility() == UI::V_VISIBLE) {
 		chatButton_->SetVisibility(UI::V_GONE);
 	}
@@ -1388,7 +1383,6 @@ UI::EventReturn EmuScreen::OnChat(UI::EventParams &params) {
 		}
 #endif
 	}
-	return UI::EVENT_DONE;
 }
 
 // To avoid including proAdhoc.h, which includes a lot of stuff.
@@ -1431,12 +1425,13 @@ void EmuScreen::update() {
 
 	if (errorMessage_.size()) {
 		auto err = GetI18NCategory(I18NCat::ERRORS);
+		auto di = GetI18NCategory(I18NCat::DIALOG);
 		std::string errLoadingFile = gamePath_.ToVisualString() + "\n";
 		errLoadingFile.append(err->T("Error loading file", "Could not load game"));
 		errLoadingFile.append(" ");
 		errLoadingFile.append(err->T(errorMessage_.c_str()));
 
-		screenManager()->push(new PromptScreen(gamePath_, errLoadingFile, "OK", ""));
+		screenManager()->push(new PromptScreen(gamePath_, errLoadingFile, di->T("OK"), ""));
 		errorMessage_.clear();
 		quit_ = true;
 		return;
@@ -1610,7 +1605,7 @@ ScreenRenderFlags EmuScreen::render(ScreenRenderMode mode) {
 		framebufferBound = true;
 	}
 
-	g_OSD.NudgeSidebar();
+	g_OSD.NudgeIngameNotifications();
 
 	if (mode & ScreenRenderMode::TOP) {
 		System_Notify(SystemNotification::KEEP_SCREEN_AWAKE);
@@ -1807,7 +1802,6 @@ ScreenRenderFlags EmuScreen::render(ScreenRenderMode mode) {
 	if (hasVisibleUI()) {
 		draw->SetViewport(viewport);
 		cardboardDisableButton_->SetVisibility(g_Config.bEnableCardboardVR ? UI::V_VISIBLE : UI::V_GONE);
-		screenManager()->getUIContext()->BeginFrame();
 		renderUI();
 	}
 
@@ -1948,7 +1942,7 @@ void EmuScreen::renderUI() {
 	thin3d->SetViewport(viewport);
 
 	if (root_) {
-		UI::LayoutViewHierarchy(*ctx, root_, false);
+		UI::LayoutViewHierarchy(*ctx, RootMargins(), root_, false, false);
 		root_->Draw(*ctx);
 	}
 

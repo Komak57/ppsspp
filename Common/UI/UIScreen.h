@@ -53,21 +53,24 @@ public:
 	virtual void TriggerFinish(DialogResult result);
 
 	// Some useful default event handlers
-	UI::EventReturn OnOK(UI::EventParams &e);
-	UI::EventReturn OnCancel(UI::EventParams &e);
-	UI::EventReturn OnBack(UI::EventParams &e);
+	void OnOK(UI::EventParams &e);
+	void OnCancel(UI::EventParams &e);
+	void OnBack(UI::EventParams &e);
+
+	virtual UI::Margins RootMargins() const { return UI::Margins(0); }
 
 protected:
 	virtual void CreateViews() = 0;
 
 	void RecreateViews() override { recreateViews_ = true; }
-	bool UseVerticalLayout() const;
+	bool UsePortraitLayout() const;
 
 	UI::ViewGroup *root_ = nullptr;
 	Vec3 translation_ = Vec3(0.0f);
 	Vec3 scale_ = Vec3(1.0f);
 	float alpha_ = 1.0f;
 	bool ignoreInsets_ = false;
+	bool ignoreBottomInset_ = false;
 	bool ignoreInput_ = false;
 
 protected:
@@ -78,7 +81,7 @@ protected:
 	void DoRecreateViews();
 
 	bool recreateViews_ = true;
-	bool lastVertical_;
+	bool lastPortrait_;
 
 private:
 	std::mutex eventQueueLock_;

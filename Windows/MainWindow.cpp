@@ -98,6 +98,8 @@ int verysleepy__useSendMessage = 1;
 const UINT WM_VERYSLEEPY_MSG = WM_APP + 0x3117;
 const UINT WM_USER_GET_BASE_POINTER = WM_APP + 0x3118;  // 0xB118
 const UINT WM_USER_GET_EMULATION_STATE = WM_APP + 0x3119;  // 0xB119
+const UINT WM_USER_GET_CURRENT_GAMEID = WM_APP + 0x311A;  // 0xB11A
+const UINT WM_USER_GET_MODULE_INFO = WM_APP + 0x311B;  // 0xB11B
 
 // Respond TRUE to a message with this param value to indicate support.
 const WPARAM VERYSLEEPY_WPARAM_SUPPORTED = 0;
@@ -126,7 +128,8 @@ namespace MainWindow
 	HWND hwndMain;
 	HWND hwndGameList;
 	TouchInputHandler touchHandler;
-	static HMENU menu;
+
+	static HMENU g_hMenu;
 
 	HINSTANCE hInst;
 	static int cursorCounter = 0;
@@ -293,7 +296,7 @@ namespace MainWindow
 		WINDOWPLACEMENT placement = { sizeof(WINDOWPLACEMENT) };
 		GetWindowPlacement(hwndMain, &placement);
 
-		int oldWindowState = g_WindowState;
+		const int oldWindowState = g_WindowState;
 		inFullscreenResize = true;
 		g_IgnoreWM_SIZE = true;
 
@@ -322,8 +325,8 @@ namespace MainWindow
 
 		::SetWindowLong(hWnd, GWL_STYLE, dwStyle);
 
-		// Remove the menu bar. This can trigger WM_SIZE because the contents change size.
-		::SetMenu(hWnd, goingFullscreen || !g_Config.bShowMenuBar ? NULL : menu);
+		// Remove the menu bar if going fullscreen. This can trigger WM_SIZE because the contents change size.
+		::SetMenu(hWnd, goingFullscreen || !g_Config.bShowMenuBar ? NULL : g_hMenu);
 
 		if (g_Config.UseFullScreen() != goingFullscreen) {
 			g_Config.bFullScreen = goingFullscreen;
@@ -339,10 +342,10 @@ namespace MainWindow
 			if (g_Config.bFullScreenMulti) {
 				// Maximize isn't enough to display on all monitors.
 				// Remember that negative coordinates may be valid.
-				int totalX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-				int totalY = GetSystemMetrics(SM_YVIRTUALSCREEN);
-				int totalWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-				int totalHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+				const int totalX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+				const int totalY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+				const int totalWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+				const int totalHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 				MoveWindow(hwndMain, totalX, totalY, totalWidth, totalHeight, TRUE);
 				HandleSizeChange(oldWindowState);
 				ShowWindow(hwndMain, SW_SHOW);
@@ -468,7 +471,7 @@ namespace MainWindow
 
 		u32 style = WS_OVERLAPPEDWINDOW;
 
-		hwndMain = CreateWindowEx(0,szWindowClass, L"", style,
+		hwndMain = CreateWindowEx(0, szWindowClass, L"", style,
 			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, NULL, NULL, hInstance, NULL);
 		if (!hwndMain)
 			return FALSE;
@@ -478,21 +481,9 @@ namespace MainWindow
 		const DWM_WINDOW_CORNER_PREFERENCE pref = DWMWCP_DONOTROUND;
 		DwmSetWindowAttribute(hwndMain, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
 
-		menu = GetMenu(hwndMain);
+		g_hMenu = GetMenu(hwndMain);
 
-		MENUINFO info;
-		ZeroMemory(&info,sizeof(MENUINFO));
-		info.cbSize = sizeof(MENUINFO);
-		info.cyMax = 0;
-		info.dwStyle = MNS_CHECKORBMP;
-		info.fMask = MIM_STYLE;
-		for (int i = 0; i < GetMenuItemCount(menu); i++) {
-			SetMenuInfo(GetSubMenu(menu,i), &info);
-		}
-
-		// Always translate first: translating resets the menu.
-		TranslateMenus(hwndMain, menu);
-		UpdateMenus();
+		MainMenuInit(hwndMain, g_hMenu);
 
 		// Accept dragged files.
 		DragAcceptFiles(hwndMain, TRUE);
@@ -675,6 +666,78 @@ namespace MainWindow
 
 		case WM_USER_GET_EMULATION_STATE:
 			return (u32)(Core_IsActive() && GetUIState() == UISTATE_INGAME);
+
+		case WM_USER_GET_CURRENT_GAMEID:
+		{
+			// Return game ID as four u32 values
+			// wParam: 0-3 = which u32 to return (chars 0-3, 4-7, 8-11, 12-15)
+			// Returns: packed u32 with 4 bytes of game ID
+			if (!PSP_IsInited())
+			{
+				return 0;
+			}
+			const std::string gameID = Reporting::CurrentGameID();
+			if (gameID.empty())
+			{
+				return 0;
+			}
+			const size_t offset = (wParam & 0x3) * 4;  // 0, 4, 8, 12
+			u32 packed = 0;
+			for (size_t i = 0; i < 4; ++i)
+			{
+				if (offset + i < gameID.length())
+				{
+					const u8 c = static_cast<u8>(gameID[offset + i]);
+					packed |= ((u32)c << (i * 8));
+				}
+			}
+			return packed;
+		}
+		break;
+		case WM_USER_GET_MODULE_INFO:
+		{
+			// Get module information by name
+			// wParam: pointer to module name (null-terminated string)
+			// lParam: 0 = address, 1 = size, 2 = active flag
+			// Returns: u64 packed with module info, or 0 if not found
+			if (!PSP_IsInited() || !g_symbolMap)
+			{
+				return 0;
+			}
+			const char* moduleName = reinterpret_cast<const char*>(wParam);
+			if (!moduleName)
+			{
+				return 0;
+			}
+			// Get all modules from symbol map
+			auto modules = g_symbolMap->getAllModules();
+			for (const auto& module : modules)
+			{
+				if (module.name == moduleName)
+				{
+					switch (lParam)
+					{
+					case 0:
+						// Return address as u32 (low 32 bits)
+						return (u64)module.address;
+					case 1:
+						// Return size as u32 (low 32 bits)
+						return (u64)module.size;
+					case 2:
+						// Return active flag in bit 0, padded with zeros
+						return (u64)(module.active ? 1 : 0);
+					case 3:
+						// Return all info packed: address (bits 0-31), size (bits 32-62), active (bit 63)
+						return ((u64)module.address) | (((u64)module.size) << 32) | (module.active ? (1ULL << 63) : 0);
+					default:
+						return 0;
+					}
+				}
+			}
+			// Module not found
+			return 0;
+		}
+		break;
 
 		// Hack to kill the white line underneath the menubar.
 		// From https://stackoverflow.com/questions/57177310/how-to-paint-over-white-line-between-menu-bar-and-client-area-of-window
@@ -908,8 +971,8 @@ namespace MainWindow
 				if (!MainThread_Ready())
 					return DefWindowProc(hWnd, message, wParam, lParam);
 
-				HDROP hdrop = (HDROP)wParam;
-				int count = DragQueryFile(hdrop, 0xFFFFFFFF, 0, 0);
+				const HDROP hdrop = (HDROP)wParam;
+				const int count = DragQueryFile(hdrop, 0xFFFFFFFF, 0, 0);
 				if (count != 1) {
 					// TODO: Translate? Or just not bother?
 					MessageBox(hwndMain, L"You can only load one file at a time", L"Error", MB_ICONINFORMATION);
@@ -955,9 +1018,9 @@ namespace MainWindow
 			break;
 
 		case WM_USER_UPDATE_UI:
-			TranslateMenus(hwndMain, menu);
+			TranslateMenus(hwndMain, g_hMenu);
 			// Update checked status immediately for accelerators.
-			UpdateMenus();
+			UpdateMenus(nullptr);
 			break;
 
 		case WM_USER_WINDOW_TITLE_CHANGED:
@@ -981,9 +1044,9 @@ namespace MainWindow
 			DestroyWindow(hWnd);
 			break;
 
-		case WM_MENUSELECT:
-			// Called when a menu is opened. Also when an item is selected, but meh.
-			UpdateMenus(true);
+		case WM_INITMENUPOPUP:
+			// Called when a menu or submenu is about to be opened.
+			UpdateMenus((HMENU)wParam);
 			WindowsRawInput::NotifyMenu();
 			trapMouse = false;
 			break;
@@ -1204,11 +1267,11 @@ namespace MainWindow
 	void ToggleDebugConsoleVisibility() {
 		if (!g_Config.bEnableLogging) {
 			g_logManager.GetConsoleListener()->Show(false);
-			EnableMenuItem(menu, ID_DEBUG_LOG, MF_GRAYED);
+			EnableMenuItem(g_hMenu, ID_DEBUG_LOG, MF_GRAYED);
 		}
 		else {
 			g_logManager.GetConsoleListener()->Show(true);
-			EnableMenuItem(menu, ID_DEBUG_LOG, MF_ENABLED);
+			EnableMenuItem(g_hMenu, ID_DEBUG_LOG, MF_ENABLED);
 		}
 	}
 

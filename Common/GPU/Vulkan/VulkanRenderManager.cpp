@@ -423,8 +423,9 @@ void VulkanRenderManager::StartThreads() {
 	}
 }
 
-// Called from main thread.
+// MUST be called from emuthread!
 void VulkanRenderManager::StopThreads() {
+	INFO_LOG(Log::G3D, "VulkanRenderManager::StopThreads");
 	// Make sure we don't have an open non-backbuffer render pass
 	if (curRenderStep_ && curRenderStep_->render.framebuffer != nullptr) {
 		EndCurRenderStep();
@@ -833,7 +834,7 @@ void VulkanRenderManager::ReportBadStateForDraw() {
 	if (curRenderStep_ && curRenderStep_->stepType != VKRStepType::RENDER) {
 		cause1 = "Not a render step: ";
 		std::string str = VulkanQueueRunner::StepToString(vulkan_, *curRenderStep_);
-		truncate_cpy(cause2, str.c_str());
+		truncate_cpy(cause2, str);
 	}
 	ERROR_LOG_REPORT_ONCE(baddraw, Log::G3D, "Can't draw: %s%s. Step count: %d", cause1, cause2, (int)steps_.size());
 }
@@ -1637,6 +1638,7 @@ void VulkanRenderManager::Run(VKRRenderThreadTask &task) {
 
 	default:
 		_dbg_assert_(false);
+		break;
 	}
 
 	VLOG("PULL: Finished running frame %d", task.frame);
@@ -1739,7 +1741,7 @@ VKRPipelineLayout *VulkanRenderManager::CreatePipelineLayout(BindingType *bindin
 			bindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 			break;
 		default:
-			_dbg_assert_(false);
+			UNREACHABLE();
 			break;
 		}
 	}

@@ -44,21 +44,25 @@ struct IndexTable
 	u32_le data_table_offset; /* Offset of the param_data from start of data_table */
 };
 
-void ParamSFOData::SetValue(const std::string &key, unsigned int value, int max_size) {
-	values[key].type = VT_INT;
-	values[key].i_value = value;
-	values[key].max_size = max_size;
-}
-void ParamSFOData::SetValue(const std::string &key, const std::string &value, int max_size) {
-	values[key].type = VT_UTF8;
-	values[key].s_value = value;
-	values[key].max_size = max_size;
+void ParamSFOData::SetValue(std::string_view key, unsigned int value, int max_size) {
+	auto [it, inserted] = values.try_emplace(std::string(key));  // The string construction only happens if inserted is true.
+	it->second.type = VT_INT;
+	it->second.i_value = value;
+	it->second.max_size = max_size;
 }
 
-void ParamSFOData::SetValue(const std::string &key, const u8 *value, unsigned int size, int max_size) {
-	values[key].type = VT_UTF8_SPE;
-	values[key].SetData(value, size);
-	values[key].max_size = max_size;
+void ParamSFOData::SetValue(std::string_view key, std::string_view value, int max_size) {
+	auto [it, inserted] = values.try_emplace(std::string(key));
+	it->second.type = VT_UTF8;
+	it->second.s_value = value;
+	it->second.max_size = max_size;
+}
+
+void ParamSFOData::SetValue(std::string_view key, const u8 *value, unsigned int size, int max_size) {
+	auto [it, inserted] = values.try_emplace(std::string(key));
+	it->second.type = VT_UTF8_SPE;
+	it->second.SetData(value, size);
+	it->second.max_size = max_size;
 }
 
 int ParamSFOData::GetValueInt(std::string_view key) const {
@@ -127,8 +131,6 @@ bool ParamSFOData::ReadSFO(const u8 *paramsfo, size_t size) {
 	if (header->key_table_start > size || header->data_table_start > size) {
 		return false;
 	}
-
-	const u8 *data_start = paramsfo + header->data_table_start;
 
 	auto readStringCapped = [paramsfo, size](size_t offset, size_t maxLen) -> std::string {
 		std::string str;
@@ -354,36 +356,65 @@ std::string ParamSFOData::GenerateFakeID(const Path &filename) const {
 	return fakeID;
 }
 
-GameRegion DetectGameRegionFromID(std::string_view id_version) {
-	if (id_version.size() >= 4) {
-		std::string_view regStr = id_version.substr(0, 4);
+GameRegion DetectGameRegionFromID(std::string_view id_full) {
+	// DISC_ID format consists of a 4-letter categorization followed by a 5-digit catalog number.
+	if (id_full.size() == 9 || (id_full.size() == 10 && id_full[4] == '-')) {
+		std::string_view id_letters = id_full.substr(0, 4);
+		std::string_view id_release_type = id_letters.substr(0, 2);
 
-		// Guesswork
-		switch (regStr[2]) {
-		case 'E': return GameRegion::EUROPE; break;
-		case 'U': return GameRegion::USA; break;
-		case 'J': return GameRegion::JAPAN; break;
-		case 'H': return GameRegion::HONGKONG; break;
-		case 'A': return GameRegion::ASIA; break;
-		case 'K': return GameRegion::KOREA; break;
-		default:  return GameRegion::OTHER;
+		// Determine the type of release from the first two letters, must be one of the following:
+		//   "UC" -> (U)MD, (C)opyrighted (first-party)
+		//   "UL" -> (U)MD, (L)icensed (third-party)
+		//   "NP" -> PlayStation (N)etwork, (P)roduction environment (digital download)
+		if (id_release_type == "UL" || id_release_type == "UC" || id_release_type == "NP") {
+			// Determine the region from the third letter.
+			// This isn't super accurate but it's all we have.
+			switch (id_letters[2]) {
+			case 'E': return GameRegion::EUROPE; break;
+			case 'U': return GameRegion::USA; break;
+			case 'J': return GameRegion::JAPAN; break;
+			case 'K': return GameRegion::KOREA; break;
+			case 'A': return GameRegion::ASIA; break;
+			default:
+				if (id_letters.substr(0, 3) == "NPH") {
+					return GameRegion::HONGKONG; // All games in this region are PSN.
+				} else if (id_letters == "NPIA") {
+					return GameRegion::INTERNAL;
+				} else {
+					return GameRegion::HOMEBREW;
+				}
+			}
+			/* The fourth letter could be used to determine the type of product. It isn't useful to us.
+			 * UMD:
+			 *   'S' -> full (S)oftware? (used by most games)
+			 *   'M' -> (M)edia? (used by some Japanese and Korean games)
+			 *   'B' -> (B)undled
+			 *   'D' -> (D)emo
+			 *   'P' -> (P)re-production
+			 *   'T' -> (T)est
+			 *   'X' -> e(X)perimental?
+			 * Digital:
+			 *   'A' -> first-party application
+			 *   'B' -> third-party PSP Remasters
+			 *   'E' -> first-party PAL PSOne
+			 *   'F' -> third-party PAL PSOne / American PC Engine (TurboGrafx-16 Classics)
+			 *   'G' -> first-party PSP / PlayView
+			 *   'H' -> third-party PSP / PlayView / Neo Geo
+			 *   'I' -> first-party NTSC PSOne
+			 *   'J' -> third-party NTSC PSOne / Japanese PC Engine
+			 *   'W' -> first-party tool?
+			 *   'X' -> first-party Minis
+			 *   'Z' -> third-party Minis
+			 */
+		} // Misc patterns
+		else if (id_letters == "UTST") {
+			return GameRegion::TEST;
+		} else if (id_letters == "UMDT") {
+			return GameRegion::DIAGNOSTIC;
 		}
-		/*
-		if (regStr == "NPEZ" || regStr == "NPEG" || regStr == "ULES" || regStr == "UCES" ||
-			  regStr == "NPEX") {
-			region = GameRegion::EUROPE;
-		} else if (regStr == "NPUG" || regStr == "NPUZ" || regStr == "ULUS" || regStr == "UCUS") {
-			region = GameRegion::USA;
-		} else if (regStr == "NPJH" || regStr == "NPJG" || regStr == "ULJM"|| regStr == "ULJS") {
-			region = GameRegion::JAPAN;
-		} else if (regStr == "NPHG") {
-			region = GameRegion::HONGKONG;
-		} else if (regStr == "UCAS") {
-			region = GameRegion::CHINA;
-		}*/
-	} else {
-		return GameRegion::OTHER;
 	}
+
+	return GameRegion::HOMEBREW;
 }
 
 std::string_view GameRegionToString(GameRegion region) {
@@ -395,6 +426,9 @@ std::string_view GameRegionToString(GameRegion region) {
 	case GameRegion::ASIA: return "Asia";
 	case GameRegion::KOREA: return "Korea";
 	case GameRegion::HOMEBREW: return "Homebrew";
-	default: return "Other";
+	case GameRegion::INTERNAL: return "Internal";
+	case GameRegion::TEST: return "Test disc";
+	case GameRegion::DIAGNOSTIC: return "Diagnostic tool";
+	default: return "unknown region";
 	}
 }

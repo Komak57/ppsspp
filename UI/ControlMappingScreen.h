@@ -30,13 +30,14 @@
 
 #include "Core/ControlMapper.h"
 
-#include "UI/MiscScreens.h"
+#include "UI/BaseScreens.h"
+#include "UI/SimpleDialogScreen.h"
 
 class SingleControlMapper;
 
-class ControlMappingScreen : public UIDialogScreenWithGameBackground {
+class ControlMappingScreen : public UIBaseDialogScreen {
 public:
-	explicit ControlMappingScreen(const Path &gamePath) : UIDialogScreenWithGameBackground(gamePath) {
+	explicit ControlMappingScreen(const Path &gamePath) : UIBaseDialogScreen(gamePath) {
 		categoryToggles_[0] = true;
 		categoryToggles_[1] = true;
 		categoryToggles_[2] = true;
@@ -49,7 +50,7 @@ protected:
 	void update() override;
 
 private:
-	UI::EventReturn OnAutoConfigure(UI::EventParams &params);
+	void OnAutoConfigure(UI::EventParams &params);
 
 	void dialogFinished(const Screen *dialog, DialogResult result) override;
 
@@ -120,9 +121,9 @@ private:
 
 class JoystickHistoryView;
 
-class AnalogSetupScreen : public UIDialogScreenWithGameBackground {
+class AnalogCalibrationScreen : public UITwoPaneBaseDialogScreen {
 public:
-	AnalogSetupScreen(const Path &gamePath);
+	AnalogCalibrationScreen(const Path &gamePath);
 
 	bool key(const KeyInput &key) override;
 	void axis(const AxisInput &axis) override;
@@ -132,10 +133,12 @@ public:
 	const char *tag() const override { return "AnalogSetup"; }
 
 protected:
-	void CreateViews() override;
+	void CreateSettingsViews(UI::LinearLayout *parent) override;
+	void CreateContentViews(UI::LinearLayout *parent) override;
 
+	std::string_view GetTitle() const override;
 private:
-	UI::EventReturn OnResetToDefaults(UI::EventParams &e);
+	void OnResetToDefaults(UI::EventParams &e);
 
 	ControlMapper mapper_;
 
@@ -149,9 +152,9 @@ private:
 
 class MockPSP;
 
-class VisualMappingScreen : public UIDialogScreenWithGameBackground {
+class VisualMappingScreen : public UIBaseDialogScreen {
 public:
-	VisualMappingScreen(const Path &gamePath) : UIDialogScreenWithGameBackground(gamePath) {}
+	VisualMappingScreen(const Path &gamePath) : UIBaseDialogScreen(gamePath) {}
 
 	const char *tag() const override { return "VisualMapping"; }
 
@@ -165,8 +168,8 @@ protected:
 	void resized() override;
 
 private:
-	UI::EventReturn OnMapButton(UI::EventParams &e);
-	UI::EventReturn OnBindAll(UI::EventParams &e);
+	void OnMapButton(UI::EventParams &e);
+	void OnBindAll(UI::EventParams &e);
 	void HandleKeyMapping(const KeyMap::MultiInputMapping &key);
 	void MapNext(bool successive);
 

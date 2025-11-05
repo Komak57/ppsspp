@@ -1,33 +1,17 @@
 #include <cstdarg>
 #include <cstring>
 #include <memory>
-#ifndef NO_ARMIPS
 #include <string_view>
-#endif
 #include <vector>
 
 #include "Common/CommonTypes.h"
-#ifndef NO_ARMIPS
 #include "ext/armips/Core/Assembler.h"
 #include "ext/armips/Core/FileManager.h"
-#endif
-
 #include "Core/Debugger/SymbolMap.h"
 #include "Core/MemMapHelpers.h"
 #include "Core/MIPS/MIPSAsm.h"
 
-namespace MIPSAsm
-{	
-	static std::string errorText;
-
-std::string GetAssembleError()
-{
-	return errorText;
-}
-
-#ifndef NO_ARMIPS
-class PspAssemblerFile: public AssemblerFile
-{
+class PspAssemblerFile : public AssemblerFile {
 public:
 	PspAssemblerFile() {
 		address = 0;
@@ -36,7 +20,7 @@ public:
 	bool open(bool onlyCheck) override{ return true; };
 	void close() override { };
 	bool isOpen() override { return true; };
-	bool write(void* data, size_t length) override {
+	bool write(void *data, size_t length) override {
 		if (!Memory::IsValidAddress((u32)(address+length-1)))
 			return false;
 
@@ -64,7 +48,7 @@ private:
 	fs::path dummyFilename_;
 };
 
-bool MipsAssembleOpcode(const char *line, DebugInterface *cpu, u32 address) {
+bool MipsAssembleOpcode(std::string_view line, DebugInterface *cpu, u32 address, std::string *error) {
 	std::vector<std::string> errors;
 
 	char str[64];
@@ -81,14 +65,12 @@ bool MipsAssembleOpcode(const char *line, DebugInterface *cpu, u32 address) {
 		g_symbolMap->GetLabels(args.labels);
 	}
 
-	errorText.clear();
-	if (!runArmips(args))
-	{
-		for (size_t i = 0; i < errors.size(); i++)
-		{
-			errorText += errors[i];
+	error->clear();
+	if (!runArmips(args)) {
+		for (size_t i = 0; i < errors.size(); i++) {
+			(*error) += errors[i];
 			if (i != errors.size() - 1)
-				errorText += "\n";
+				error->push_back('\n');
 		}
 
 		return false;
@@ -96,11 +78,3 @@ bool MipsAssembleOpcode(const char *line, DebugInterface *cpu, u32 address) {
 
 	return true;
 }
-#else
-bool MipsAssembleOpcode(const char *line, DebugInterface *cpu, u32 address) {
-	errorText = "Built without armips, cannot assemble";
-	return false;
-}
-#endif
-
-}  // namespace

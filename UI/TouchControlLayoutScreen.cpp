@@ -24,6 +24,7 @@
 #include "Common/Math/math_util.h"
 #include "Common/System/Display.h"
 #include "Common/UI/Context.h"
+#include "Common/UI/PopupScreens.h"
 
 #include "Common/CommonTypes.h"
 #include "Common/Log.h"
@@ -581,34 +582,31 @@ void TouchControlLayoutScreen::onFinish(DialogResult reason) {
 	g_Config.Save("TouchControlLayoutScreen::onFinish");
 }
 
-UI::EventReturn TouchControlLayoutScreen::OnVisibility(UI::EventParams &e) {
+void TouchControlLayoutScreen::OnVisibility(UI::EventParams &e) {
 	screenManager()->push(new TouchControlVisibilityScreen(gamePath_));
-	return UI::EVENT_DONE;
 }
 
-UI::EventReturn TouchControlLayoutScreen::OnReset(UI::EventParams &e) {
+void TouchControlLayoutScreen::OnReset(UI::EventParams &e) {
 	INFO_LOG(Log::G3D, "Resetting touch control layout");
 	g_Config.ResetControlLayout();
 	const Bounds &bounds = screenManager()->getUIContext()->GetBounds();
 	InitPadLayout(bounds.w, bounds.h);
 	RecreateViews();
-	return UI::EVENT_DONE;
 };
 
 void TouchControlLayoutScreen::dialogFinished(const Screen *dialog, DialogResult result) {
 	RecreateViews();
 }
 
-UI::EventReturn TouchControlLayoutScreen::OnMode(UI::EventParams &e) {
+void TouchControlLayoutScreen::OnMode(UI::EventParams &e) {
 	int mode = mode_->GetSelection();
 	if (layoutView_) {
 		layoutView_->mode_ = mode;
 	}
-	return UI::EVENT_DONE;
 }
 
 void TouchControlLayoutScreen::update() {
-	UIDialogScreenWithGameBackground::update();
+	UIBaseDialogScreen::update();
 
 	if (!layoutView_) {
 		return;
@@ -666,7 +664,7 @@ void TouchControlLayoutScreen::CreateViews() {
 	leftColumn->Add(gridSize);
 	leftColumn->Add(new Choice(di->T("Reset")))->OnClick.Handle(this, &TouchControlLayoutScreen::OnReset);
 	leftColumn->Add(new Spacer(12.0f));
-	leftColumn->Add(new Choice(di->T("Back"), "", false))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
+	leftColumn->Add(new Choice(di->T("Back"), ImageID("I_NAVIGATE_BACK")))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
 	leftColumn->Add(new Spacer(0.0f));
 
 	LinearLayout* rightColumn = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f, Margins(0.0f, 12.0f, 12.0f, 12.0f))));

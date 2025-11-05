@@ -29,13 +29,14 @@
 
 #include "Core/Util/MemStick.h"
 
-#include "UI/MiscScreens.h"
+#include "UI/BaseScreens.h"
+#include "UI/MiscViews.h"
 
 class NoticeView;
 
 // MemStickScreen - let's you configure your memory stick directory.
 // Currently only useful for Android.
-class MemStickScreen : public UIDialogScreenWithBackground {
+class MemStickScreen : public UIBaseDialogScreen {
 public:
 	MemStickScreen(bool initialSetup);
 	~MemStickScreen() = default;
@@ -58,7 +59,7 @@ protected:
 		// Simple anti-flicker due to delayed finish.
 		if (!done_) {
 			// render as usual.
-			return UIDialogScreenWithBackground::render(mode);
+			return UIBaseDialogScreen::render(mode);
 		} else {
 			// no render. black frame insertion is better than flicker.
 		}
@@ -67,17 +68,17 @@ protected:
 
 private:
 	// Event handlers
-	UI::EventReturn OnHelp(UI::EventParams &e);
+	void OnHelp(UI::EventParams &e);
 
 	// Confirm button sub handlers
-	UI::EventReturn Browse(UI::EventParams &e);
-	UI::EventReturn UseInternalStorage(UI::EventParams &params);
-	UI::EventReturn UseStorageRoot(UI::EventParams &params);
-	UI::EventReturn SetFolderManually(UI::EventParams &params);
+	void Browse(UI::EventParams &e);
+	void UseInternalStorage(UI::EventParams &params);
+	void UseStorageRoot(UI::EventParams &params);
+	void SetFolderManually(UI::EventParams &params);
 
 	// Button handlers.
-	UI::EventReturn OnConfirmClick(UI::EventParams &params);
-	UI::EventReturn OnChoiceClick(UI::EventParams &params);
+	void OnConfirmClick(UI::EventParams &params);
+	void OnChoiceClick(UI::EventParams &params);
 
 	SettingInfoMessage *settingInfo_ = nullptr;
 	NoticeView *errorNoticeView_ = nullptr;
@@ -97,7 +98,7 @@ struct SpaceResult {
 	int64_t bytesFree;
 };
 
-class ConfirmMemstickMoveScreen : public UIDialogScreenWithBackground {
+class ConfirmMemstickMoveScreen : public UIBaseDialogScreen {
 public:
 	ConfirmMemstickMoveScreen(const Path &newMemstickFolder, bool initialSetup);
 	~ConfirmMemstickMoveScreen();
@@ -109,10 +110,10 @@ protected:
 	void CreateViews() override;
 
 private:
-	UI::EventReturn OnMoveDataClick(UI::EventParams &params);
+	void OnMoveDataClick(UI::EventParams &params);
 	void FinishFolderMove();
 
-	UI::EventReturn OnConfirm(UI::EventParams &params);
+	void OnConfirm(UI::EventParams &params);
 
 	Path newMemstickFolder_;
 	bool existingFilesInNewFolder_;

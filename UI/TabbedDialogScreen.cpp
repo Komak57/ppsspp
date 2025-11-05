@@ -1,29 +1,43 @@
 #include <algorithm>
 
+#include "Common/Data/Text/I18n.h"
 #include "Common/StringUtils.h"
 #include "Common/System/NativeApp.h"
 #include "Common/System/Request.h"
 #include "Common/System/Display.h"
+#include "Common/UI/TabHolder.h"
+#include "Common/UI/ViewGroup.h"
+#include "Common/UI/ScrollView.h"
+#include "Common/UI/PopupScreens.h"
+#include "UI/MiscViews.h"
 #include "UI/TabbedDialogScreen.h"
 
-void TabbedUIDialogScreenWithGameBackground::AddTab(const char *tag, std::string_view title, std::function<void(UI::LinearLayout *)> createCallback, bool isSearch) {
+void UITabbedBaseDialogScreen::AddTab(const char *tag, std::string_view title, std::function<void(UI::LinearLayout *)> createCallback, TabFlags flags) {
 	using namespace UI;
 
-	tabHolder_->AddTabDeferred(title, [createCallback = std::move(createCallback), tag]() -> UI::ViewGroup * {
-		ViewGroup *scroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
-		scroll->SetTag(tag);
+	tabHolder_->AddTabDeferred(title, [createCallback = std::move(createCallback), tag, flags]() -> UI::ViewGroup * {
+		using namespace UI;
+		ViewGroup *scroll = nullptr;
+		if (!(flags & TabFlags::NonScrollable)) {
+			scroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
+			scroll->SetTag(tag);
+		}
 		LinearLayout *contents = new LinearLayoutList(ORIENT_VERTICAL);
 		contents->SetSpacing(0);
-		scroll->Add(contents);
 		createCallback(contents);
-		return scroll;
+		if (scroll) {
+			scroll->Add(contents);
+			return scroll;
+		} else {
+			return contents;
+		}
 	});
 }
 
-void TabbedUIDialogScreenWithGameBackground::CreateViews() {
+void UITabbedBaseDialogScreen::CreateViews() {
 	PreCreateViews();
 
-	bool vertical = UseVerticalLayout();
+	bool portrait = UsePortraitLayout() || ForceHorizontalTabs();
 
 	// Information in the top left.
 	// Back button to the bottom left.
@@ -36,16 +50,15 @@ void TabbedUIDialogScreenWithGameBackground::CreateViews() {
 	filterNotice_ = new TextView("(filter notice, you shouldn't see this text", new LinearLayoutParams(Margins(20, 5)));
 	filterNotice_->SetVisibility(V_GONE);
 
-	if (vertical) {
+	if (portrait) {
 		auto di = GetI18NCategory(I18NCat::DIALOG);
 		LinearLayout *verticalLayout = new LinearLayout(ORIENT_VERTICAL, new LayoutParams(FILL_PARENT, FILL_PARENT));
-		tabHolder_ = new TabHolder(ORIENT_HORIZONTAL, 200, filterNotice_, new LinearLayoutParams(1.0f));
+		tabHolder_ = new TabHolder(ORIENT_HORIZONTAL, 200, TabHolderFlags::BackButton, filterNotice_, new LinearLayoutParams(1.0f));
 		verticalLayout->Add(tabHolder_);
 		CreateExtraButtons(verticalLayout, 0);
-		verticalLayout->Add(new Choice(di->T("Back"), "", false, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT, 0.0f, Margins(0))))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
 		root_->Add(verticalLayout);
 	} else {
-		tabHolder_ = new TabHolder(ORIENT_VERTICAL, 200, filterNotice_, new AnchorLayoutParams(10, 0, 10, 0, false));
+		tabHolder_ = new TabHolder(ORIENT_VERTICAL, 200, TabHolderFlags::Default, filterNotice_, new AnchorLayoutParams(10, 0, 10, 0, false));
 		CreateExtraButtons(tabHolder_->Container(), 10);
 		tabHolder_->AddBack(this);
 		root_->Add(tabHolder_);
@@ -55,7 +68,7 @@ void TabbedUIDialogScreenWithGameBackground::CreateViews() {
 	root_->SetDefaultFocusView(tabHolder_);
 
 	float leftSide = 40.0f;
-	if (!vertical) {
+	if (!portrait) {
 		leftSide += 200.0f;
 	}
 	settingInfo_ = new SettingInfoMessage(ALIGN_CENTER | FLAG_WRAP_TEXT, g_display.dp_yres - 200.0f, new AnchorLayoutParams(
@@ -83,24 +96,22 @@ void TabbedUIDialogScreenWithGameBackground::CreateViews() {
 				searchSettings->Add(new ItemHeader(se->T("Find settings")));
 				searchSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &searchFilter_, se->T("Filter"), "", 64, screenManager()))->OnChange.Add([=](UI::EventParams &e) {
 					System_PostUIMessage(UIMessage::GAMESETTINGS_SEARCH, StripSpaces(searchFilter_));
-					return UI::EVENT_DONE;
 				});
 
 				clearSearchChoice_ = searchSettings->Add(new Choice(se->T("Clear filter")));
 				clearSearchChoice_->OnClick.Add([=](UI::EventParams &e) {
 					System_PostUIMessage(UIMessage::GAMESETTINGS_SEARCH, "");
-					return UI::EVENT_DONE;
 				});
 				clearSearchChoice_->SetVisibility(searchFilter_.empty() ? UI::V_GONE : UI::V_VISIBLE);
 
 				noSearchResults_ = searchSettings->Add(new TextView("", new LinearLayoutParams(Margins(20, 5))));
-			}, true);
+			});
 		}
 	}
 }
 
-void TabbedUIDialogScreenWithGameBackground::sendMessage(UIMessage message, const char *value) {
-	UIDialogScreenWithGameBackground::sendMessage(message, value);
+void UITabbedBaseDialogScreen::sendMessage(UIMessage message, const char *value) {
+	UIBaseDialogScreen::sendMessage(message, value);
 	if (message == UIMessage::GAMESETTINGS_SEARCH) {
 		std::string filter = value ? value : "";
 		searchFilter_.resize(filter.size());
@@ -110,19 +121,27 @@ void TabbedUIDialogScreenWithGameBackground::sendMessage(UIMessage message, cons
 	}
 }
 
-void TabbedUIDialogScreenWithGameBackground::RecreateViews() {
+void UITabbedBaseDialogScreen::RecreateViews() {
 	oldSettingInfo_ = settingInfo_ ? settingInfo_->GetText() : "N/A";
 	UIScreen::RecreateViews();
 }
 
-void TabbedUIDialogScreenWithGameBackground::EnsureTabs() {
+void UITabbedBaseDialogScreen::EnsureTabs() {
 	_dbg_assert_(tabHolder_);
 	if (tabHolder_) {
 		tabHolder_->EnsureAllCreated();
 	}
 }
 
-void TabbedUIDialogScreenWithGameBackground::ApplySearchFilter() {
+int UITabbedBaseDialogScreen::GetCurrentTab() const {
+	return tabHolder_->GetCurrentTab();
+}
+
+void UITabbedBaseDialogScreen::SetCurrentTab(int tab) {
+	tabHolder_->SetCurrentTab(tab);
+}
+
+void UITabbedBaseDialogScreen::ApplySearchFilter() {
 	using namespace UI;
 	auto se = GetI18NCategory(I18NCat::SEARCH);
 

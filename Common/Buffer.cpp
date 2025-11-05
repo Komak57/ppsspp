@@ -106,11 +106,11 @@ void Buffer::Printf(const char *fmt, ...) {
 		// Output was truncated. TODO: Do something.
 		ERROR_LOG(Log::IO, "Buffer::Printf truncated output");
 	}
+	va_end(vl);
 	if (retval < 0) {
 		ERROR_LOG(Log::IO, "Buffer::Printf failed, bad args?");
 		return;
 	}
-	va_end(vl);
 	char *ptr = Append(retval);
 	memcpy(ptr, buffer, retval);
 }
@@ -121,7 +121,7 @@ bool Buffer::FlushToFile(const Path &filename, bool clear) {
 		return false;
 	if (!data_.empty()) {
 		// Write the buffer to the file.
-		data_.iterate_blocks([=](const char *blockData, size_t blockSize) {
+		data_.iterate_blocks([f](const char *blockData, size_t blockSize) {
 			return fwrite(blockData, 1, blockSize, f) == blockSize;
 		});
 		if (clear) {
@@ -158,7 +158,7 @@ int Buffer::Contains(const char* needle) {
 
 void Buffer::PeekAll(std::string *dest) {
 	dest->resize(data_.size());
-	data_.iterate_blocks(([=](const char *blockData, size_t blockSize) {
+	data_.iterate_blocks(([dest](const char *blockData, size_t blockSize) {
 		dest->append(blockData, blockSize);
 		return true;
 	}));

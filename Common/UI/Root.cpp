@@ -31,7 +31,8 @@ void EventTriggered(Event *e, EventParams params) {
 	g_dispatchQueue.push_front(item);
 }
 
-void DispatchEvents() {
+DialogResult DispatchEvents() {
+	DialogResult result = DR_NONE;
 	while (!g_dispatchQueue.empty()) {
 		DispatchQueueItem item;
 		if (g_dispatchQueue.empty())
@@ -40,8 +41,12 @@ void DispatchEvents() {
 		g_dispatchQueue.pop_back();
 		if (item.e) {
 			item.e->Dispatch(item.params);
+			if (item.params.bubbleResult != DR_NONE) {
+				result = item.params.bubbleResult;
+			}
 		}
 	}
+	return result;
 }
 
 void RemoveQueuedEventsByView(View *view) {
@@ -95,8 +100,8 @@ bool IsFocusMovementEnabled() {
 	return focusMovementEnabled;
 }
 
-void LayoutViewHierarchy(const UIContext &dc, ViewGroup *root, bool ignoreInsets) {
-	Bounds rootBounds = ignoreInsets ? dc.GetBounds() : dc.GetLayoutBounds();
+void LayoutViewHierarchy(const UIContext &dc, const UI::Margins &rootMargins, ViewGroup *root, bool ignoreInsets, bool ignoreBottomInset) {
+	Bounds rootBounds = ignoreInsets ? dc.GetBounds() : dc.GetLayoutBounds(ignoreBottomInset);
 
 	MeasureSpec horiz(EXACTLY, rootBounds.w);
 	MeasureSpec vert(EXACTLY, rootBounds.h);
@@ -104,6 +109,10 @@ void LayoutViewHierarchy(const UIContext &dc, ViewGroup *root, bool ignoreInsets
 	// Two phases - measure contents, layout.
 	root->Measure(dc, horiz, vert);
 	// Root has a specified size. Set it, then let root layout all its children.
+	rootBounds.x += rootMargins.left;
+	rootBounds.y += rootMargins.top;
+	rootBounds.w -= rootMargins.right;
+	rootBounds.h -= rootMargins.bottom;
 	root->SetBounds(rootBounds);
 	root->Layout();
 }
@@ -363,13 +372,13 @@ restart:
 	}
 }
 
-void UpdateViewHierarchy(ViewGroup *root) {
+DialogResult UpdateViewHierarchy(ViewGroup *root) {
 	ProcessHeldKeys(root);
 	frameCount++;
 
 	if (!root) {
 		ERROR_LOG(Log::UI, "Tried to update a view hierarchy from a zero pointer root");
-		return;
+		return DR_NONE;
 	}
 
 	if (focusMoves.size()) {
@@ -402,7 +411,7 @@ void UpdateViewHierarchy(ViewGroup *root) {
 	}
 
 	root->Update();
-	DispatchEvents();
+	return DispatchEvents();
 }
 
 }  // namespace UI

@@ -19,13 +19,14 @@
 
 #include "Common/UI/View.h"
 #include "Common/UI/ViewGroup.h"
-#include "MiscScreens.h"
+#include "Common/UI/TabHolder.h"
+#include "BaseScreens.h"
 
 class ControlLayoutView;
 
-class TouchControlLayoutScreen : public UIDialogScreenWithGameBackground {
+class TouchControlLayoutScreen : public UIBaseDialogScreen {
 public:
-	TouchControlLayoutScreen(const Path &gamePath) : UIDialogScreenWithGameBackground(gamePath) {}
+	TouchControlLayoutScreen(const Path &gamePath) : UIBaseDialogScreen(gamePath) {}
 
 	void CreateViews() override;
 	void dialogFinished(const Screen *dialog, DialogResult result) override;
@@ -36,9 +37,9 @@ public:
 	const char *tag() const override { return "TouchControlLayout"; }
 
 protected:
-	UI::EventReturn OnReset(UI::EventParams &e);
-	UI::EventReturn OnVisibility(UI::EventParams &e);
-	UI::EventReturn OnMode(UI::EventParams &e);
+	void OnReset(UI::EventParams &e);
+	void OnVisibility(UI::EventParams &e);
+	void OnMode(UI::EventParams &e);
 
 private:
 	UI::ChoiceStrip *mode_ = nullptr;

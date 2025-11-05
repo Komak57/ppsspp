@@ -22,11 +22,11 @@
 
 #include "Common/UI/UIScreen.h"
 #include "Common/UI/ViewGroup.h"
-#include "UI/MiscScreens.h"
+#include "UI/BaseScreens.h"
 #include "UI/MainScreen.h"
 #include "UI/TabbedDialogScreen.h"
 
-class RemoteISOScreen : public TabbedUIDialogScreenWithGameBackground {
+class RemoteISOScreen : public UITabbedBaseDialogScreen {
 public:
 	RemoteISOScreen(const Path &filename);
 
@@ -34,7 +34,7 @@ public:
 	void CreateTabs() override;
 
 protected:
-	UI::EventReturn OnChangeRemoteISOSubdir(UI::EventParams &e);
+	void OnChangeRemoteISOSubdir(UI::EventParams &e);
 
 	void CreateConnectTab(UI::ViewGroup *viewGroup);
 	void CreateSettingsTab(UI::ViewGroup *viewGroup);
@@ -42,13 +42,15 @@ protected:
 
 	void update() override;
 
-	UI::EventReturn HandleStartServer(UI::EventParams &e);
-	UI::EventReturn HandleStopServer(UI::EventParams &e);
-	UI::EventReturn HandleBrowse(UI::EventParams &e);
+	void HandleStartServer(UI::EventParams &e);
+	void HandleStopServer(UI::EventParams &e);
+	void HandleBrowse(UI::EventParams &e);
 
 	UI::TextView *firewallWarning_ = nullptr;
 	bool serverRunning_ = false;
 	bool serverStopping_ = false;
+
+	int frameCount_ = 0;
 };
 
 enum class ScanStatus {
@@ -60,7 +62,7 @@ enum class ScanStatus {
 	LOADED,
 };
 
-class RemoteISOConnectScreen : public UIDialogScreenWithBackground {
+class RemoteISOConnectScreen : public UIBaseDialogScreen {
 public:
 	RemoteISOConnectScreen();
 	~RemoteISOConnectScreen();

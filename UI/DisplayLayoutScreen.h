@@ -21,11 +21,15 @@
 
 #include "Common/UI/View.h"
 #include "Common/UI/ViewGroup.h"
+#include "Common/UI/PopupScreens.h"
 #include "GPU/Common/PostShader.h"
+#include "UI/MiscScreens.h"
 
-#include "MiscScreens.h"
+namespace UI {
+class ChoiceStrip;
+}
 
-class DisplayLayoutScreen : public UIDialogScreenWithGameBackground {
+class DisplayLayoutScreen : public UIBaseDialogScreen {
 public:
 	DisplayLayoutScreen(const Path &filename);
 	void CreateViews() override;
@@ -41,7 +45,7 @@ public:
 	const char *tag() const override { return "DisplayLayout"; }
 	
 protected:
-	UI::EventReturn OnPostProcShaderChange(UI::EventParams &e);
+	void OnPostProcShaderChange(UI::EventParams &e);
 
 	void sendMessage(UIMessage message, const char *value) override;
 	void DrawBackground(UIContext &dc) override;

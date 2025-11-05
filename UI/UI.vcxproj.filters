@@ -19,7 +19,7 @@
     <ClCompile Include="MiscScreens.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
-		<ClCompile Include="IAPScreen.cpp">
+    <ClCompile Include="IAPScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
     <ClCompile Include="ControlMappingScreen.cpp">
@@ -89,6 +89,9 @@
     <ClCompile Include="TabbedDialogScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
+    <ClCompile Include="SimpleDialogScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
     <ClCompile Include="RetroAchievementScreens.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
@@ -122,6 +125,25 @@
     <ClCompile Include="DeveloperToolsScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
+    <ClCompile Include="UIAtlas.cpp" />
+    <ClCompile Include="SystemInfoScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="ImDebugger\ImJitViewer.cpp">
+      <Filter>ImDebugger</Filter>
+    </ClCompile>
+    <ClCompile Include="UploadScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="MiscViews.cpp">
+      <Filter>Views</Filter>
+    </ClCompile>
+    <ClCompile Include="BaseScreens.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Background.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="GameInfoCache.h" />
@@ -141,7 +163,7 @@
     <ClInclude Include="MiscScreens.h">
       <Filter>Screens</Filter>
     </ClInclude>
-		<ClInclude Include="IAPScreen.h">
+    <ClInclude Include="IAPScreen.h">
       <Filter>Screens</Filter>
     </ClInclude>
     <ClInclude Include="ControlMappingScreen.h">
@@ -242,6 +264,25 @@
       <Filter>ImDebugger</Filter>
     </ClInclude>
     <ClInclude Include="DeveloperToolsScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="UIAtlas.h" />
+    <ClInclude Include="SystemInfoScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="ImDebugger\ImJitViewer.h">
+      <Filter>ImDebugger</Filter>
+    </ClInclude>
+    <ClInclude Include="UploadScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="MiscViews.h">
+      <Filter>Views</Filter>
+    </ClInclude>
+    <ClInclude Include="BaseScreens.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Background.h">
       <Filter>Screens</Filter>
     </ClInclude>
   </ItemGroup>

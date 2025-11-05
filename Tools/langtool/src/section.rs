@@ -36,7 +36,7 @@ impl Section {
                 continue;
             };
 
-            if prefix.eq_ignore_ascii_case(key) {
+            if prefix.eq(key) {
                 remove_index = Some(index);
                 break;
             }
@@ -57,7 +57,7 @@ impl Section {
                 continue;
             };
 
-            if prefix.eq_ignore_ascii_case(key) {
+            if prefix.eq(key) {
                 return Some(line.clone());
             }
         }
@@ -203,6 +203,28 @@ impl Section {
         });
     }
 
+    pub fn get_lines_not_in(&self, other: &Section) -> Vec<String> {
+        let mut missing_lines = Vec::new();
+        // Brute force (O(n^2)). Bad but not a problem.
+        for line in &self.lines {
+            let prefix = if let Some(pos) = line.find(" =") {
+                &line[0..pos + 2]
+            } else {
+                // Keep non-key lines.
+                continue;
+            };
+            if prefix.starts_with("Font") || prefix.starts_with('#') {
+                continue;
+            }
+
+            // keeps the line if this expression returns true.
+            if !other.lines.iter().any(|line| line.starts_with(prefix)) {
+                missing_lines.push(line.clone());
+            }
+        }
+        missing_lines
+    }
+
     pub fn get_keys_if_not_in(&mut self, other: &Section) -> Vec<String> {
         let mut missing_lines = Vec::new();
         // Brute force (O(n^2)). Bad but not a problem.
@@ -235,7 +257,7 @@ impl Section {
                 continue;
             };
 
-            if prefix.eq_ignore_ascii_case(key) {
+            if prefix.eq(key) {
                 found_index = Some(index);
                 break;
             }
@@ -252,7 +274,7 @@ impl Section {
     pub fn get_value(&self, key: &str) -> Option<String> {
         for line in &self.lines {
             if let Some((ref_key, value)) = split_line(line) {
-                if key.eq_ignore_ascii_case(ref_key) {
+                if key.eq(ref_key) {
                     return Some(value.to_string());
                 }
             }

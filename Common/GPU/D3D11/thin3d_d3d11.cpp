@@ -160,7 +160,14 @@ public:
 
 	void BeginFrame(DebugFlags debugFlags) override;
 	void EndFrame() override;
-	void Present(PresentMode presentMode, int vblanks) override;
+	void Present(PresentMode presentMode) override;
+	PresentMode GetCurrentPresentMode() const override {
+		if (currentInterval_ == 1) {
+			return PresentMode::FIFO;
+		} else {
+			return PresentMode::IMMEDIATE;
+		}
+	}
 
 	int GetFrameCount() override { return frameCount_; }
 
@@ -272,6 +279,8 @@ private:
 	D3D_FEATURE_LEVEL featureLevel_;
 	std::string adapterDesc_;
 	std::vector<std::string> deviceList_;
+
+	int currentInterval_ = -1;
 };
 
 D3D11DrawContext::D3D11DrawContext(ComPtr<ID3D11Device> device, ComPtr<ID3D11DeviceContext> deviceContext, ComPtr<ID3D11Device1> device1, ComPtr<ID3D11DeviceContext1> deviceContext1, ComPtr<IDXGISwapChain> swapChain, D3D_FEATURE_LEVEL featureLevel, HWND hWnd, std::vector<std::string> deviceList, int maxInflightFrames)
@@ -478,12 +487,12 @@ void D3D11DrawContext::EndFrame() {
 	curPipeline_ = nullptr;
 }
 
-void D3D11DrawContext::Present(PresentMode presentMode, int vblanks) {
+void D3D11DrawContext::Present(PresentMode presentMode) {
 	frameTimeHistory_[frameCount_].queuePresent = time_now_d();
 
 	// Safety for libretro
 	if (swapChain_) {
-		uint32_t interval = vblanks;
+		uint32_t interval = 1;
 		uint32_t flags = 0;
 		if (presentMode != PresentMode::FIFO) {
 			interval = 0;
@@ -492,6 +501,7 @@ void D3D11DrawContext::Present(PresentMode presentMode, int vblanks) {
 #endif
 		}
 		swapChain_->Present(interval, flags);
+		currentInterval_ = interval;
 	}
 
 	curRenderTargetView_.Reset();
@@ -807,7 +817,7 @@ InputLayout *D3D11DrawContext::CreateInputLayout(const InputLayoutDesc &desc) {
 
 class D3D11ShaderModule : public ShaderModule {
 public:
-	D3D11ShaderModule(const std::string &tag) : tag_(tag) { }
+	D3D11ShaderModule(std::string_view tag) : tag_(tag) { }
 	~D3D11ShaderModule() {
 	}
 	ShaderStage GetStage() const override { return stage; }

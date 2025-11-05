@@ -354,6 +354,8 @@
     <ClInclude Include="..\ext\lua\lzio.h" />
     <ClInclude Include="..\ext\minimp3\minimp3.h" />
     <ClInclude Include="..\ext\naett\naett.h" />
+    <ClInclude Include="..\ext\nanosvg\src\nanosvg.h" />
+    <ClInclude Include="..\ext\nanosvg\src\nanosvgrast.h" />
     <ClInclude Include="..\ext\sol\config.hpp" />
     <ClInclude Include="..\ext\sol\forward.hpp" />
     <ClInclude Include="..\ext\sol\sol.hpp" />
@@ -464,6 +466,7 @@
     <ClInclude Include="Net\URL.h" />
     <ClInclude Include="Net\WebsocketServer.h" />
     <ClInclude Include="Profiler\Profiler.h" />
+    <ClInclude Include="Render\AtlasGen.h" />
     <ClInclude Include="Render\DrawBuffer.h" />
     <ClInclude Include="Render\ManagedTexture.h" />
     <ClInclude Include="Render\TextureAtlas.h" />
@@ -536,6 +539,7 @@
     <ClInclude Include="UI\Root.h" />
     <ClInclude Include="UI\Screen.h" />
     <ClInclude Include="UI\ScrollView.h" />
+    <ClInclude Include="UI\TabHolder.h" />
     <ClInclude Include="UI\Tween.h" />
     <ClInclude Include="UI\UI.h" />
     <ClInclude Include="UI\UIScreen.h" />
@@ -918,6 +922,7 @@
     <ClCompile Include="Net\URL.cpp" />
     <ClCompile Include="Net\WebsocketServer.cpp" />
     <ClCompile Include="Profiler\Profiler.cpp" />
+    <ClCompile Include="Render\AtlasGen.cpp" />
     <ClCompile Include="Render\DrawBuffer.cpp" />
     <ClCompile Include="Render\ManagedTexture.cpp" />
     <ClCompile Include="Render\TextureAtlas.cpp" />
@@ -980,6 +985,7 @@
     <ClCompile Include="UI\Root.cpp" />
     <ClCompile Include="UI\Screen.cpp" />
     <ClCompile Include="UI\ScrollView.cpp" />
+    <ClCompile Include="UI\TabHolder.cpp" />
     <ClCompile Include="UI\Tween.cpp" />
     <ClCompile Include="UI\UI.cpp" />
     <ClCompile Include="UI\UIScreen.cpp" />

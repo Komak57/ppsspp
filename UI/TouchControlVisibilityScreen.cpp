@@ -15,9 +15,12 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include "Common/System/Display.h"
 #include "Common/Render/TextureAtlas.h"
 #include "Common/Data/Text/I18n.h"
 #include "Common/StringUtils.h"
+#include "Common/UI/TabHolder.h"
+#include "Common/UI/PopupScreens.h"
 
 #include "Core/Config.h"
 
@@ -38,37 +41,43 @@ public:
 	}
 
 private:
-	UI::EventReturn HandleClick(UI::EventParams &e);
+	void HandleClick(UI::EventParams &e);
 
 	UI::CheckBox *checkbox_;
 };
 
-void TouchControlVisibilityScreen::CreateViews() {
+void TouchControlVisibilityScreen::CreateTabs() {
+	auto co = GetI18NCategory(I18NCat::CONTROLS);
+
+	AddTab("Visibility", co->T("Visibility"), [this](UI::LinearLayout *contents) {
+		CreateVisibilityTab(contents);
+	});
+}
+
+void TouchControlVisibilityScreen::CreateVisibilityTab(UI::LinearLayout *vert) {
 	using namespace UI;
 	using namespace CustomKeyData;
 
 	auto di = GetI18NCategory(I18NCat::DIALOG);
 	auto co = GetI18NCategory(I18NCat::CONTROLS);
 
-	root_ = new AnchorLayout(new LayoutParams(FILL_PARENT, FILL_PARENT));
+	const bool portrait = UsePortraitLayout();
 
-	Choice *back = new Choice(di->T("Back"), "", false, new AnchorLayoutParams(leftColumnWidth - 10, WRAP_CONTENT, 10, NONE, NONE, 10));
-	root_->Add(back)->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
 	Choice *toggleAll = new Choice(di->T("Toggle All"), "", false, new AnchorLayoutParams(leftColumnWidth - 10, WRAP_CONTENT, 10, NONE, NONE, 84));
-	root_->Add(toggleAll)->OnClick.Handle(this, &TouchControlVisibilityScreen::OnToggleAll);
 
-	TabHolder *tabHolder = new TabHolder(ORIENT_VERTICAL, leftColumnWidth, nullptr, new AnchorLayoutParams(10, 0, 10, 0, false));
-	tabHolder->SetTag("TouchControlVisibility");
-	root_->Add(tabHolder);
-	ScrollView *rightPanel = new ScrollView(ORIENT_VERTICAL);
-	tabHolder->AddTab(co->T("Visibility"), rightPanel);
-
-	LinearLayout *vert = rightPanel->Add(new LinearLayout(ORIENT_VERTICAL, new LayoutParams(FILL_PARENT, FILL_PARENT)));
 	vert->SetSpacing(0);
+
+	vert->Add(toggleAll)->OnClick.Add([this](UI::EventParams &e) {
+		// TODO: Is this a meaningful operation to support?
+		for (auto toggle : toggles_) {
+			*toggle.show = nextToggleAll_;
+		}
+		nextToggleAll_ = !nextToggleAll_;
+	});
 
 	vert->Add(new ItemHeader(co->T("Touch Control Visibility")));
 
-	const int cellSize = 380;
+	const int cellSize = portrait ? std::min((g_display.dp_xres / 2 - 10), 290) : 380;
 
 	UI::GridLayoutSettings gridsettings(cellSize, 64, 5);
 	gridsettings.fillCells = true;
@@ -87,7 +96,6 @@ void TouchControlVisibilityScreen::CreateViews() {
 	toggles_.push_back({ "Analog Stick", &g_Config.touchAnalogStick.show, ImageID::invalid(), nullptr });
 	toggles_.push_back({ "Right Analog Stick", &g_Config.touchRightAnalogStick.show, ImageID::invalid(), [=](EventParams &e) {
 		screenManager()->push(new RightAnalogMappingScreen(gamePath_));
-		return UI::EVENT_DONE;
 	}});
 	toggles_.push_back({ "Fast-forward", &g_Config.touchFastForwardKey.show, ImageID::invalid(), nullptr });
 
@@ -96,7 +104,6 @@ void TouchControlVisibilityScreen::CreateViews() {
 		snprintf(temp, sizeof(temp), "Custom %d", i + 1);
 		toggles_.push_back({ temp, &g_Config.touchCustom[i].show, ImageID::invalid(), [=](EventParams &e) {
 			screenManager()->push(new CustomButtonMappingScreen(gamePath_, i));
-			return UI::EVENT_DONE;
 		} });
 	}
 
@@ -144,7 +151,7 @@ void RightAnalogMappingScreen::CreateViews() {
 	root_ = new AnchorLayout(new LayoutParams(FILL_PARENT, FILL_PARENT));
 	Choice *back = new Choice(di->T("Back"), "", false, new AnchorLayoutParams(leftColumnWidth - 10, WRAP_CONTENT, 10, NONE, NONE, 10));
 	root_->Add(back)->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
-	TabHolder *tabHolder = new TabHolder(ORIENT_VERTICAL, leftColumnWidth, nullptr, new AnchorLayoutParams(10, 0, 10, 0, false));
+	TabHolder *tabHolder = new TabHolder(ORIENT_VERTICAL, leftColumnWidth, TabHolderFlags::Default, nullptr, new AnchorLayoutParams(10, 0, 10, 0, false));
 	root_->Add(tabHolder);
 	ScrollView *rightPanel = new ScrollView(ORIENT_VERTICAL);
 	tabHolder->AddTab(co->T("Binds"), rightPanel);
@@ -171,17 +178,6 @@ void RightAnalogMappingScreen::CreateViews() {
 	rightAnalogPress->SetEnabledPtr(&g_Config.bRightAnalogCustom);
 }
 
-UI::EventReturn TouchControlVisibilityScreen::OnToggleAll(UI::EventParams &e) {
-	for (auto toggle : toggles_) {
-		*toggle.show = nextToggleAll_;
-	}
-	nextToggleAll_ = !nextToggleAll_;
-
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn CheckBoxChoice::HandleClick(UI::EventParams &e) {
+void CheckBoxChoice::HandleClick(UI::EventParams &e) {
 	checkbox_->Toggle();
-
-	return UI::EVENT_DONE;
 };

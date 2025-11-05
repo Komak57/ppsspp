@@ -54,6 +54,7 @@
 #include "Core/HLE/Plugins.h"
 #include "Core/HLE/ReplaceTables.h"
 #include "Core/HLE/sceKernel.h"
+#include "Core/HLE/sceUtility.h"
 #include "Core/HW/Display.h"
 #include "Core/Config.h"
 #include "Core/Core.h"
@@ -81,6 +82,7 @@ enum CPUThreadState {
 
 MetaFileSystem pspFileSystem;
 ParamSFOData g_paramSFO;
+ParamSFOData g_paramSFORaw;
 static GlobalUIState globalUIState;
 CoreParameter g_CoreParameter;
 static FileLoader *g_loadedFile;
@@ -354,15 +356,9 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 	g_lua.Init();
 
 	// Here we have read the PARAM.SFO, let's see if we need any compatibility overrides.
-	// Homebrew usually has an empty discID, and even if they do have a disc id, it's not
-	// likely to collide with any commercial ones.
+	// Homebrew get fake disc IDs assigned to the global paramSFO, so they shouldn't clash with real games.
 	g_CoreParameter.compat.Load(g_paramSFO.GetDiscID());
 	ShowCompatWarnings(g_CoreParameter.compat);
-
-	// Compat settings can override the software renderer, take care of that here.
-	if (g_Config.bSoftwareRendering || PSP_CoreParameter().compat.flags().ForceSoftwareRenderer) {
-		g_CoreParameter.gpuCore = GPUCORE_SOFTWARE;
-	}
 
 	// This must be before Memory::Init because plugins can override the memory size.
 	if (type != IdentifiedFileType::PPSSPP_GE_DUMP) {
@@ -420,7 +416,9 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 		g_CoreParameter.mountIsoLoader = ConstructFileLoader(g_CoreParameter.mountIso);
 	}
 
-	// TODO: Check Game INI here for settings, patches and cheats, and modify coreParameter accordingly
+	// Game-specific settings are load from for example Load_PSP_ISO (which calls g_Config.loadGameConfig).
+	// We can't do things that depend on these before the below switch. So for example, the adjustment of the GPU core
+	// to software has now been moved below it.
 
 	// If they shut down early, we'll catch it when load completes.
 	// Note: this may return before init is complete, which is checked if CPU_IsReady().
@@ -448,8 +446,9 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 	case IdentifiedFileType::PSP_PBP:
 	case IdentifiedFileType::PSP_ELF:
 	{
-		INFO_LOG(Log::Loader, "File is an ELF or loose PBP! %s", fileLoader->GetPath().c_str());
+		INFO_LOG(Log::Loader, "File is an ELF or loose PBP %s", fileLoader->GetPath().c_str());
 		if (!Load_PSP_ELF_PBP(fileLoader, errorString)) {
+			ERROR_LOG(Log::Loader, "Failed to load ELF or loose PBP: %s", errorString->c_str());
 			return false;
 		}
 		break;
@@ -478,6 +477,13 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 
 	if (g_CoreParameter.updateRecent) {
 		g_recentFiles.Add(g_CoreParameter.fileToStart.ToString());
+	}
+
+	// Update things that depend on game-specific config here.
+
+	// Compat settings can override the software renderer, take care of that here.
+	if (g_Config.bSoftwareRendering || g_CoreParameter.compat.flags().ForceSoftwareRenderer) {
+		g_CoreParameter.gpuCore = GPUCORE_SOFTWARE;
 	}
 
 	InstallExceptionHandler(&Memory::HandleFault);
@@ -585,14 +591,14 @@ bool PSP_InitStart(const CoreParameter &coreParam) {
 
 	_assert_msg_(!g_loadingThread.joinable(), "%s", coreParam.fileToStart.c_str());
 
+	Core_NotifyLifecycle(CoreLifecycle::STARTING);
+
 	g_loadingThread = std::thread([error_string]() {
 		SetCurrentThreadName("ExecLoader");
 
 		AndroidJNIThreadContext jniContext;
 
 		NOTICE_LOG(Log::Boot, "PPSSPP %s", PPSSPP_GIT_VERSION);
-
-		Core_NotifyLifecycle(CoreLifecycle::STARTING);
 
 		Path filename = g_CoreParameter.fileToStart;
 		FileLoader *loadedFile = ResolveFileLoaderTarget(ConstructFileLoader(filename));
@@ -724,6 +730,7 @@ void PSP_Shutdown(bool success) {
 	CPU_Shutdown(success);
 	GPU_Shutdown();
 	g_paramSFO.Clear();
+	g_paramSFORaw.Clear();
 	System_SetWindowTitle("");
 
 	currentMIPS = nullptr;
