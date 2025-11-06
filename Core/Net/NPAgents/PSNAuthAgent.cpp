@@ -23,25 +23,6 @@ namespace net {
 	int PSNAuthAgent::Login(const char* titleId, const char* token, const char* password) {
 		return false;
 	}
-	int PSNAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
-		return false;
-	}
-
-	int PSNAuthAgent::ResendToken(const char* npid, const char* password) {
-		return 0;
-	}
-
-	int PSNAuthAgent::SendResetToken(const char* npid, const char* email) {
-		return 0;
-	}
-
-	int PSNAuthAgent::ResetPassword(const char* npid, const char* token, const char* password) {
-		return 0;
-	}
-
-	u64 PSNAuthAgent::GetNetworkTime() {
-		return 1000000ULL * rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
-	}
 
 	void PSNAuthAgent::Disconnect() {
 		NOTICE_LOG(Log::sceNet, "NPAuthAgent::Disconnect()");
@@ -289,10 +270,6 @@ namespace net {
 				i++;
 			}
 		}
-		return 0;
-	}
-
-	int PSNAuthAgent::GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npCommId) {
 		return 0;
 	}
 }

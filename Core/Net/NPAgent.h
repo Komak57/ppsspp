@@ -473,7 +473,7 @@ namespace net {
 		0
 	};
 
-	enum class NPAgentType { PSN, RPCN };
+	enum class NPAgentType { NONE, PSN, RPCN };
 
 	struct NPServerInfo {
 		NPAgentType nptype;
@@ -496,7 +496,6 @@ namespace net {
 
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
-		virtual void Disconnect() = 0;
 		bool Send(Packet* packet, double timeout, bool* cancelled);
 		virtual std::chrono::microseconds HandleResponses() = 0;
 		int Recv(Packet* packet, bool* cancelled);
@@ -520,28 +519,30 @@ namespace net {
 			return { serverReq->serverId, SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE };
 		};
 
-		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) = 0;
+		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
+		virtual void Disconnect();
 		// NPAuthAgent Functions
-		virtual int Login(const char* npid, const char* token, const char* password) = 0;
-		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
-		virtual int GetServers(SceNpCommunicationId npTitleId) = 0;
-		virtual u64 GetNetworkTime() = 0;
+		virtual int Login(const char* npid, const char* token, const char* password);
+		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		virtual int GetServers(SceNpCommunicationId npTitleId);
+		virtual u64 GetNetworkTime();
 
 		// NPAgent Functions
-		virtual int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) = 0;
-		virtual int RequestSignalingInfo(std::string npid, u32 conn_id) = 0;
-		virtual int SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) = 0;
-		virtual int CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) = 0;
-		virtual int JoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) = 0;
-		virtual int LeaveRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) = 0;
-		virtual int GetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req) = 0;
-		virtual int SetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req) = 0;
-		virtual int SetRoomDataExternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req) = 0;
-		virtual int SetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomMemberDataInternalRequest* req) = 0;
-		virtual int GetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomMemberDataInternalRequest* req) = 0;
-		virtual int SendRoomMessage(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req) = 0;
-		virtual int SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) = 0;
-		virtual int GetRoomDataExternalList(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req) = 0;
+		virtual int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
+		virtual int SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req);
+		virtual int CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req);
+		virtual int JoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req);
+		virtual int LeaveRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req);
+		virtual int GetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req);
+		virtual int SetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req);
+		virtual int GetRoomDataExternalList(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req);
+		virtual int SetRoomDataExternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req);
+		virtual int SetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomMemberDataInternalRequest* req);
+		virtual int GetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomMemberDataInternalRequest* req);
+		virtual int SendRoomMessage(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req);
+		virtual int SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req);
+		virtual int PingRoomOwner(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2RoomId room_id);
+		virtual int RequestSignalingInfo(std::string npid, u32 conn_id);
 
 		virtual void start_read_thread() = 0;
 		virtual void stop_read_thread() = 0;
@@ -605,27 +606,16 @@ namespace net {
 		PSNAgent(std::string host, int port);
 		std::chrono::microseconds HandleResponses();
 
-		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
-		void Disconnect();
-		int Login(const char* npid, const char* token, const char* password);
-		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
-		int GetServers(SceNpCommunicationId npTitleId);
-		u64 GetNetworkTime();
+		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) override;
+		void Disconnect() override;
+		int Login(const char* npid, const char* token, const char* password) override;
+		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) override;
+		int GetServers(SceNpCommunicationId npTitleId) override;
 
-		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
-		int RequestSignalingInfo(std::string npid, u32 conn_id);
-		int SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req);
-		int CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req);
-		int JoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req);
-		int LeaveRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req);
-		int GetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req);
-		int SetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req);
-		int SetRoomDataExternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req);
-		int SetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomMemberDataInternalRequest* req);
-		int GetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomMemberDataInternalRequest* req);
-		int SendRoomMessage(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req);
-		int SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req);
-		int GetRoomDataExternalList(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req);
+		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) override;
+		int RequestSignalingInfo(std::string npid, u32 conn_id) override;
+		int SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) override;
+		int CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) override;
 
 		void start_read_thread();
 		void stop_read_thread();
@@ -640,40 +630,40 @@ namespace net {
 		RPCNAgent(std::string host, int port);
 		std::chrono::microseconds HandleResponses();
 
-		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
-		void Disconnect();
-		int Login(const char* npid, const char* token, const char* password);
-		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
-		int GetServers(SceNpCommunicationId npTitleId);
-		u64 GetNetworkTime();
+		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) override;
+		void Disconnect() override;
+		int Login(const char* npid, const char* token, const char* password) override;
+		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) override;
+		int GetServers(SceNpCommunicationId npTitleId) override;
+		u64 GetNetworkTime() override;
 
-		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
+		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) override;
 		int GetWorldInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int RequestSignalingInfo(std::string npid, u32 conn_id);
+		int RequestSignalingInfo(std::string npid, u32 conn_id) override;
 		int RequestSignalingInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId conn_id, RPCNResponse resp);
-		int SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req);
+		int SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) override;
 		int SearchRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req);
+		int CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) override;
 		int CreateJoinRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int JoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req);
+		int JoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) override;
 		int JoinRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int LeaveRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req);
+		int LeaveRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) override;
 		int LeaveRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int GetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req);
+		int GetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req) override;
 		int GetRoomDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int SetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req);
+		int SetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req) override;
 		int SetRoomDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int SetRoomDataExternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req);
+		int SetRoomDataExternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req) override;
 		int SetRoomDataExternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int SetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomMemberDataInternalRequest* req);
+		int SetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomMemberDataInternalRequest* req) override;
 		int SetRoomMemberDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int GetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomMemberDataInternalRequest* req);
+		int GetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomMemberDataInternalRequest* req) override;
 		int GetRoomMemberDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int SendRoomMessage(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req);
+		int SendRoomMessage(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req) override;
 		int SendRoomMessage_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req);
+		int SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) override;
 		int SetUserInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int GetRoomDataExternalList(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req);
+		int GetRoomDataExternalList(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req) override;
 		int GetRoomDataExternalList_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
 
 		void start_read_thread();
@@ -710,10 +700,10 @@ namespace net {
 
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
-		virtual std::unique_ptr<NPAgent> CreateAgent() = 0;
-		virtual bool Connect(int maxTries = 1, double timeout = 20.0f, bool* cancelConnect = nullptr) = 0;
-		virtual void Disconnect() = 0;
-		virtual NPAgentType GetAuthType() const = 0;
+		virtual std::unique_ptr<NPAgent> CreateAgent();
+		virtual bool Connect(int maxTries = 1, double timeout = 20.0f, bool* cancelConnect = nullptr);
+		virtual void Disconnect();
+		virtual NPAgentType GetAuthType() const { return NPAgentType::NONE; }
 
 		bool Send(Packet* packet, double timeout, bool* cancelled);
 		int Recv(Packet* packet, bool* cancelled);
@@ -721,14 +711,14 @@ namespace net {
 		//int GetID() { return ID; }
 		//SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
 
-		virtual int Login(const char* npid, const char* token, const char* password) = 0;
-		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) = 0;
-		virtual int ResendToken(const char* npid, const char* password) = 0;
-		virtual int SendResetToken(const char* npid, const char* email) = 0;
-		virtual int ResetPassword(const char* npid, const char* token, const char* password) = 0;
-		virtual u64 GetNetworkTime() = 0;
-		virtual int GetServers(SceNpCommunicationId npTitleId) = 0;
-		virtual int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) = 0;
+		virtual int Login(const char* npid, const char* token, const char* password);
+		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
+		virtual int ResendToken(const char* npid, const char* password);
+		virtual int SendResetToken(const char* npid, const char* email);
+		virtual int ResetPassword(const char* npid, const char* token, const char* password);
+		virtual u64 GetNetworkTime();
+		virtual int GetServers(SceNpCommunicationId npTitleId);
+		virtual int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
 
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
@@ -797,32 +787,26 @@ namespace net {
 		std::unique_ptr<NPAgent> CreateAgent();
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
 		void Disconnect();
-		int Login(const char* npid, const char* token, const char* password);
-		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
-		int ResendToken(const char* npid, const char* password);
-		int SendResetToken(const char* npid, const char* email);
-		int ResetPassword(const char* npid, const char* token, const char* password);
-		u64 GetNetworkTime();
+		int Login(const char* npid, const char* token, const char* password) override;
 		NPAgentType GetAuthType() const override { return NPAgentType::PSN; }
 		int GetServers(SceNpCommunicationId npTitleId);
-		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
 	};
 	class RPCNAuthAgent : public NPAuthAgent {
 	public:
 		~RPCNAuthAgent();
 		RPCNAuthAgent(std::string host, int port);
 		std::unique_ptr<NPAgent> CreateAgent();
-		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
-		void Disconnect();
+		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr) override;
+		void Disconnect() override;
 		static std::string generate_npid();
-		int Login(const char* npid, const char* token, const char* password);
-		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
-		int ResendToken(const char* npid, const char* password);
-		int SendResetToken(const char* npid, const char* email);
-		int ResetPassword(const char* npid, const char* token, const char* password);
-		u64 GetNetworkTime();
-		int GetServers(SceNpCommunicationId npTitleId);
-		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
+		int Login(const char* npid, const char* token, const char* password) override;
+		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) override;
+		int ResendToken(const char* npid, const char* password) override;
+		int SendResetToken(const char* npid, const char* email) override;
+		int ResetPassword(const char* npid, const char* token, const char* password) override;
+		u64 GetNetworkTime() override;
+		int GetServers(SceNpCommunicationId npTitleId) override;
+		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) override;
 		int GetWorldInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
 
 		NPAgentType GetAuthType() const override { return NPAgentType::RPCN; }

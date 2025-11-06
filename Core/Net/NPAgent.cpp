@@ -7,6 +7,7 @@
 #include "Common/TimeUtil.h"
 #include "Common/File/FileDescriptor.h"
 #include "Common/SysError.h"
+#include <Core/HLE/sceRtc.h>
 
 bool IsBigEndian() {
 	uint16_t number = 0x1;
@@ -139,6 +140,7 @@ void Packet::AddCommId(flatbuffers::FlatBufferBuilder* builder, uint8_t* commId)
 }
 
 namespace net {
+	// Helper Functions
 	bool NPAuthAgent::Resolve(DNSType type) {
 		if (!host_.c_str() || port_ < 1 || port_ > 65535) {
 			ERROR_LOG(Log::IO, "Resolve: Unable to resolve %s:%d", host_.c_str(), port_);
@@ -197,197 +199,25 @@ namespace net {
 		return true;
 	}
 
-	//u64 NPAgent::get_signaling_context(u32 ctx_id)
-	//{
-	//	static u64 fallback_id = 1; // In case map is empty
-
-	//	if (!signaling_ctx.contains(ctx_id))
-	//		return fallback_id++;
-
-	//	u64 max_key = 0;
-	//	for (const auto& [key, _] : responses)
-	//	{
-	//		if (key > max_key)
-	//			max_key = key;
-	//	}
-	//	return max_key + 1;
-	//}
-
-	bool NPAuthAgent::Send(Packet* packet, double timeout, bool* cancelled) {
-		if (sock() <= 0) {
-			ERROR_LOG(Log::IO, "Send Failed - Invalid Socket");
-			return false;
-		}
-
-		int i;
-		std::string hexdata = "";
-		for (i = 0; i < packet->Length(); i++) {
-			char const c = packet->Data()[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		DEBUG_LOG(Log::sceNet, "NPAgent::Send('%s')", hexdata.c_str());
-		static constexpr float CANCEL_INTERVAL = 0.25f;
-
-		bool ready = false;
-		double endTimeout = time_now_d() + timeout;
-		//const char* data = reinterpret_cast<const char*>(packet->Data());
-		for (size_t pos = 0, end = packet->Length(); pos < end; ) {
-			if (time_now_d() > endTimeout) {
-				ERROR_LOG(Log::IO, "Send timed out");
-				return false;
-			}
-			int sent;
-			if (tls.enabled) {
-				sent = mbedtls_ssl_write(&tls.sslCtx, packet->Data() + pos, end - pos);
-				// TODO: Do we need some retry logic here, instead of just giving up?
-				if (sent <= 0) {
-					switch (sent) {
-					case MBEDTLS_ERR_NET_CONN_RESET:
-					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-						ERROR_LOG(Log::sceNet, "FlushSocket: Client closed connection gracefully");
-						return true;
-					default:
-						ERROR_LOG(Log::sceNet, "SSL write failed: -0x%04x", -sent);
-						return false;
-					}
-				}
-			}
-			else {
-				sent = send(sock(), (const char*)packet->Data() + pos, end - pos, 0);
-				// Only await when we failed to receive data we're expecting
-				if (sent < 0) {
-#if !PPSSPP_PLATFORM(WINDOWS)
-					int err = errno;
-					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
-						ERROR_LOG(Log::IO, "Send Failed - %d", err);
-						return false;
-					}
-#else
-					int err = WSAGetLastError();
-					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
-						ERROR_LOG(Log::IO, "Send Failed - %d", err);
-						return false;
-					}
-#endif
-					ready = false;
-					while (!ready) {
-						if (cancelled && *cancelled)
-							return false;
-						if (sock() <= 0) {
-							ERROR_LOG(Log::IO, "Socket Failed - Socket lost");
-							return false;
-						}
-						ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, true);
-						if (!ready && time_now_d() > endTimeout) {
-							ERROR_LOG(Log::IO, "Send timed out");
-							return false;
-						}
-					}
-					continue;
-				}
-			}
-			pos += sent;
-		}
-		packet->Clear();
-		return true;
-	}
-
 	enum ReadState {
 		Headers,
 		Body,
 		Complete
 	};
 
-	int NPAuthAgent::Recv(Packet* packet, bool* cancelled) {
-		static constexpr float CANCEL_INTERVAL = 0.25f;
-		char buf[4096];
-		// Adjustable read size
-		PacketHeader header;
-		size_t toRead = sizeof(PacketHeader);
-		int retval = 0;
-		size_t received = 0;
-		ReadState state = ReadState::Headers;
-		int content_length = 0;
-		int ready = 0;
 
-		while (state != ReadState::Complete) {
-			if (*cancelled) {
-				WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");
-				return 0;
-			}
-			if (tls.enabled) {
-				DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
-				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
-
-				if (*cancelled) {
-					WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");
-					return 0;
-				}
-				//int ready = 0;
-				if (retval < 0) {
-					switch (retval) {
-					case MBEDTLS_ERR_NET_CONN_RESET:
-					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-						WARN_LOG(Log::sceNet, "Read - Client closed connection gracefully");
-						return (int)received > 0 ? (int)received : retval;
-					case MBEDTLS_ERR_SSL_TIMEOUT:
-						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned TIMOUT");
-						return retval;
-					case MBEDTLS_ERR_SSL_WANT_WRITE:
-						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_WRITE");
-						return retval;
-					case MBEDTLS_ERR_SSL_WANT_READ:
-						DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
-						while (!ready && (cancelled && !*cancelled))
-							ready = fd_util::WaitUntilReady(tls.netCtx.fd, CANCEL_INTERVAL, false);
-						if (cancelled && *cancelled)
-							return SCE_NP_AUTH_ERROR_ABORTED;
-							// Read some more!
-						continue;
-					default:
-						char errbuf[128];
-						mbedtls_strerror(retval, errbuf, sizeof(errbuf));
-						ERROR_LOG(Log::HTTP, "Read Failed: -0x%04x -> %s", -retval, errbuf);
-						return retval;
-					}
-				}
-
-			}
-			else {
-				DEBUG_LOG(Log::sceNet, "socket reading %i bytes", toRead);
-				retval = recv(sock(), buf, toRead, MSG_NOSIGNAL);
-
-				if (retval < 0)
-					break;
-			}
-			packet->Append(buf, retval);
-			received += retval;
-
-			if (state == ReadState::Headers) {
-				// More data to read?
-				if (received < sizeof(PacketHeader))
-					continue;
-				// Pull Header
-				memcpy(&header, packet->Data(), sizeof(PacketHeader));
-
-				content_length = header.size;
-				toRead = content_length - received;
-				state = ReadState::Body;
-			}
-			if (state == ReadState::Body) {
-				// Should always be true
-				if (received == content_length)
-					state = ReadState::Complete;
-			}
-		}
-		return received;  // Return HTML Status Code or Error Code
+#pragma region NPAgent_Defaults
+	// NPAgent Defaults
+	bool NPAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		connected = true;
+		return true;
 	}
 
-	/*u8 NPAgent::GetStatus() {
-		return status;
-	}*/
-
+	void NPAgent::Disconnect() {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		connected = false;
+	}
 
 	bool NPAgent::Send(Packet* packet, double timeout, bool* cancelled) {
 		if (sock() <= 0) {
@@ -509,11 +339,11 @@ namespace net {
 						return retval;
 					case MBEDTLS_ERR_SSL_WANT_READ:
 						VERBOSE_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
-							while (!ready && (cancelled && !*cancelled))
-								ready = fd_util::WaitUntilReady(tls.netCtx.fd, CANCEL_INTERVAL, false);
+						while (!ready && (cancelled && !*cancelled))
+							ready = fd_util::WaitUntilReady(tls.netCtx.fd, CANCEL_INTERVAL, false);
 						if (cancelled && *cancelled)
 							return SCE_NP_MANAGER_ERROR_ABORTED;
-							// Read some more!
+						// Read some more!
 						continue;
 					default:
 						char errbuf[128];
@@ -554,4 +384,309 @@ namespace net {
 		return received;  // Return HTML Status Code or Error Code
 	}
 
+	int NPAgent::Login(const char* npid, const char* token, const char* password) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+
+	int NPAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+
+	u64 NPAgent::GetNetworkTime() {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 1000000ULL * rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
+	}
+
+	int NPAgent::GetServers(SceNpCommunicationId npTitleId) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+
+	int NPAgent::GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::JoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::LeaveRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::GetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::SetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::GetRoomDataExternalList(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::SetRoomDataExternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::SetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomMemberDataInternalRequest* req) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::GetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomMemberDataInternalRequest* req) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::SendRoomMessage(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::PingRoomOwner(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2RoomId room_id) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+	int NPAgent::RequestSignalingInfo(std::string npid, u32 conn_id) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+#pragma endregion
+
+#pragma region NPAuthAgent_Defaults
+	// NPAuthAgent Defaults
+	std::unique_ptr<NPAgent> NPAuthAgent::CreateAgent() {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return nullptr;
+	}
+
+	bool NPAuthAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		connected = true;
+		return true;
+	}
+
+	void NPAuthAgent::Disconnect() {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		connected = false;
+	}
+
+	bool NPAuthAgent::Send(Packet* packet, double timeout, bool* cancelled) {
+		if (sock() <= 0) {
+			ERROR_LOG(Log::IO, "Send Failed - Invalid Socket");
+			return false;
+		}
+
+		int i;
+		std::string hexdata = "";
+		for (i = 0; i < packet->Length(); i++) {
+			char const c = packet->Data()[i];
+			hexdata += hex_chars[(c & 0xF0) >> 4];
+			hexdata += hex_chars[(c & 0x0F) >> 0];
+		}
+		DEBUG_LOG(Log::sceNet, "NPAgent::Send('%s')", hexdata.c_str());
+		static constexpr float CANCEL_INTERVAL = 0.25f;
+
+		bool ready = false;
+		double endTimeout = time_now_d() + timeout;
+		//const char* data = reinterpret_cast<const char*>(packet->Data());
+		for (size_t pos = 0, end = packet->Length(); pos < end; ) {
+			if (time_now_d() > endTimeout) {
+				ERROR_LOG(Log::IO, "Send timed out");
+				return false;
+			}
+			int sent;
+			if (tls.enabled) {
+				sent = mbedtls_ssl_write(&tls.sslCtx, packet->Data() + pos, end - pos);
+				// TODO: Do we need some retry logic here, instead of just giving up?
+				if (sent <= 0) {
+					switch (sent) {
+					case MBEDTLS_ERR_NET_CONN_RESET:
+					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+						ERROR_LOG(Log::sceNet, "FlushSocket: Client closed connection gracefully");
+						return true;
+					default:
+						ERROR_LOG(Log::sceNet, "SSL write failed: -0x%04x", -sent);
+						return false;
+					}
+				}
+			}
+			else {
+				sent = send(sock(), (const char*)packet->Data() + pos, end - pos, 0);
+				// Only await when we failed to receive data we're expecting
+				if (sent < 0) {
+#if !PPSSPP_PLATFORM(WINDOWS)
+					int err = errno;
+					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+						ERROR_LOG(Log::IO, "Send Failed - %d", err);
+						return false;
+					}
+#else
+					int err = WSAGetLastError();
+					if (err > 0 && err != EAGAIN && err != EWOULDBLOCK) {
+						ERROR_LOG(Log::IO, "Send Failed - %d", err);
+						return false;
+					}
+#endif
+					ready = false;
+					while (!ready) {
+						if (cancelled && *cancelled)
+							return false;
+						if (sock() <= 0) {
+							ERROR_LOG(Log::IO, "Socket Failed - Socket lost");
+							return false;
+						}
+						ready = fd_util::WaitUntilReady(sock_, CANCEL_INTERVAL, true);
+						if (!ready && time_now_d() > endTimeout) {
+							ERROR_LOG(Log::IO, "Send timed out");
+							return false;
+						}
+					}
+					continue;
+				}
+			}
+			pos += sent;
+		}
+		packet->Clear();
+		return true;
+	}
+
+	int NPAuthAgent::Recv(Packet* packet, bool* cancelled) {
+		static constexpr float CANCEL_INTERVAL = 0.25f;
+		char buf[4096];
+		// Adjustable read size
+		PacketHeader header;
+		size_t toRead = sizeof(PacketHeader);
+		int retval = 0;
+		size_t received = 0;
+		ReadState state = ReadState::Headers;
+		int content_length = 0;
+		int ready = 0;
+
+		while (state != ReadState::Complete) {
+			if (*cancelled) {
+				WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");
+				return 0;
+			}
+			if (tls.enabled) {
+				DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read reading %i bytes", toRead);
+				retval = mbedtls_ssl_read(&tls.sslCtx, (unsigned char*)buf, toRead);
+
+				if (*cancelled) {
+					WARN_LOG(Log::sceNet, "NPAgent::Recv() Cancelled");
+					return 0;
+				}
+				//int ready = 0;
+				if (retval < 0) {
+					switch (retval) {
+					case MBEDTLS_ERR_NET_CONN_RESET:
+					case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+						WARN_LOG(Log::sceNet, "Read - Client closed connection gracefully");
+						return (int)received > 0 ? (int)received : retval;
+					case MBEDTLS_ERR_SSL_TIMEOUT:
+						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned TIMOUT");
+						return retval;
+					case MBEDTLS_ERR_SSL_WANT_WRITE:
+						ERROR_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_WRITE");
+						return retval;
+					case MBEDTLS_ERR_SSL_WANT_READ:
+						DEBUG_LOG(Log::sceNet, "mbedtls_ssl_read returned WANT_READ");
+						while (!ready && (cancelled && !*cancelled))
+							ready = fd_util::WaitUntilReady(tls.netCtx.fd, CANCEL_INTERVAL, false);
+						if (cancelled && *cancelled)
+							return SCE_NP_AUTH_ERROR_ABORTED;
+						// Read some more!
+						continue;
+					default:
+						char errbuf[128];
+						mbedtls_strerror(retval, errbuf, sizeof(errbuf));
+						ERROR_LOG(Log::HTTP, "Read Failed: -0x%04x -> %s", -retval, errbuf);
+						return retval;
+					}
+				}
+
+			}
+			else {
+				DEBUG_LOG(Log::sceNet, "socket reading %i bytes", toRead);
+				retval = recv(sock(), buf, toRead, MSG_NOSIGNAL);
+
+				if (retval < 0)
+					break;
+			}
+			packet->Append(buf, retval);
+			received += retval;
+
+			if (state == ReadState::Headers) {
+				// More data to read?
+				if (received < sizeof(PacketHeader))
+					continue;
+				// Pull Header
+				memcpy(&header, packet->Data(), sizeof(PacketHeader));
+
+				content_length = header.size;
+				toRead = content_length - received;
+				state = ReadState::Body;
+			}
+			if (state == ReadState::Body) {
+				// Should always be true
+				if (received == content_length)
+					state = ReadState::Complete;
+			}
+		}
+		return received;  // Return HTML Status Code or Error Code
+	}
+
+	int NPAuthAgent::Login(const char* npid, const char* token, const char* password) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+
+	int NPAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+
+	int NPAuthAgent::ResendToken(const char* npid, const char* password) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+
+	int NPAuthAgent::SendResetToken(const char* npid, const char* email) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+
+	int NPAuthAgent::ResetPassword(const char* npid, const char* token, const char* password) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+
+	u64 NPAuthAgent::GetNetworkTime() {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+
+	int NPAuthAgent::GetServers(SceNpCommunicationId npTitleId) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+
+	int NPAuthAgent::GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) {
+		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		return 0;
+	}
+#pragma endregion
 }
