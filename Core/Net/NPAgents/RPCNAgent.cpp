@@ -330,9 +330,11 @@ namespace net {
 					case CommandType::GetRoomDataInternal: GetRoomDataInternal_Reply(ctxId, reqId, buf); break;
 					case CommandType::SetRoomDataInternal: SetRoomDataInternal_Reply(ctxId, reqId, buf); break;
 					case CommandType::SetRoomDataExternal: SetRoomDataExternal_Reply(ctxId, reqId, buf); break;
+					case CommandType::GetRoomDataExternalList: GetRoomDataExternalList_Reply(ctxId, reqId, buf); break;
+					case CommandType::SetRoomMemberDataInternal: SetRoomDataInternal_Reply(ctxId, reqId, buf); break;
+					case CommandType::GetRoomMemberDataInternal: GetRoomDataInternal_Reply(ctxId, reqId, buf); break;
 					case CommandType::SendRoomMessage: SendRoomMessage_Reply(ctxId, reqId, buf); break;
 					case CommandType::SetUserInfo: SetUserInfo_Reply(ctxId, reqId, buf); break;
-					case CommandType::GetRoomDataExternalList: GetRoomDataExternalList_Reply(ctxId, reqId, buf); break;
 					case CommandType::RequestSignalingInfos: RequestSignalingInfo_Reply(ctxId, reqId, buf); break;
 					default: responses[header.uid] = std::move(buf); break; // Response is synchronous
 				}
@@ -1776,6 +1778,106 @@ namespace net {
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, SCE_NP_MATCHING2_OKAY, 0);
 	}
+
+	int RPCNAgent::SetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomMemberDataInternalRequest* req) {
+		flatbuffers::FlatBufferBuilder builder(1024);
+		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_binattrinternal_vec;
+		if (req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal)
+		{
+			std::vector<flatbuffers::Offset<BinAttr>> davec;
+			for (u32 i = 0; i < req->roomMemberBinAttrInternalNum; i++)
+			{
+				auto bin = CreateBinAttr(builder, req->roomMemberBinAttrInternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomMemberBinAttrInternal[i].ptr.ptr), req->roomMemberBinAttrInternal[i].size));
+				davec.push_back(bin);
+			}
+			final_binattrinternal_vec = builder.CreateVector(davec);
+		}
+
+		auto req_finished = CreateSetRoomMemberDataInternalRequest(builder, req->roomId, req->memberId, req->teamId, final_binattrinternal_vec);
+		builder.Finish(req_finished);
+
+		// Wrap and send the packet
+		Packet packet;
+		packet.AddCommId(&builder, this->GetCommHeader().data());
+
+		packet.Pack(CommandType::SetRoomMemberDataInternal, generate_uid(ctxId, reqId));
+
+		INFO_LOG(Log::sceNet, "Setting Room Data Internal for Room #%d", req->roomId);
+
+		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
+		bool flushed = Send(&packet, 5.0, &cancelled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return (u8)ErrorType::NotFound;
+		}
+
+		return SCE_NP_MATCHING2_OKAY;
+	}
+
+	int RPCNAgent::SetRoomMemberDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
+
+		switch ((ErrorType)resp.error)
+		{
+		case ErrorType::NoError: break;
+		case ErrorType::RoomMissing: return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "No such room"), 0);
+		case ErrorType::NotFound: return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER, "No such member"), 0);
+		case ErrorType::Unauthorized: return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_FORBIDDEN, "Forbidden"), 0);
+		default: 
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, hleLogError(Log::sceNet, resp.error, "Unexpected Reply"), 0);
+		}
+		
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, SCE_NP_MATCHING2_OKAY, 0);
+	}
+
+	int RPCNAgent::GetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomMemberDataInternalRequest* req) {
+		flatbuffers::FlatBufferBuilder builder(1024);
+		flatbuffers::Offset<flatbuffers::Vector<u16>> final_attrid_vec;
+		if (req->attrIdNum && req->attrId)
+		{
+			std::vector<u16> attrid_vec;
+			for (u32 i = 0; i < req->attrIdNum; i++)
+			{
+				attrid_vec.push_back(req->attrId[i]);
+			}
+			final_attrid_vec = builder.CreateVector(attrid_vec);
+		}
+
+		auto req_finished = CreateGetRoomMemberDataInternalRequest(builder, req->roomId, req->memberId, final_attrid_vec);
+		builder.Finish(req_finished);
+
+		// Wrap and send the packet
+		Packet packet;
+		packet.AddCommId(&builder, this->GetCommHeader().data());
+
+		packet.Pack(CommandType::GetRoomMemberDataInternal, generate_uid(ctxId, reqId));
+
+		INFO_LOG(Log::sceNet, "Getting Room Data Internal for Room #%d", req->roomId);
+
+		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
+		bool flushed = Send(&packet, 5.0, &cancelled);
+		if (!flushed) {
+			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			return (u8)ErrorType::NotFound;
+		}
+
+		return SCE_NP_MATCHING2_OKAY;
+	}
+
+	int RPCNAgent::GetRoomMemberDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
+
+		switch ((ErrorType)resp.error)
+		{
+		case ErrorType::NoError: break;
+		case ErrorType::RoomMissing: return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "No such room"), 0);
+		case ErrorType::NotFound: return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_USER, "No such member"), 0);
+		case ErrorType::Unauthorized: return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_FORBIDDEN, "Forbidden"), 0);
+		default:
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, hleLogError(Log::sceNet, resp.error, "Unexpected Reply"), 0);
+		}
+
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, SCE_NP_MATCHING2_OKAY, 0);
+	}
+
 	//async
 	int RPCNAgent::SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
