@@ -257,11 +257,18 @@ void SetDefaultParams(SceNpMatching2ContextId ctxId, SceNpMatching2SignalingOptP
  * @return u32 System RequestID
  */
 SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestOptParam optParam, u32 assignedReqId, SceNpMatching2EventType event_type) {
-	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %d) at %08x", __FUNCTION__, ctxId, optParam.cbFunc.ptr, optParam.cbFuncArg.ptr, event_type, currentMIPS->pc);
+	NOTICE_LOG(Log::sceNet, "%s(ctx: %d, cb: %08x, cb_args: %08x, event_type: %d) at %08x", __FUNCTION__, ctxId, optParam.cbFunc.ptr, optParam.cbFuncArg.ptr, event_type, currentMIPS->pc);
 	
+	// If empty callback, check for a default callback of the same type
 	if (!Memory::IsValidAddress(optParam.cbFunc.ptr)) {
-		NOTICE_LOG(Log::sceNet, "%s(count: %d) - Destroying Empty Callback for %s(%d, %d)", __FUNCTION__, npMatching2Handlers.size(), EventToString(event_type).c_str(), ctxId, assignedReqId);
+		auto _default = defaultOptParams.find(event_type);
+		if (_default == defaultOptParams.end()) {
+			WARN_LOG(Log::sceNet, "%s(count: %d) - Destroying Empty Callback for %s(%d, %d)", __FUNCTION__, npMatching2Handlers.size(), EventToString(event_type).c_str(), ctxId, assignedReqId);
 		return assignedReqId;
+	}
+		WARN_LOG(Log::sceNet, "%s - Using Default Opt Params", __FUNCTION__);
+		optParam.cbFunc = _default->second.cb;
+		optParam.cbFuncArg = _default->second.cb_arg;
 	}
 
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
@@ -416,11 +423,12 @@ bool NpMatching2ProcessEvents() {
 	npMatching2Events.pop_front();
 
 	NpMatching2Handler* optParam = nullptr;
-	if (event.context_id == DEFAULT_CONTEXT) {
+	/*if (event.context_id == DEFAULT_CONTEXT) {
 		WARN_LOG(Log::sceNet, "NpMatching2ProcessEvents - Using Default Opt Params");
 		if (auto def = defaultOptParams.find(event.event_type); def != defaultOptParams.end())
 			optParam = &def->second;
-	} else if (auto it = npMatching2Handlers.find(event.request_id); it != npMatching2Handlers.end()) {
+	} else */
+	if (auto it = npMatching2Handlers.find(event.request_id); it != npMatching2Handlers.end()) {
 		//optParam = &it->second;
 		optParam = new NpMatching2Handler(std::move(it->second));  // Save and erase?
 		npMatching2Handlers.erase(it);
