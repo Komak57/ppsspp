@@ -235,7 +235,7 @@ SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId
 	// If empty callback, check for a default callback of the same type
 	if (!Memory::IsValidAddress(optParam.cbFunc.ptr)) {
 		return RegisterNpMatching2DefaultHandler(ctxId, assignedReqId, event_type);
-		}
+	}
 
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 	SceNpMatching2RequestId req_id = GenerateRequestId(ctxId, assignedReqId);
@@ -1344,9 +1344,10 @@ static int sceNpMatching2AbortRequest(int ctxId, u32 assignedReqIdPtr)
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
+//static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
+static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 optParamPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParamPtr, currentMIPS->pc);
 
 	// ThreadStart
 	if (!npMatching2Inited)
@@ -1355,7 +1356,7 @@ static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 op
 	if (ctx.find(ctxId) == ctx.end())
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND);
 
-	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
+	if (!Memory::IsValidAddress(optParamPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
 	auto signalingOptParam = PSPPointer<SceNpMatching2SignalingOptParam>::Create(optParamPtr);
@@ -1985,7 +1986,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0xFADBA9DB, &WrapI_IU<sceNpMatching2AbortRequest>,						"sceNpMatching2AbortRequest",					'i', "ix"     },
 
 	{0xA3C298D1, &WrapI_IU<sceNpMatching2RegisterSignalingCallback>,		"sceNpMatching2RegisterSignalingCallback",		'i', "ix"    },
-	{0x9A67F5D0, &WrapI_IUUU<sceNpMatching2SetSignalingOptParam>,			"sceNpMatching2SetSignalingOptParam",			'i', "ixxx"   },
+	{0x9A67F5D0, &WrapI_IU<sceNpMatching2SetSignalingOptParam>,				"sceNpMatching2SetSignalingOptParam",			'i', "ix"     },
 	{0xC7E72EC5, &WrapI_IUU<sceNpMatching2GetSignalingOptParamLocal>,		"sceNpMatching2GetSignalingOptParamLocal",		'i', "ixx"    },
 	{0xFF32EA05, &WrapI_U<sceNpMatching2SignalingGetLocalNetInfo>,			"sceNpMatching2SignalingGetLocalNetInfo",		'i', "x"      },
 	{0x8CD109E7, &WrapI_IUUU<sceNpMatching2SignalingGetPeerNetInfo>,		"sceNpMatching2SignalingGetPeerNetInfo",		'i', "ixxx"   },
