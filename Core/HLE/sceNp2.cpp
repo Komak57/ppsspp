@@ -223,33 +223,6 @@ SceNpMatching2RequestId GenerateRequestId(SceNpMatching2ContextId ctxId, SceNpMa
 //	Memory::Memcpy(address, &object, sizeof(T), tag, taglen);
 //}
 
-void SetDefaultParams(SceNpMatching2ContextId ctxId, SceNpMatching2RoomEventOptParam roomEventOptParam, SceNpMatching2EventType event_type) {
-	NpMatching2Handler optParam{};
-	optParam.ctx_id = ctxId;
-	optParam.cb = roomEventOptParam.cbFunc.ptr;
-	optParam.cb_arg = roomEventOptParam.cbFuncArg.ptr;
-	optParam.event_type = event_type;
-	defaultOptParams[event_type] = optParam;
-}
-
-void SetDefaultParams(SceNpMatching2ContextId ctxId, SceNpMatching2RoomMessageOptParam roomMessageOptParam, SceNpMatching2EventType event_type) {
-	NpMatching2Handler optParam{};
-	optParam.ctx_id = ctxId;
-	optParam.cb = roomMessageOptParam.cbFunc.ptr;
-	optParam.cb_arg = roomMessageOptParam.cbFuncArg.ptr;
-	optParam.event_type = event_type;
-	defaultOptParams[event_type] = optParam;
-}
-
-void SetDefaultParams(SceNpMatching2ContextId ctxId, SceNpMatching2SignalingOptParam signalingOptParam, SceNpMatching2EventType event_type) {
-	NpMatching2Handler optParam{};
-	optParam.ctx_id = ctxId;
-	optParam.cb = signalingOptParam.cbFunc.ptr;
-	optParam.cb_arg = signalingOptParam.cbFuncArg.ptr;
-	optParam.event_type = event_type;
-	defaultOptParams[event_type] = optParam;
-}
-
 /* Generate a callback handler for async processing returns
  * @param optParamPtr pointer to SceNpMatching2RequestOptParam
  * @param assignedReqIdPtr pointer to AppRequestID
@@ -293,7 +266,7 @@ SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId
 	return req_id;
 }
 
-/* Thread-safe Event Processor for Request Callback. Relevant arguments will be replaced.
+/* Thread-safe Event Processor for System Requests. Relevant arguments will be replaced.
  * @param event_code Related System Request Type, matches the Handler
  * @param argc Count of the number of arguments
  * @param args Variable length of arguments, MAX_ARGS = 11
@@ -321,7 +294,7 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
 	return 0;
 }
 
-/* Thread-safe Event Processor for related Callback. Relevant arguments will be replaced.
+/* Thread-safe Event Processor for Room Messages. Relevant arguments will be replaced.
  * @param event_code Related System Request Type, matches the Handler
  * @param argc Count of the number of arguments
  * @param args Variable length of arguments, MAX_ARGS = 11
@@ -345,7 +318,7 @@ int notifyRoomMessageHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId
 	return 0;
 }
 
-/* Thread-safe Event Processor for related Callback. Relevant arguments will be replaced.
+/* Thread-safe Event Processor for Room Events. Relevant arguments will be replaced.
  * @param event_code Related System Request Type, matches the Handler
  * @param argc Count of the number of arguments
  * @param args Variable length of arguments, MAX_ARGS = 11
@@ -368,7 +341,7 @@ int notifyRoomEventHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId r
 	return 0;
 }
 
-/* Thread-safe Event Processor for related Callback. Relevant arguments will be replaced.
+/* Thread-safe Event Processor for Signaling Events. Relevant arguments will be replaced.
  * @param event_code Related System Request Type, matches the Handler
  * @param argc Count of the number of arguments
  * @param args Variable length of arguments, MAX_ARGS = 11
@@ -746,10 +719,10 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 optParamPtr)
 	if (optParamPtr == 0 || !Memory::IsValidAddress(optParamPtr)) {
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_CALLBACK, "%s - Invalid Callback %08x", __FUNCTION__, optParamPtr);
 	}
-	auto signalingOptParam = PSPPointer<SceNpMatching2SignalingOptParam>::Create(optParamPtr);
-	//signalingOptParam.cbFunc.ptr = callbackFunctionAddr;
-	//signalingOptParam.cbFuncArg = callbackArgument;
-	SetDefaultParams(ctxId, *signalingOptParam, SCE_NP_MATCHING2_SIGNALING_EVENT);
+
+	hleCall(sceNpMatching2, int, sceNpMatching2SetSignalingOptParam, ctxId, optParamPtr);
+
+	// Start signaling thread?
 
 	return SCE_NP_MATCHING2_OKAY; // error returns 0x80550004
 }
@@ -968,17 +941,11 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	if (!npServer)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
-	if (Memory::IsValidAddress(roomEventCbPtr)) {
-		auto roomEventCb = PSPPointer<SceNpMatching2RoomEventOptParam>::Create(roomEventCbPtr);
-		if (Memory::IsValidAddress(roomEventCb->cbFunc.ptr) && Memory::IsValidAddress(roomEventCb->cbFuncArg.ptr))
-			SetDefaultParams(ctxId, *roomEventCb, SCE_NP_MATCHING2_ROOM_EVENT);
-	}
+	if (Memory::IsValidAddress(roomEventCbPtr))
+		hleCall(sceNpMatching2, int, sceNpMatching2SetDefaultRoomEventOptParam, ctxId, roomEventCbPtr);
 
-	if (Memory::IsValidAddress(roomMessageCbPtr)) {
-		auto roomMessageCb = PSPPointer<SceNpMatching2RoomMessageOptParam>::Create(roomMessageCbPtr);
-		if (Memory::IsValidAddress(roomMessageCb->cbFunc.ptr) && Memory::IsValidAddress(roomMessageCb->cbFuncArg.ptr))
-			SetDefaultParams(ctxId, *roomMessageCb, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
-	}
+	if (Memory::IsValidAddress(roomMessageCbPtr))
+		hleCall(sceNpMatching2, int, sceNpMatching2SetDefaultRoomMessageOptParam, ctxId, roomMessageCbPtr);
 
 	auto req = PSPPointer<SceNpMatching2CreateJoinRoomRequest>::Create(reqParamPtr);
 	//Memory::Memcpy(&req, reqParamPtr, sizeof(req));
@@ -1051,17 +1018,11 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u
 	if (!npServer)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
-	if (Memory::IsValidAddress(roomEventCbPtr)) {
-		auto roomEventCb = PSPPointer<SceNpMatching2RoomEventOptParam>::Create(roomEventCbPtr);
-		if (Memory::IsValidAddress(roomEventCb->cbFunc.ptr) && Memory::IsValidAddress(roomEventCb->cbFuncArg.ptr))
-			SetDefaultParams(ctxId, *roomEventCb, SCE_NP_MATCHING2_ROOM_EVENT);
-	}
+	if (Memory::IsValidAddress(roomEventCbPtr))
+		hleCall(sceNpMatching2, int, sceNpMatching2SetDefaultRoomEventOptParam, ctxId, roomEventCbPtr);
 
-	if (Memory::IsValidAddress(roomMessageCbPtr)) {
-		auto roomMessageCb = PSPPointer<SceNpMatching2RoomMessageOptParam>::Create(roomMessageCbPtr);
-		if (Memory::IsValidAddress(roomMessageCb->cbFunc.ptr) && Memory::IsValidAddress(roomMessageCb->cbFuncArg.ptr))
-			SetDefaultParams(ctxId, *roomMessageCb, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
-	}
+	if (Memory::IsValidAddress(roomMessageCbPtr))
+		hleCall(sceNpMatching2, int, sceNpMatching2SetDefaultRoomMessageOptParam, ctxId, roomMessageCbPtr);
 
 	auto req = PSPPointer<SceNpMatching2JoinRoomRequest>::Create(reqParamPtr);
 
@@ -1263,9 +1224,9 @@ static int sceNpMatching2SendRoomChatMessage(int ctxId, u32 reqParamPtr, u32 opt
 	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomChatMessage, SCE_NP_MATCHING2_OKAY, 0);
 }
 
-static int sceNpMatching2SetDefaultRequestOptParam(int ctxId, u32 optParam)
+static int sceNpMatching2SetDefaultRequestOptParam(int ctxId, u32 optParamPtr)
 {
-	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParam, currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParamPtr, currentMIPS->pc);
 
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
@@ -1273,11 +1234,16 @@ static int sceNpMatching2SetDefaultRequestOptParam(int ctxId, u32 optParam)
 	if (ctx.find(ctxId) == ctx.end())
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND);
 
-	if (!Memory::IsValidAddress(optParam) || !Memory::IsValidAddress(optParam))
+	if (!Memory::IsValidAddress(optParamPtr) || !Memory::IsValidAddress(optParamPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	auto signalingOptParams = PSPPointer<SceNpMatching2SignalingOptParam>::Create(optParam);
-	SetDefaultParams(ctxId, *signalingOptParams, SCE_NP_MATCHING2_REQUEST_EVENT);
+	auto requestOptParams = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
+	NpMatching2Handler optParam{};
+	optParam.ctx_id = ctxId;
+	optParam.cb = requestOptParams->cbFunc.ptr;
+	optParam.cb_arg = requestOptParams->cbFuncArg.ptr;
+	optParam.event_type = SCE_NP_MATCHING2_REQUEST_EVENT;
+	defaultOptParams[SCE_NP_MATCHING2_REQUEST_EVENT] = optParam;
 
 	return SCE_NP_MATCHING2_OKAY;
 }
@@ -1369,8 +1335,13 @@ static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 op
 	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
-	auto signalingOptParams = PSPPointer<SceNpMatching2SignalingOptParam>::Create(optParamPtr);
-	SetDefaultParams(ctxId, *signalingOptParams, SCE_NP_MATCHING2_SIGNALING_EVENT);
+	auto signalingOptParam = PSPPointer<SceNpMatching2SignalingOptParam>::Create(optParamPtr);
+	NpMatching2Handler optParam{};
+	optParam.ctx_id = ctxId;
+	optParam.cb = signalingOptParam->cbFunc.ptr;
+	optParam.cb_arg = signalingOptParam->cbFuncArg.ptr;
+	optParam.event_type = SCE_NP_MATCHING2_SIGNALING_EVENT;
+	defaultOptParams[SCE_NP_MATCHING2_SIGNALING_EVENT] = optParam;
 
 	return SCE_NP_MATCHING2_OKAY;
 }
@@ -1415,7 +1386,12 @@ static int sceNpMatching2SetDefaultRoomEventOptParam(int ctxId, u32 optParamPtr)
 	}
 
 	auto roomEvtOptParams = PSPPointer<SceNpMatching2RoomEventOptParam>::Create(optParamPtr);
-	SetDefaultParams(ctxId, *roomEvtOptParams, SCE_NP_MATCHING2_ROOM_EVENT);
+	NpMatching2Handler optParam{};
+	optParam.ctx_id = ctxId;
+	optParam.cb = roomEvtOptParams->cbFunc.ptr;
+	optParam.cb_arg = roomEvtOptParams->cbFuncArg.ptr;
+	optParam.event_type = SCE_NP_MATCHING2_ROOM_EVENT;
+	defaultOptParams[SCE_NP_MATCHING2_ROOM_EVENT] = optParam;
 
 	return SCE_NP_MATCHING2_OKAY;
 }
@@ -1435,7 +1411,12 @@ static int sceNpMatching2SetDefaultRoomMessageOptParam(int ctxId, u32 optParamPt
 	}
 
 	auto roomEvtOptParams = PSPPointer<SceNpMatching2RoomMessageOptParam>::Create(optParamPtr);
-	SetDefaultParams(ctxId, *roomEvtOptParams, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
+	NpMatching2Handler optParam{};
+	optParam.ctx_id = ctxId;
+	optParam.cb = roomEvtOptParams->cbFunc.ptr;
+	optParam.cb_arg = roomEvtOptParams->cbFuncArg.ptr;
+	optParam.event_type = SCE_NP_MATCHING2_ROOM_MSG_EVENT;
+	defaultOptParams[SCE_NP_MATCHING2_ROOM_MSG_EVENT] = optParam;
 
 	return SCE_NP_MATCHING2_OKAY;
 }
