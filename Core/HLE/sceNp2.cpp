@@ -234,15 +234,8 @@ SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId
 	
 	// If empty callback, check for a default callback of the same type
 	if (!Memory::IsValidAddress(optParam.cbFunc.ptr)) {
-		auto _default = defaultOptParams.find(event_type);
-		if (_default == defaultOptParams.end()) {
-			WARN_LOG(Log::sceNet, "%s(count: %d) - Destroying Empty Callback for %s(%d, %d)", __FUNCTION__, npMatching2Handlers.size(), EventToString(event_type).c_str(), ctxId, assignedReqId);
-			return assignedReqId;
+		return RegisterNpMatching2DefaultHandler(ctxId, assignedReqId, event_type);
 		}
-		WARN_LOG(Log::sceNet, "%s - Using Default Opt Params", __FUNCTION__);
-		optParam.cbFunc = _default->second.cb;
-		optParam.cbFuncArg = _default->second.cb_arg;
-	}
 
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 	SceNpMatching2RequestId req_id = GenerateRequestId(ctxId, assignedReqId);
@@ -261,7 +254,37 @@ SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId
 	// 0 defines an Aborted Request
 	npMatching2Handlers[req_id] = handler;
 	NOTICE_LOG(Log::sceNet, "%s(count: %d) - Added Callback FUN_%08x(%d, %d, %08x) for %s", __FUNCTION__, npMatching2Handlers.size(), handler.cb, ctxId, req_id, handler.cb_arg, EventToString(event_type).c_str());
-	NOTICE_LOG(Log::sceNet, " - optParam = (CB: %08x, Args: %08x, Timeout: %d, AppReqId: %d)", optParam.cbFunc.ptr, optParam.cbFuncArg.ptr, optParam.timeout, optParam.appReqId);
+
+	return req_id;
+}
+
+/* Generate a callback handler for async processing returns
+ * @param ctxId Replaced with the defaultOptParam's context id
+ * @param assignedReqId Irrelevant Default ID to return when Default Opt Param isn't available
+ * @param event_type PS3Matching2RequestEvent Event
+ * @return u32 System RequestID
+ */
+SceNpMatching2RequestId RegisterNpMatching2DefaultHandler(SceNpMatching2ContextId& ctxId, SceNpMatching2RequestId assignedReqId, SceNpMatching2EventType event_type) {
+	// Check if defaultOptParams contains this eventType
+	auto it = defaultOptParams.find(event_type);
+	if (it == defaultOptParams.end()) {
+		WARN_LOG(Log::sceNet, "%s(count: %d) - Destroying Empty Callback for %s(%d, %d)", __FUNCTION__, npMatching2Handlers.size(), EventToString(event_type).c_str(), ctxId, assignedReqId);
+		return assignedReqId;
+	}
+	WARN_LOG(Log::sceNet, "%s - Using Default Opt Params", __FUNCTION__);
+
+	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
+	SceNpMatching2RequestId req_id = GenerateRequestId(ctxId, assignedReqId);
+
+	//if (!Memory::IsValidAddress(optParam.cbFunc.ptr)) {
+	//	req_id = 0; // PSP2i crashes if this isn't set to abort
+	//}
+	NpMatching2Handler handler = it->second;
+	ctxId = it->second.ctx_id;
+
+	// 0 defines an Aborted Request
+	npMatching2Handlers[req_id] = handler;
+	NOTICE_LOG(Log::sceNet, "%s(count: %d) - Added Callback FUN_%08x(%d, %d, %08x) for %s", __FUNCTION__, npMatching2Handlers.size(), handler.cb, ctxId, req_id, handler.cb_arg, EventToString(event_type).c_str());
 
 	return req_id;
 }
