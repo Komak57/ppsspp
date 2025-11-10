@@ -1412,7 +1412,31 @@ static int sceNpMatching2SetDefaultRoomEventOptParam(int ctxId, u32 optParamPtr)
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+static int sceNpMatching2SetDefaultRoomMessageOptParam(int ctxId, u32 optParamPtr)
+{
+	ERROR_LOG(Log::sceNet, "UNTESTED %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParamPtr, currentMIPS->pc);
+
+	if (!npMatching2Inited)
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
+
+	if (ctx.find(ctxId) == ctx.end())
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND);
+
+	if (optParamPtr == 0 || !Memory::IsValidAddress(optParamPtr)) {
+		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_CALLBACK, "%s - Invalid Callback %08x", __FUNCTION__, optParamPtr);
+	}
+
+	auto roomEvtOptParams = PSPPointer<SceNpMatching2RoomMessageOptParam>::Create(optParamPtr);
+	SetDefaultParams(ctxId, *roomEvtOptParams, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
+
+	/*SceNpMatching2RoomMessageOptParam roomEvtOptParams{};
+	roomEvtOptParams.cbFunc.ptr = callbackFunctionAddr;
+	roomEvtOptParams.cbFuncArg = callbackArgument;
+	SetDefaultParams(ctxId, roomEvtOptParams, SCE_NP_MATCHING2_ROOM_MSG_EVENT);*/
+
+	return SCE_NP_MATCHING2_OKAY;
 }
+
 static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNTESTED %s(%08x) at %08x", __FUNCTION__, netInfoPtr, currentMIPS->pc);
@@ -1964,7 +1988,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0x2B3892FC, &WrapI_I<sceNpMatching2ContextStop>,						"sceNpMatching2ContextStop",					'i', "i"      },
 
 	{0x1421514B, &WrapI_IU<sceNpMatching2SetDefaultRoomEventOptParam>,		"sceNpMatching2SetDefaultRoomEventOptParam",	'i', "ix"    },
-	{0xD13491AB, nullptr,													"sceNpMatching2SetDefaultRoomMessageOptParam",	'i', ""       },
+	{0xD13491AB, &WrapI_IU<sceNpMatching2SetDefaultRoomMessageOptParam>,	"sceNpMatching2SetDefaultRoomMessageOptParam",	'i', "ix"    },
 	{0xE6C93DBD, &WrapI_IUUU<sceNpMatching2SetRoomDataInternal>,			"sceNpMatching2SetRoomDataInternal",			'i', "ixxx"   },
 	{0xE313E586, &WrapI_IUUU<sceNpMatching2GetRoomDataInternal>,			"sceNpMatching2GetRoomDataInternal",			'i', "ixxx"   },
 	{0xEF683F4F, nullptr,													"sceNpMatching2GetRoomDataInternalLocal",		'i', ""       },
