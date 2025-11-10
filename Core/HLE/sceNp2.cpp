@@ -726,22 +726,22 @@ static int sceNpMatching2GetMemoryStat(u32 memStatPtr)
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 callbackFunctionAddr, u32 callbackArgument)
+static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 optParamPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, callbackFunctionAddr, callbackArgument, currentMIPS->pc);
+	ERROR_LOG(Log::sceNet, "UNTESTED %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParamPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
 	if (ctx.find(ctxId) == ctx.end())
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND);
 
-	if (callbackFunctionAddr == 0 || !Memory::IsValidAddress(callbackFunctionAddr)) {
-		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_CALLBACK, "%s - Invalid Callback %08x", __FUNCTION__, callbackFunctionAddr);
+	if (optParamPtr == 0 || !Memory::IsValidAddress(optParamPtr)) {
+		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_CALLBACK, "%s - Invalid Callback %08x", __FUNCTION__, optParamPtr);
 	}
-	SceNpMatching2SignalingOptParam signalingOptParam{};
-	signalingOptParam.cbFunc.ptr = callbackFunctionAddr;
-	signalingOptParam.cbFuncArg = callbackArgument;
-	SetDefaultParams(ctxId, signalingOptParam, SCE_NP_MATCHING2_SIGNALING_EVENT);
+	auto signalingOptParam = PSPPointer<SceNpMatching2SignalingOptParam>::Create(optParamPtr);
+	//signalingOptParam.cbFunc.ptr = callbackFunctionAddr;
+	//signalingOptParam.cbFuncArg = callbackArgument;
+	SetDefaultParams(ctxId, *signalingOptParam, SCE_NP_MATCHING2_SIGNALING_EVENT);
 
 	return SCE_NP_MATCHING2_OKAY; // error returns 0x80550004
 }
@@ -1970,7 +1970,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0xC8FC5D41, &WrapI_IUUU<sceNpMatching2GetUserInfoList>,				"sceNpMatching2GetUserInfoList",				'i', "ixxx"   },
 	{0xFADBA9DB, &WrapI_IU<sceNpMatching2AbortRequest>,						"sceNpMatching2AbortRequest",					'i', "ix"     },
 
-	{0xA3C298D1, &WrapI_IUU<sceNpMatching2RegisterSignalingCallback>,		"sceNpMatching2RegisterSignalingCallback",		'i', "ixx"    },
+	{0xA3C298D1, &WrapI_IU<sceNpMatching2RegisterSignalingCallback>,		"sceNpMatching2RegisterSignalingCallback",		'i', "ix"    },
 	{0x9A67F5D0, &WrapI_IUUU<sceNpMatching2SetSignalingOptParam>,			"sceNpMatching2SetSignalingOptParam",			'i', "ixxx"   },
 	{0xC7E72EC5, &WrapI_IUU<sceNpMatching2GetSignalingOptParamLocal>,		"sceNpMatching2GetSignalingOptParamLocal",		'i', "ixx"    },
 	{0xFF32EA05, &WrapI_U<sceNpMatching2SignalingGetLocalNetInfo>,			"sceNpMatching2SignalingGetLocalNetInfo",		'i', "x"      },
