@@ -38,6 +38,10 @@ extern BlockAllocator np_memory;
 	PSPPointer<u8> arg);
 */
 
+int sceNpMatching2SetDefaultRoomEventOptParam(int ctxId, u32 optParamPtr);
+int sceNpMatching2SetDefaultRoomMessageOptParam(int ctxId, u32 optParamPtr);
+int sceNpMatching2SetSignalingOptParam(int ctxId, u32 optParamPtr);
+
 SceNpMatching2RequestId GenerateRequestId(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId app_req);
 SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestOptParam optParam, u32 assignedReqId, SceNpMatching2EventType event_type);
 SceNpMatching2RequestId RegisterNpMatching2DefaultHandler(SceNpMatching2ContextId& ctxId, SceNpMatching2RequestId assignedReqId, SceNpMatching2EventType event_type);
