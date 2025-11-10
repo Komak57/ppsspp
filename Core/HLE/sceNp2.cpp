@@ -264,8 +264,8 @@ SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId
 		auto _default = defaultOptParams.find(event_type);
 		if (_default == defaultOptParams.end()) {
 			WARN_LOG(Log::sceNet, "%s(count: %d) - Destroying Empty Callback for %s(%d, %d)", __FUNCTION__, npMatching2Handlers.size(), EventToString(event_type).c_str(), ctxId, assignedReqId);
-		return assignedReqId;
-	}
+			return assignedReqId;
+		}
 		WARN_LOG(Log::sceNet, "%s - Using Default Opt Params", __FUNCTION__);
 		optParam.cbFunc = _default->second.cb;
 		optParam.cbFuncArg = _default->second.cb_arg;
@@ -1152,6 +1152,12 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+// Placeholder until args are found
+static int sceNpMatching2GetRoomDataInternalLocal(int ctxId) {
+	ERROR_LOG(Log::sceNet, "UNIMPLEMENTED %s(%d) at %08x", __FUNCTION__, ctxId, currentMIPS->pc);
+	return -1;
+}
+
 /* Incomplete - Unconfirmed. Similar to sceNpMatching2SetRoomDataInternal
  * @param reqParamPtr SceNpMatching2SetRoomDataExternalRequest containing External room information?
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
@@ -1394,7 +1400,6 @@ static int sceNpMatching2GetSignalingOptParamLocal(int ctxId, u32 roomId, u32 op
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-//static int sceNpMatching2SetDefaultRoomEventOptParam(int ctxId, u32 callbackFunctionAddr, u32 callbackArgument)
 static int sceNpMatching2SetDefaultRoomEventOptParam(int ctxId, u32 optParamPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNTESTED %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParamPtr, currentMIPS->pc);
@@ -1411,11 +1416,6 @@ static int sceNpMatching2SetDefaultRoomEventOptParam(int ctxId, u32 optParamPtr)
 
 	auto roomEvtOptParams = PSPPointer<SceNpMatching2RoomEventOptParam>::Create(optParamPtr);
 	SetDefaultParams(ctxId, *roomEvtOptParams, SCE_NP_MATCHING2_ROOM_EVENT);
-
-	/*SceNpMatching2RoomEventOptParam roomEvtOptParams{};
-	roomEvtOptParams.cbFunc.ptr = callbackFunctionAddr;
-	roomEvtOptParams.cbFuncArg = callbackArgument;
-	SetDefaultParams(ctxId, roomEvtOptParams, SCE_NP_MATCHING2_ROOM_EVENT);*/
 
 	return SCE_NP_MATCHING2_OKAY;
 }
@@ -1436,11 +1436,6 @@ static int sceNpMatching2SetDefaultRoomMessageOptParam(int ctxId, u32 optParamPt
 
 	auto roomEvtOptParams = PSPPointer<SceNpMatching2RoomMessageOptParam>::Create(optParamPtr);
 	SetDefaultParams(ctxId, *roomEvtOptParams, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
-
-	/*SceNpMatching2RoomMessageOptParam roomEvtOptParams{};
-	roomEvtOptParams.cbFunc.ptr = callbackFunctionAddr;
-	roomEvtOptParams.cbFuncArg = callbackArgument;
-	SetDefaultParams(ctxId, roomEvtOptParams, SCE_NP_MATCHING2_ROOM_MSG_EVENT);*/
 
 	return SCE_NP_MATCHING2_OKAY;
 }
@@ -1915,6 +1910,13 @@ static int sceNpMatching2GetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 	return hleLogWarning(Log::sceNet, SCE_NP_MATCHING2_OKAY, "UNTESTED");
 }
 
+// Placeholder until args are identified
+static int sceNpMatching2GetRoomMemberDataInternalList(int ctxId)
+{
+	ERROR_LOG(Log::sceNet, "UNIMPLEMENTED %s(%d) at %08x", __FUNCTION__, ctxId, currentMIPS->pc);
+	return -1;
+}
+
 static int sceNpMatching2GetRoomMemberDataExternalList(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
@@ -1999,7 +2001,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0xD13491AB, &WrapI_IU<sceNpMatching2SetDefaultRoomMessageOptParam>,	"sceNpMatching2SetDefaultRoomMessageOptParam",	'i', "ix"    },
 	{0xE6C93DBD, &WrapI_IUUU<sceNpMatching2SetRoomDataInternal>,			"sceNpMatching2SetRoomDataInternal",			'i', "ixxx"   },
 	{0xE313E586, &WrapI_IUUU<sceNpMatching2GetRoomDataInternal>,			"sceNpMatching2GetRoomDataInternal",			'i', "ixxx"   },
-	{0xEF683F4F, nullptr,													"sceNpMatching2GetRoomDataInternalLocal",		'i', ""       },
+	{0xEF683F4F, &WrapI_I<sceNpMatching2GetRoomDataInternalLocal>,			"sceNpMatching2GetRoomDataInternalLocal",		'i', ""       },
 	{0xD7D4AEB2, &WrapI_IUUU<sceNpMatching2SetRoomDataExternal>,			"sceNpMatching2SetRoomDataExternal",			'i', "ixxx"   },
 	{0x12C5A111, &WrapI_IUUU<sceNpMatching2GetRoomDataExternalList>,		"sceNpMatching2GetRoomDataExternalList",		'i', "ixxx"   },
 	{0xF739BE92, &WrapI_IUUU<sceNpMatching2GetRoomPasswordLocal>,			"sceNpMatching2GetRoomPasswordLocal",			'i', "ixxx"   },
@@ -2016,7 +2018,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0x7DAA8A90, &WrapI_IUUU<sceNpMatching2SetRoomMemberDataInternal>,		"sceNpMatching2SetRoomMemberDataInternal",		'i', "ixxx"   },
 	{0xF22C7ADC, &WrapI_IUUUUUUU<sceNpMatching2GetRoomMemberDataInternalLocal>,	"sceNpMatching2GetRoomMemberDataInternalLocal",	'i', "ixxxxxxx"   },
 	{0xA5775DBF, &WrapI_IUUU<sceNpMatching2GetRoomMemberDataInternal>,		"sceNpMatching2GetRoomMemberDataInternal",		'i', "ixxx"   },
-	{0x5C7DB6A4, nullptr,													"sceNpMatching2GetRoomMemberDataInternalList",	'i', ""       },
+	{0x5C7DB6A4, &WrapI_I<sceNpMatching2GetRoomMemberDataInternalList>,		"sceNpMatching2GetRoomMemberDataInternalList",	'i', ""       },
 	{0xFBF494C0, &WrapI_IUUU<sceNpMatching2GetRoomMemberDataExternalList>,	"sceNpMatching2GetRoomMemberDataExternalList",	'i', "ixxx"   },
 	{0x97529ECC, &WrapI_IUUU<sceNpMatching2KickoutRoomMember>,				"sceNpMatching2KickoutRoomMember",				'i', "ixxx"   },
 	// Fake function for PPSSPP's use.
