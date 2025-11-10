@@ -492,6 +492,8 @@ static int sceHttpCreateConnection(int templateID, const char *hostString, const
 	// TODO: Look up hostString in DNS here.
 	int objId = NextObjectID();
 	auto conn = std::make_shared<HTTPConnection>(templateID, hostString ? hostString : "", scheme ? scheme : "", port, enableKeepalive);
+	if (int err = conn->GetLastError() < 0)
+		return hleLogError(Log::HTTP, err, "Could not create connection");
 	//conn->InitializeSSL();
 	//conn->Connect();
 	httpObjects[objId] = conn;

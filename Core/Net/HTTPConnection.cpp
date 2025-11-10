@@ -63,6 +63,8 @@ HTTPConnection::HTTPConnection(int templateID, const char* hostString, const cha
 	this->scheme = scheme;
 	this->port = port;
 	this->enableKeepalive = enableKeepalive;
+
+	this->lastError = 0;
 	if (strcmp(scheme, "https") == 0) {
 		this->tls = HTTPS_Config();
 		Resolve(hostString, port, net::DNSType::IPV4);

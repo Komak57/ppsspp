@@ -104,6 +104,7 @@ public:
 	void InitSession(int connectionID);
 	void DestroySession(int connectionID);
 
+	u32 GetLastError() { return lastError; };
 	
 	bool connecting = false;
 	
