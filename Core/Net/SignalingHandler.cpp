@@ -303,7 +303,12 @@ u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_i
 
 	// If connection exists from prior state notify
 	if (si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE)
-		notifySignalingHandler(DEFAULT_CONTEXT, room_id, conn_id, si->conn_status, member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
+	{
+		SceNpMatching2ContextId default_id = 0;
+		auto request_id = RegisterNpMatching2DefaultHandler(default_id, 0, SCE_NP_MATCHING2_SIGNALING_EVENT);
+
+		notifySignalingHandler(default_id, room_id, conn_id, si->conn_status, member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
+	}
 	else
 		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_PENDING;
 
@@ -371,7 +376,10 @@ void signaling_handler::update_si_status(std::shared_ptr<signaling_info>& si, s3
 		if (si->op_activated) {
 			si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED;
 			//signal_ext_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED, CELL_OK);
-			notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
+			SceNpMatching2ContextId default_id = 0;
+			auto request_id = RegisterNpMatching2DefaultHandler(default_id, 0, SCE_NP_MATCHING2_SIGNALING_EVENT);
+
+			notifySignalingHandler(default_id, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
 		}
 	}
 	else if ((si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_PENDING || si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE) && new_status == SCE_NP_SIGNALING_CONN_STATUS_INACTIVE)
@@ -381,7 +389,10 @@ void signaling_handler::update_si_status(std::shared_ptr<signaling_info>& si, s3
 		//signal_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_DEAD, error_code);
 		//notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, 0, si->member_id, SCE_NP_SIGNALING_EVENT_DEAD, error_code);
 		//signal_sig2_callback(si->room_id, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, error_code);
-		notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, error_code);
+		SceNpMatching2ContextId default_id = 0;
+		auto request_id = RegisterNpMatching2DefaultHandler(default_id, 0, SCE_NP_MATCHING2_SIGNALING_EVENT);
+
+		notifySignalingHandler(default_id, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, error_code);
 		retire_all_packets(si);
 	}
 }
@@ -412,7 +423,10 @@ void signaling_handler::update_ext_si_status(std::shared_ptr<signaling_info>& si
 		//notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
 	}
 
-	notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
+	SceNpMatching2ContextId default_id = 0;
+	auto request_id = RegisterNpMatching2DefaultHandler(default_id, 0, SCE_NP_MATCHING2_SIGNALING_EVENT);
+
+	notifySignalingHandler(default_id, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
 }
 
 void signaling_handler::DisconnectUsers(SceNpMatching2RoomId room_id)
@@ -1009,6 +1023,7 @@ void signaling_handler::UserJoinedRoom(SceNpMatching2ContextId ctxId, SceNpMatch
 		ERROR_LOG(Log::sceNet, "NOTI Malformed UserJoinedRoom notification");
 		return;
 	}
+	auto request_id = RegisterNpMatching2DefaultHandler(ctxId, reqId, SCE_NP_MATCHING2_ROOM_EVENT);
 
 	auto _context = ctx.find(ctxId);
 	if (_context == ctx.end()) {
@@ -1057,8 +1072,6 @@ void signaling_handler::UserJoinedRoom(SceNpMatching2ContextId ctxId, SceNpMatch
 		// Connect to Signaling Server
 		g_signaling.connect(connId, addr_p2p, port_p2p);
 	}
-	//auto ctx = get_ctx(resp.header.uid);
-	const u32 event_key = 0;// get_event_key();
 
 	/*if (room_event_cb)
 	{
@@ -1069,11 +1082,13 @@ void signaling_handler::UserJoinedRoom(SceNpMatching2ContextId ctxId, SceNpMatch
 		});
 	}*/
 	//notifySignalingHandlers(resp.header.uid, room_id, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, event_key, 0, _size);
-	notifyRoomEventHandler(DEFAULT_CONTEXT, room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, notif_data.ptr);
+	notifyRoomEventHandler(ctxId, room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, notif_data.ptr);
 }
 
 void signaling_handler::UserLeftRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
 	WARN_LOG(Log::sceNet, "NOTI UserLeftRoom(%d, %d, RPCNResponse)", ctxId, reqId);
+
+	auto request_id = RegisterNpMatching2DefaultHandler(ctxId, reqId, SCE_NP_MATCHING2_ROOM_EVENT);
 
 	auto _context = ctx.find(ctxId);
 	if (_context == ctx.end()) {
@@ -1119,11 +1134,13 @@ void signaling_handler::UserLeftRoom(SceNpMatching2ContextId ctxId, SceNpMatchin
 
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
 
-	notifyRoomEventHandler(DEFAULT_CONTEXT, room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, notif_data.ptr);
+	notifyRoomEventHandler(ctxId, room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, notif_data.ptr);
 }
 
 void signaling_handler::RoomDestroyed(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
 	WARN_LOG(Log::sceNet, "NOTI RoomDestroyed(%d, %d, RPCNResponse)", ctxId, reqId);
+
+	auto request_id = RegisterNpMatching2DefaultHandler(ctxId, reqId, SCE_NP_MATCHING2_ROOM_EVENT);
 
 	auto _context = ctx.find(ctxId);
 	if (_context == ctx.end()) {
@@ -1153,11 +1170,13 @@ void signaling_handler::RoomDestroyed(SceNpMatching2ContextId ctxId, SceNpMatchi
 	DisconnectUsers(room_id);
 	//disconnect_sig2_users(room_id);
 
-	notifyRoomEventHandler(DEFAULT_CONTEXT, room_id, 0, SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, notif_data.ptr);
+	notifyRoomEventHandler(ctxId, room_id, 0, SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, notif_data.ptr);
 }
 
 void signaling_handler::UpdatedRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
 	WARN_LOG(Log::sceNet, "NOTI UpdatedRoomDataInternal(%d, %d, RPCNResponse)", ctxId, reqId);
+
+	auto request_id = RegisterNpMatching2DefaultHandler(ctxId, reqId, SCE_NP_MATCHING2_ROOM_EVENT);
 
 	auto _context = ctx.find(ctxId);
 	if (_context == ctx.end()) {
@@ -1196,11 +1215,13 @@ void signaling_handler::UpdatedRoomDataInternal(SceNpMatching2ContextId ctxId, S
 		});
 	}*/
 
-	notifyRoomEventHandler(DEFAULT_CONTEXT, room_id, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal, notif_data.ptr);
+	notifyRoomEventHandler(ctxId, room_id, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal, notif_data.ptr);
 }
 
 void signaling_handler::UpdatedRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
 	WARN_LOG(Log::sceNet, "NOTI UpdatedRoomMemberDataInternal(%d, %d, RPCNResponse)", ctxId, reqId);
+
+	auto request_id = RegisterNpMatching2DefaultHandler(ctxId, reqId, SCE_NP_MATCHING2_ROOM_EVENT);
 
 	auto _context = ctx.find(ctxId);
 	if (_context == ctx.end()) {
@@ -1222,24 +1243,28 @@ void signaling_handler::UpdatedRoomMemberDataInternal(SceNpMatching2ContextId ct
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberDataInternalUpdateInfo>::Create(ptr);
 	np::RoomMemberDataInternalUpdateInfo_to_SceNpMatching2RoomMemberDataInternalUpdateInfo(np_memory, update_info, notif_data, _context->second->include_onlinename, _context->second->include_avatarurl);
 
+	// Does this room exist?
 	auto room = npServer->cache.GetRoom(room_id);
 	if (!room) {
 		//notifyRoomEventHandler(ctxId, room_id, memberId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
 		return;
 	}
 	
+	// Cache the member's info
 	SceNpMatching2RoomMemberId memberId = notif_data->newRoomMemberDataInternal->memberId;
 	npServer->cache.AddMember(*notif_data->newRoomMemberDataInternal);
 
 	NOTICE_LOG(Log::sceNet, "NOTI User %s(%d) data was updated for room (%d)", notif_data->newRoomMemberDataInternal->userInfo.npId.handle.data, memberId, room_id);
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());
 
-	notifyRoomEventHandler(DEFAULT_CONTEXT, room_id, memberId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
+	notifyRoomEventHandler(ctxId, room_id, memberId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
 }
 
 void signaling_handler::RoomMessageReceived(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {
 	WARN_LOG(Log::sceNet, "NOTI RoomMessageReceived(%d, %d, RPCNResponse)", ctxId, reqId);
 	// 0000000000000010 0090 00000014 00000000000E0014000000070008000C0010000E00000000000001700000006800000004000000580000000500000000000000903D9B08A0F1FF090C79A6089078A6086889A30878A89B0860F4FF09D0F4FF09B01815090000000060F4FF0980F3FF0978567609EFBEADDED06DA60840547609B0181509B46CA308A51894038C6EA608040004000400000000000000
+
+	auto request_id = RegisterNpMatching2DefaultHandler(ctxId, reqId, SCE_NP_MATCHING2_ROOM_MSG_EVENT);
 
 	auto _context = ctx.find(ctxId);
 	if (_context == ctx.end()) {
@@ -1267,7 +1292,7 @@ void signaling_handler::RoomMessageReceived(SceNpMatching2ContextId ctxId, SceNp
 	auto notif_data = PSPPointer<SceNpMatching2RoomMessageInfo>::Create(ptr);
 	np::RoomMessageInfo_to_SceNpMatching2RoomMessageInfo(np_memory, message_info, notif_data, _context->second->include_onlinename, _context->second->include_avatarurl);
 	
-	notifyRoomMessageHandler(DEFAULT_CONTEXT, room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
+	notifyRoomMessageHandler(ctxId, room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
 }
 
 void signaling_handler::SignalingHelper(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, net::RPCNResponse resp) {

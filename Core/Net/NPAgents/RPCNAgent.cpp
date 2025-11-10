@@ -340,17 +340,11 @@ namespace net {
 				}
 				break;
 				case PacketType::Notification:
-				{
-					auto defOptParam = defaultOptParams.find(SceNpMatching2EventType::SCE_NP_MATCHING2_ROOM_EVENT);
-					if (defOptParam != defaultOptParams.end())
-						ctxId = defOptParam->second.ctx_id;
-					reqId = GenerateRequestId(ctxId, 0);
-				}
 				switch ((NotificationType)header.command) {
 				case NotificationType::UserJoinedRoom: g_signaling.UserJoinedRoom(ctxId, reqId, buf); break;
 				case NotificationType::RoomMessageReceived: g_signaling.RoomMessageReceived(ctxId, reqId, buf); break;
 				case NotificationType::UserLeftRoom: g_signaling.UserLeftRoom(ctxId, reqId, buf); break;
-				case NotificationType::RoomDestroyed:g_signaling.RoomDestroyed(ctxId, reqId, buf); break;
+				case NotificationType::RoomDestroyed: g_signaling.RoomDestroyed(ctxId, reqId, buf); break;
 				case NotificationType::UpdatedRoomDataInternal: g_signaling.UpdatedRoomDataInternal(ctxId, reqId, buf); break;
 				case NotificationType::UpdatedRoomMemberDataInternal: g_signaling.UpdatedRoomMemberDataInternal(ctxId, reqId, buf); break;
 				case NotificationType::SignalingHelper: g_signaling.SignalingHelper(ctxId, reqId, buf); break;
