@@ -298,8 +298,22 @@ SceNpMatching2RequestId RegisterNpMatching2DefaultHandler(SceNpMatching2ContextI
 int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2Event event, s32 errorCode, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
+	NpMatching2Handler* handler = nullptr;
+	// Check for registered handler
+	if (auto it = npMatching2Handlers.find(reqId); it != npMatching2Handlers.end()) {
+		handler = new NpMatching2Handler(std::move(it->second));
+		npMatching2Handlers.erase(it);
+	}
+	else
+	{
+		// Check for default handler
+		if (auto def = defaultOptParams.find(SCE_NP_MATCHING2_REQUEST_EVENT); def != defaultOptParams.end())
+			handler = &def->second;
+	}
+
+	
 	u32 args[6];
-	//args[0] = ctxId;	// ContextID
+	args[0] = ctxId;	// ContextID
 	args[1] = reqId;	// RequestId || 0 indicates aborted request
 	args[2] = event;	// Event
 	args[3] = errorCode;// ErrorCode || 0 is OK
@@ -307,13 +321,17 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
 	//args[5] = argsPtr	// Request Arguments
 
 	// Consume if the event handler has no callback
-	if (auto it = npMatching2Handlers.find(reqId); it == npMatching2Handlers.end()) {
-		NOTICE_LOG(Log::sceNet, "SceNpMatching2RequestCallback - Destroying %s_EMPTY(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_REQUEST_EVENT).c_str(),
+	if (handler == nullptr) {
+		NOTICE_LOG(Log::sceNet, "notifyRequestHandler - Destroying %s_EMPTY(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_REQUEST_EVENT).c_str(),
 			ctxId, args[1], args[2], args[3], args[4], 0);
 		return 0;
 	}
-	npMatching2Events.push_back(NpMatching2Args(ctxId, reqId, 6, args, SCE_NP_MATCHING2_REQUEST_EVENT));
+	args[0] = handler->ctx_id;
+	args[5] = handler->cb_arg.ptr;
+	npMatching2Events.push_back(NpMatching2Args(*handler, reqId, 6, args, SCE_NP_MATCHING2_REQUEST_EVENT));
 
+	NOTICE_LOG(Log::sceNet, "notifyRequestHandler - %s_%08x(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_REQUEST_EVENT).c_str(), handler->cb.ptr,
+		args[0], args[1], args[2], args[3], args[4], args[5]);
 	return 0;
 }
 
@@ -323,11 +341,17 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
  * @param args Variable length of arguments, MAX_ARGS = 11
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
-int notifyRoomMessageHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, RPCNMatching2RequestEvent requestEvent, u32 dataPtr) {
+int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, RPCNMatching2RequestEvent requestEvent, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
+	NpMatching2Handler* handler = nullptr;
+
+	// Check for default handler
+	if (auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_MSG_EVENT); def != defaultOptParams.end())
+		handler = &def->second;
+
 	u32 args[8];
-	//args[0] = ctxId	// ContextID
+	args[0] = 0;	// ContextID
 	args[1] = roomId;	// RoomID
 	args[2] = memberId;	// ConnId? Ignored by PSP2i
 	args[3] = match2_event_cnt.fetch_add(1); // param_4? Ingored by PSP2i
@@ -336,8 +360,19 @@ int notifyRoomMessageHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId
 	args[6] = dataPtr;	// Message
 	//args[7] = argsPtr	// Request Arguments
 
-	npMatching2Events.push_back(NpMatching2Args(ctxId, 8, args, SCE_NP_MATCHING2_ROOM_MSG_EVENT));
+	// Consume if the event handler has no callback
+	if (handler == nullptr) {
+		NOTICE_LOG(Log::sceNet, "notifyRoomMessageHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %d, memberId: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_MSG_EVENT).c_str(),
+			args[0], args[1], args[2], args[6], 0);
+		return 0;
+	}
+	args[0] = handler->ctx_id;
+	args[7] = handler->cb_arg.ptr;
 
+	npMatching2Events.push_back(NpMatching2Args(*handler, 8, args, SCE_NP_MATCHING2_ROOM_MSG_EVENT));
+
+	NOTICE_LOG(Log::sceNet, "notifyRoomMessageHandler - %s_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %d, param_5: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_MSG_EVENT).c_str(), handler->cb.ptr,
+		args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
 	return 0;
 }
 
@@ -347,11 +382,17 @@ int notifyRoomMessageHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId
  * @param args Variable length of arguments, MAX_ARGS = 11
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
-int notifyRoomEventHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr) {
+int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
+	NpMatching2Handler* handler = nullptr;
+
+	// Check for default handler
+	if (auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_EVENT); def != defaultOptParams.end())
+		handler = &def->second;
+
 	u32 args[7];
-	//args[0] = ctxId	// ContextID
+	args[0] = 0;	// ContextID
 	args[1] = roomId;	// RoomID
 	args[2] = match2_event_cnt.fetch_add(1); // ConnectionID?
 	args[3] = memberId;	// MemberID?
@@ -359,8 +400,20 @@ int notifyRoomEventHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId r
 	args[5] = dataPtr;	// ErrorCode
 	//args[6] = argsPtr	// Request Arguments
 
-	npMatching2Events.push_back(NpMatching2Args(ctxId, 7, args, SCE_NP_MATCHING2_ROOM_EVENT));
+	// Consume if the event handler has no callback
+	if (handler == nullptr) {
+		NOTICE_LOG(Log::sceNet, "notifyRoomEventHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %d, memberId: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_EVENT).c_str(),
+			args[0], args[1], args[3], args[4], 0);
+		return 0;
+	}
 
+	args[0] = handler->ctx_id;
+	args[6] = handler->cb_arg.ptr;
+
+	npMatching2Events.push_back(NpMatching2Args(*handler, 7, args, SCE_NP_MATCHING2_ROOM_EVENT));
+
+	NOTICE_LOG(Log::sceNet, "notifyRoomEventHandler - %s_%08x(ctxId: %d, roomId: %d, param_3: %d, memberId: %d, event: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_EVENT).c_str(), handler->cb.ptr,
+		args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
 	return 0;
 }
 
@@ -370,12 +423,18 @@ int notifyRoomEventHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId r
  * @param args Variable length of arguments, MAX_ARGS = 11
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
-int notifySignalingHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId room_id, u32 conn_id, u32 conn_state, SceNpMatching2RoomMemberId roomMemberId, SceNpMatching2Event event, s32 errorCode) {
+int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 conn_state, SceNpMatching2RoomMemberId roomMemberId, SceNpMatching2Event event, s32 errorCode) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
+
+	NpMatching2Handler* handler = nullptr;
+
+	// Check for default handler
+	if (auto def = defaultOptParams.find(SCE_NP_MATCHING2_SIGNALING_EVENT); def != defaultOptParams.end())
+		handler = &def->second;
 
 	// FIXME: Need confirmation on arguments for conn_id, room_id
 	u32 args[8];
-	//args[0] = ctxId;		// ContextID
+	args[0] = 0;		// ContextID
 	args[1] = room_id;		// room_id?
 	args[2] = conn_id;		// conn_id?
 	args[3] = conn_state;	// unknown?
@@ -384,7 +443,20 @@ int notifySignalingHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId r
 	args[6] = errorCode;	// ErrorCode
 	//args[7] = 0;			// cbArgs
 
-	npMatching2Events.push_back(NpMatching2Args(ctxId, 8, args, SCE_NP_MATCHING2_SIGNALING_EVENT));
+	// Consume if the event handler has no callback
+	if (handler == nullptr) {
+		NOTICE_LOG(Log::sceNet, "notifySignalingHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %d, connId: %d, connState: %d, memberId: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(),
+			args[0], args[1], args[2], args[3], args[4], 0);
+		return 0;
+	}
+
+	args[0] = handler->ctx_id;
+	args[7] = handler->cb_arg.ptr;
+
+	npMatching2Events.push_back(NpMatching2Args(*handler, 8, args, SCE_NP_MATCHING2_SIGNALING_EVENT));
+
+	NOTICE_LOG(Log::sceNet, "notifySignalingHandler - %s_%08x(ctxId: %d, roomId: %d, connId: %d, connState: %d, memberId: %d, event: %d, errorCode: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(), handler->cb.ptr,
+		args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
 
 	return 0;
 }
@@ -418,80 +490,45 @@ bool NpMatching2ProcessEvents() {
 	auto& event = npMatching2Events.front();
 	npMatching2Events.pop_front();
 
-	NpMatching2Handler* optParam = nullptr;
-	/*if (event.context_id == DEFAULT_CONTEXT) {
-		WARN_LOG(Log::sceNet, "NpMatching2ProcessEvents - Using Default Opt Params");
-		if (auto def = defaultOptParams.find(event.event_type); def != defaultOptParams.end())
-			optParam = &def->second;
-	} else */
-	if (auto it = npMatching2Handlers.find(event.request_id); it != npMatching2Handlers.end()) {
-		//optParam = &it->second;
-		optParam = new NpMatching2Handler(std::move(it->second));  // Save and erase?
-		npMatching2Handlers.erase(it);
-	}
-	else {
-		ERROR_LOG(Log::sceNet, "NpMatching2ProcessEvents - No Handler Found for Event %s", EventToString(event.event_type).c_str());
-		return false;
-	}
 
-	if (optParam != nullptr) {
-		if (!Memory::IsValidAddress(optParam->cb.ptr)) {
+	if (!Memory::IsValidAddress(event.handler.cb.ptr)) {
 			WARN_LOG(Log::sceNet, "NpMatching2ProcessEvents - Nothing to Callback to for %s", EventToString(event.event_type).c_str());
-			return NpMatching2ProcessEvents();
+		return false;
 		}
-		switch (optParam->event_type) {
+	switch (event.handler.event_type) {
 			// combine the callback parameters with the request based on the event type
 		case SCE_NP_MATCHING2_REQUEST_EVENT:
-			event.args[0] = optParam->ctx_id;
-			event.args[5] = optParam->cb_arg.ptr;
-
-			NOTICE_LOG(Log::sceNet, "SceNpMatching2RequestCallback - %s_%08x(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", EventToString(event.event_type).c_str(), optParam->cb.ptr,
+		NOTICE_LOG(Log::sceNet, "SceNpMatching2RequestCallback - %s_%08x(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
 				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]);
 			break;
 		case SCE_NP_MATCHING2_ROOM_EVENT:
-			event.args[0] = optParam->ctx_id;
-			event.args[6] = optParam->cb_arg.ptr;
-
-			NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomEventCallback - %s_%08x(ctxId: %d, roomId: %d, connId?: %08x, memberId: %d, requestEvent: %08x, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), optParam->cb.ptr,
+		NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomEventCallback - %s_%08x(ctxId: %d, roomId: %d, connId?: %08x, memberId: %d, requestEvent: %08x, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
 				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6]);
 			break;
 		case SCE_NP_MATCHING2_ROOM_MSG_EVENT:
-			event.args[0] = optParam->ctx_id;
-			event.args[7] = optParam->cb_arg.ptr;
-			_dbg_assert_(Memory::IsValidAddress(event.args[7]));
-
-			NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomMessageCallback - %s_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %d, param_5: %d, event: %d, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), optParam->cb.ptr,
+		NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomMessageCallback - %s_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %d, param_5: %d, event: %d, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
 				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
 			break;
 		case SCE_NP_MATCHING2_LOBBY_EVENT:
-			event.args[0] = optParam->ctx_id;
-
-			ERROR_LOG(Log::sceNet, "UNIMPLEMENTED SceNpMatching2LobbyEventCallback - %s_%08x(ctxId: %d)", EventToString(event.event_type).c_str(), optParam->cb.ptr, event.args[0]);
+		ERROR_LOG(Log::sceNet, "UNIMPLEMENTED SceNpMatching2LobbyEventCallback - %s_%08x(ctxId: %d)", EventToString(event.event_type).c_str(), event.handler.cb.ptr, event.args[0]);
 			return false;
 		case SCE_NP_MATCHING2_LOBBY_MSG_EVENT:
-			event.args[0] = optParam->ctx_id;
-
-			ERROR_LOG(Log::sceNet, "UNIMPLEMENTED SceNpMatching2LobbyMessageCallback - %s_%08x(ctxId: %d)", EventToString(event.event_type).c_str(), optParam->cb.ptr, event.args[0]);
+		ERROR_LOG(Log::sceNet, "UNIMPLEMENTED SceNpMatching2LobbyMessageCallback - %s_%08x(ctxId: %d)", EventToString(event.event_type).c_str(), event.handler.cb.ptr, event.args[0]);
 			return false;
 		case SCE_NP_MATCHING2_SIGNALING_EVENT:
-			event.args[0] = optParam->ctx_id;
-			event.args[7] = optParam->cb_arg.ptr;
-
-			NOTICE_LOG(Log::sceNet, "SceNpMatching2SignalingCallback - %s_%08x(param_1: %d, param_2: %d, param_3: %d, param_4: %d, param_5: %d, param_6: %d, param_7: %d, param_8: %08x)", EventToString(event.event_type).c_str(), optParam->cb.ptr,
+		NOTICE_LOG(Log::sceNet, "SceNpMatching2SignalingCallback - %s_%08x(param_1: %d, param_2: %d, param_3: %d, param_4: %d, param_5: %d, param_6: %d, param_7: %d, param_8: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
 				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
 			break;
 		default:
-			NOTICE_LOG(Log::sceNet, "UNHANDLED Callback Type %d - FUN_%08x(ctxId: %d)", event.event_type, optParam->cb.ptr, event.args[0]);
+		NOTICE_LOG(Log::sceNet, "UNHANDLED Callback Type %d - FUN_%08x(ctxId: %d)", event.event_type, event.handler.cb.ptr, event.args[0]);
 			_dbg_assert_(false);
 			return false;
 		}
-		//DEBUG_LOG(Log::sceNet, "NpMatching2Callback [HandlerID=%i][EventID=%04x][State=%04x][ArgsPtr=%08x]", it->first, event, stat, optParam->argument);
-		if (Memory::IsValidAddress(optParam->cb.ptr))
-			hleEnqueueCall(optParam->cb.ptr, event.argc, event.args);
+	//DEBUG_LOG(Log::sceNet, "NpMatching2Callback [HandlerID=%i][EventID=%04x][State=%04x][ArgsPtr=%08x]", it->first, event, stat, event.handler.argument);
+	if (Memory::IsValidAddress(event.handler.cb.ptr))
+		hleEnqueueCall(event.handler.cb.ptr, event.argc, event.args);
 		return true;
 	}
-	return false;
-}
 
 static inline u32 AllocUser(u32 size, bool fromTop, const char* name) {
 	u32 addr = userMemory.Alloc(size, fromTop, name);
