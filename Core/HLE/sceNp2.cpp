@@ -246,8 +246,8 @@ SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId
 	NpMatching2Handler handler{};
 
 	handler.ctx_id = ctxId; // double handle
-	handler.cb = optParam.cbFunc;
-	handler.cb_arg = optParam.cbFuncArg.ptr;
+	handler.cb.ptr = optParam.cbFunc.ptr;
+	handler.cb_arg.ptr = optParam.cbFuncArg.ptr;
 	handler.event_type = event_type;
 
 
@@ -786,8 +786,8 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 cbFuncPtr, u32
 
 	u32 alloc_size = sizeof(SceNpMatching2SignalingOptParam);
 	auto signalingOptParam = PSPPointer<SceNpMatching2SignalingOptParam>::Create(np_memory.Alloc(alloc_size));
-	signalingOptParam->cbFunc = cbFuncPtr;
-	signalingOptParam->cbFuncArg = cbArgsPtr;
+	signalingOptParam->cbFunc.ptr = cbFuncPtr;
+	signalingOptParam->cbFuncArg.ptr = cbArgsPtr;
 
 	hleCall(sceNpMatching2, int, sceNpMatching2SetSignalingOptParam, ctxId, signalingOptParam.ptr);
 
@@ -1408,8 +1408,8 @@ static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 optParamPtr)
 	auto signalingOptParam = PSPPointer<SceNpMatching2SignalingOptParam>::Create(optParamPtr);
 	NpMatching2Handler optParam{};
 	optParam.ctx_id = ctxId;
-	optParam.cb = signalingOptParam->cbFunc.ptr;
-	optParam.cb_arg = signalingOptParam->cbFuncArg.ptr;
+	optParam.cb.ptr = signalingOptParam->cbFunc.ptr;
+	optParam.cb_arg.ptr = signalingOptParam->cbFuncArg.ptr;
 	optParam.event_type = SCE_NP_MATCHING2_SIGNALING_EVENT;
 	defaultOptParams[SCE_NP_MATCHING2_SIGNALING_EVENT] = optParam;
 
