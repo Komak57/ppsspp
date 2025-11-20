@@ -44,7 +44,7 @@ BlockAllocator np_memory;
 
 std::map<SceNpMatching2ContextId, std::unique_ptr<NpMatching2Context>> ctx;
 std::deque<NpMatching2Args> npMatching2Events;
-std::map<SceNpMatching2ContextId, NpMatching2Handler> npMatching2Handlers;
+std::map<SceNpMatching2RequestId, NpMatching2Handler> npMatching2Handlers;
 std::map<SceNpMatching2EventType, NpMatching2Handler> defaultOptParams;
 std::atomic<u16> match2_event_cnt = 1;
 //std::recursive_mutex npMatching2SigMtx;
