@@ -278,13 +278,14 @@ SceNpMatching2RequestId RegisterNpMatching2DefaultHandler(SceNpMatching2ContextI
 	WARN_LOG(Log::sceNet, "%s - Using Default Opt Params", __FUNCTION__);
 
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
-	SceNpMatching2RequestId req_id = GenerateRequestId(ctxId, assignedReqId);
 
 	//if (!Memory::IsValidAddress(optParam.cbFunc.ptr)) {
 	//	req_id = 0; // PSP2i crashes if this isn't set to abort
 	//}
 	NpMatching2Handler handler = it->second;
 	ctxId = it->second.ctx_id;
+	// Match ctxId to the default handler's context
+	SceNpMatching2RequestId req_id = GenerateRequestId(ctxId, assignedReqId);
 
 	// 0 defines an Aborted Request
 	npMatching2Handlers[req_id] = handler;
