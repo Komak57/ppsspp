@@ -268,7 +268,11 @@ SceNpMatching2RequestId RegisterNpMatching2DefaultHandler(SceNpMatching2ContextI
 	// Check if defaultOptParams contains this eventType
 	auto it = defaultOptParams.find(event_type);
 	if (it == defaultOptParams.end()) {
-		WARN_LOG(Log::sceNet, "%s(count: %d) - Destroying Empty Callback for %s(%d, %d)", __FUNCTION__, npMatching2Handlers.size(), EventToString(event_type).c_str(), ctxId, assignedReqId);
+		WARN_LOG(Log::sceNet, "%s - No Default Callback for %s(%d, %d)", __FUNCTION__, EventToString(event_type).c_str(), ctxId, assignedReqId);
+		return assignedReqId;
+	}
+	if (!Memory::IsValidAddress(it->second.cb.ptr)) {
+		WARN_LOG(Log::sceNet, "%s - Invalid Default Callback for %s(%d, %d)", __FUNCTION__, EventToString(event_type).c_str(), ctxId, assignedReqId);
 		return assignedReqId;
 	}
 	WARN_LOG(Log::sceNet, "%s - Using Default Opt Params", __FUNCTION__);
