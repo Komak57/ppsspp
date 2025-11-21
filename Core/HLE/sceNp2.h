@@ -24,6 +24,7 @@
 #include <mutex>
 #include "Core/HLE/Np2Types.h"
 #include <Core/Util/BlockAllocator.h>
+#include "Core/Net/NpMatching2Cache.h"
 
 extern std::recursive_mutex npMatching2EvtMtx;
 extern BlockAllocator np_memory;
@@ -135,11 +136,13 @@ int sceNpMatching2SetDefaultRoomMessageOptParam(int ctxId, u32 optParamPtr);
 int sceNpMatching2SetSignalingOptParam(int ctxId, u32 optParamPtr);
 
 SceNpMatching2RequestId GenerateRequestId(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId app_req);
+std::optional<std::map<SceNpMatching2ContextId, std::unique_ptr<NpMatching2Context>>::iterator> GetDefaultContext(SceNpMatching2EventType event_type);
 SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestOptParam optParam, u32 assignedReqId, SceNpMatching2EventType event_type);
+SceNpMatching2RequestId RegisterNpMatching2DefaultHandler(SceNpMatching2ContextId& ctxId, SceNpMatching2RequestId assignedReqId, SceNpMatching2EventType event_type);
 int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2Event event, s32 errorCode, u32 dataPtr);
-int notifyRoomMessageHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, RPCNMatching2RequestEvent requestEvent, u32 dataPtr);
-int notifyRoomEventHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr);
-int notifySignalingHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RoomId room_id, u32 conn_id, u32 conn_state, SceNpMatching2RoomMemberId roomMemberId, SceNpMatching2Event event, s32 errorCode);
+int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, RPCNMatching2RequestEvent requestEvent, u32 dataPtr);
+int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr);
+int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 conn_state, SceNpMatching2RoomMemberId roomMemberId, SceNpMatching2Event event, s32 errorCode);
 bool NpMatching2ProcessEvents();
 
 void __Np2Init();
