@@ -218,6 +218,20 @@ SceNpMatching2RequestId GenerateRequestId(SceNpMatching2ContextId ctxId, SceNpMa
 	return request_id;
 }
 
+std::optional<std::map<SceNpMatching2ContextId, std::unique_ptr<NpMatching2Context>>::iterator> GetDefaultContext(SceNpMatching2EventType event_type) {
+	auto def = defaultOptParams.find(event_type);
+	if (def == defaultOptParams.end()) {
+		ERROR_LOG(Log::sceNet, "Default event handler not Found");
+		return std::nullopt;
+	}
+	auto _context = ctx.find(def->second.ctx_id);
+	if (_context == ctx.end()) {
+		ERROR_LOG(Log::sceNet, "Matching Context not Found for Event");
+		return std::nullopt;
+	}
+	return _context;
+}
+
 //template <typename T>
 //void Write_Struct(const T& object, const u32 address, const char* tag, size_t taglen) {
 //	Memory::Memcpy(address, &object, sizeof(T), tag, taglen);
