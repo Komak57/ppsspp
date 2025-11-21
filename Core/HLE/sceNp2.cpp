@@ -807,7 +807,12 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 cbFuncPtr, u32
 
 	hleCall(sceNpMatching2, int, sceNpMatching2SetSignalingOptParam, ctxId, signalingOptParam.ptr);
 
-	// Start signaling thread?
+	// This is normally started 
+	if (np2P2PThreadID > 0) {
+		__KernelStartThread(np2P2PThreadID, 0, 0);
+	}
+	// We should probably move most of the signaling calls to SignalingHandler
+	// And, you know, rename it to sceNpMatching2Signaling
 
 	return SCE_NP_MATCHING2_OKAY; // error returns 0x80550004
 }
