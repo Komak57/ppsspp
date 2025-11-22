@@ -1383,8 +1383,8 @@ namespace net {
 		INFO_LOG(Log::sceNet, "Leaving Room #%d", req->roomId);
 
 		// Send Finished, RPSC3 triggers this in sceNpSignalingTerminateConnection
-		auto connId = g_signaling.get_always_conn_id(*NpGetNpId());
-		g_signaling.stop_sig_nl(connId, false);
+		//auto connId = g_signaling.get_always_conn_id(*NpGetNpId());
+		//g_signaling.stop_sig_nl(connId, false);
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
