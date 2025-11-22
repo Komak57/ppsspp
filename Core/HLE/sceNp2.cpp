@@ -66,6 +66,10 @@ int np2P2PState = NP_SIGNIN_STATUS_NONE;
 static int np2P2PStateEvent = -1;
 static int actionAfterP2PMipsCall;
 
+/*
+* This function is added as a placeholder for FakePSN Savestates to
+*   handle RPCN IP/Port information for the client
+*/
 static void __RPCNState(u64 userdata, int cyclesLate) {
 	SceUID threadID = userdata >> 32;
 	int uid = (int)(userdata & 0xFFFFFFFF);
@@ -99,6 +103,10 @@ int ScheduleRPCNState(int event, int newState, int usec, const char* reason) {
 	return 0;
 }
 
+/*
+* This function is added as a placeholder for FakePSN Savestates to
+*   handle P2P communications, fake or otherwise
+*/
 static void __P2PState(u64 userdata, int cyclesLate) {
 	SceUID threadID = userdata >> 32;
 	int uid = (int)(userdata & 0xFFFFFFFF);
@@ -132,6 +140,10 @@ int ScheduleP2PState(int event, int newState, int usec, const char* reason) {
 	return 0;
 }
 
+/* We register the HLE Loop functions when initializing the emulator here.
+*    This is safe enough, as the functions are small, clean, and do not auto-start
+*    But, these should be registered when the module is loaded instead.
+*/ 
 void __Np2Init() {
 	npMatching2Inited = false;
 
@@ -163,6 +175,9 @@ void __Np2Shutdown() {
 	}
 }
 
+/* 
+*   Signaling is made of 3 parts. This is Part 1, which handles the STUN based public/local IP information
+*/
 void __Np2SignalingGetRPCNResponses()
 {
 	hleSkipDeadbeef();
@@ -183,6 +198,14 @@ void __Np2SignalingGetRPCNResponses()
 	hleNoLogVoid();
 }
 
+/*
+*   Signaling is made of 3 parts. This is Part 2, which handles the Internal P2P connections.
+*   Part 3 is System P2P communications, and is officially on SCE_SIGN_PORT 3658.
+*   TODO: Intercept communications on port 3658, handle as RPCN or InternalP2P, and
+*       pass all unmatched packets to System.
+*   Reason: We're forced to man-handle the port numbers. This can require the use of
+*       Port Forwarding to function as intended, but so far has not.
+*/
 void __Np2SignalingGetP2PResponses()
 {
 	hleSkipDeadbeef();
@@ -205,6 +228,9 @@ void __Np2SignalingGetP2PResponses()
 /* Generate a Unique Request Id for various callbacks
  * @param app_req value derrived from AppRequestID
  * @return u32 System RequestID
+ * @note Request ID's can never be recycled, or the game can interpret it as already handled
+ * @note Request ID of 0 is handled as an aborted request
+ * @note app_req should be overwritten whenever supplied
  */
 SceNpMatching2RequestId GenerateRequestId(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId app_req) {
 	auto context = ctx.find(ctxId);
@@ -218,6 +244,9 @@ SceNpMatching2RequestId GenerateRequestId(SceNpMatching2ContextId ctxId, SceNpMa
 	return request_id;
 }
 
+/* Temporary Context Grabber
+*  - Functions that need this should probably use the relavant System Call
+*/ 
 std::optional<std::map<SceNpMatching2ContextId, std::unique_ptr<NpMatching2Context>>::iterator> GetDefaultContext(SceNpMatching2EventType event_type) {
 	auto def = defaultOptParams.find(event_type);
 	if (def == defaultOptParams.end()) {
@@ -232,20 +261,16 @@ std::optional<std::map<SceNpMatching2ContextId, std::unique_ptr<NpMatching2Conte
 	return _context;
 }
 
-//template <typename T>
-//void Write_Struct(const T& object, const u32 address, const char* tag, size_t taglen) {
-//	Memory::Memcpy(address, &object, sizeof(T), tag, taglen);
-//}
-
-/* Generate a callback handler for async processing returns
- * @param optParamPtr pointer to SceNpMatching2RequestOptParam
- * @param assignedReqIdPtr pointer to AppRequestID
+/* Generate a request_id based callback handler for async processing returns
+ * @param optParam Contains Callback / Args to be supplied to matching notifications
+ * @param assignedReqIdPtr Default Request_Id used when registration errors
  * @param event_type PS3Matching2RequestEvent Event
- * @return u32 System RequestID
+ * @return u32 System Generated RequestID
+ * @note This WILL advance the request_id if it doesn't fail
  */
 SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestOptParam optParam, u32 assignedReqId, SceNpMatching2EventType event_type) {
 	NOTICE_LOG(Log::sceNet, "%s(ctx: %d, cb: %08x, cb_args: %08x, event_type: %d) at %08x", __FUNCTION__, ctxId, optParam.cbFunc.ptr, optParam.cbFuncArg.ptr, event_type, currentMIPS->pc);
-	
+
 	// If empty callback, check for a default callback of the same type
 	if (!Memory::IsValidAddress(optParam.cbFunc.ptr)) {
 		return RegisterNpMatching2DefaultHandler(ctxId, assignedReqId, event_type);
@@ -267,16 +292,17 @@ SceNpMatching2RequestId RegisterNpMatching2Handler(SceNpMatching2ContextId ctxId
 
 	// 0 defines an Aborted Request
 	npMatching2Handlers[req_id] = handler;
-	NOTICE_LOG(Log::sceNet, "%s(count: %d) - Added Callback FUN_%08x(%d, %d, %08x) for %s", __FUNCTION__, npMatching2Handlers.size(), handler.cb, ctxId, req_id, handler.cb_arg, EventToString(event_type).c_str());
+	NOTICE_LOG(Log::sceNet, "%s(count: %d) - Added Callback FUN_%08x(%d, %d, %08x) for %s", __FUNCTION__, npMatching2Handlers.size(), handler.cb.ptr, ctxId, req_id, handler.cb_arg.ptr, EventToString(event_type).c_str());
 
 	return req_id;
 }
 
-/* Generate a callback handler for async processing returns
+/* Generate a default request_id based callback handler for async processing returns
  * @param ctxId Replaced with the defaultOptParam's context id
- * @param assignedReqId Irrelevant Default ID to return when Default Opt Param isn't available
+ * @param assignedReqId Default ID to return if the request fails
  * @param event_type PS3Matching2RequestEvent Event
  * @return u32 System RequestID
+ * @note This WILL advance the request_id if it doesn't fail
  */
 SceNpMatching2RequestId RegisterNpMatching2DefaultHandler(SceNpMatching2ContextId& ctxId, SceNpMatching2RequestId assignedReqId, SceNpMatching2EventType event_type) {
 	// Check if defaultOptParams contains this eventType
@@ -309,10 +335,13 @@ SceNpMatching2RequestId RegisterNpMatching2DefaultHandler(SceNpMatching2ContextI
 }
 
 /* Thread-safe Event Processor for System Requests. Relevant arguments will be replaced.
- * @param event_code Related System Request Type, matches the Handler
- * @param argc Count of the number of arguments
- * @param args Variable length of arguments, MAX_ARGS = 11
+ * @param ctxId Relevant Context to notify
+ * @param reqId Matching Request ID
+ * @param event u16 value to notify the system what event occurred
+ * @param errorCode u32 value indicating what errors occurred
+ * @param dataPtr u32 pointer to the data struct we pass back to the system
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
+ * @note errorCode 0 or SCE_NP_MATCHING2_OKAY is a clean request
  */
 int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2Event event, s32 errorCode, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
@@ -354,10 +383,11 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
 	return 0;
 }
 
-/* Thread-safe Event Processor for Room Messages. Relevant arguments will be replaced.
- * @param event_code Related System Request Type, matches the Handler
- * @param argc Count of the number of arguments
- * @param args Variable length of arguments, MAX_ARGS = 11
+/* Thread-safe Event Processor for Room Messages. Incomplete, but functional.
+ * @param roomId What room the notification triggered for
+ * @param memberId The relevant source, or target of the event
+ * @param event u16 value to notify the system what event occurred
+ * @param dataPtr u32 pointer to the data struct we pass back to the system
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
 int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, RPCNMatching2RequestEvent requestEvent, u32 dataPtr) {
@@ -395,11 +425,13 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemb
 	return 0;
 }
 
-/* Thread-safe Event Processor for Room Events. Relevant arguments will be replaced.
- * @param event_code Related System Request Type, matches the Handler
- * @param argc Count of the number of arguments
- * @param args Variable length of arguments, MAX_ARGS = 11
+/* Thread-safe Event Processor for Room Events. Incomplete, but functional.
+ * @param roomId What room the notification triggered for
+ * @param memberId The relevant source, or target of the event
+ * @param event u16 value to notify the system what event occurred
+ * @param dataPtr u32 pointer to the data struct we pass back to the system
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
+ * @note This function seems to return a ConnectionID. This is optional, and replaces the requirement of room/member
  */
 int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
@@ -436,13 +468,16 @@ int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
 	return 0;
 }
 
-/* Thread-safe Event Processor for Signaling Events. Relevant arguments will be replaced.
- * @param event_code Related System Request Type, matches the Handler
- * @param argc Count of the number of arguments
- * @param args Variable length of arguments, MAX_ARGS = 11
+/* Thread-safe Event Processor for Room Events. Incomplete, but functional.
+ * @param roomId What room the notification triggered for
+ * @param conn_id A key matching a room/member combination, usually ignored or set to 0 
+ * @param memberId The relevant source, or target of the event
+ * @param event u16 value to notify the system what event occurred
+ * @param errorCode u32 value indicating what system error occurred
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
+ * @note This function seems to return a ConnectionID. This is optional, and replaces the requirement of room/member
  */
-int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 conn_state, SceNpMatching2RoomMemberId roomMemberId, SceNpMatching2Event event, s32 errorCode) {
+int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 conn_state, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, s32 errorCode) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	NpMatching2Handler* handler = nullptr;
@@ -457,7 +492,7 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 conn_s
 	args[1] = room_id;		// room_id?
 	args[2] = conn_id;		// conn_id?
 	args[3] = conn_state;	// unknown?
-	args[4] = roomMemberId;	// roomMemberId
+	args[4] = memberId;		// roomMemberId
 	args[5] = event;		// EventCode
 	args[6] = errorCode;	// ErrorCode
 	//args[7] = 0;			// cbArgs
@@ -480,25 +515,9 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 conn_s
 	return 0;
 }
 
-//int trynotifySignalingHandler() {
-//	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
-//
-//	u32 args[8];
-//	//args[0] = 1;	// ContextID
-//	args[1] = 2;	// param_2
-//	args[2] = 3;	// param_3
-//	args[3] = 4;	// param_4
-//	args[4] = 5;	// roomMemberId
-//	args[5] = SCE_NP_MATCHING2_SIGNALING_EVENT_Established;	// event
-//	args[6] = 7;	// errorCode
-//	//args[7] = 0;	// cbArgs
-//
-//	npMatching2Events.push_back(NpMatching2Args(SCE_NP_MATCHING2_SIGNALING_EVENT, 8, args));
-//
-//	return 0;
-//}
 /* Event Processor
- * @note The arguments are suppose to be combined here?
+ * @note There is some complex logging in here, but it just validates the callback address and executes
+ * @note This is triggered from sceNet
  */
 bool NpMatching2ProcessEvents() {
 	if (npMatching2Events.empty()) {
@@ -511,43 +530,43 @@ bool NpMatching2ProcessEvents() {
 
 
 	if (!Memory::IsValidAddress(event.handler.cb.ptr)) {
-			WARN_LOG(Log::sceNet, "NpMatching2ProcessEvents - Nothing to Callback to for %s", EventToString(event.event_type).c_str());
+		WARN_LOG(Log::sceNet, "NpMatching2ProcessEvents - Nothing to Callback to for %s", EventToString(event.event_type).c_str());
 		return false;
-		}
+	}
 	switch (event.handler.event_type) {
-			// combine the callback parameters with the request based on the event type
-		case SCE_NP_MATCHING2_REQUEST_EVENT:
+		// combine the callback parameters with the request based on the event type
+	case SCE_NP_MATCHING2_REQUEST_EVENT:
 		NOTICE_LOG(Log::sceNet, "SceNpMatching2RequestCallback - %s_%08x(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
-				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]);
-			break;
-		case SCE_NP_MATCHING2_ROOM_EVENT:
+			event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]);
+		break;
+	case SCE_NP_MATCHING2_ROOM_EVENT:
 		NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomEventCallback - %s_%08x(ctxId: %d, roomId: %d, connId?: %08x, memberId: %d, requestEvent: %08x, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
-				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6]);
-			break;
-		case SCE_NP_MATCHING2_ROOM_MSG_EVENT:
+			event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6]);
+		break;
+	case SCE_NP_MATCHING2_ROOM_MSG_EVENT:
 		NOTICE_LOG(Log::sceNet, "SceNpMatching2RoomMessageCallback - %s_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %d, param_5: %d, event: %d, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
-				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
-			break;
-		case SCE_NP_MATCHING2_LOBBY_EVENT:
+			event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
+		break;
+	case SCE_NP_MATCHING2_LOBBY_EVENT:
 		ERROR_LOG(Log::sceNet, "UNIMPLEMENTED SceNpMatching2LobbyEventCallback - %s_%08x(ctxId: %d)", EventToString(event.event_type).c_str(), event.handler.cb.ptr, event.args[0]);
-			return false;
-		case SCE_NP_MATCHING2_LOBBY_MSG_EVENT:
+		return false;
+	case SCE_NP_MATCHING2_LOBBY_MSG_EVENT:
 		ERROR_LOG(Log::sceNet, "UNIMPLEMENTED SceNpMatching2LobbyMessageCallback - %s_%08x(ctxId: %d)", EventToString(event.event_type).c_str(), event.handler.cb.ptr, event.args[0]);
-			return false;
-		case SCE_NP_MATCHING2_SIGNALING_EVENT:
+		return false;
+	case SCE_NP_MATCHING2_SIGNALING_EVENT:
 		NOTICE_LOG(Log::sceNet, "SceNpMatching2SignalingCallback - %s_%08x(param_1: %d, param_2: %d, param_3: %d, param_4: %d, param_5: %d, param_6: %d, param_7: %d, param_8: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
-				event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
-			break;
-		default:
+			event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
+		break;
+	default:
 		NOTICE_LOG(Log::sceNet, "UNHANDLED Callback Type %d - FUN_%08x(ctxId: %d)", event.event_type, event.handler.cb.ptr, event.args[0]);
-			_dbg_assert_(false);
-			return false;
-		}
+		_dbg_assert_(false);
+		return false;
+	}
 	//DEBUG_LOG(Log::sceNet, "NpMatching2Callback [HandlerID=%i][EventID=%04x][State=%04x][ArgsPtr=%08x]", it->first, event, stat, event.handler.argument);
 	if (Memory::IsValidAddress(event.handler.cb.ptr))
 		hleEnqueueCall(event.handler.cb.ptr, event.argc, event.args);
-		return true;
-	}
+	return true;
+}
 
 static inline u32 AllocUser(u32 size, bool fromTop, const char* name) {
 	u32 addr = userMemory.Alloc(size, fromTop, name);
@@ -562,6 +581,9 @@ static inline void FreeUser(u32& addr) {
 	addr = 0;
 }
 
+/* Initialization
+ * @note This is triggered when any game requires the functions from NpMatching2
+ */
 static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityMask, int threadStackSize)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %d, %d, %d) at %08x", __FUNCTION__, poolSize, threadPriority, cpuAffinityMask, threadStackSize, currentMIPS->pc);
@@ -631,6 +653,9 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Initialization
+ * @note This is triggered when any game no longer requires this module or it's functions
+ */
 static int sceNpMatching2Term()
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s() at %08x", __FUNCTION__, currentMIPS->pc);
@@ -649,6 +674,13 @@ static int sceNpMatching2Term()
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Create Context
+ * @param communicationIdPtr Pointer to a SceNpCommunicationId containing the PSN Title and Number
+ * @param passPhrasePtr Some crypto key used for communicating with the NP Matching Servers?
+ * @param ctxIdPtr A pointer containing the Unique Context ID generated by this request
+ * @param optionFlags Flags indicating if the OnlineName or Avatar are used by the game
+ * @note Some hints suggest this usually only supports 1-7 contexts at a time, but most games only request 1 context
+ */
 static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr, u32 ctxIdPtr, s32 optionFlags)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x[%s], %08x[%08x], %08x[%hu], %08x) at %08x", __FUNCTION__, communicationIdPtr, safe_string(Memory::GetCharPointer(communicationIdPtr)), passPhrasePtr, Memory::Read_U32(passPhrasePtr), ctxIdPtr, Memory::Read_U16(ctxIdPtr), optionFlags, currentMIPS->pc);
@@ -696,6 +728,10 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 	return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_MAX, "Max Contexts Reached");
 }
 
+/* Start Context
+ * @param ctxId Related Context to start
+ * @note Some hints suggest the PSP caches the server list here
+ */
 static int sceNpMatching2ContextStart(int ctxId)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d) at %08x", __FUNCTION__, ctxId, currentMIPS->pc);
@@ -727,6 +763,9 @@ static int sceNpMatching2ContextStart(int ctxId)
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Stop Context
+ * @param ctxId Related Context to stop
+ */
 static int sceNpMatching2ContextStop(int ctxId)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d) at %08x", __FUNCTION__, ctxId, currentMIPS->pc);
@@ -754,6 +793,10 @@ static int sceNpMatching2ContextStop(int ctxId)
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Destroy Context
+ * @param ctxId Related Context to destroy
+ * @note The context is still technically valid until this is called
+ */
 static int sceNpMatching2DestroyContext(int ctxId)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d) at %08x", __FUNCTION__, ctxId, currentMIPS->pc);
@@ -787,6 +830,12 @@ static int sceNpMatching2GetMemoryStat(u32 memStatPtr)
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Register Signaling Callback
+ * @param ctxId Related Context that signaling should run on
+ * @param cbFuncPtr a u32 pointer to the address the game uses to handle the response
+ * @param cbArgsPtr a u32 pointer to the global struct the game uses in memory
+ * @note This should register and start the SignalingHandler
+ */
 static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 cbFuncPtr, u32 cbArgsPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, cbFuncPtr, cbArgsPtr, currentMIPS->pc);
@@ -858,7 +907,7 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, u32 m
 
 /* Produces information about a target server
  * @param serverIdPtr Pointer to the target Server ID
- * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param optParamPtr Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Server will respond with relevant information and trigger the related callback
@@ -885,7 +934,7 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamP
 	if (!Memory::IsValidAddress(serverIdPtr))
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
 	// Server ID is a 16-bit variable according to JPCSP
-	// PSP2i says this is a 16-byte request struct where only the 16-bit server id is allocated
+	// PSP2i says this is a 16-bit request struct where only the 16-bit server id is allocated
 	auto serverReq = PSPPointer<SceNpMatching2GetServerInfoRequest>::Create(serverIdPtr);
 	//SceNpMatching2ServerId serverId = Memory::Read_U16(serverIdPtr);
 
@@ -916,7 +965,7 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamP
 
 /* Allocates a list of SceNpMatching2World for information about the lobbies, parties, and existing player counts
  * @param serverIdPtr Pointer to the target Server ID
- * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param optParamPtr Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Server will respond with relevant information and trigger the related callback
@@ -951,12 +1000,12 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-/* Incomplete - Searches for all Lobbies/Parties
+/* Searches for all Lobbies/Parties
  * @param reqParamPtr SceNpMatching2SearchRoomRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
- * @note Performs the operations in an async lambda function
+ * @note If the room is in an incomplete state, the client may be unable to select it for auto matching
  */
 static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
@@ -1005,14 +1054,14 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-/* Incomplete - Hosts a Lobby/Party
+/* Hosts a Lobby/Party
  * @param reqParamPtr SceNpMatching2CreateJoinRoomRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param roomEventCbPtr Pointer to Callback Address for future Room Events (optional)
  * @param roomMessageCbPtr Pointer to Callback Address for future Room Messages (optional) 
- * @param assignedReqIdPtr Pointer to a pre-specified request id
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; System Errors are entirely ignored
- * @note Performs the operations in an async lambda function
+ * @note This will officially start self-signaling
  */
 static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 roomEventCbPtr, u32 roomMessageCbPtr, u32 assignedReqIdPtr)
 {
@@ -1085,12 +1134,12 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-/* Incomplete - Joins an existing Lobby/Party
- * @param reqParamPtr ?
+/* Joins an existing Lobby/Party
+ * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqIdPtr Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; System Errors are entirely ignored
- * @note Performs the operations in an async lambda function
+ * @note This will officially start self-signaling
  */
 static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 roomEventCbPtr, u32 roomMessageCbPtr, u32 assignedReqIdPtr)
 {
@@ -1134,7 +1183,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u
 /* Incomplete - Leaves the current Lobby/Party
  * @param reqParamPtr ?
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqIdPtr Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  * PSP2i fails to create a party at 08ca57d8 when DAT_08ed59d4 is set to 2
@@ -1172,7 +1221,7 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, 
 /* Incomplete - Requests attributes of a specific Lobby/Party
  * @param reqParamPtr SceNpMatching2GetRoomDataInternalRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqIdPtr Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
@@ -1217,10 +1266,10 @@ static int sceNpMatching2GetRoomDataInternalLocal(int ctxId) {
 	return -1;
 }
 
-/* Incomplete - Unconfirmed. Similar to sceNpMatching2SetRoomDataInternal
+/* Similar to sceNpMatching2SetRoomDataInternal, but stores the information externally
  * @param reqParamPtr SceNpMatching2SetRoomDataExternalRequest containing External room information?
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqIdPtr Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
@@ -1252,10 +1301,10 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-/* Incomplete - Sets attributes of a specific Lobby/Party
+/* Sets attributes of a specific Lobby/Party
  * @param reqParamPtr SceNpMatching2GetRoomDataInternalRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqIdPtr Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
@@ -1290,10 +1339,10 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-/* Incomplete - Sends a Chat Message to relevant players?
+/* Sends a Chat Message to relevant players?
  * @param reqParamPtr ? Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
- * @param assignedReqIdPtr Pointer to the index of a unique callback
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; System Errors are entirely ignored
  * @note Performs the operations in an async lambda function
  */
@@ -1322,6 +1371,11 @@ static int sceNpMatching2SendRoomChatMessage(int ctxId, u32 reqParamPtr, u32 opt
 	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomChatMessage, SCE_NP_MATCHING2_OKAY, 0);
 }
 
+/* Sets the Default Callback function for System Requests to be used when the functions optParam isn't provided
+ * @param optParamPtr Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @return 0; or System Error
+ * @note Few games use this, and normally rely on the optParamPtr argument for said functions instead
+ */
 static int sceNpMatching2SetDefaultRequestOptParam(int ctxId, u32 optParamPtr)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParamPtr, currentMIPS->pc);
@@ -1347,6 +1401,12 @@ static int sceNpMatching2SetDefaultRequestOptParam(int ctxId, u32 optParamPtr)
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Appears to set user-specific attributes, but is rarely used
+ * @param reqParamPtr SceNpMatching2SetUserInfoRequest containing the new attributes
+ * @param optParamPtr Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ */
 static int sceNpMatching2SetUserInfo(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
@@ -1376,6 +1436,12 @@ static int sceNpMatching2SetUserInfo(int ctxId, u32 reqParamPtr, u32 optParamPtr
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Incomplete - Appears to get user-specific attributes, but is rarely used
+ * @param reqParamPtr SceNpMatching2GetUserInfoListRequest containing relevant information of a player?
+ * @param optParamPtr Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
+ * @return 0; System Errors are entirely ignored
+ */
 static int sceNpMatching2GetUserInfoList(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
@@ -1398,10 +1464,18 @@ static int sceNpMatching2GetUserInfoList(int ctxId, u32 reqParamPtr, u32 optPara
 	if (!npServer)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetUserInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
-	// FIXME: Actually get the User Info
+	auto req = PSPPointer<SceNpMatching2GetUserInfoListRequest>::Create(reqParamPtr);
+
+	// FIXME: GetUserInfoList does not yet exist in RPCN, or is otherwise unimplemented
+	//int ret = npServer->GetUserInfo(ctxId, request_id, req);
 	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetUserInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_OKAY, "UNIMPLEMENTED"), 0);
 }
 
+/* Incomplete - When a request is aborted, it should use request_id 0
+ * @param assignedReqIdPtr Pointer to the index of a unique callback
+ * @return 0; or System Error
+ * @note Not used under normal circumstances.
+ */
 static int sceNpMatching2AbortRequest(int ctxId, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x[%d]) at %08x", __FUNCTION__, ctxId, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
@@ -1422,7 +1496,11 @@ static int sceNpMatching2AbortRequest(int ctxId, u32 assignedReqIdPtr)
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-//static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
+/* Sets or Changes the registered Signaling Callback information
+ * @param optParamPtr Pointer to SceNpMatching2SignalingOptParam containing Callback information
+ * @return 0; or System Error
+ * @note This should set the information in SignalingHandler for cleaner separation
+ */
 static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 optParamPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParamPtr, currentMIPS->pc);
@@ -1449,6 +1527,12 @@ static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 optParamPtr)
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Gets the registered Signaling Callback information
+ * @param roomId SceNpMatching2RoomId as the primary key for signaling
+ * @param optParamPtr Pointer to SceNpMatching2SignalingOptParam containing Callback information
+ * @return 0; or System Error
+ * @note room_id is the primary key for default parameters, not context
+ */
 static int sceNpMatching2GetSignalingOptParamLocal(int ctxId, u32 roomId, u32 optParamPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, optParamPtr, currentMIPS->pc);
@@ -1475,6 +1559,11 @@ static int sceNpMatching2GetSignalingOptParamLocal(int ctxId, u32 roomId, u32 op
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Sets or Changes the registered Room Event Callback information
+ * @param optParamPtr Pointer to SceNpMatching2RoomEventOptParam containing Callback information
+ * @return 0; or System Error
+ * @note This channel handles Create/Join/Leave events
+ */
 static int sceNpMatching2SetDefaultRoomEventOptParam(int ctxId, u32 optParamPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNTESTED %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParamPtr, currentMIPS->pc);
@@ -1501,6 +1590,11 @@ static int sceNpMatching2SetDefaultRoomEventOptParam(int ctxId, u32 optParamPtr)
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Sets or Changes the registered Room Message Event Callback information
+ * @param optParamPtr Pointer to SceNpMatching2RoomMessageOptParam containing Callback information
+ * @return 0; or System Error
+ * @note This channel handles optional extra details about the room conditions and flags
+ */
 static int sceNpMatching2SetDefaultRoomMessageOptParam(int ctxId, u32 optParamPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNTESTED %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParamPtr, currentMIPS->pc);
@@ -1527,6 +1621,11 @@ static int sceNpMatching2SetDefaultRoomMessageOptParam(int ctxId, u32 optParamPt
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Gets the local IP, Port, NAT Type, and other flags
+ * @param netInfoPtr Pointer to SceNpMatching2SignalingNetInfo to be provided requested information
+ * @return 0; or System Error
+ * @note This channel handles optional extra details about the room conditions and flags
+ */
 static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNTESTED %s(%08x) at %08x", __FUNCTION__, netInfoPtr, currentMIPS->pc);
@@ -1555,6 +1654,13 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Incomplete - Gets the target Peer's IP, Port, NAT Type, and other flags
+ * @param roomId The keyed room_id to search for player
+ * @param roomMemberId The target players ID to provide in the system request
+ * @param netInfoPtr Pointer to SceNpMatching2SignalingNetInfo to be provided requested information
+ * @return 0; or System Error
+ * @note This might request the information from the target player, rather than providing what it knows
+ */
 static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 roomId, u32 roomMemberId, u32 netInfoPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, roomMemberId, netInfoPtr, currentMIPS->pc);
@@ -1598,6 +1704,11 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 roomId, u32 room
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Incomplete - Might handle the response from the PeerNetInfo request?
+ * @param signalingReqIdPtr ?
+ * @param netInfoPtr Pointer to SceNpMatching2SignalingNetInfo to be provided requested information
+ * @return 0; or System Error
+ */
 static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingReqIdPtr, u32 netInfoPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x[%08x], %08x) at %08x", __FUNCTION__, ctxId, signalingReqIdPtr, Memory::Read_U32(signalingReqIdPtr), netInfoPtr, currentMIPS->pc);
@@ -1616,6 +1727,10 @@ static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingR
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Incomplete - Might cancel the request from the PeerNetInfo request?
+ * @param signalingReqIdPtr ?
+ * @return 0; or System Error
+ */
 static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x[%08x]) at %08x", __FUNCTION__, ctxId, signalingReqIdPtr, Memory::Read_U32(signalingReqIdPtr), currentMIPS->pc);
@@ -1630,7 +1745,17 @@ static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqI
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-// Fat Princess assigns a local connId? here when requesting information, and then proceeds to call GetConnectionInfo
+/* Provides known Connection Status, IP, and Port between 2 members
+ * @param connId Optionally replaces RoomId / MemberId
+ * @param roomId Keyed Room where the member is a part of
+ * @param memberId Source member to check connection, or 0 for self
+ * @param peerMemberId Target member to retrieve information about
+ * @param connInfoPtr Peer CONNECT_STATUS
+ * @param ipAddrPtr Peer IP Address
+ * @param portPtr Peer Port
+ * @return 0; or System Error
+ * @note Fat Princess assigns a local connId? here when requesting information, and then proceeds to call GetConnectionInfo
+ */
 static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32 roomId, u32 memberId, u32 peerMemberId, u32 connInfoPtr, u32 ipAddrPtr, u32 portPtr) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %d, %d, %d, %d, 0x%08X, 0x%08X, 0x%08X) at %08x", __FUNCTION__, ctxId, connId, roomId, memberId, peerMemberId, connInfoPtr, ipAddrPtr, portPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
@@ -1727,9 +1852,18 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 	return hleLogInfo(Log::sceNet, SCE_NP_MATCHING2_OKAY);
 }
 
-// Fat Princess assigns a connId of 0 when connStatus == 2
-// Most games appear to adhere to this rule of thumb, and rely on roomId/memberId for assigning connection details
-// Fat Princess expects rtt, bandwidth, and npid in a level 4 request, suggesting this is [[fallthrough]] behavior
+/* Provides more detailed information, and specific between 2 members
+ * @param connId Optionally replaces RoomId / MemberId
+ * @param roomId Keyed Room where the member is a part of
+ * @param memberId Source member to check connection, or 0 for self
+ * @param peerMemberId Target member to retrieve information about
+ * @param code Enum Type of information requested
+ * @param connInfoPtr SceNpSignalingConnectionInfo containing response information
+ * @return 0; or System Error
+ * @note Fat Princess assigns a connId of 0 when connStatus == 2
+ * @note Most games appear to adhere to this rule of thumb, and rely on roomId/memberId for assigning connection details
+ * @note This returns a UNION, not a struct, meaning only specific parts of the struct will be returned
+ */
 static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 roomId, u32 memberId, u32 peerMemberId, u32 code, u32 connInfoPtr)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %d, %d, %d, %d, %d, %08x) at %08x", __FUNCTION__, ctxId, connId, roomId, memberId, peerMemberId, code, connInfoPtr, currentMIPS->pc);
@@ -1804,6 +1938,12 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Requests RoomData from an external source
+ * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
+ * @return 0; or System Error
+ */
 static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
@@ -1832,6 +1972,12 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Incomplete - Requests Room Password Information from cache
+ * @param roomIdPtr Relevant cached room to request information about
+ * @param withPasswordPtr Boolean validating the condition of the room password
+ * @param roomPasswordPtr SceNpMatching2SessionPassword containing the password
+ * @return 0; or System Error
+ */
 static int sceNpMatching2GetRoomPasswordLocal(int ctxId, u32 roomIdPtr, u32 withPasswordPtr, u32 roomPasswordPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomIdPtr, withPasswordPtr, roomPasswordPtr, currentMIPS->pc);
@@ -1865,13 +2011,14 @@ static int sceNpMatching2GetRoomPasswordLocal(int ctxId, u32 roomIdPtr, u32 with
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-/* Incomplete - Sends a Room Message to relevant players?
+/* Sends a Room Message to relevant players
  * @param reqParamPtr PSPPointer<SceNpMatching2SendRoomMessageRequest> Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to the index of a unique callback
  * @return 0; System Errors are entirely ignored
  * @note Sends the message to the NPAgent, and receives a reply via Notification
- * @note PSP2i doesn't provide a callback, they should be optional
+ * @note PSP2i doesn't provide a callback, and waits for the related notification to send a ROOM_MSG_EVENT
+ * @note PSP2i sends character level/equipment over this channel, but not player position
  */
 static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
@@ -1912,6 +2059,12 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Incomplete - Promotes a member of the party to Host?
+ * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
+ * @return 0; or System Error
+ */
 static int sceNpMatching2GrantRoomOwner(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
@@ -1937,13 +2090,27 @@ static int sceNpMatching2GrantRoomOwner(int ctxId, u32 reqParamPtr, u32 optParam
 	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GrantRoomOwner, SCE_NP_MATCHING2_OKAY, 0);
 }
 
+/* Incomplete - Requests the cached list of member_id's in a room
+ * @param roomId ?
+ * @param sortMethod ?
+ * @param memberId ?
+ * @param memberIdNum ?
+ * @return 0; or System Error
+ */
 static int sceNpMatching2GetRoomMemberIdListLocal(int ctxId, u32 roomId, u32 sortMethod, u32 memberId, u32 memberIdNum)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, sortMethod, memberId, memberIdNum, currentMIPS->pc);
 
+	_dbg_assert_msg_(false, "FoxLovesYou is looking for more information about this system call!");
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Changes or Sets Room Member updates
+ * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
+ * @return 0; or System Error
+ */
 static int sceNpMatching2SetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
@@ -1972,13 +2139,30 @@ static int sceNpMatching2SetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 	return hleLogWarning(Log::sceNet, SCE_NP_MATCHING2_OKAY, "UNTESTED");
 }
 
+/* Incomplete - Gets extra cached information about all room members
+ * @param roomId ?
+ * @param memberId ?
+ * @param attrId ?
+ * @param attrIdNum ?
+ * @param memberPtr ?
+ * @param bufPtr ?
+ * @param bufLen ?
+ * @return 0; or System Error
+ */
 static int sceNpMatching2GetRoomMemberDataInternalLocal(int ctxId, u32 roomId, u32 memberId, u32 attrId, u32 attrIdNum, u32 memberPtr, u32 bufPtr, u32 bufLen)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x, %08x, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, memberId, attrId, attrIdNum, memberPtr, bufPtr, bufLen, currentMIPS->pc);
 
+	_dbg_assert_msg_(false, "FoxLovesYou is looking for more information about this system call!");
 	return SCE_NP_MATCHING2_OKAY;
 }
 
+/* Gets a members data from an Internal source
+ * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
+ * @return 0; or System Error
+ */
 static int sceNpMatching2GetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
@@ -2007,13 +2191,24 @@ static int sceNpMatching2GetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 	return hleLogWarning(Log::sceNet, SCE_NP_MATCHING2_OKAY, "UNTESTED");
 }
 
-// Placeholder until args are identified
+/* Incomplete - Requests a list of extended information about members in a room
+ * @param Parameters are unknown!
+ * @return 0; or System Error
+ * @note Placeholder until args are identified
+ */
 static int sceNpMatching2GetRoomMemberDataInternalList(int ctxId)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPLEMENTED %s(%d) at %08x", __FUNCTION__, ctxId, currentMIPS->pc);
+	_dbg_assert_msg_(false, "FoxLovesYou is looking for more information about this system call!");
 	return -1;
 }
 
+/* Incomplete - Requests an extended list of information from an external source
+ * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
+ * @return 0; or System Error
+ */
 static int sceNpMatching2GetRoomMemberDataExternalList(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
@@ -2039,6 +2234,12 @@ static int sceNpMatching2GetRoomMemberDataExternalList(int ctxId, u32 reqParamPt
 	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_OKAY, "UNIMPLEMENTED"), 0);
 }
 
+/* Incomplete - Ejects a member from the party
+ * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
+ * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
+ * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
+ * @return 0; or System Error
+ */
 static int sceNpMatching2KickoutRoomMember(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
