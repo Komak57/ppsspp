@@ -1013,18 +1013,18 @@ int signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	auto notification = resp.stream->get_flatbuffer<NotificationUserJoinedRoom>();
 	if (resp.stream->is_error()) {
 		ERROR_LOG(Log::sceNet, "NOTI Malformed UserJoinedRoom notification");
-		return 0;
+		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_EVENT);
 	if (def == defaultOptParams.end()) {
 		ERROR_LOG(Log::sceNet, "Default ROOM_EVENT handler not Found");
-		return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, 0);
+		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 	auto _context = ctx.find(def->second.ctx_id);
 	if (_context == ctx.end()) {
 		ERROR_LOG(Log::sceNet, "Context not Found");
-		return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, 0);
+		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 
 	const SceNpMatching2RoomId room_id = notification->room_id();
@@ -1043,7 +1043,7 @@ int signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	auto member = npServer->cache.GetMember(notif_data->roomMemberDataInternal->memberId);
 	if (member) {
 		//get_match2_event(event_key, 0, 0);
-		return;
+		return SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND;
 	}
 	// Cache new Room Member
 	npServer->cache.AddMember(*notif_data->roomMemberDataInternal);
@@ -1090,18 +1090,18 @@ int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	if (resp.stream->is_error())
 	{
 		ERROR_LOG(Log::sceNet, "NOTI UserLeftRoom Malformed UserLeftRoom notification");
-		return;
+		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_EVENT);
 	if (def == defaultOptParams.end()) {
 		ERROR_LOG(Log::sceNet, "Default ROOM_EVENT handler not Found");
-		return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, 0);
+		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 	auto _context = ctx.find(def->second.ctx_id);
 	if (_context == ctx.end()) {
 		ERROR_LOG(Log::sceNet, "Context not Found");
-		return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, 0);
+		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 
 	//auto [include_onlinename, include_avatarurl] = get_match2_context_options(room_event_cb_ctx);
@@ -1117,7 +1117,7 @@ int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	auto room = npServer->cache.GetRoom(room_id);
 	if (!room) {
 		//get_match2_event(event_key, 0, 0);
-		return;
+		return SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND;
 	}
 	auto n = GetI18NCategory(I18NCat::NETWORKING);
 	g_OSD.Show(OSDType::MESSAGE_ERROR, std::string(n->T("SH: Player Leaving")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]"), 0.0f, "userleaveroom");
@@ -1145,18 +1145,18 @@ int signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 	if (resp.stream->is_error())
 	{
 		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomDestroyed notification");
-		return;
+		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_EVENT);
 	if (def == defaultOptParams.end()) {
 		ERROR_LOG(Log::sceNet, "Default ROOM_EVENT handler not Found");
-		return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, 0);
+		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 	auto _context = ctx.find(def->second.ctx_id);
 	if (_context == ctx.end()) {
 		ERROR_LOG(Log::sceNet, "Context not Found");
-		return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, 0);
+		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 
 	u32 _size = sizeof(SceNpMatching2RoomUpdateInfo);
@@ -1181,12 +1181,12 @@ int signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_EVENT);
 	if (def == defaultOptParams.end()) {
 		ERROR_LOG(Log::sceNet, "Default ROOM_EVENT handler not Found");
-		return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal, 0);
+		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 	auto _context = ctx.find(def->second.ctx_id);
 	if (_context == ctx.end()) {
 		ERROR_LOG(Log::sceNet, "Context not Found");
-		return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal, 0);
+		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 
 	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
@@ -1195,7 +1195,7 @@ int signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 	if (resp.stream->is_error())
 	{
 		ERROR_LOG(Log::sceNet, "NOTI Malformed UpdatedRoomDataInternal notification");
-		return;
+		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
 	u32 _size = sizeof(SceNpMatching2RoomDataInternalUpdateInfo);
@@ -1232,18 +1232,18 @@ int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	if (resp.stream->is_error())
 	{
 		ERROR_LOG(Log::sceNet, "NOTI Malformed UpdatedRoomMemberDataInternal notification");
-		return;
+		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_EVENT);
 	if (def == defaultOptParams.end()) {
 		ERROR_LOG(Log::sceNet, "Default ROOM_EVENT handler not Found");
-		return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, 0);
+		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 	auto _context = ctx.find(def->second.ctx_id);
 	if (_context == ctx.end()) {
 		ERROR_LOG(Log::sceNet, "Context not Found");
-		return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, 0);
+		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 
 	u32 _size = sizeof(SceNpMatching2RoomMemberDataInternalUpdateInfo);
@@ -1255,7 +1255,7 @@ int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	auto room = npServer->cache.GetRoom(room_id);
 	if (!room) {
 		//notifyRoomEventHandler(ctxId, room_id, memberId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
-		return;
+		return SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND;
 	}
 	
 	// Cache the member's info
@@ -1284,18 +1284,18 @@ int signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 	if (resp.stream->is_error())
 	{
 		ERROR_LOG(Log::sceNet, " - Malformed RoomMessageReceived notification");
-		return notifyRoomMessageHandler(0, 0, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, 0);
+		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_MSG_EVENT);
 	if (def == defaultOptParams.end()) {
 		ERROR_LOG(Log::sceNet, "Default ROOM_EVENT handler not Found");
-		return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, 0);
+		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 	auto _context = ctx.find(def->second.ctx_id);
 	if (_context == ctx.end()) {
 		ERROR_LOG(Log::sceNet, "Context not Found");
-		return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, 0);
+		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 
 	u32 _size = sizeof(SceNpMatching2RoomMessageInfo);
