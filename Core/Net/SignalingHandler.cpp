@@ -1126,10 +1126,13 @@ int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	//		We should probably log out cleanly when emulation stops, and handle this
 	//		a different way when a sudden disconnect occurs.
 	auto conn_id = get_conn_id_from_npid(notif_data->roomMemberDataInternal->userInfo.npId);
-	if (conn_id)
-		stop_sig(conn_id.value(), true);
+	// Sending Forced causes a lock-up when a player quits
+	// Sending NotForced spams "Finished" until a timeout occurs.
+	if (conn_id) {
+		stop_sig(conn_id.value(), false);
+	}
 
-	npServer->cache.RemoveMember(notif_data->roomMemberDataInternal->memberId);
+	//npServer->cache.RemoveMember(notif_data->roomMemberDataInternal->memberId);
 
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
 
