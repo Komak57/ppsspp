@@ -130,10 +130,10 @@ extern std::map<SceNpMatching2EventType, NpMatching2Handler> defaultOptParams;
 extern std::atomic<u16> match2_event_cnt;
 
 
-int sceNpMatching2SetDefaultRequestOptParam(int ctxId, u32 optParamPtr);
-int sceNpMatching2SetDefaultRoomEventOptParam(int ctxId, u32 optParamPtr);
-int sceNpMatching2SetDefaultRoomMessageOptParam(int ctxId, u32 optParamPtr);
-int sceNpMatching2SetSignalingOptParam(int ctxId, u32 optParamPtr);
+static int sceNpMatching2SetDefaultRequestOptParam(int ctxId, u32 optParamPtr);
+static int sceNpMatching2SetDefaultRoomEventOptParam(int ctxId, u32 optParamPtr);
+static int sceNpMatching2SetDefaultRoomMessageOptParam(int ctxId, u32 optParamPtr);
+static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 optParamPtr);
 
 SceNpMatching2RequestId GenerateRequestId(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId app_req);
 std::optional<std::map<SceNpMatching2ContextId, std::unique_ptr<NpMatching2Context>>::iterator> GetDefaultContext(SceNpMatching2EventType event_type);
