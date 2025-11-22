@@ -1748,12 +1748,13 @@ static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqI
 /* Provides known Connection Status, IP, and Port between 2 members
  * @param connId Optionally replaces RoomId / MemberId
  * @param roomId Keyed Room where the member is a part of
- * @param memberId Source member to check connection, or 0 for self
+ * @param memberId Source member to check connection
  * @param peerMemberId Target member to retrieve information about
  * @param connInfoPtr Peer CONNECT_STATUS
  * @param ipAddrPtr Peer IP Address
  * @param portPtr Peer Port
  * @return 0; or System Error
+ * @note It looks like 0 is used for "self"
  * @note Fat Princess assigns a local connId? here when requesting information, and then proceeds to call GetConnectionInfo
  */
 static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32 roomId, u32 memberId, u32 peerMemberId, u32 connInfoPtr, u32 ipAddrPtr, u32 portPtr) {
@@ -1804,7 +1805,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 		sig_port = htons(SCE_SIGN_PORT);
 		conn_status = si->conn_status;
 	}
-	else if (memberId != 0) {
+	/*else if (memberId != 0) {
 		member = npServer->cache.GetMember(memberId);
 
 		auto connID = g_signaling.get_conn_id_from_npid(member->userInfo.npId);
@@ -1820,11 +1821,15 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 		sig_addr = si->addr;
 		sig_port = htons(SCE_SIGN_PORT);
 		conn_status = si->conn_status;
-	}
+	}*/
 	else {
 		member = *_room->memberList.me;
-		sig_addr = g_signaling.GetSigAddr();
+		if (memberId == 0)
+			sig_addr = g_signaling.GetLocalAddr();
+		else
+			sig_addr = g_signaling.GetSigAddr();
 		sig_port = htons(g_signaling.GetSigPort());
+		conn_status = SCE_NP_SIGNALING_CONN_STATUS_ACTIVE;
 	}
 
 	if (!member)
