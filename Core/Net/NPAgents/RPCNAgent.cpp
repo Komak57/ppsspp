@@ -1423,8 +1423,8 @@ namespace net {
 
 		// Execute signaling callback to update users
 		g_signaling.DisconnectUsers(roomId);
-		if (np2P2PThreadID)
-			__KernelStopThread(np2P2PThreadID, 0, "User Left Room");
+		//if (np2P2PThreadID)
+			//__KernelStopThread(np2P2PThreadID, 0, "User Left Room");
 
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);
