@@ -223,7 +223,10 @@ public:
 		std::unique_lock<std::mutex> lock(rpcn_mtx_);
 		if (port_sig.load() == 0)
 			sigv.wait_for(lock, std::chrono::seconds(5), [&] { return port_sig.load() != 0; });
-		return port_sig.load();
+		u16 sig_port = port_sig.load();
+		if (sig_port == SCE_SIGN_PORT)
+			sig_port = SCE_INTERNAL_PORT;
+		return sig_port;
 	}
 
 	u64 GetLatencyUs() {

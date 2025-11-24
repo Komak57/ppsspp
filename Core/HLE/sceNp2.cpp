@@ -1649,7 +1649,7 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	// Unverified extra data?
 	netInfo->UPnPStatus = (g_Config.bEnableUPnP ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
 	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-	netInfo->port = htons(SCE_SIGN_PORT);
+	netInfo->port = htons(g_signaling.GetSigPort());
 
 	return SCE_NP_MATCHING2_OKAY;
 }
@@ -1802,7 +1802,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 		}
 
 		sig_addr = si->addr;
-		sig_port = htons(SCE_SIGN_PORT);
+		sig_port = htons(si->port);
 		conn_status = si->conn_status;
 	}
 	/*else if (memberId != 0) {
@@ -1918,14 +1918,14 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 		NOTICE_LOG(Log::sceNet, " - NpId: %s", connInfo->npId.handle.data);
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_PEER_ADDRESS:
-		connInfo->address.port = htons(SCE_SIGN_PORT);
+		connInfo->address.port = htons(si->port);
 		connInfo->address.addr.np_s_addr = si->addr;
 		NOTICE_LOG(Log::sceNet, " - SCE_NP_SIGNALING_CONN_INFO_PEER_ADDRESS:");
 		NOTICE_LOG(Log::sceNet, " - IP Addr: %s", ip2str(connInfo->address.addr.np_s_addr).c_str());
 		NOTICE_LOG(Log::sceNet, " - Port: %d", ntohs(connInfo->address.port));
 		break;
 	case SCE_NP_SIGNALING_CONN_INFO_MAPPED_ADDRESS:
-		connInfo->address.port = htons(SCE_SIGN_PORT);
+		connInfo->address.port = htons(si->mapped_port);
 		connInfo->address.addr.np_s_addr = si->mapped_addr;
 		NOTICE_LOG(Log::sceNet, " - SCE_NP_SIGNALING_CONN_INFO_MAPPED_ADDRESS:");
 		NOTICE_LOG(Log::sceNet, " - IP Addr: %s", ip2str(connInfo->address.addr.np_s_addr).c_str());
