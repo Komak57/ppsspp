@@ -1760,7 +1760,10 @@ static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
 
 	if (uPnPInfo->local_address != 0) {
 		uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-		// This is the only value Phantasy Star cares about at +0x8
+		// FIXME: TYPE3 should have all ports accessible. TYPE2 should have required ports accessible. TYPE1 should have some ports limited
+		if (g_Config.bEnableUPnP)
+			uPnPInfo->nat_status = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3;
+		else
 		uPnPInfo->nat_status = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
 	}
 	NOTICE_LOG(Log::sceNet, " - Local Address: %s", ip2str(uPnPInfo->local_address).c_str());
