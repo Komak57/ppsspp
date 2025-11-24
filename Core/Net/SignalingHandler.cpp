@@ -626,6 +626,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 			switch (subset) {
 			case SUBSET_RPCN:
 				{
+					INFO_HEXLOG(Log::sceNet, "recv_loop::RPCN", reinterpret_cast<const char*>(vport_0_data.data()), vport_0_data.size(), 386);
 					// push_back to rpcn_msgs
 					{
 						std::lock_guard lock(rpcn_mtx_);
@@ -642,7 +643,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 					msg.src_addr = src.sin_addr.s_addr;
 					msg.src_port = ntohs(src.sin_port);
 					msg.data = std::move(vport_0_data);
-					INFO_HEXLOG(Log::sceNet, "recv_loop::SIGSERV", reinterpret_cast<const char*>(msg.data.data()), msg.data.size(), 386);
+					INFO_HEXLOG(Log::sceNet, "recv_loop::SIGN", reinterpret_cast<const char*>(msg.data.data()), msg.data.size(), 386);
 
 					{
 						std::lock_guard lock(sign_mtx_);
@@ -655,9 +656,39 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 				}
 				break;
 			default:
-				ERROR_LOG(Log::sceNet, "Invalid vport 0 subset (%d)", subset);
+				// Not for our internal system, forward to game system.
+				break;
+			}
+		}
+
+		// Handle unfamiliar packets as game specific signaling
+
+		INFO_HEXLOG(Log::sceNet, "recv_loop::GAME", reinterpret_cast<const char*>(buf), n, 386);
+
+		auto sign_sock = g_socketManager.FindSocketByPort(SCE_SIGN_PORT);
+		if (sign_sock == nullptr) {
+			// This is okay. The game controls when this is set up and shut down.
+			WARN_LOG(Log::sceNet, "GAME Signaling Socket not configured", subset);
 				continue;
 			}
+
+		sockaddr_in dst{};
+		dst.sin_family = AF_INET;
+		dst.sin_port = htons(SCE_SIGN_PORT);
+		dst.sin_addr.s_addr = local_addr_sig.load();
+
+		int sent = sendto(sign_sock->sock,
+			reinterpret_cast<const char*>(buf),
+			n, 0,
+			reinterpret_cast<sockaddr*>(&dst),
+			sizeof(dst));
+		if (sent < 0) {
+#if PPSSPP_PLATFORM(WINDOWS)
+			int err = WSAGetLastError();
+#else
+			int err = errno;
+#endif
+			WARN_LOG(Log::sceNet, "Unable to forward to SCE_SIGN_PORT: %d", err);
 		}
 
 	}
