@@ -162,7 +162,7 @@ namespace np
 	{
 		NOTICE_LOG(Log::sceNet, "RoomDataExternal_to_SceNpMatching2RoomDataExternal()");
 		room_info->serverId = room->serverId();
-		room_info->worldIndex = room->worldId();
+		room_info->worldId = room->worldId();
 		room_info->lobbyId = room->lobbyId();
 		room_info->roomId = room->roomId();
 		room_info->maxSlot = room->maxSlot();

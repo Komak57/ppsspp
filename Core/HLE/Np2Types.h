@@ -810,8 +810,8 @@ struct PS3NpMatching2World
 // Fat Princess suggests this is size 0x40
 struct SceNpMatching2World
 {
-	SceNpMatching2WorldId worldId; // Usually ignored
-	SceNpMatching2WorldId worldIndex; // offset +4 is vital
+	PSPPointer<SceNpMatching2World> next; // Usually ignored
+	SceNpMatching2WorldId worldId; // offset +4 is vital
 	u32 numOfLobby;
 	u32 maxNumOfTotalLobbyMember;
 	u32 curNumOfTotalLobbyMember;
@@ -1005,7 +1005,7 @@ struct SceNpMatching2RoomDataExternal
 	PSPPointer<SceNpMatching2RoomDataExternal> next;
 	SceNpMatching2ServerId serverId;
 	u8 padding1[2];
-	SceNpMatching2WorldId worldIndex;
+	SceNpMatching2WorldId worldId;
 	u16 publicSlotNum;
 	u16 privateSlotNum;
 	SceNpMatching2LobbyId lobbyId;
@@ -1264,7 +1264,7 @@ struct PS3NpMatching2CreateJoinRoomRequest
 // Create-and-join room request parameters
 struct SceNpMatching2CreateJoinRoomRequest
 {
-	SceNpMatching2WorldId worldIndex;
+	SceNpMatching2WorldId worldId;
 	u8 padding1[4];
 	SceNpMatching2LobbyId lobbyId;
 	u32 maxSlot;
@@ -1350,7 +1350,7 @@ struct SceNpMatching2KickoutRoomMemberRequest
 struct SceNpMatching2SearchRoomRequest
 {
 	s32 option;
-	SceNpMatching2WorldId worldIndex;
+	SceNpMatching2WorldId worldId;
 	SceNpMatching2LobbyId lobbyId;
 	SceNpMatching2RangeFilter rangeFilter;
 	SceNpMatching2FlagAttr flagFilter;

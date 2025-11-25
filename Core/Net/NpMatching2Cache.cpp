@@ -24,19 +24,10 @@ std::optional<SceNpMatching2World> Cache::GetWorldFromId(SceNpMatching2WorldId w
 	}
 	return std::nullopt;
 }
-// Returns matching world by Index or std::nullopt
-std::optional<SceNpMatching2World> Cache::GetWorldFromIndex(SceNpMatching2WorldId worldIndex) {
-	for (auto& world : worlds) {
-		if (world.worldIndex == worldIndex) {
-			return world;
-		}
-	}
-	return std::nullopt;
-}
 // Remove World by WorldId
-void Cache::RemoveWorld(SceNpMatching2WorldId worldIndex) {
+void Cache::RemoveWorld(SceNpMatching2WorldId worldId) {
 	for (auto it = worlds.begin(); it != worlds.end();) {
-		if (it->worldIndex == worldIndex) {
+		if (it->worldId == worldId) {
 			worlds.erase(it);
 			return;
 		}

@@ -1035,7 +1035,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 
 	INFO_LOG(Log::sceNet, "SceNpMatching2SearchRoomRequest(%08X)", req.ptr);
 	INFO_LOG(Log::sceNet, " - option:       %d", req->option);
-	INFO_LOG(Log::sceNet, " - worldIndex:   %d", req->worldIndex);
+	INFO_LOG(Log::sceNet, " - worldId:   %d", req->worldId);
 	INFO_LOG(Log::sceNet, " - lobbyId:      %d", req->lobbyId);
 	INFO_LOG(Log::sceNet, " - rangeFilter:  %d", req->rangeFilter);
 	INFO_LOG(Log::sceNet, " - flagFilter:   %d", req->flagFilter);
@@ -1043,7 +1043,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 	INFO_LOG(Log::sceNet, " - intFilterNum: %d", req->intFilterNum);
 	INFO_LOG(Log::sceNet, " - binFilterNum: %d", req->binFilterNum);
 	INFO_LOG(Log::sceNet, " - attrIdNum:    %d", req->attrIdNum);
-	if (!npServer->cache.GetWorldFromIndex(req->worldIndex)) {
+	if (!npServer->cache.GetWorldFromId(req->worldId)) {
 		ERROR_LOG(Log::sceNet, " - Invalid World ID");
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
 	}
@@ -1095,15 +1095,13 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 
 	auto req = PSPPointer<SceNpMatching2CreateJoinRoomRequest>::Create(reqParamPtr);
 	//Memory::Memcpy(&req, reqParamPtr, sizeof(req));
-	auto world = npServer->cache.GetWorldFromIndex(req->worldIndex);
+	auto world = npServer->cache.GetWorldFromId(req->worldId);
 	INFO_LOG(Log::sceNet, "SceNpMatching2CreateJoinRoomRequest(%08X)", req.ptr);
 	if (world) {
-		INFO_LOG(Log::sceNet, " - worldId:          %d", world->worldId);
-		INFO_LOG(Log::sceNet, " - worldIndex:       %d", req->worldIndex);
+		INFO_LOG(Log::sceNet, " - worldId:			%d", req->worldId);
 	}
 	else {
 		ERROR_LOG(Log::sceNet, " - worldId:          NONE");
-		ERROR_LOG(Log::sceNet, " - worldIndex:       %d", req->worldIndex);
 	}
 	INFO_LOG(Log::sceNet, " - lobbyId:          %d", req->lobbyId);
 	INFO_LOG(Log::sceNet, " - maxSlot:          %d", req->maxSlot);

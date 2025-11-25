@@ -805,10 +805,12 @@ namespace net {
 		// RPCN requests only use the WorldID, so they must be converted prior to sending requests
 		//auto world_id = resp.stream->get<SceNpMatching2WorldId>();
 		for (u32 i = 0; i < num_worlds; ++i) {
-			worlds[i].worldId = resp.stream->get<SceNpMatching2WorldId>();
+			if (i + 1 < num_worlds)
+				worlds[i].next = worlds.ptr + (sizeof(SceNpMatching2World) * (i+1));
+			//worlds[i].worldId = resp.stream->get<SceNpMatching2WorldId>();
 			//worlds[i].worldId = world_id;
-			worlds[i].worldIndex= i+1;
-			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d | Index: %d", i, worlds[i].worldId, worlds[i].worldIndex);
+			worlds[i].worldId = resp.stream->get<SceNpMatching2WorldId>();
+			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d", i, worlds[i].worldId);
 			npServer->cache.AddWorld(worlds[i]);
 		}
 
@@ -916,11 +918,9 @@ namespace net {
 			}
 			attrid_vec = builder.CreateVector(attr_ids);
 		}
-		// Convert WorldIndex to WorldId
-		auto world = npServer->cache.GetWorldFromIndex(req->worldIndex);
 		SearchRoomRequestBuilder s_req(builder);
 		s_req.add_option(req->option);
-		s_req.add_worldId(world->worldId);
+		s_req.add_worldId(req->worldId);
 		s_req.add_lobbyId(req->lobbyId);
 		s_req.add_rangeFilter_startIndex(req->rangeFilter.startIndex);
 		s_req.add_rangeFilter_max(req->rangeFilter.max);
@@ -943,7 +943,7 @@ namespace net {
 		//auto reqId = generate_uid();
 		packet.Pack(CommandType::SearchRoom, generate_uid(ctxId, reqId));
 
-		INFO_LOG(Log::sceNet, "Requesting Search Room for World Index #%d, Lobby #%d", req->worldIndex, req->lobbyId);
+		INFO_LOG(Log::sceNet, "Requesting Search Room for World Index #%d, Lobby #%d", req->worldId, req->lobbyId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
 		bool flushed = Send(&packet, 5.0, &cancelled);
@@ -982,14 +982,9 @@ namespace net {
 		auto respData = PSPPointer<SceNpMatching2SearchRoomResponse>::Create(respPtr);
 		::np::SearchRoomResponse_to_SceNpMatching2SearchRoomResponse(np_memory, roomResp, respData);
 
-		// Convert WorldId to WorldIndex for each room
 		auto room = respData->roomDataExternal;
 		while (room.IsValid()) {
-			auto world = npServer->cache.GetWorldFromId(room->worldIndex);
-			if (world)
-				respData->roomDataExternal->worldIndex = world->worldIndex;
-			else
-				ERROR_LOG(Log::sceNet, "World #%d not found for room #%d", room->worldIndex, room->roomId);
+			respData->roomDataExternal->worldId = room->worldId;
 			room = room->next;
 		}
 
@@ -1155,9 +1150,7 @@ namespace net {
 		if (req->passwordSlotMask.IsValid())
 			final_passwordSlotMask = *req->passwordSlotMask;
 
-		auto world = npServer->cache.GetWorldFromIndex(req->worldIndex);
-
-		auto req_finished = CreateCreateJoinRoomRequest(builder, world->worldId, req->lobbyId, req->maxSlot, req->flagAttr, final_binattrinternal_vec, final_searchintattrexternal_vec,
+		auto req_finished = CreateCreateJoinRoomRequest(builder, req->worldId, req->lobbyId, req->maxSlot, req->flagAttr, final_binattrinternal_vec, final_searchintattrexternal_vec,
 			final_searchbinattrexternal_vec, final_binattrexternal_vec, final_roompassword, final_groupconfigs_vec, final_passwordSlotMask, final_allowedusers_vec, final_blockedusers_vec, final_grouplabel,
 			final_memberbinattrinternal_vec, req->teamId, final_optparam);
 		builder.Finish(req_finished);
@@ -1168,7 +1161,7 @@ namespace net {
 
 		packet.Pack(CommandType::CreateRoom, generate_uid(ctxId, reqId));
 
-		INFO_LOG(Log::sceNet, "Requesting Create Join for World #%d, Lobby #%d", world->worldId, req->lobbyId);
+		INFO_LOG(Log::sceNet, "Requesting Create Join for World #%d, Lobby #%d", req->worldId, req->lobbyId);
 
 		// NPAgent::Send('001000AB00000001000000000000004E50575230313434365F30308C0000001C0000001800240020001C0000001800140010000C0008000000040018000000200000003800000000000004000000641400000001000000CCCCCCCC180000000B0000004C004D004E004F0050005100520053005400550056000000010000000C00000008000C000700080008000000000000040C00000008000C00060008000800000000004C003F000000')
 		bool flushed = Send(&packet, 5.0, &cancelled);
@@ -1222,8 +1215,7 @@ namespace net {
 		SceNpId* npId = NpGetNpId();
 		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomData, room_info, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
 
-		auto world = npServer->cache.GetWorldFromId(room_info->worldId);
-		room_info->worldId = world->worldIndex;
+		room_info->worldId = room_info->worldId;
 		// Cache Rooms
 		//rooms.push_back(roomData);
 		npServer->cache.AddRoom(*room_info);

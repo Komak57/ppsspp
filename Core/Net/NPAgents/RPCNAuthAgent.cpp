@@ -627,9 +627,10 @@ namespace net {
 		NOTICE_LOG(Log::sceNet, "Received %d worlds", num_worlds);
 
 		for (u32 i = 0; i < num_worlds; ++i) {
+			if (i + 1 < num_worlds)
+				worlds[i].next = worlds.ptr + (sizeof(SceNpMatching2World) * (i + 1));
 			worlds[i].worldId = resp.stream->get<SceNpMatching2WorldId>();
-			worlds[i].worldIndex = i + 1;
-			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d | Index: %d", i, worlds[i].worldId, worlds[i].worldIndex);
+			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d | Index: %d", i, worlds[i].worldId, worlds[i].worldId);
 			//npServer->cache.AddWorld(worlds[i]);
 		}
 
