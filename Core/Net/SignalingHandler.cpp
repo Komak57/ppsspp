@@ -636,7 +636,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 					if (np2RPCNThreadID)
 						__KernelResumeThreadFromWait(np2RPCNThreadID, 0);
 				}	
-				break;
+				continue;
 			case SUBSET_SIGNALING:
 				{
 					signaling_message msg;
@@ -654,7 +654,7 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 						__KernelResumeThreadFromWait(np2P2PThreadID, 0);
 					//dispatch_packet(msg);
 				}
-				break;
+				continue;
 			default:
 				// Not for our internal system, forward to game system.
 				break;
