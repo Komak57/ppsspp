@@ -350,8 +350,9 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
 	NpMatching2Handler* handler = nullptr;
 	// Check for registered handler
 	if (auto it = npMatching2Handlers.find(reqId); it != npMatching2Handlers.end()) {
-		handler = new NpMatching2Handler(std::move(it->second));
-		npMatching2Handlers.erase(it);
+		handler = &it->second;
+		//handler = new NpMatching2Handler(std::move(it->second));
+		//npMatching2Handlers.erase(it);
 	}
 	else
 	{
@@ -1477,22 +1478,21 @@ static int sceNpMatching2GetUserInfoList(int ctxId, u32 reqParamPtr, u32 optPara
  * @return 0; or System Error
  * @note Not used under normal circumstances.
  */
-static int sceNpMatching2AbortRequest(int ctxId, u32 assignedReqIdPtr)
+static int sceNpMatching2AbortRequest(int ctxId, u32 reqId)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x[%d]) at %08x", __FUNCTION__, ctxId, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNet, "UNTESTED %s(%d, %d) at %08x", __FUNCTION__, ctxId, reqId, currentMIPS->pc);
 
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
-	auto request_id = Memory::Read_U32(assignedReqIdPtr);
 	// Find the handler matching the request_id
-	auto it = npMatching2Handlers.find(request_id);
+	auto it = npMatching2Handlers.find(reqId);
 	if (it == npMatching2Handlers.end())
-		return SCE_NP_MATCHING2_ERROR_REQUEST_NOT_FOUND;
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_REQUEST_NOT_FOUND, "Request not found");
 
 	// FIXME: Context needs to know exactly what event it should match
 	// Assign an event with reqId 0 to matching handler
 	//notifyRequestHandler(ctxId, 0, it->second.event_type, SCE_NP_MATCHING2_ERROR_ABORTED, 0);
-
+	npMatching2Handlers.erase(it);
 
 	return SCE_NP_MATCHING2_OKAY;
 }
