@@ -821,7 +821,7 @@ void signaling_handler::process_incoming_messages() {
 		//if (!validate_signaling_packet(sp))
 			//continue;
 
-		INFO_LOG(Log::sceNet, "SIGSERV %d Packet Received from %s:%d(%s)", sp->command, ip2str(op_addr).c_str(), op_port, sp->npid.handle.data);
+		INFO_LOG(Log::sceNet, "SIGSERV %s Packet Received from %s:%d(%s)", SignalingCommandStr[sp->command], ip2str(op_addr).c_str(), op_port, sp->npid.handle.data);
 		auto& sent_packet = sig_packet;
 		auto si = get_signaling_ptr(sp);
 		if (si == nullptr)
@@ -834,6 +834,7 @@ void signaling_handler::process_incoming_messages() {
 		if (sp->command == SignalingCommand::Finished) {
 			// User is unknown to us or the connection is inactive
 			// Ignore packet unless it's a finished packet in case the finished_ack wasn't received by opponent
+			handle_finished(sp, si, sent_packet, op_addr, op_port);
 			return;
 		}
 		const auto now = std::chrono::steady_clock::now();
