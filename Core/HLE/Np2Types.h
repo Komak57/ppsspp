@@ -1777,10 +1777,10 @@ struct SceNpMatching2SignalingNetInfo
 	u32 size;
 	u32 localAddr;
 	u32 mappedAddr;
-	s32 natStatus;
+	u32 natStatus;
 	// Nemoumbra: sceNpMatching2SignalingGetLocalNetInfo internally calls a function sceNetUpnp_0x1038E77A that returns a bunch of network-related info
-	s32 UPnPStatus;
-	s32 portStatus;
+	u32 UPnPStatus;
+	u32 portStatus;
 	u16 port;
 	u8 padding[2];
 };

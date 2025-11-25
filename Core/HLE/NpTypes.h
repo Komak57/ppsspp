@@ -303,10 +303,10 @@ using SceNpTime = s64;
 struct SceNpUpnpInfo {
 	u32 local_address;
 	u32 mapped_address;
-	u8 nat_status;
-	u8 upnp_status;
+	u32 nat_status;
+	/*u8 upnp_status;
 	u8 npport_status;
-	u8 padding;
+	u8 padding;*/
 };
 #pragma pack(pop)
 

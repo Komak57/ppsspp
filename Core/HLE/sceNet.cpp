@@ -1753,19 +1753,19 @@ static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
 	// If we wait for a valid value, it locks up the thread
 	uPnPInfo->local_address = g_signaling.local_addr_sig.load();
 	uPnPInfo->mapped_address = g_signaling.addr_sig.load();
-	uPnPInfo->upnp_status = (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
-	uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
+	//uPnPInfo->upnp_status = (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
+	//uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
 	uPnPInfo->nat_status = g_signaling.nat_type.load();
 
 
 	if (uPnPInfo->local_address != 0) {
-		uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
+		//uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
 	}
 	NOTICE_LOG(Log::sceNet, " - Local Address: %s", ip2str(uPnPInfo->local_address).c_str());
 	NOTICE_LOG(Log::sceNet, " - Public Address: %s", ip2str(uPnPInfo->mapped_address).c_str());
 	NOTICE_LOG(Log::sceNet, " - NAT Type: %d", uPnPInfo->nat_status); // Only thing PSP2i cares about. 1 byte at offset +8
-	NOTICE_LOG(Log::sceNet, " - uPnP Status: %d", uPnPInfo->upnp_status);
-	NOTICE_LOG(Log::sceNet, " - NPPort Status: %d", uPnPInfo->npport_status);
+	//NOTICE_LOG(Log::sceNet, " - uPnP Status: %d", uPnPInfo->upnp_status);
+	//NOTICE_LOG(Log::sceNet, " - NPPort Status: %d", uPnPInfo->npport_status);
 
 	return hleLogWarning(Log::sceNet, 0, "UNTESTED");
 }
