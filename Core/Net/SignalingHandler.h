@@ -59,6 +59,9 @@ struct signaling_info
 	// Host Order
 	u16 mapped_port = 0;
 
+	// Calculated NAT type for this Peer
+	u8 nat_type = 0;
+
 	// For handler
 	std::chrono::steady_clock::time_point time_last_msg_recvd = std::chrono::steady_clock::now();
 	bool self = false;

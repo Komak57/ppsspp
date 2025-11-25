@@ -309,6 +309,8 @@ u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_i
 	else
 		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_PENDING;
 
+	si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1;
+
 	return conn_id;
 }
 
@@ -327,6 +329,13 @@ void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32 
 
 		si->addr = new_addr;
 		si->port = new_port;
+
+		if (si->port != SCE_INTERNAL_PORT)
+			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1;
+		else
+			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
+		if (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE)
+			si->nat_type += 1;
 	}
 }
 
@@ -352,7 +361,15 @@ void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& s
 
 		si->mapped_addr = new_addr;
 		si->mapped_port = new_port;
+
+		if (si->port != SCE_INTERNAL_PORT) {
+			if (g_Config.bEnableUPnP)
+				si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
+			else
+				si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1;
 	}
+		else si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3;
+}
 }
 
 void signaling_handler::update_si_status(std::shared_ptr<signaling_info>& si, s32 new_status, s32 error_code)
