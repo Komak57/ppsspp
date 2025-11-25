@@ -33,6 +33,7 @@
 #include "Core/HLE/sceKernelMemory.h"
 #include "Core/Net/fb_helpers.h"
 #include "Core/HLE/proAdhoc.h" // For Local IP
+#include <Core/Util/PortManager.h>
 //#include "NpMatchingContext.h"
 //#include "Np2SignalingHandler.h"
 
@@ -1645,9 +1646,9 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	netInfo->mappedAddr = g_signaling.GetSigAddr();		// Public IP
 	// Pure speculation
 	//si->conn_status
-	netInfo->natStatus = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
+	netInfo->natStatus = g_signaling.nat_type.load();
 	// Unverified extra data?
-	netInfo->UPnPStatus = (g_Config.bEnableUPnP ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
+	netInfo->UPnPStatus = (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
 	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
 	netInfo->port = htons(g_signaling.GetSigPort());
 
@@ -1695,11 +1696,11 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 roomId, u32 room
 	netInfo->mappedAddr = si->mapped_addr;	// PublicIP
 	// Pure speculation
 	//si->conn_status
-	netInfo->natStatus = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
+	netInfo->natStatus = si->nat_type;
 	// Unverified extra data?
 	netInfo->UPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
 	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-	netInfo->port = htons(si->port);
+	netInfo->port = htons(si->mapped_port);
 
 	return SCE_NP_MATCHING2_OKAY;
 }
@@ -1823,6 +1824,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 		conn_status = si->conn_status;
 	}*/
 	else {
+		// TODO: Use p2p siginfo for self?
 		member = *_room->memberList.me;
 		if (memberId == 0)
 			sig_addr = g_signaling.GetLocalAddr();

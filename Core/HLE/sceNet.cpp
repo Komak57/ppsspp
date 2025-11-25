@@ -1753,18 +1753,13 @@ static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
 	// If we wait for a valid value, it locks up the thread
 	uPnPInfo->local_address = g_signaling.local_addr_sig.load();
 	uPnPInfo->mapped_address = g_signaling.addr_sig.load();
-	uPnPInfo->upnp_status = (g_Config.bEnableUPnP ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
+	uPnPInfo->upnp_status = (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
 	uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
-	uPnPInfo->nat_status = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
+	uPnPInfo->nat_status = g_signaling.nat_type.load();
 
 
 	if (uPnPInfo->local_address != 0) {
 		uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-		// FIXME: TYPE3 should have all ports accessible. TYPE2 should have required ports accessible. TYPE1 should have some ports limited
-		if (g_Config.bEnableUPnP)
-			uPnPInfo->nat_status = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3;
-		else
-		uPnPInfo->nat_status = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
 	}
 	NOTICE_LOG(Log::sceNet, " - Local Address: %s", ip2str(uPnPInfo->local_address).c_str());
 	NOTICE_LOG(Log::sceNet, " - Public Address: %s", ip2str(uPnPInfo->mapped_address).c_str());
