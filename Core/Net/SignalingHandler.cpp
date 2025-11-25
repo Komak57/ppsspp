@@ -367,9 +367,9 @@ void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& s
 				si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
 			else
 				si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1;
-	}
+		}
 		else si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3;
-}
+	}
 }
 
 void signaling_handler::update_si_status(std::shared_ptr<signaling_info>& si, s32 new_status, s32 error_code)
@@ -686,8 +686,8 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 		if (sign_sock == nullptr) {
 			// This is okay. The game controls when this is set up and shut down.
 			WARN_LOG(Log::sceNet, "GAME Signaling Socket not configured", subset);
-				continue;
-			}
+			continue;
+		}
 
 		sockaddr_in dst{};
 		dst.sin_family = AF_INET;

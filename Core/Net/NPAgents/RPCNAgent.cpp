@@ -1404,7 +1404,7 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE), 0);
 		}
-
+		
 		return SCE_NP_MATCHING2_OKAY;
 	}
 
