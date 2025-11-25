@@ -13,6 +13,8 @@
 #include <Data/Text/I18n.h>
 #include <Core/CoreTiming.h>
 #include <Core/Net/fb_helpers.h>
+#include <Core/Config.h>
+#include <Core/Util/PortManager.h>
 
 using namespace std::literals::chrono_literals;
 
@@ -154,6 +156,14 @@ namespace net {
 					{
 						std::lock_guard<std::mutex> lock(sig_mutex);
 						g_signaling.addr_sig = new_addr_sig;
+						auto local_ip = g_signaling.local_addr_sig.load();
+
+						if (new_port_sig != SCE_INTERNAL_PORT)
+							g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1);
+						else
+							g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2);
+						if (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE)
+							g_signaling.nat_type.fetch_add(1);
 					}
 
 					auto n = GetI18NCategory(I18NCat::NETWORKING);

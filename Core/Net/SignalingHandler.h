@@ -232,6 +232,11 @@ public:
 		return sig_port;
 	}
 
+	u8 GetNatType() {
+		std::unique_lock<std::mutex> lock(rpcn_mtx_);
+		return nat_type.load();
+	}
+
 	u64 GetLatencyUs() {
 		return latency.load();
 	}
@@ -244,6 +249,7 @@ public:
 	std::atomic<u16> port_sig;
 	// Network Order
 	std::atomic<u32> local_addr_sig = 0;
+	std::atomic<u8> nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
 	std::atomic<u64> latency = 0;
 private:
 	void recv_loop(InetSocket* inetSocket);
