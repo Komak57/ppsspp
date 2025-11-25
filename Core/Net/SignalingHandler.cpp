@@ -751,7 +751,7 @@ std::chrono::microseconds signaling_handler::HandleResponses() {
 		}
 
 		// Resend the packet
-		INFO_LOG(Log::sceNet, "Re-Send %d -> %s", sig.packet.command, ip2str(sig.sig_info->addr).c_str());
+		INFO_LOG(Log::sceNet, "Re-Send %s -> %s", SignalingCommandStr[sig.packet.command], ip2str(sig.sig_info->addr).c_str());
 		send_signaling_packet(sig.packet, sig.sig_info->addr, sig.sig_info->port);
 
 		// Reschedule another packet

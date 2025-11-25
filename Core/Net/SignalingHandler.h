@@ -35,6 +35,16 @@ enum SignalingCommand : u32_le {
 	FinishedAck,
 	Info,
 };
+static const char* SignalingCommandStr[] = {
+	"PING",
+	"PONG",
+	"CONNECT",
+	"CONNECT_ACK",
+	"CONFIRM",
+	"FINISHED",
+	"FINISHED_ACK",
+	"INFO",
+};
 
 static constexpr auto REPEAT_CONNECT_DELAY = std::chrono::milliseconds(200);
 static constexpr auto REPEAT_PING_DELAY = std::chrono::milliseconds(500);
@@ -48,15 +58,14 @@ struct signaling_info
 {
 	SceNpSignalingState sig_status = SCE_NP_SIGNALING_EVENT_DEAD;
 	SceNpSignalingConnectionState conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
-	// Network Order
+	// Network Order NAT bypass address for this Peer
 	u32 addr = 0;
-	// Host Order
+	// Host Order NAT bypass port for this Peer
 	u16 port = 0;
 
-	// User seen from that peer
-	// Network Order
+	// Network Order address the Peer sends from
 	u32 mapped_addr = 0;
-	// Host Order
+	// Host Order port the Peer sends from
 	u16 mapped_port = 0;
 
 	// Calculated NAT type for this Peer
@@ -221,7 +230,7 @@ public:
 		return addr_sig.load();
 	}
 
-	// Returns Signaling Port in Network Order
+	// Returns Signaling Port in Host Order
 	u16 GetSigPort() {
 		std::unique_lock<std::mutex> lock(rpcn_mtx_);
 		if (port_sig.load() == 0)
