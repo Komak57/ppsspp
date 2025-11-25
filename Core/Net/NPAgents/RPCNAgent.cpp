@@ -982,12 +982,6 @@ namespace net {
 		auto respData = PSPPointer<SceNpMatching2SearchRoomResponse>::Create(respPtr);
 		::np::SearchRoomResponse_to_SceNpMatching2SearchRoomResponse(np_memory, roomResp, respData);
 
-		auto room = respData->roomDataExternal;
-		while (room.IsValid()) {
-			respData->roomDataExternal->worldId = room->worldId;
-			room = room->next;
-		}
-
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, SCE_NP_MATCHING2_OKAY, respPtr);
 	}
 	//async

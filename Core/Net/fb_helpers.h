@@ -17,9 +17,9 @@ namespace np
 	void RoomGroups_to_SceNpMatching2RoomGroups(const flatbuffers::Vector<flatbuffers::Offset<RoomGroup>>* fb_groups, SceNpMatching2RoomGroup* sce_groups);
 	void UserInfo_to_SceNpUserInfo(const UserInfo* user, SceNpUserInfo* user_info);
 	void UserInfo_to_SceNpUserInfo2(BlockAllocator& edata, const UserInfo* user, SceNpUserInfo2* user_info, bool include_onlinename, bool include_avatarurl);
-	void RoomDataExternal_to_SceNpMatching2RoomDataExternal(BlockAllocator& edata, const RoomDataExternal* room, SceNpMatching2RoomDataExternal* room_info, bool include_onlinename, bool include_avatarurl);
+	void RoomDataExternal_to_SceNpMatching2RoomDataExternal(BlockAllocator& edata, const RoomDataExternal* room, PSPPointer<SceNpMatching2RoomDataExternal> room_info, bool include_onlinename, bool include_avatarurl);
 	void SearchRoomResponse_to_SceNpMatching2SearchRoomResponse(BlockAllocator& edata, const SearchRoomResponse* resp, SceNpMatching2SearchRoomResponse* search_resp);
-	void GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(BlockAllocator& edata, const GetRoomDataExternalListResponse* resp, SceNpMatching2GetRoomDataExternalListResponse* get_resp, bool include_onlinename, bool include_avatarurl);
+	void GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(BlockAllocator& edata, const GetRoomDataExternalListResponse* resp, PSPPointer<SceNpMatching2GetRoomDataExternalListResponse> get_resp, bool include_onlinename, bool include_avatarurl);
 	u16 RoomDataInternal_to_SceNpMatching2RoomDataInternal(BlockAllocator& edata, const RoomDataInternal* resp, SceNpMatching2RoomDataInternal* room_resp, const SceNpId* npid, bool include_onlinename, bool include_avatarurl);
 	void RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(BlockAllocator& edata, const RoomMemberDataInternal* member_data, const SceNpMatching2RoomDataInternal* room_info, SceNpMatching2RoomMemberDataInternal* sce_member_data, bool include_onlinename, bool include_avatarurl);
 	void RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(BlockAllocator& edata, const RoomMemberUpdateInfo* resp, SceNpMatching2RoomMemberUpdateInfo* room_info, bool include_onlinename, bool include_avatarurl);

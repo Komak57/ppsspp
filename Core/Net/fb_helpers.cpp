@@ -158,7 +158,7 @@ namespace np
 		}
 	}
 
-	void RoomDataExternal_to_SceNpMatching2RoomDataExternal(BlockAllocator& edata, const RoomDataExternal* room, SceNpMatching2RoomDataExternal* room_info, bool include_onlinename, bool include_avatarurl)
+	void RoomDataExternal_to_SceNpMatching2RoomDataExternal(BlockAllocator& edata, const RoomDataExternal* room, PSPPointer<SceNpMatching2RoomDataExternal> room_info, bool include_onlinename, bool include_avatarurl)
 	{
 		NOTICE_LOG(Log::sceNet, "RoomDataExternal_to_SceNpMatching2RoomDataExternal()");
 		room_info->serverId = room->serverId();
@@ -262,7 +262,7 @@ namespace np
 		search_resp->range.startIndex = resp->startIndex();
 		search_resp->range.total = resp->total();
 
-		SceNpMatching2RoomDataExternal* prev_room = nullptr;
+		PSPPointer<SceNpMatching2RoomDataExternal> prev_room; prev_room.ptr = 0;
 		for (flatbuffers::uoffset_t i = 0; i < search_resp->range.size; i++)
 		{
 			auto* fb_room = resp->rooms()->Get(i);
@@ -279,20 +279,19 @@ namespace np
 		}
 	}
 
-	void GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(BlockAllocator& edata, const GetRoomDataExternalListResponse* resp, SceNpMatching2GetRoomDataExternalListResponse* get_resp, bool include_onlinename, bool include_avatarurl)
+	void GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(BlockAllocator& edata, const GetRoomDataExternalListResponse* resp, PSPPointer<SceNpMatching2GetRoomDataExternalListResponse> get_resp, bool include_onlinename, bool include_avatarurl)
 	{
 		NOTICE_LOG(Log::sceNet, "GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse()");
 		get_resp->roomDataExternalNum = resp->rooms() ? resp->rooms()->size() : 0;
 
-		SceNpMatching2RoomDataExternal* prev_room = nullptr;
+		PSPPointer<SceNpMatching2RoomDataExternal> prev_room; prev_room.ptr = 0;
 		for (flatbuffers::uoffset_t i = 0; i < get_resp->roomDataExternalNum; i++)
 		{
 			auto* fb_room = resp->rooms()->Get(i);
-			PSPPointer<SceNpMatching2RoomDataExternal> cur_room;
 
 			//cur_room = edata.allocate<SceNpMatching2RoomDataExternal>(sizeof(SceNpMatching2RoomDataExternal), (i > 0) ? prev_room->next : get_resp->roomDataExternal);
 			u32 alloc = sizeof(SceNpMatching2RoomDataExternal);
-			cur_room = PSPPointer<SceNpMatching2RoomDataExternal>::Create(edata.Alloc(alloc));
+			PSPPointer<SceNpMatching2RoomDataExternal> cur_room = PSPPointer<SceNpMatching2RoomDataExternal>::Create(edata.Alloc(alloc));
 			if (i > 0)
 				prev_room->next = cur_room;
 			else
