@@ -138,25 +138,18 @@ public:
 	signaling_handler();
 	~signaling_handler();
 
-	static void print_interfaces();
 	static u64 get_micro_timestamp(const std::chrono::steady_clock::time_point& time_point);
-	// DEBUGGING
-	bool create_connection();
-	bool destroy_connection();
-	void connect(u32 conn_id, u32 addr, u16 port);
-	void stop(const char* reason);
-	std::chrono::microseconds HandleResponses();
+	// Signaling Helpers
 
-	std::shared_ptr<signaling_info> get_signaling_ptr(const signaling_packet* sp);
-
-	u32 get_always_conn_id(const SceNpId& npid);
-	std::optional<u32> get_conn_id_from_npid(const SceNpId& npid);
-	std::optional<signaling_info> get_sig_infos(u32 conn_id);
-	void set_self_sig_info(SceNpId& npid);
 	// Create connection to RPCN
 	u32 init_sig(const SceNpId& npid);
 	// Create connection to P2P
 	u32 init_sig(const SceNpId& npid, SceNpMatching2RoomId room_id, SceNpMatching2RoomMemberId member_id);
+	u32 get_always_conn_id(const SceNpId& npid);
+	std::optional<u32> get_conn_id_from_npid(const SceNpId& npid);
+	std::optional<signaling_info> get_sig_infos(u32 conn_id);
+	void set_self_sig_info(SceNpId& npid);
+	std::shared_ptr<signaling_info> get_signaling_ptr(const signaling_packet* sp);
 	void update_si_addr(std::shared_ptr<signaling_info>& si, u32 new_addr, u16 new_port);
 	void update_si_mapped_addr(std::shared_ptr<signaling_info>& si, u32 new_addr, u16 new_port);
 	void update_si_status(std::shared_ptr<signaling_info>& si, s32 new_status, s32 error_code);
@@ -164,17 +157,28 @@ public:
 	void DisconnectUsers(SceNpMatching2RoomId room_id);
 	void stop_sig_nl(u32 conn_id, bool forceful);
 	void stop_sig(u32 conn_id, bool forceful);
-	//void sig2_callback(u64 room_id, u16 member_id, SceNpMatching2Event event, s32 error_code) const;
 
-	// send helpers (you already have an implementation; we call into it)
+	// Connection Helpers
+
+	bool create_connection();
+	bool destroy_connection();
+	void connect(u32 conn_id, u32 addr, u16 port);
+	void stop(const char* reason);
+
+	// Packet Helpers
+
 	void send_signaling_packet(signaling_packet& sp, u32 addr, u16 port) const;
 	void send_information_packets(u32 addr, u16 port, const SceNpId& npid);
 	void reschedule_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd, std::chrono::steady_clock::time_point new_timepoint);
 	void retire_packet(std::shared_ptr<signaling_info>& si, SignalingCommand cmd);
 	void retire_all_packets(std::shared_ptr<signaling_info>& si);
 
-	bool send_packet_ipv4(const std::vector<u8>& data, sockaddr_in dest) const;
-	// Signal Triggers
+	// P2P Logic Functions
+
+	std::chrono::microseconds HandleResponses();
+
+	// Notification Functions
+
 	int UserJoinedRoom(net::RPCNResponse resp);
 	int UserLeftRoom(net::RPCNResponse resp);
 	int RoomDestroyed(net::RPCNResponse resp);
@@ -182,7 +186,6 @@ public:
 	int UpdatedRoomMemberDataInternal(net::RPCNResponse resp);
 	int RoomMessageReceived(net::RPCNResponse resp);
 	void SignalingHelper(net::RPCNResponse resp);
-	// GUI
 	void MemberJoinedRoomGUI(net::RPCNResponse resp);
 	void MemberLeftRoomGUI(net::RPCNResponse resp);
 	void RoomDisappearedGUI(net::RPCNResponse resp);
@@ -190,29 +193,8 @@ public:
 	void UserKickedGUI(net::RPCNResponse resp);
 	void QuickMatchCompleteGUI(net::RPCNResponse resp);
 
-	/*void wait_for_rpcn(bool* running, bool* cancelled, std::chrono::nanoseconds duration) {
-		std::unique_lock<std::mutex> lock(rpcn_mtx_);
-		rpcn_msg_cv.wait_for(lock, duration, [&] { return (!*running || *cancelled) || (!rpcn_msgs.empty()); });
-	}*/
-	// Needs to wake when a packet is queued
-	// Needs to wake when a new connection is made
-	/*void wait_for_sign(std::chrono::nanoseconds duration) {
-		INFO_LOG(Log::sceNet, "signaling_thread: Acquiring lock.");
-		std::unique_lock<std::mutex> lock(sign_mtx_);
-		NOTICE_LOG(Log::sceNet, "signaling_thread Waiting %ds for next sign_msg", std::chrono::duration_cast<std::chrono::seconds>(duration));
-		sign_msg_cv.wait_for(lock, duration, [&] { return (!running_ || !sign_msgs.empty()); });
-		NOTICE_LOG(Log::sceNet, "signaling_thread Woken");
-	}*/
-
-	std::vector<std::vector<u8>> get_rpcn_msgs() {
-		std::vector<std::vector<u8>> msgs;
-		{
-			std::lock_guard lock(rpcn_mtx_);
-			msgs = std::move(rpcn_msgs);
-			rpcn_msgs.clear();
-		}
-		return msgs;
-	}
+	// Socket Functions
+	bool send_packet_ipv4(const std::vector<u8>& data, sockaddr_in dest) const;
 
 	// Returns Local Address in Network Order
 	u32 GetLocalAddr() {
@@ -262,9 +244,31 @@ public:
 	std::atomic<u64> latency = 0;
 private:
 	void recv_loop(InetSocket* inetSocket);
-	std::vector<signaling_message> get_sign_msgs();
-	void process_incoming_messages();
+	std::vector<signaling_message> get_sign_msgs() {
+		std::vector<signaling_message> msgs;
+		std::lock_guard lock(sign_mtx_);
+		msgs = std::move(sign_msgs);
+		sign_msgs.clear();
 
+		return msgs;
+	}
+
+	// Packet Helpers
+
+	void queue_signaling_packet(signaling_packet& sp, std::shared_ptr<signaling_info> si, std::chrono::steady_clock::time_point wakeup_time);
+
+	// P2P Logic Functions
+
+	std::vector<std::vector<u8>> get_rpcn_msgs() {
+		std::vector<std::vector<u8>> msgs;
+		{
+			std::lock_guard lock(rpcn_mtx_);
+			msgs = std::move(rpcn_msgs);
+			rpcn_msgs.clear();
+		}
+		return msgs;
+	}
+	void process_incoming_messages();
 	void handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32 op_addr, u16 op_port);
 	void handle_pong(const signaling_packet* sp, std::shared_ptr<signaling_info> si);
 	void handle_info(const signaling_packet* sp, std::shared_ptr<signaling_info> si, u32 op_addr, u16 op_port);
@@ -273,15 +277,6 @@ private:
 	void handle_confirm(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port);
 	void handle_finished(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port);
 	void handle_finished_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si);
-
-	// context helpers
-	//std::optional<ContextState> get_ctx(u32 ctx);
-	//void touch_ctx(u32 ctx);
-	//create/register a new context id and callback
-	//u32 create_context(SignalingCallback cb);
-	//void add_match2_ctx(ContextState context);
-	//void remove_match2_ctx(ContextState context);
-	void queue_signaling_packet(signaling_packet& sp, std::shared_ptr<signaling_info> si, std::chrono::steady_clock::time_point wakeup_time);
 	
 private:
 	bool running_ = false;
