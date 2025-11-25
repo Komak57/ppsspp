@@ -1386,6 +1386,9 @@ namespace net {
 		//auto connId = g_signaling.get_always_conn_id(*NpGetNpId());
 		//g_signaling.stop_sig_nl(connId, false);
 
+		// Execute signaling callback to update users
+		g_signaling.DisconnectUsers(req->roomId);
+
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
@@ -1421,8 +1424,6 @@ namespace net {
 		// Remove room from cache
 		//npServer->cache.RemoveRoom(roomId);
 
-		// Execute signaling callback to update users
-		g_signaling.DisconnectUsers(roomId);
 		//if (np2P2PThreadID)
 			//__KernelStopThread(np2P2PThreadID, 0, "User Left Room");
 
