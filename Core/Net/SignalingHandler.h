@@ -175,6 +175,15 @@ public:
 
 	// P2P Logic Functions
 
+	std::vector<std::vector<u8>> get_rpcn_msgs() {
+		std::vector<std::vector<u8>> msgs;
+		{
+			std::lock_guard lock(rpcn_mtx_);
+			msgs = std::move(rpcn_msgs);
+			rpcn_msgs.clear();
+		}
+		return msgs;
+	}
 	std::chrono::microseconds HandleResponses();
 
 	// Notification Functions
@@ -259,15 +268,6 @@ private:
 
 	// P2P Logic Functions
 
-	std::vector<std::vector<u8>> get_rpcn_msgs() {
-		std::vector<std::vector<u8>> msgs;
-		{
-			std::lock_guard lock(rpcn_mtx_);
-			msgs = std::move(rpcn_msgs);
-			rpcn_msgs.clear();
-		}
-		return msgs;
-	}
 	void process_incoming_messages();
 	void handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32 op_addr, u16 op_port);
 	void handle_pong(const signaling_packet* sp, std::shared_ptr<signaling_info> si);
