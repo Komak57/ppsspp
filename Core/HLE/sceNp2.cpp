@@ -1485,11 +1485,10 @@ static int sceNpMatching2AbortRequest(int ctxId, u32 reqId)
 	// Find the handler matching the request_id
 	auto it = npMatching2Handlers.find(reqId);
 	if (it == npMatching2Handlers.end())
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_REQUEST_NOT_FOUND, "Request not found");
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CANNOT_ABORT, "Request already completed");
 
-	// FIXME: Context needs to know exactly what event it should match
 	// Assign an event with reqId 0 to matching handler
-	//notifyRequestHandler(ctxId, 0, it->second.event_type, SCE_NP_MATCHING2_ERROR_ABORTED, 0);
+	notifyRequestHandler(it->second.ctx_id, it->first, it->second.event_type, SCE_NP_MATCHING2_ERROR_ABORTED, 0);
 	npMatching2Handlers.erase(it);
 
 	return SCE_NP_MATCHING2_OKAY;
