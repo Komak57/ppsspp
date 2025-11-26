@@ -350,9 +350,9 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
 	NpMatching2Handler* handler = nullptr;
 	// Check for registered handler
 	if (auto it = npMatching2Handlers.find(reqId); it != npMatching2Handlers.end()) {
-		handler = &it->second;
-		//handler = new NpMatching2Handler(std::move(it->second));
-		//npMatching2Handlers.erase(it);
+		//handler = &it->second;
+		handler = new NpMatching2Handler(std::move(it->second));
+		npMatching2Handlers.erase(it);
 	}
 	else
 	{
