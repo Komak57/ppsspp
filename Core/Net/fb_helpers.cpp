@@ -266,14 +266,12 @@ namespace np
 		for (flatbuffers::uoffset_t i = 0; i < search_resp->range.size; i++)
 		{
 			auto* fb_room = resp->rooms()->Get(i);
-			PSPPointer<SceNpMatching2RoomDataExternal> cur_room;
 			//cur_room = edata.allocate<SceNpMatching2RoomDataExternal>(sizeof(SceNpMatching2RoomDataExternal), (i > 0) ? prev_room->next : search_resp->roomDataExternal);
 			u32 alloc = sizeof(SceNpMatching2RoomDataExternal);
-			cur_room = PSPPointer<SceNpMatching2RoomDataExternal>::Create(edata.Alloc(alloc));
+			PSPPointer<SceNpMatching2RoomDataExternal> cur_room = PSPPointer<SceNpMatching2RoomDataExternal>::Create(edata.Alloc(alloc));
 			if (i > 0)
 				prev_room->next = cur_room;
-			else
-				search_resp->roomDataExternal = cur_room;
+			search_resp->roomDataExternal = cur_room;
 			RoomDataExternal_to_SceNpMatching2RoomDataExternal(edata, fb_room, cur_room, true, true);
 			prev_room = cur_room;
 		}
