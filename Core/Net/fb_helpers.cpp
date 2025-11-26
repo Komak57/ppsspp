@@ -183,15 +183,15 @@ namespace np
 		//}
 		//else
 		//{
-		//	room_info->publicSlotNum = 0;
-		//	room_info->privateSlotNum = 0;
-		//	room_info->openPublicSlotNum = 0;
-		//	room_info->openPrivateSlotNum = 0;
+		/*room_info->publicSlotNum = 0;
+		room_info->privateSlotNum = 0;
+		room_info->openPublicSlotNum = 0;
+		room_info->openPrivateSlotNum = 0;*/
 		//}
-		room_info->publicSlotNum = room->publicSlotNum();
-		room_info->privateSlotNum = room->privateSlotNum();
-		room_info->openPublicSlotNum = room->openPublicSlotNum();
-		room_info->openPrivateSlotNum = room->openPrivateSlotNum();
+		//room_info->publicSlotNum = room->publicSlotNum();
+		//room_info->privateSlotNum = room->privateSlotNum();
+		//room_info->openPublicSlotNum = room->openPublicSlotNum();
+		//room_info->openPrivateSlotNum = room->openPrivateSlotNum();
 		/*room_info->publicSlotNum = 0;
 		room_info->privateSlotNum = 0;
 		room_info->openPublicSlotNum = 0;

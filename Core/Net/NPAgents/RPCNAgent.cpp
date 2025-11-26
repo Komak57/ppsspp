@@ -982,7 +982,36 @@ namespace net {
 		auto respData = PSPPointer<SceNpMatching2SearchRoomResponse>::Create(respPtr);
 		::np::SearchRoomResponse_to_SceNpMatching2SearchRoomResponse(np_memory, roomResp, respData);
 
-		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, SCE_NP_MATCHING2_OKAY, respPtr);
+		INFO_LOG(Log::sceNet, " - Range Size:        %d", respData->range.size);
+		INFO_LOG(Log::sceNet, " - Range Start:       %d", respData->range.startIndex);
+		INFO_LOG(Log::sceNet, " - Range Total:       %d", respData->range.total);
+		if (Memory::IsValidAddress(respData->roomDataExternal.ptr)) {
+			INFO_LOG(Log::sceNet, " - Server ID:         %d", respData->roomDataExternal->serverId);
+			INFO_LOG(Log::sceNet, " - World ID:          %d", respData->roomDataExternal->worldId);
+			INFO_LOG(Log::sceNet, " - Public Slot:       %d", respData->roomDataExternal->publicSlotNum);
+			INFO_LOG(Log::sceNet, " - Private Slot:      %d", respData->roomDataExternal->privateSlotNum);
+			INFO_LOG(Log::sceNet, " - Lobby ID:          %d", respData->roomDataExternal->lobbyId);
+			INFO_LOG(Log::sceNet, " - Room ID:           %d", respData->roomDataExternal->roomId);
+			//INFO_LOG(Log::sceNet, " - Open Plubic Slot:  %d", respData->roomDataExternal->openPublicSlotNum);
+			INFO_LOG(Log::sceNet, " - Max Slot:          %d", respData->roomDataExternal->maxSlot);
+			//INFO_LOG(Log::sceNet, " - Open Private Slot: %d", respData->roomDataExternal->openPrivateSlotNum);
+			INFO_LOG(Log::sceNet, " - Cur Member Num:    %d", respData->roomDataExternal->curMemberNum);
+			INFO_LOG(Log::sceNet, " - Password Mask:     %d", respData->roomDataExternal->passwordSlotMask);
+			if (Memory::IsValidAddress(respData->roomDataExternal->owner.ptr))
+				INFO_LOG(Log::sceNet, " - Owner NpId:        %s", respData->roomDataExternal->owner->npId);
+			else
+				INFO_LOG(Log::sceNet, " - Owner NpId:        NONE");
+			//INFO_LOG(Log::sceNet, " - RoomGroup Label:       %s", respData->roomDataExternal->roomGroup->label.data);
+			INFO_LOG(Log::sceNet, " - Room Group Num:    %d", respData->roomDataExternal->roomGroupNum);
+			INFO_LOG(Log::sceNet, " - Flag Attr:         %d", respData->roomDataExternal->flagAttr);
+			INFO_LOG(Log::sceNet, " - sIntAttrNum:       %d", respData->roomDataExternal->roomSearchableIntAttrExternalNum);
+			INFO_LOG(Log::sceNet, " - sBinAttrNum:       %d", respData->roomDataExternal->roomSearchableBinAttrExternalNum);
+			INFO_LOG(Log::sceNet, " - BinAttrNum:        %d", respData->roomDataExternal->roomBinAttrExternalNum);
+		}
+		else
+			INFO_LOG(Log::sceNet, " - Empty Search Request");
+
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, SCE_NP_MATCHING2_OKAY, respData.ptr);
 	}
 	//async
 	int RPCNAgent::CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) {

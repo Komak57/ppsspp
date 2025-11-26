@@ -1010,15 +1010,18 @@ struct SceNpMatching2RoomDataExternal
 	u16 privateSlotNum;
 	SceNpMatching2LobbyId lobbyId;
 	SceNpMatching2RoomId roomId;
-	u16 openPublicSlotNum;
-	u16 maxSlot;
-	u16 openPrivateSlotNum;
-	u16 curMemberNum;
+	// PSP uses PS3 < 3.3.0 SDK for this
+	u32 maxSlot;
+	u32 curMemberNum;
+	//u16 openPublicSlotNum;
+	//u16 maxSlot;
+	//u16 openPrivateSlotNum;
+	//u16 curMemberNum;
 	SceNpMatching2RoomPasswordSlotMask passwordSlotMask;
 	PSPPointer<SceNpUserInfo2> owner;
 	PSPPointer<SceNpMatching2RoomGroup> roomGroup;
 	u32 roomGroupNum;
-	u32 flagAttr; // PSPo2i indicates +0x24 == owner (%s)
+	u32 flagAttr;
 	PSPPointer<SceNpMatching2IntAttr> roomSearchableIntAttrExternal;
 	u32 roomSearchableIntAttrExternalNum;
 	PSPPointer<SceNpMatching2BinAttr> roomSearchableBinAttrExternal;
