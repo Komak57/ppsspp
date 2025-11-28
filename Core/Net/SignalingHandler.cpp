@@ -1319,7 +1319,8 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 			switch (subset) {
 			case SUBSET_RPCN:
 			{
-				INFO_HEXLOG(Log::sceNet, "recv_loop::RPCN", reinterpret_cast<const char*>(vport_0_data.data()), vport_0_data.size(), 386);
+				auto header = "recv_loop::RPCN " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
+				INFO_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(vport_0_data.data()), vport_0_data.size(), 386);
 				// push_back to rpcn_msgs
 				{
 					std::lock_guard lock(rpcn_mtx_);
@@ -1336,7 +1337,8 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 				msg.src_addr = src.sin_addr.s_addr;
 				msg.src_port = ntohs(src.sin_port);
 				msg.data = std::move(vport_0_data);
-				INFO_HEXLOG(Log::sceNet, "recv_loop::SIGN", reinterpret_cast<const char*>(msg.data.data()), msg.data.size(), 386);
+				auto header = "recv_loop::SIGN " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
+				INFO_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(msg.data.data()), msg.data.size(), 386);
 
 				{
 					std::lock_guard lock(sign_mtx_);
@@ -1355,8 +1357,8 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 		}
 
 		// Handle unfamiliar packets as game specific signaling
-
-		INFO_HEXLOG(Log::sceNet, "recv_loop::GAME", reinterpret_cast<const char*>(buf), n, 386);
+		auto header = "recv_loop::GAME " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
+		INFO_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(buf), n, 386);
 
 		auto sign_sock = g_socketManager.FindSocketByPort(SCE_SIGN_PORT);
 		if (sign_sock == nullptr) {
