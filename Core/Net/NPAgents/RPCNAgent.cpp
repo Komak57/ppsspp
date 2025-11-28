@@ -1347,12 +1347,28 @@ namespace net {
 
 		u32 sizeof_room_info = sizeof(SceNpMatching2RoomDataInternal);
 		u32 roomInfoPtr = np_memory.Alloc(sizeof_room_info);
-		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
-
-		room_resp->roomDataInternal = room_info;
+		room_resp->roomDataInternal = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
 
 		SceNpId* npId = NpGetNpId();
-		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, joinRoomResp->room_data(), room_info, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
+		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, joinRoomResp->room_data(), room_resp->roomDataInternal, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
+
+		INFO_LOG(Log::sceNet, "JoinRoom_Reply(%08X)", room_resp.ptr);
+		if (Memory::IsValidAddress(room_resp->roomDataInternal.ptr))
+		{
+			INFO_LOG(Log::sceNet, " - Server ID:       %d", room_resp->roomDataInternal->serverId);
+			INFO_LOG(Log::sceNet, " - World ID:        %d", room_resp->roomDataInternal->worldId);
+			INFO_LOG(Log::sceNet, " - Lobby ID:        %d", room_resp->roomDataInternal->lobbyId);
+			INFO_LOG(Log::sceNet, " - Room ID:         %d", room_resp->roomDataInternal->roomId);
+			INFO_LOG(Log::sceNet, " - PasswordSlotMask: %llx", room_resp->roomDataInternal->passwordSlotMask);
+			INFO_LOG(Log::sceNet, " - maxSlot:         %d", room_resp->roomDataInternal->maxSlot);
+			INFO_LOG(Log::sceNet, " - members.Num:     %d", room_resp->roomDataInternal->memberList.membersNum);
+			INFO_LOG(Log::sceNet, " - roomGroupNum:    %d", room_resp->roomDataInternal->roomGroupNum);
+			INFO_LOG(Log::sceNet, " - flagAttr:        %08x", room_resp->roomDataInternal->flagAttr);
+			INFO_LOG(Log::sceNet, " - roomBinAttrIntNum: %d", room_resp->roomDataInternal->roomBinAttrInternalNum);
+		}
+		else
+			ERROR_LOG(Log::sceNet, " - No Room Attached", room_resp->roomDataInternal);
+
 		// Cache room_info
 		npServer->cache.AddRoom(*room_resp->roomDataInternal);
 
@@ -1390,7 +1406,7 @@ namespace net {
 			}
 		}
 
-		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, SCE_NP_MATCHING2_OKAY, roomRespPtr);
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, SCE_NP_MATCHING2_OKAY, room_resp.ptr);
 	}
 	//async
 	int RPCNAgent::LeaveRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) {
