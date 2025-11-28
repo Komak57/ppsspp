@@ -894,14 +894,14 @@ int signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		notif_data->roomMemberDataInternal->userInfo.npId.handle.data);
 	g_OSD.Show(OSDType::MESSAGE_SUCCESS, buffer, 3.0f);
 	NOTICE_LOG(Log::sceNet, "User %s(%d) joined the room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);*/
+
 	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
-	auto member = npServer->cache.GetMember(notif_data->roomMemberDataInternal->memberId);
-	if (member) {
+	if (!npServer->cache.Exists(room_id)) {
 		//get_match2_event(event_key, 0, 0);
-		return SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND;
+		return SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND;
 	}
 	// Cache new Room Member
-	npServer->cache.AddMember(*notif_data->roomMemberDataInternal);
+	npServer->cache.AddMember(room_id, *notif_data->roomMemberDataInternal);
 
 	// We initiate signaling if necessary
 	if (const auto* signaling_info = notification->signaling())
@@ -969,10 +969,9 @@ int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	NOTICE_LOG(Log::sceNet, "NOTI UserLeftRoom User %s(%d) left room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
 
 	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
-	auto room = npServer->cache.GetRoom(room_id);
-	if (!room) {
+	if (!npServer->cache.Exists(room_id)) {
 		//get_match2_event(event_key, 0, 0);
-		return SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND;
+		return SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND;
 	}
 	auto n = GetI18NCategory(I18NCat::NETWORKING);
 	g_OSD.Show(OSDType::MESSAGE_ERROR, std::string(n->T("SH: Player Leaving")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]"), 0.0f, "userleaveroom");
@@ -1108,15 +1107,14 @@ int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	np::RoomMemberDataInternalUpdateInfo_to_SceNpMatching2RoomMemberDataInternalUpdateInfo(np_memory, update_info, notif_data, _context->second->include_onlinename, _context->second->include_avatarurl);
 
 	// Does this room exist?
-	auto room = npServer->cache.GetRoom(room_id);
-	if (!room) {
+	if (!npServer->cache.Exists(room_id)) {
 		//notifyRoomEventHandler(ctxId, room_id, memberId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
-		return SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND;
+		return SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND;
 	}
 
 	// Cache the member's info
 	SceNpMatching2RoomMemberId memberId = notif_data->newRoomMemberDataInternal->memberId;
-	npServer->cache.AddMember(*notif_data->newRoomMemberDataInternal);
+	npServer->cache.AddMember(room_id, *notif_data->newRoomMemberDataInternal);
 
 	NOTICE_LOG(Log::sceNet, "NOTI User %s(%d) data was updated for room (%d)", notif_data->newRoomMemberDataInternal->userInfo.npId.handle.data, memberId, room_id);
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());

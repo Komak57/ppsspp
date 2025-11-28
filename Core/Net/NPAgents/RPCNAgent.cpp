@@ -1242,6 +1242,7 @@ namespace net {
 		// Cache Rooms
 		//rooms.push_back(roomData);
 		npServer->cache.AddRoom(*room_info);
+		npServer->cache.SavePassword(room_info->roomId);
 
 		SceNpMatching2CreateJoinRoomResponse respData{};
 		respData.roomDataInternal = room_info;
@@ -1353,7 +1354,7 @@ namespace net {
 		SceNpId* npId = NpGetNpId();
 		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, joinRoomResp->room_data(), room_info, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
 		// Cache room_info
-		npServer->cache.AddRoom(*room_info);
+		npServer->cache.AddRoom(*room_resp->roomDataInternal);
 
 		if (np2P2PThreadID)
 			__KernelStartThread(np2P2PThreadID, 0, 0);
@@ -1377,15 +1378,14 @@ namespace net {
 
 				const SceNpMatching2RoomMemberId member_id = signaling_info->member_id();
 
-				auto member = npServer->cache.GetMember(member_id);
-
-				if (!member)
+				if (!npServer->cache.Exists(room_id, member_id))
 					continue;
 
-				NOTICE_LOG(Log::sceNet, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(member->userInfo.npId.handle.data), room_id, ip2str(addr_p2p).c_str(), port_p2p);
+				auto p2p_npid = npServer->cache.GetNpId(room_id, member_id);
+				NOTICE_LOG(Log::sceNet, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(p2p_npid.handle.data), room_id, ip2str(addr_p2p).c_str(), port_p2p);
 
 				// Attempt Signaling
-				const u32 conn_id = g_signaling.init_sig(member->userInfo.npId, room_id, member_id);
+				const u32 conn_id = g_signaling.init_sig(p2p_npid, room_id, member_id);
 				g_signaling.connect(conn_id, addr_p2p, port_p2p);
 			}
 		}

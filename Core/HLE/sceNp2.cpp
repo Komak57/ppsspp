@@ -15,6 +15,11 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+// Definitions:
+// Internal - Data scoped to members in the session
+// External - Data accessible by all
+// Local - Cached Data
+
 #include <mutex>
 #include <deque>
 #include <StringUtils.h>
@@ -1043,7 +1048,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 	INFO_LOG(Log::sceNet, " - intFilterNum: %d", req->intFilterNum);
 	INFO_LOG(Log::sceNet, " - binFilterNum: %d", req->binFilterNum);
 	INFO_LOG(Log::sceNet, " - attrIdNum:    %d", req->attrIdNum);
-	if (!npServer->cache.GetWorldFromId(req->worldId)) {
+	if (!npServer->cache.Exists(req->worldId)) {
 		ERROR_LOG(Log::sceNet, " - Invalid World ID");
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM), 0);
 	}
@@ -1095,9 +1100,9 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 
 	auto req = PSPPointer<SceNpMatching2CreateJoinRoomRequest>::Create(reqParamPtr);
 	//Memory::Memcpy(&req, reqParamPtr, sizeof(req));
-	auto world = npServer->cache.GetWorldFromId(req->worldId);
+	auto world_exists = npServer->cache.Exists(req->worldId);
 	INFO_LOG(Log::sceNet, "SceNpMatching2CreateJoinRoomRequest(%08X)", req.ptr);
-	if (world) {
+	if (world_exists) {
 		INFO_LOG(Log::sceNet, " - worldId:			%d", req->worldId);
 	}
 	else {
@@ -1115,6 +1120,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	INFO_LOG(Log::sceNet, " - passwordSlotMask: %llx", (req->passwordSlotMask.IsValid() ? *req->passwordSlotMask : 0));
 	char* pwd = "EMPTY";
 	if (req->roomPassword.IsValid()) {
+		npServer->cache.SetPassword(*req->roomPassword);
 		pwd = reinterpret_cast<char*>(req->roomPassword->data);
 	}
 
@@ -1124,7 +1130,7 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 	INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternalNum: %d", req->roomMemberBinAttrInternalNum);
 	INFO_LOG(Log::sceNet, " - teamId:           %d", req->teamId);
 	// When a game requests world_id 0, it implies an error occurred in the game's logic
-	if (!world) {
+	if (!world_exists) {
 		ERROR_LOG(Log::sceNet, " - Invalid worldId");
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ROOM_ID), 0);
 	}
@@ -1261,6 +1267,7 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 }
 
 // Placeholder until args are found
+// FIXME: Return RoomDataInternal from Cache
 static int sceNpMatching2GetRoomDataInternalLocal(int ctxId) {
 	ERROR_LOG(Log::sceNet, "UNIMPLEMENTED %s(%d) at %08x", __FUNCTION__, ctxId, currentMIPS->pc);
 	return -1;
@@ -1302,7 +1309,7 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 }
 
 /* Sets attributes of a specific Lobby/Party
- * @param reqParamPtr SceNpMatching2GetRoomDataInternalRequest Request Information
+ * @param reqParamPtr SceNpMatching2SetRoomDataInternalRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; System Errors are entirely ignored
@@ -1675,13 +1682,11 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 roomId, u32 room
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
 	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
-	auto room = npServer->cache.GetRoom(roomId);
-	if (!room)
-		return SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND;
-	auto member = npServer->cache.GetMember(roomMemberId);
-	if (!member)
+
+	auto member_exists = npServer->cache.Exists(roomId, roomMemberId);
+	if (!member_exists)
 		return SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND;
-	auto connId = g_signaling.get_conn_id_from_npid(member->userInfo.npId);
+	auto connId = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, roomMemberId));
 	if (!connId)
 		return SCE_NP_MATCHING2_SIGNALING_ERROR_CONNID_NOT_AVAILABLE;
 	auto si = g_signaling.get_sig_infos(*connId);
@@ -1777,41 +1782,29 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 	//connStatus = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 	Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connInfoPtr);
 
-	auto _room = npServer->cache.GetRoom(roomId);
-	if (!_room)
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
-
-	std::optional<SceNpMatching2RoomMemberDataInternal> member;
 	u32 sig_addr = 0;
 	u16 sig_port = 0;
 	u32 conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 
+	std::optional<u32> conn_id = std::nullopt;
 	if (peerMemberId != 0) {
-		member = npServer->cache.GetMember(peerMemberId);
+		if (!npServer->cache.Exists(roomId))
+			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
 
-		auto connID = g_signaling.get_conn_id_from_npid(member->userInfo.npId);
-		if (!connID) {
-			return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Connection not found");
+		if (!npServer->cache.Exists(roomId, peerMemberId))
+			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
+
+		conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, peerMemberId));
 		}
-
-		auto si = g_signaling.get_sig_infos(*connID);
-		if (!si) {
-			return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
-		}
-
-		sig_addr = si->addr;
-		sig_port = htons(si->port);
-		conn_status = si->conn_status;
+	else if (connId != 0) {
+		conn_id = connId;
 	}
-	/*else if (memberId != 0) {
-		member = npServer->cache.GetMember(memberId);
-
-		auto connID = g_signaling.get_conn_id_from_npid(member->userInfo.npId);
-		if (!connID) {
+	// FIXME: This can technically call for p2p info between other members, but should call sceNpMatching2SignalingGetPeerNetInfo instead?
+	if (!conn_id) {
 			return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Connection not found");
 		}
 
-		auto si = g_signaling.get_sig_infos(*connID);
+	auto si = g_signaling.get_sig_infos(conn_id.value());
 		if (!si) {
 			return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
 		}
@@ -1883,16 +1876,15 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 	// Fat Princess marks this as 0x24
 	auto connInfo = PSPPointer<SceNpSignalingConnectionInfo>::Create(connInfoPtr);
 
-	auto member = npServer->cache.GetMember(peerMemberId);
-
-	if (!member)
+	if (!npServer->cache.Exists(roomId, peerMemberId))
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
 
-	if (strncmp(NpGetNpId()->handle.data, member->userInfo.npId.handle.data, 16) == 0) {
+	// FIXME: Do a memberId check instead?
+	if (strncmp(NpGetNpId()->handle.data, npServer->cache.GetNpId(roomId, peerMemberId).handle.data, 16) == 0) {
 		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_OWN_NP_ID, "Member is Self");
 	}
 
-	auto conn_id = g_signaling.get_always_conn_id(member->userInfo.npId);
+	auto conn_id = g_signaling.get_always_conn_id(npServer->cache.GetNpId(roomId, peerMemberId));
 
 	auto si = g_signaling.get_sig_infos(conn_id);
 	if (!si) {
@@ -1981,6 +1973,8 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
  * @param withPasswordPtr Boolean validating the condition of the room password
  * @param roomPasswordPtr SceNpMatching2SessionPassword containing the password
  * @return 0; or System Error
+ * @note None of our test games support this system call
+ * @note Fat Princess uses a default password of some sort, and PSP2i uses an optional user generated password
  */
 static int sceNpMatching2GetRoomPasswordLocal(int ctxId, u32 roomIdPtr, u32 withPasswordPtr, u32 roomPasswordPtr)
 {
@@ -2000,16 +1994,21 @@ static int sceNpMatching2GetRoomPasswordLocal(int ctxId, u32 roomIdPtr, u32 with
 	auto withPassword = PSPPointer<u8>::Create(withPasswordPtr);
 	auto roomPassword = PSPPointer<SceNpMatching2SessionPassword>::Create(roomPasswordPtr);
 
+	withPassword = false;
+
+	if (!npServer->cache.Exists(*roomId)) {
+		return SCE_NP_MATCHING2_SERVER_ERROR_NO_PASSWORD;
+	}
+
 	// get Password from cache
-	bool cache_withPassword = false;
-	auto cache_Password = new SceNpMatching2SessionPassword();
+	bool cache_withPassword = npServer->cache.HasPassword(*roomId);
+	if (!cache_withPassword) {
+		return SCE_NP_MATCHING2_SERVER_ERROR_NO_PASSWORD;
+	}
 
 	if (cache_withPassword) {
 		withPassword = true;
-		Memory::Memcpy(roomPassword.ptr, &*cache_Password, sizeof(SceNpMatching2SessionPassword));
-	}
-	else {
-		withPassword = false;
+		Memory::Memcpy(roomPassword.ptr, &npServer->cache.GetRoomPassword(*roomId), sizeof(SceNpMatching2SessionPassword));
 	}
 
 	return SCE_NP_MATCHING2_OKAY;
@@ -2054,8 +2053,7 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 	INFO_LOG(Log::sceNet, " - castType:   %d", req->castType);
 	INFO_LOG(Log::sceNet, " - msgLen:     %d", req->msgLen);
 
-	auto roomData = npServer->cache.GetRoom(req->roomId);
-	if (!roomData)
+	if (!npServer->cache.Exists(req->roomId))
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't exist"), 0);
 
 	int ret = npServer->SendRoomMessage(ctxId, request_id, req);
