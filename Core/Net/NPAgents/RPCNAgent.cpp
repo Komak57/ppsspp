@@ -805,8 +805,9 @@ namespace net {
 		// RPCN requests only use the WorldID, so they must be converted prior to sending requests
 		//auto world_id = resp.stream->get<SceNpMatching2WorldId>();
 		for (u32 i = 0; i < num_worlds; ++i) {
+			worlds[i].next = 0;
 			if (i + 1 < num_worlds)
-				worlds[i].next = worlds.ptr + (sizeof(SceNpMatching2World) * (i+1));
+				worlds[i].next.ptr = worlds.ptr + (sizeof(SceNpMatching2World) * (i+1));
 			//worlds[i].worldId = resp.stream->get<SceNpMatching2WorldId>();
 			//worlds[i].worldId = world_id;
 			worlds[i].worldId = resp.stream->get<SceNpMatching2WorldId>();
