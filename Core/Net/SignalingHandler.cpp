@@ -246,9 +246,11 @@ void signaling_handler::update_ext_si_status(std::shared_ptr<signaling_info>& si
 			si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_PEER_ACTIVATED;
 			//signal_ext_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_EXT_PEER_ACTIVATED, CELL_OK);
 			//notifySignalingHandler(DEFAULT_CONTEXT, si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
-		else
+		else {
 			si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED;
 			//signal_ext_sig_callback(si->conn_id, SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED, CELL_OK);
+			//notifySignalingHandler(si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
+		}
 		//notifySignalingHandler(si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
 	}
 	else if (!op_activated && si->op_activated)
@@ -259,7 +261,7 @@ void signaling_handler::update_ext_si_status(std::shared_ptr<signaling_info>& si
 		//notifySignalingHandler(si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
 	}
 
-	notifySignalingHandler(si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
+	//notifySignalingHandler(si->room_id, si->conn_id, si->conn_status, si->member_id, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
 }
 
 void signaling_handler::DisconnectUsers(SceNpMatching2RoomId room_id)
