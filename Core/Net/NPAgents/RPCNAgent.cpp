@@ -1004,7 +1004,7 @@ namespace net {
 				INFO_LOG(Log::sceNet, " - Owner NpId:        NONE");
 			//INFO_LOG(Log::sceNet, " - RoomGroup Label:       %s", respData->roomDataExternal->roomGroup->label.data);
 			INFO_LOG(Log::sceNet, " - Room Group Num:    %d", respData->roomDataExternal->roomGroupNum);
-			INFO_LOG(Log::sceNet, " - Flag Attr:         %d", respData->roomDataExternal->flagAttr);
+			INFO_LOG(Log::sceNet, " - Flag Attr:         %08x", respData->roomDataExternal->flagAttr);
 			INFO_LOG(Log::sceNet, " - sIntAttrNum:       %d", respData->roomDataExternal->roomSearchableIntAttrExternalNum);
 			INFO_LOG(Log::sceNet, " - sBinAttrNum:       %d", respData->roomDataExternal->roomSearchableBinAttrExternalNum);
 			INFO_LOG(Log::sceNet, " - BinAttrNum:        %d", respData->roomDataExternal->roomBinAttrExternalNum);

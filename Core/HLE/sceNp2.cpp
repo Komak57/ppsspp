@@ -1508,7 +1508,7 @@ static int sceNpMatching2AbortRequest(int ctxId, u32 reqId)
  */
 static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 optParamPtr)
 {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParamPtr, currentMIPS->pc);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParamPtr, currentMIPS->pc);
 
 	// ThreadStart
 	if (!npMatching2Inited)
@@ -1795,23 +1795,23 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
 
 		conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, peerMemberId));
-		}
+	}
 	else if (connId != 0) {
 		conn_id = connId;
 	}
 	// FIXME: This can technically call for p2p info between other members, but should call sceNpMatching2SignalingGetPeerNetInfo instead?
 	if (!conn_id) {
-			return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Connection not found");
-		}
+		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Connection not found");
+	}
 
 	auto si = g_signaling.get_sig_infos(conn_id.value());
-		if (!si) {
-			return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
-		}
+	if (!si) {
+		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
+	}
 
-		sig_addr = si->addr;
+	sig_addr = si->addr;
 	sig_port = htons(si->port);
-		conn_status = si->conn_status;
+	conn_status = si->conn_status;
 	//else {
 	//	// TODO: Use p2p siginfo for self?
 	//	if (memberId == 0)
@@ -1930,7 +1930,7 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 }
 
 /* Requests RoomData from an external source
- * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
+ * @param reqParamPtr 
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; or System Error
@@ -2057,7 +2057,7 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 }
 
 /* Incomplete - Promotes a member of the party to Host?
- * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
+ * @param reqParamPtr ?
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; or System Error
@@ -2103,7 +2103,7 @@ static int sceNpMatching2GetRoomMemberIdListLocal(int ctxId, u32 roomId, u32 sor
 }
 
 /* Changes or Sets Room Member updates
- * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
+ * @param reqParamPtr SceNpMatching2SetRoomMemberDataInternalRequest
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; or System Error
@@ -2155,7 +2155,7 @@ static int sceNpMatching2GetRoomMemberDataInternalLocal(int ctxId, u32 roomId, u
 }
 
 /* Gets a members data from an Internal source
- * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
+ * @param reqParamPtr SceNpMatching2GetRoomMemberDataInternalRequest
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; or System Error
@@ -2201,7 +2201,7 @@ static int sceNpMatching2GetRoomMemberDataInternalList(int ctxId)
 }
 
 /* Incomplete - Requests an extended list of information from an external source
- * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
+ * @param reqParamPtr ?
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; or System Error
@@ -2232,7 +2232,7 @@ static int sceNpMatching2GetRoomMemberDataExternalList(int ctxId, u32 reqParamPt
 }
 
 /* Incomplete - Ejects a member from the party
- * @param reqParamPtr SceNpMatching2JoinRoomRequest containing relavant information required for the join process
+ * @param reqParamPtr ?
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; or System Error
