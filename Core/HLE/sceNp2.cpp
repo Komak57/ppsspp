@@ -1810,23 +1810,18 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 		}
 
 		sig_addr = si->addr;
-		sig_port = htons(SCE_SIGN_PORT);
+	sig_port = htons(si->port);
 		conn_status = si->conn_status;
-	}*/
-	else {
-		// TODO: Use p2p siginfo for self?
-		member = *_room->memberList.me;
-		if (memberId == 0)
-			sig_addr = g_signaling.GetLocalAddr();
-		else
-			sig_addr = g_signaling.GetSigAddr();
-		sig_port = htons(g_signaling.GetSigPort());
-		conn_status = SCE_NP_SIGNALING_CONN_STATUS_ACTIVE;
-	}
-
-	if (!member)
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
-
+	//else {
+	//	// TODO: Use p2p siginfo for self?
+	//	if (memberId == 0)
+	//		sig_addr = g_signaling.GetLocalAddr();
+	//	else
+	//		sig_addr = g_signaling.GetSigAddr();
+	//	member_exists = true;
+	//	sig_port = htons(g_signaling.GetSigPort());
+	//	conn_status = SCE_NP_SIGNALING_CONN_STATUS_ACTIVE;
+	//}
 
 	// Write Connection Status
 	Memory::Write_U32(conn_status, connInfoPtr);
