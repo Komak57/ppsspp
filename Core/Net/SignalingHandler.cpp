@@ -984,7 +984,7 @@ int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	//	//stop_sig(conn_id.value(), false);
 	//}
 
-	//npServer->cache.RemoveMember(notif_data->roomMemberDataInternal->memberId);
+	npServer->cache.RemoveMember(room_id, notif_data->roomMemberDataInternal->memberId);
 
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
 
