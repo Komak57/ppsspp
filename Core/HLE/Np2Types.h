@@ -1021,7 +1021,7 @@ struct SceNpMatching2RoomDataExternal
 	PSPPointer<SceNpUserInfo2> owner;
 	PSPPointer<SceNpMatching2RoomGroup> roomGroup;
 	u32 roomGroupNum;
-	u32 flagAttr;
+	SceNpMatching2FlagAttr flagAttr;
 	PSPPointer<SceNpMatching2IntAttr> roomSearchableIntAttrExternal;
 	u32 roomSearchableIntAttrExternalNum;
 	PSPPointer<SceNpMatching2BinAttr> roomSearchableBinAttrExternal;
