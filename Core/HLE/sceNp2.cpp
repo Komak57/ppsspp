@@ -2003,7 +2003,8 @@ static int sceNpMatching2GetRoomPasswordLocal(int ctxId, u32 roomIdPtr, u32 with
 
 	if (cache_withPassword) {
 		withPassword = true;
-		Memory::Memcpy(roomPassword.ptr, &npServer->cache.GetRoomPassword(*roomId), sizeof(SceNpMatching2SessionPassword));
+		auto room_pwd = npServer->cache.GetRoomPassword(*roomId);
+		Memory::Memcpy(roomPassword.ptr, &room_pwd, sizeof(SceNpMatching2SessionPassword));
 	}
 
 	return SCE_NP_MATCHING2_OKAY;
