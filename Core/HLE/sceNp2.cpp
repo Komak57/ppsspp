@@ -1788,7 +1788,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 
 	std::optional<u32> conn_id = std::nullopt;
 	if (peerMemberId != 0) {
-		if (!npServer->cache.Exists(roomId))
+		if (!npServer->cache.Exists((SceNpMatching2RoomId)roomId))
 			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
 
 		if (!npServer->cache.Exists(roomId, peerMemberId))
