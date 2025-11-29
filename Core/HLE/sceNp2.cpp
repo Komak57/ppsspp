@@ -373,19 +373,19 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
 	args[2] = event;	// Event
 	args[3] = errorCode;// ErrorCode || 0 is OK
 	args[4] = dataPtr;	// Response struct
-	//args[5] = argsPtr	// Request Arguments
+	args[5] = 0;		// Request Arguments
 
 	// Consume if the event handler has no callback
 	if (handler == nullptr) {
-		NOTICE_LOG(Log::sceNet, "notifyRequestHandler - Destroying %s_EMPTY(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_REQUEST_EVENT).c_str(),
-			ctxId, args[1], args[2], args[3], args[4], 0);
+		NOTICE_LOG(Log::sceNet, "notifyRequestHandler - Destroying %s_EMPTY(ctxId: %d, reqId: %d, event: 0x%08x, error: 0x%08x, dataPtr: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_REQUEST_EVENT).c_str(),
+			ctxId, args[1], args[2], args[3], args[4], args[5]);
 		return 0;
 	}
 	args[0] = handler->ctx_id;
 	args[5] = handler->cb_arg.ptr;
 	npMatching2Events.push_back(NpMatching2Args(*handler, reqId, 6, args, SCE_NP_MATCHING2_REQUEST_EVENT));
 
-	NOTICE_LOG(Log::sceNet, "notifyRequestHandler - %s_%08x(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_REQUEST_EVENT).c_str(), handler->cb.ptr,
+	NOTICE_LOG(Log::sceNet, "notifyRequestHandler - %s_%08x(ctxId: %d, reqId: %d, event: 0x%08x, error: 0x%08x, dataPtr: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_REQUEST_EVENT).c_str(), handler->cb.ptr,
 		args[0], args[1], args[2], args[3], args[4], args[5]);
 	return 0;
 }
@@ -1795,14 +1795,14 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 			// PSP2i uses peerMemberId as the connId instead of an actual connId at 08cb4f38
 			WARN_LOG(Log::sceNet, "Invalid Connection ID. Trying Member ID instead.");
 
-		if (!npServer->cache.Exists((SceNpMatching2RoomId)roomId))
-			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
+			if (!npServer->cache.Exists((SceNpMatching2RoomId)roomId))
+				return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
 
-		if (!npServer->cache.Exists(roomId, peerMemberId))
-			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
+			if (!npServer->cache.Exists(roomId, peerMemberId))
+				return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
 
-		conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, peerMemberId));
-	}
+			conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, peerMemberId));
+		}
 	}
 	else {
 		if (!npServer->cache.Exists((SceNpMatching2RoomId)roomId))
