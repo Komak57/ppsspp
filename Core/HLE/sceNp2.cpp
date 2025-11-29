@@ -1787,7 +1787,14 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 	u32 conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 
 	std::optional<u32> conn_id = std::nullopt;
-	if (peerMemberId != 0) {
+	if (connId != 0) {
+		conn_id = connId;
+
+		auto si = g_signaling.get_sig_infos(conn_id.value());
+		if (!si) {
+			// PSP2i uses peerMemberId as the connId instead of an actual connId at 08cb4f38
+			WARN_LOG(Log::sceNet, "Invalid Connection ID. Trying Member ID instead.");
+
 		if (!npServer->cache.Exists((SceNpMatching2RoomId)roomId))
 			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
 
@@ -1796,8 +1803,15 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 
 		conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, peerMemberId));
 	}
-	else if (connId != 0) {
-		conn_id = connId;
+	}
+	else {
+		if (!npServer->cache.Exists((SceNpMatching2RoomId)roomId))
+			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
+
+		if (!npServer->cache.Exists(roomId, peerMemberId))
+			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
+
+		conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, peerMemberId));
 	}
 	// FIXME: This can technically call for p2p info between other members, but should call sceNpMatching2SignalingGetPeerNetInfo instead?
 	if (!conn_id) {
