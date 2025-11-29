@@ -397,7 +397,7 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
  * @param dataPtr u32 pointer to the data struct we pass back to the system
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
-int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, RPCNMatching2RequestEvent requestEvent, u32 dataPtr) {
+int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, u32 conn_id, RPCNMatching2RequestEvent requestEvent, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	NpMatching2Handler* handler = nullptr;
@@ -407,14 +407,14 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemb
 		handler = &def->second;
 
 	u32 args[8];
-	args[0] = 0;	// ContextID
+	args[0] = 0;		// ContextID
 	args[1] = roomId;	// RoomID
-	args[2] = memberId;	// ConnId? Ignored by PSP2i
-	args[3] = match2_event_cnt.fetch_add(1); // param_4? Ingored by PSP2i
+	args[2] = conn_id;	// ConnId? Ignored by PSP2i
+	args[3] = 0;		// param_4? Ingored by PSP2i
 	args[4] = memberId;	// MemberID
 	args[5] = requestEvent;// Event [SCE_NP_MATCHING2_ROOM_MSG_EVENT_ChatMessage / SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message]
 	args[6] = dataPtr;	// Message
-	//args[7] = argsPtr	// Request Arguments
+	args[7] = 0;		// Request Arguments
 
 	// Consume if the event handler has no callback
 	if (handler == nullptr) {
@@ -440,7 +440,7 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemb
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  * @note This function seems to return a ConnectionID. This is optional, and replaces the requirement of room/member
  */
-int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr) {
+int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, u32 conn_id, SceNpMatching2Event event, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	NpMatching2Handler* handler = nullptr;
@@ -452,11 +452,11 @@ int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
 	u32 args[7];
 	args[0] = 0;	// ContextID
 	args[1] = roomId;	// RoomID
-	args[2] = match2_event_cnt.fetch_add(1); // ConnectionID?
+	args[2] = conn_id;  // ConnectionID?
 	args[3] = memberId;	// MemberID?
 	args[4] = event;	// Event
 	args[5] = dataPtr;	// ErrorCode
-	//args[6] = argsPtr	// Request Arguments
+	args[6] = 0;		// Request Arguments
 
 	// Consume if the event handler has no callback
 	if (handler == nullptr) {
@@ -484,7 +484,7 @@ int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  * @note This function seems to return a ConnectionID. This is optional, and replaces the requirement of room/member
  */
-int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 conn_state, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, s32 errorCode) {
+int notifySignalingHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMemberId memberId, u32 conn_id, u32 conn_state, SceNpMatching2Event event, s32 errorCode) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	NpMatching2Handler* handler = nullptr;
@@ -502,12 +502,12 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 conn_s
 	args[4] = memberId;		// roomMemberId
 	args[5] = event;		// EventCode
 	args[6] = errorCode;	// ErrorCode
-	//args[7] = 0;			// cbArgs
+	args[7] = 0;			// cbArgs
 
 	// Consume if the event handler has no callback
 	if (handler == nullptr) {
-		NOTICE_LOG(Log::sceNet, "notifySignalingHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %d, connId: %d, connState: %d, memberId: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(),
-			args[0], args[1], args[2], args[3], args[4], 0);
+		NOTICE_LOG(Log::sceNet, "notifySignalingHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %d, connId: %d, connState: %d, memberId: %d, event: 0x%04x, errorCode: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(),
+			args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
 		return 0;
 	}
 
@@ -516,7 +516,7 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, u32 conn_id, u32 conn_s
 
 	npMatching2Events.push_back(NpMatching2Args(*handler, 8, args, SCE_NP_MATCHING2_SIGNALING_EVENT));
 
-	NOTICE_LOG(Log::sceNet, "notifySignalingHandler - %s_%08x(ctxId: %d, roomId: %d, connId: %d, connState: %d, memberId: %d, event: %d, errorCode: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(), handler->cb.ptr,
+	NOTICE_LOG(Log::sceNet, "notifySignalingHandler - %s_%08x(ctxId: %d, roomId: %d, connId: %d, connState: %d, memberId: %d, event: 0x%04x, errorCode: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(), handler->cb.ptr,
 		args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
 
 	return 0;
