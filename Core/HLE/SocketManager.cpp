@@ -1,7 +1,6 @@
 #include "Common/Net/SocketCompat.h"
 #include "Core/HLE/NetInetConstants.h"
 #include "Core/HLE/SocketManager.h"
-#include "Common/Log.h"
 
 #include <mutex>
 
@@ -30,16 +29,16 @@ InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketS
 		int i = NextUnusedSocket();
 		if (i < 0 || i > VALID_INET_SOCKET_COUNT) {
 			*returned_errno = ENOMEM; // or something..
-		return nullptr;
-	}
+			return nullptr;
+		}
 
-			*index = i;
+		*index = i;
 		inetSock = inetSockets_ + i;
-			*inetSock = {};  // Reset to default.
-			inetSock->domain = domain;
-			inetSock->type = type;
-			inetSock->protocol = protocol;
-			inetSock->nonblocking = false;
+		*inetSock = {};  // Reset to default.
+		inetSock->domain = domain;
+		inetSock->type = type;
+		inetSock->protocol = protocol;
+		inetSock->nonblocking = false;
 	}
 
 	SOCKET hostSock;
@@ -54,7 +53,7 @@ InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketS
 
 		inetSock->state = state;
 		dccp_sock = inetSock;
-			return inetSock;
+		return inetSock;
 	case PSP_NET_INET_SOCK_CONN_DGRAM: // Virtual Socket
 		inetSock->sock = 0; // This helps find unhandled uses
 		inetSock->state = state;
@@ -172,7 +171,7 @@ void SocketManager::CloseAll() {
 			if (sock.type == PSP_NET_INET_SOCK_CONN_DGRAM)
 				sock.closesocket();
 			else
-			closesocket(sock.sock);
+				closesocket(sock.sock);
 		}
 		sock.state = SocketState::Unused;
 		sock.sock = 0;

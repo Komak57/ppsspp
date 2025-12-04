@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common/Net/SocketCompat.h"
+#include "Common/Log.h"
 
 // These should be safe between Windows and Linux?
 #define SOCK_DCCP 18
@@ -21,12 +22,13 @@ struct InetSocket {
 	SocketState state;
 	// NOTE: These are the PSP types. Can be converted to the host types if needed.
 	int domain;
-	int type;
+	int type; // WARNING: vsocks rely on this, will break if changed
 	int protocol;
 	bool nonblocking;
 	// Metadata for debug use only.
 	std::string addr;
-	int port;
+	int port; // WARNING: vsocks rely on this, will break if changed
+
 	int recvfrom(_Out_writes_bytes_to_(len, return) __out_data_source(NETWORK) char FAR* buf, _In_ int len, _In_ int flags, _Out_writes_bytes_to_opt_(*fromlen, *fromlen) struct sockaddr FAR* from, _Inout_opt_ int FAR* fromlen);
 	int select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout);
 	int sendto(const char* buf, int len, int flags, const sockaddr* to, int tolen);
