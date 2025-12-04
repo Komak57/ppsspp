@@ -214,7 +214,7 @@ void signaling_handler::update_si_status(std::shared_ptr<signaling_info>& si, s3
 
 		if (last_sig_status != SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED && si->sig_status == SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED) {
 			notifySignalingHandler(si->room_id, si->member_id, si->conn_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
-	}
+		}
 	}
 	else if ((si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_PENDING || si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE) && new_status == SCE_NP_SIGNALING_CONN_STATUS_INACTIVE)
 	{
@@ -253,7 +253,7 @@ void signaling_handler::update_ext_si_status(std::shared_ptr<signaling_info>& si
 
 		notifySignalingHandler(si->room_id, si->member_id, si->conn_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, SCE_NP_SIGNALING_ERROR_TERMINATED_BY_PEER);
 		retire_all_packets(si);
-}
+	}
 }
 
 void signaling_handler::DisconnectUsers(SceNpMatching2RoomId room_id)
@@ -318,12 +318,12 @@ bool signaling_handler::create_connection() {
 	// Create the Virtual Socket for p2p handshakes
 	WARN_LOG(Log::sceNet, "Creating new socket for vport %d", SCE_INTERNAL_PORT);
 	auto ConnSocket = create_socket(SCE_INTERNAL_PORT, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_CONN_DGRAM, PSP_NET_INET_IPPROTO_UNSPEC);
-
+	
 	if (!DccpSocket || !ConnSocket) {
 		ERROR_LOG(Log::sceNet, "Could not initialize connection.");
 		_dbg_assert_msg_(false, "Could not initialize connection.");
-			return false;
-		}
+		return false;
+	}
 
 	// If not running, spin up the recv thread
 	if (!running_) {
@@ -345,9 +345,9 @@ bool signaling_handler::destroy_connection() {
 	}
 	{
 		// Close our virtual socket
-	auto inetSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
+		auto inetSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
 		if (inetSocket != nullptr) {
-	g_socketManager.Close(inetSocket);
+			g_socketManager.Close(inetSocket);
 		}
 	}
 	return true;
@@ -885,7 +885,7 @@ int signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		if (port_p2p != SCE_SIGN_PORT)
 			g_OSD.Show(OSDType::MESSAGE_WARNING, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(SCE_SIGN_PORT) + std::string(" -> ") + std::to_string(port_p2p), 0.0f, "userjoinroom");
 		else
-		g_OSD.Show(OSDType::MESSAGE_SUCCESS, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(port_p2p), 0.0f, "userjoinroom");
+			g_OSD.Show(OSDType::MESSAGE_SUCCESS, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(port_p2p), 0.0f, "userjoinroom");
 
 		const SceNpMatching2RoomMemberId member_id = notif_data->roomMemberDataInternal->memberId;
 		const SceNpId& npid = notif_data->roomMemberDataInternal->userInfo.npId;
@@ -1344,46 +1344,46 @@ void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket
 		std::vector<u8> vport_0_data;
 		std::copy(std::begin(buf) + VPORT_0_HEADER_SIZE, std::begin(buf) + VPORT_0_HEADER_SIZE + data_size, std::back_inserter(vport_0_data));
 
-			switch (subset) {
-			case SUBSET_RPCN:
+		switch (subset) {
+		case SUBSET_RPCN:
+		{
+			auto header = "recv_loop::RPCN " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
+			INFO_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(vport_0_data.data()), vport_0_data.size(), 386);
+			// push_back to rpcn_msgs
 			{
-				auto header = "recv_loop::RPCN " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
-				INFO_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(vport_0_data.data()), vport_0_data.size(), 386);
-				// push_back to rpcn_msgs
-				{
-					std::lock_guard lock(rpcn_mtx_);
-					rpcn_msgs.push_back(std::move(vport_0_data));
-				}
-				rpcn_msg_cv.notify_all();
-				if (np2RPCNThreadID)
-					__KernelResumeThreadFromWait(np2RPCNThreadID, 0);
+				std::lock_guard lock(rpcn_mtx_);
+				rpcn_msgs.push_back(std::move(vport_0_data));
 			}
-			continue;
-			case SUBSET_SIGNALING:
-			{
-				signaling_message msg;
-				msg.src_addr = src.sin_addr.s_addr;
-				msg.src_port = ntohs(src.sin_port);
-				msg.data = std::move(vport_0_data);
-				auto header = "recv_loop::SIGN " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
-				INFO_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(msg.data.data()), msg.data.size(), 386);
+			rpcn_msg_cv.notify_all();
+			if (np2RPCNThreadID)
+				__KernelResumeThreadFromWait(np2RPCNThreadID, 0);
+		}
+		continue;
+		case SUBSET_SIGNALING:
+		{
+			signaling_message msg;
+			msg.src_addr = src.sin_addr.s_addr;
+			msg.src_port = ntohs(src.sin_port);
+			msg.data = std::move(vport_0_data);
+			auto header = "recv_loop::SIGN " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
+			INFO_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(msg.data.data()), msg.data.size(), 386);
 
-				{
-					std::lock_guard lock(sign_mtx_);
-					sign_msgs.push_back(std::move(msg));
-				}
-				sign_msg_cv.notify_all();
-				if (np2P2PThreadID)
-					__KernelResumeThreadFromWait(np2P2PThreadID, 0);
-				//dispatch_packet(msg);
+			{
+				std::lock_guard lock(sign_mtx_);
+				sign_msgs.push_back(std::move(msg));
 			}
-			continue;
-			default:
+			sign_msg_cv.notify_all();
+			if (np2P2PThreadID)
+				__KernelResumeThreadFromWait(np2P2PThreadID, 0);
+			//dispatch_packet(msg);
+		}
+		continue;
+		default:
 			// Not for our internal system
 			auto header = "recv_loop::UNHANDLED " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
 			WARN_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(buf), n, 386);
-				break;
-			}
+			break;
+		}
 	}
 }
 #pragma endregion
