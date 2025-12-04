@@ -474,7 +474,7 @@ static int sceNetInetSocket(int domain, int type, int protocol) {
 		UpdateErrnoFromHost(__KernelGetCurThread(), hostErrno, __FUNCTION__);
 		return hleLogError(Log::sceNet, -1);
 	}
-
+	if (inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM) {
 	// Ignore SIGPIPE when supported (ie. BSD/MacOS)
 	setSockNoSIGPIPE(inetSock->sock, 1);
 	// TODO: We should always use non-blocking mode and simulate blocking mode
@@ -483,6 +483,7 @@ static int sceNetInetSocket(int domain, int type, int protocol) {
 	setSockReuseAddrPort(inetSock->sock);
 	// Disable Connection Reset error on UDP to avoid strange behavior
 	setUDPConnReset(inetSock->sock, false);
+	}
 	return hleLogDebug(Log::sceNet, socket);
 }
 
