@@ -41,6 +41,7 @@ struct InetSocket {
 	int send(const char* buf, int len, int flags);
 	int recv(char* buf, int len, int flags);
 	int connect(sockaddr* name, int namelen);
+	int listen(int backlog);
 };
 
 // Only use this for sockets whose ID are exposed to the game.

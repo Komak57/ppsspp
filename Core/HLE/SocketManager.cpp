@@ -330,6 +330,15 @@ int InetSocket::connect(sockaddr* name, int namelen) {
 	}
 }
 
+int InetSocket::listen(int backlog) {
+	switch (type) {
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		_dbg_assert_msg_(false, "listen not implemented for this socket type");
+		return 0;
+	default:
+		return ::listen(sock, backlog);
+	}
+}
 int InetSocket::shutdown(int how) {
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:

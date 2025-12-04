@@ -768,7 +768,8 @@ static int sceNetInetListen(int socket, int backlog) {
 		return hleLogError(Log::sceNet, ERROR_INET_EBADF, "Bad socket #%d", socket);
 	}
 
-	int retval = listen(inetSock->sock, (backlog == PSP_NET_INET_SOMAXCONN ? SOMAXCONN : backlog));
+	int retval = inetSock->listen((backlog == PSP_NET_INET_SOMAXCONN ? SOMAXCONN : backlog));
+	//retval = listen(inetSock->sock, (backlog == PSP_NET_INET_SOMAXCONN ? SOMAXCONN : backlog));
 	if (retval < 0) {
 		UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
 		return hleLogError(Log::sceNet, retval);
