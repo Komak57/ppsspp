@@ -790,7 +790,8 @@ static int sceNetInetAccept(int socket, u32 addrPtr, u32 addrLenPtr) {
 	if (srclen)
 		*srclen = std::min((*srclen) > 0 ? *srclen : 0, static_cast<socklen_t>(sizeof(saddr)));
 
-	int newHostSocket = accept(inetSock->sock, (struct sockaddr*)&saddr.addr, srclen);
+	int newHostSocket = inetSock->accept((struct sockaddr*)&saddr.addr, srclen);
+	//newHostSocket = accept(inetSock->sock, (struct sockaddr*)&saddr.addr, srclen);
 	if (newHostSocket < 0) {
 		if (UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__) == ERROR_INET_EAGAIN) {
 			return hleLogDebug(Log::sceNet, -1, "EAGAIN");

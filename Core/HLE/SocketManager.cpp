@@ -339,6 +339,17 @@ int InetSocket::listen(int backlog) {
 		return ::listen(sock, backlog);
 	}
 }
+
+int InetSocket::accept(sockaddr* addr, int* addrlen) {
+	switch (type) {
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		_dbg_assert_msg_(false, "accept not implemented for this socket type");
+		return 0;
+	default:
+		return ::accept(sock, addr, addrlen);
+	}
+}
+
 int InetSocket::shutdown(int how) {
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
