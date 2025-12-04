@@ -240,6 +240,17 @@ int InetSocket::select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, tim
 		return ::select(sock, readfds, writefds, exceptfds, timeout);
 	}
 }
+
+int InetSocket::send(const char* buf, int len, int flags) {
+	switch (type) {
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		_dbg_assert_msg_(false, "send not implemented for this socket type");
+		return 0;
+	default:
+		return ::send(sock, buf, len, flags);
+	}
+}
+
 int InetSocket::sendto(const char* buf, int len, int flags, const sockaddr* to, int tolen) {
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:

@@ -36,6 +36,9 @@ struct InetSocket {
 	int bind(_In_reads_bytes_(namelen) const struct sockaddr FAR* name, _In_ int namelen);
 	int closesocket();
 	int shutdown(int how);
+
+	// These aren't normally used by this socket type
+	int send(const char* buf, int len, int flags);
 };
 
 // Only use this for sockets whose ID are exposed to the game.
