@@ -155,7 +155,7 @@ void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32 
 		si->addr = new_addr;
 		si->port = new_port;
 
-		if (si->port != SCE_INTERNAL_PORT)
+		if (si->port != SCE_SIGN_PORT)
 			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1;
 		else
 			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
@@ -187,7 +187,7 @@ void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& s
 		si->mapped_addr = new_addr;
 		si->mapped_port = new_port;
 
-		if (si->port != SCE_INTERNAL_PORT) {
+		if (si->port != SCE_SIGN_PORT) {
 			if (g_Config.bEnableUPnP)
 				si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
 			else
@@ -901,10 +901,9 @@ int signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		const u32 addr_p2p = RegisterIp(signaling_info->ip());
 		u16 port_p2p = signaling_info->port();
 		auto n = GetI18NCategory(I18NCat::NETWORKING);
-		if (port_p2p == SCE_SIGN_PORT) {
-			g_OSD.Show(OSDType::MESSAGE_WARNING, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(port_p2p) + std::string(" -> ") + std::to_string(SCE_INTERNAL_PORT), 0.0f, "userjoinroom");
-			port_p2p = SCE_INTERNAL_PORT;
-		}
+		if (port_p2p != SCE_SIGN_PORT)
+			g_OSD.Show(OSDType::MESSAGE_WARNING, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(SCE_SIGN_PORT) + std::string(" -> ") + std::to_string(port_p2p), 0.0f, "userjoinroom");
+		else
 		g_OSD.Show(OSDType::MESSAGE_SUCCESS, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(port_p2p), 0.0f, "userjoinroom");
 
 		const SceNpMatching2RoomMemberId member_id = notif_data->roomMemberDataInternal->memberId;
@@ -1170,8 +1169,8 @@ void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 
 	const u32 addr_p2p = RegisterIp(matching_info->addr()->ip());
 	u16 port_p2p = matching_info->addr()->port();
-	if (port_p2p == SCE_SIGN_PORT)
-		port_p2p = SCE_INTERNAL_PORT;
+	//if (port_p2p == SCE_SIGN_PORT)
+		//port_p2p = SCE_INTERNAL_PORT;
 
 	NOTICE_LOG(Log::sceNet, " - IP at %s", ip2str(addr_p2p));
 	send_information_packets(addr_p2p, port_p2p, npid_p2p);

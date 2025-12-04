@@ -158,7 +158,7 @@ namespace net {
 						g_signaling.addr_sig = new_addr_sig;
 						auto local_ip = g_signaling.local_addr_sig.load();
 
-						if (new_port_sig != SCE_INTERNAL_PORT)
+						if (new_port_sig != SCE_SIGN_PORT)
 							g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1);
 						else
 							g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2);
@@ -1393,8 +1393,8 @@ namespace net {
 
 				const u32 addr_p2p = RegisterIp(signaling_info->addr()->ip());
 				u16 port_p2p = signaling_info->addr()->port();
-				if (port_p2p == SCE_SIGN_PORT)
-					port_p2p = SCE_INTERNAL_PORT;
+				//if (port_p2p == SCE_SIGN_PORT)
+					//port_p2p = SCE_INTERNAL_PORT;
 
 				const SceNpMatching2RoomMemberId member_id = signaling_info->member_id();
 

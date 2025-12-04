@@ -17,11 +17,10 @@
 #pragma pack(push,1)
 #define SCE_NP_DEFINED
 
-// Port used to communicate with Game P2P (3658)
+// Port used by real socket to perform Signaling communications
 const u16 SCE_SIGN_PORT = 3658;
-// Port used to communicate with Signaling P2P (3659)
-// NOTE: This should be 3658, but most games appear to already implement this themselves
-const u16 SCE_INTERNAL_PORT = 3659;
+// Port used to communicate with P2P Signaling; aka vport
+const u16 SCE_INTERNAL_PORT = 0;
 
 extern u32 np2RPCNThreadHackAddr;
 extern u32_le np2RPCNThreadCode[3];
