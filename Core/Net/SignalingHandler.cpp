@@ -312,48 +312,19 @@ void signaling_handler::stop_sig(u32 conn_id, bool forceful)
 #pragma region Connection Functions
 
 bool signaling_handler::create_connection() {
-	// Get the InetSocket object from the socket manager
-	auto inetSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
-	if (inetSocket == nullptr) {
-		WARN_LOG(Log::sceNet, "Creating new socket for port %d", SCE_INTERNAL_PORT);
-		//return;
+	// Create the Master Socket for transmissions
+	WARN_LOG(Log::sceNet, "Creating new socket for port %d", SCE_SIGN_PORT);
+	auto DccpSocket = create_socket(SCE_SIGN_PORT, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_DCCP, PSP_NET_INET_IPPROTO_UNSPEC);
+	// Create the Virtual Socket for p2p handshakes
+	WARN_LOG(Log::sceNet, "Creating new socket for vport %d", SCE_INTERNAL_PORT);
+	auto ConnSocket = create_socket(SCE_INTERNAL_PORT, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_CONN_DGRAM, PSP_NET_INET_IPPROTO_UNSPEC);
 
-		int index;
-		int hostErrno = 0;
-		// PSP_NET_INET_AF_INET = 2
-		// PSP_NET_INET_SOCK_CONN_DGRAM = 6
-		// PSP_NET_INET_IPPROTO_UNSPEC = 0
-		// PSP_NET_INET_IPPROTO_UDP = 17
-		inetSocket = g_socketManager.CreateSocket(&index, &hostErrno, SocketState::UsedNetInet, 2, 6, 0);
-		if (!inetSocket) {
-			ERROR_LOG(Log::sceNet, "Unable to create new socket");
+	if (!DccpSocket || !ConnSocket) {
+		ERROR_LOG(Log::sceNet, "Could not initialize connection.");
+		_dbg_assert_msg_(false, "Could not initialize connection.");
 			return false;
 		}
 
-		// Bind socket for listening
-		sockaddr_in addr{};
-		addr.sin_family = AF_INET;
-		addr.sin_addr.s_addr = INADDR_ANY;
-		addr.sin_port = ntohs(SCE_INTERNAL_PORT);
-
-		if (bind(inetSocket->sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
-			ERROR_LOG(Log::sceNet, "Unable to bind new socket for listening");
-		}
-
-		// Ignore SIGPIPE when supported (ie. BSD/MacOS)
-		setSockNoSIGPIPE(inetSocket->sock, 1);
-		// TODO: We should always use non-blocking mode and simulate blocking mode
-		changeBlockingMode(inetSocket->sock, 1);
-		// Enable Port Re-use, required for multiple-instance
-		setSockReuseAddrPort(inetSocket->sock);
-		// Disable Connection Reset error on UDP to avoid strange behavior
-		setUDPConnReset(inetSocket->sock, false);
-
-		inetSocket->state = SocketState::UsedNetInet;
-		inetSocket->port = SCE_INTERNAL_PORT;
-
-		bool ok = g_PortManager.Add("UDP", SCE_INTERNAL_PORT, SCE_INTERNAL_PORT);
-	}
 	// If not running, spin up the recv thread
 	if (!running_) {
 		recv_thread_ = std::thread(&signaling_handler::recv_loop, this, inetSocket);
@@ -1212,6 +1183,53 @@ void signaling_handler::QuickMatchCompleteGUI(net::RPCNResponse resp) {
 // Socket Functions
 // ====================================
 #pragma region Socket Functions
+InetSocket* signaling_handler::create_socket(u16 port, int domain, int type, int protocol) {
+	auto inetSocket = g_socketManager.FindSocketByPort(port);
+	if (inetSocket == nullptr) {
+		//return;
+
+		int index;
+		int hostErrno = 0;
+
+		// Create the master socket
+		inetSocket = g_socketManager.CreateSocket(&index, &hostErrno, SocketState::UsedNetInet, domain, type, protocol);
+		if (!inetSocket) {
+			ERROR_LOG(Log::sceNet, "Unable to create new socket");
+			return nullptr;
+		}
+
+		// Bind socket for listening
+		sockaddr_in addr{};
+		addr.sin_family = AF_INET;
+		addr.sin_addr.s_addr = INADDR_ANY;
+		addr.sin_port = htons(port);
+
+		int ret = inetSocket->bind((sockaddr*)&addr, sizeof(addr));
+		if (ret < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to bind new socket for listening");
+			return nullptr;
+		}
+
+		inetSocket->state = SocketState::UsedNetInet;
+		inetSocket->port = port;
+
+		if (type != PSP_NET_INET_SOCK_CONN_DGRAM) {
+			// Ignore SIGPIPE when supported (ie. BSD/MacOS)
+			setSockNoSIGPIPE(inetSocket->sock, 1);
+			// TODO: We should always use non-blocking mode and simulate blocking mode
+			changeBlockingMode(inetSocket->sock, 1);
+			// Enable Port Re-use, required for multiple-instance
+			setSockReuseAddrPort(inetSocket->sock);
+			// Disable Connection Reset error on UDP to avoid strange behavior
+			setUDPConnReset(inetSocket->sock, false);
+
+			// Don't open the port for virtual sockets
+			if (g_Config.bEnableUPnP)
+				bool ok = g_PortManager.Add("UDP", port, port);
+		}
+		return inetSocket;
+	}
+}
 // This function assumes addr and port are in network order
 bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, sockaddr_in dest) const {
 

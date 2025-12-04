@@ -160,6 +160,7 @@ public:
 
 	// Connection Helpers
 
+	InetSocket* create_socket(u16 port, int domain, int type, int protocol);
 	bool create_connection();
 	bool destroy_connection();
 	void connect(u32 conn_id, u32 addr, u16 port);
