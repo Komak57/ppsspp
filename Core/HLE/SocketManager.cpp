@@ -106,7 +106,14 @@ InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const Inet
 
 bool SocketManager::Close(InetSocket *inetSocket) {
 	_dbg_assert_(inetSocket->state != SocketState::Unused);
-	if (closesocket(inetSocket->sock) != 0) {
+
+	int ret = 0;
+	if (inetSocket->type == PSP_NET_INET_SOCK_CONN_DGRAM)
+		ret = inetSocket->closesocket();
+	else
+		ret = closesocket(inetSocket->sock);
+
+	if (ret != 0) {
 		ERROR_LOG(Log::sceNet, "closesocket(%d) failed", inetSocket->sock);
 		return false;
 	}
@@ -162,6 +169,9 @@ InetSocket* SocketManager::FindSocketByPort(int target_port) {
 void SocketManager::CloseAll() {
 	for (auto &sock : inetSockets_) {
 		if (sock.state != SocketState::Unused) {
+			if (sock.type == PSP_NET_INET_SOCK_CONN_DGRAM)
+				sock.closesocket();
+			else
 			closesocket(sock.sock);
 		}
 		sock.state = SocketState::Unused;
@@ -286,5 +296,15 @@ int InetSocket::bind(_In_reads_bytes_(namelen) const struct sockaddr FAR* name, 
 		return 0;
 	default:
 		return ::bind(sock, name, namelen);
+	}
+}
+
+// Close a virtual socket
+int InetSocket::closesocket() {
+	switch (type) {
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		return 0;
+	default:
+		return ::closesocket(sock);
 	}
 }
