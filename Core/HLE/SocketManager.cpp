@@ -93,6 +93,8 @@ InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const Inet
 			inetSock->type = derive->type;
 			inetSock->protocol = derive->protocol;
 			inetSock->nonblocking = derive->nonblocking;  // should we inherit blocking state?
+			if (derive->type == PSP_NET_INET_SOCK_CONN_DGRAM)
+				inetSock->port = derive->port; // We only need this if we're adopting a CONN_DGRAM (unlikely)
 			return inetSock;
 		}
 	}
