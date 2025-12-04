@@ -432,8 +432,8 @@ void signaling_handler::queue_signaling_packet(signaling_packet& sp, std::shared
 void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u16 port) const {
 	INFO_LOG(Log::sceNet, "send_signaling_packet(command: %d, ip: %s, port: %d)", sp.command, ip2str(addr).c_str(), port);
 	std::vector<u8> packet(sizeof(signaling_packet) + VPORT_0_HEADER_SIZE);
-	reinterpret_cast<u16_le&>(packet[0]) = 0; // VPort 0 (LE)
-	packet[2] = SUBSET_SIGNALING;
+	//reinterpret_cast<u16_le&>(packet[0]) = 0; // VPort 0 (LE)
+	packet[0] = SUBSET_SIGNALING;
 	//sockaddr_in local_ip;
 	//getLocalIp(&local_ip);
 	sp.sent_addr = addr;
@@ -1287,24 +1287,18 @@ void signaling_handler::recv_loop(InetSocket* inetSocket) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			continue;
 		}
-		if (n < static_cast<s32>(sizeof(u16))) {
-			ERROR_LOG(Log::sceNet, "Malformed packet on P2P port (no vport)");
-			continue;
-		}
 		if (n < VPORT_0_HEADER_SIZE) {
-			ERROR_LOG(Log::sceNet, "Bad vport 0 packet (no subset)");
+			ERROR_LOG(Log::sceNet, "Bad vport %d packet (no subset)", SCE_INTERNAL_PORT);
 			continue;
 		}
 
-
-		// vport + subset
-		const u16 vport_le = *reinterpret_cast<const u16_le*>(&buf[0]);
-		const u8 subset = buf[2];
+		// UPDATE: vport was moved to SocketManager, and stripped in recvfrom
+		//const u16 vport_le = *reinterpret_cast<const u16_le*>(&buf[0]);
+		const u8 subset = buf[0];
 		const auto data_size = n - VPORT_0_HEADER_SIZE;
 		std::vector<u8> vport_0_data;
 		std::copy(std::begin(buf) + VPORT_0_HEADER_SIZE, std::begin(buf) + VPORT_0_HEADER_SIZE + data_size, std::back_inserter(vport_0_data));
 
-		if (vport_le == 0) {
 			switch (subset) {
 			case SUBSET_RPCN:
 			{

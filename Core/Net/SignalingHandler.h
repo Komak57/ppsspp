@@ -17,7 +17,7 @@
 #include "Core/HLE/SocketManager.h"
 #include <Core/Util/BlockAllocator.h>
 
-constexpr s32 VPORT_0_HEADER_SIZE = sizeof(u16) + sizeof(u8); // u16 vport(LE) + u8 subset
+constexpr s32 VPORT_0_HEADER_SIZE = sizeof(u8); // u16 vport(LE) + u8 subset
 
 enum VPORT_0_SUBSET : u8
 {
