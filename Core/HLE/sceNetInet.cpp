@@ -263,7 +263,7 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		if (readfds && (NetInetFD_ISSET(i, readfds))) {
 			SOCKET sock = g_socketManager.GetHostSocketFromInetSocket(i);
 			if (sock == 0)
-				continue; // Assume this is a VSOCK /*sock = (!g_socketManager.GetDCCP()? 0 : g_socketManager.GetDCCP()->sock);*/
+				sock = (!g_socketManager.GetDCCP()? 0 : g_socketManager.GetDCCP()->sock);
 			_dbg_assert_(sock != 0); // False-Positive on VSocks
 			hostSockets[i] = sock;
 			if (sock > maxHostSocket)
@@ -279,7 +279,7 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		if (writefds && (NetInetFD_ISSET(i, writefds))) {
 			SOCKET sock = g_socketManager.GetHostSocketFromInetSocket(i);
 			if (sock == 0)
-				continue; // Assume this is a VSOCK /*sock = (!g_socketManager.GetDCCP()? 0 : g_socketManager.GetDCCP()->sock);*/
+				sock = (!g_socketManager.GetDCCP() ? 0 : g_socketManager.GetDCCP()->sock);
 			_dbg_assert_(sock != 0);
 			hostSockets[i] = sock;
 			if (sock > maxHostSocket)
@@ -295,7 +295,7 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		if (exceptfds && (NetInetFD_ISSET(i, exceptfds))) {
 			SOCKET sock = g_socketManager.GetHostSocketFromInetSocket(i);
 			if (sock == 0)
-				continue; // Assume this is a VSOCK /*sock = (!g_socketManager.GetDCCP()? 0 : g_socketManager.GetDCCP()->sock);*/
+				sock = (!g_socketManager.GetDCCP() ? 0 : g_socketManager.GetDCCP()->sock);
 			_dbg_assert_(sock != 0);
 			hostSockets[i] = sock;
 			if (sock > maxHostSocket)
