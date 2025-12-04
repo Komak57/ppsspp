@@ -31,6 +31,7 @@ struct InetSocket {
 	int select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout);
 	int sendto(const char* buf, int len, int flags, const sockaddr* to, int tolen);
 	int setsockopt(int level, int optname, const char* optval, int optlen);
+	int getsockopt(int level, int optname, char* optval, int* optlen);
 };
 
 // Only use this for sockets whose ID are exposed to the game.
