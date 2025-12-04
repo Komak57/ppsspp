@@ -1276,11 +1276,18 @@ void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket
 	tv.tv_sec = 1;      // timeout 1s
 	tv.tv_usec = 0;
 	while (running_) {
-		if (!inetSocket) {
+		if (!DccpSocket) {
 			// Socket lost. Try to find it again!
-			WARN_LOG(Log::sceNet, "Reaquiring Socket for Signaling Receiver Thread");
+			WARN_LOG(Log::sceNet, "Reaquiring DCCP Socket for Signaling Receiver Thread");
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-			inetSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
+			DccpSocket = g_socketManager.GetDCCP();
+			continue;
+		}
+		if (!ConnSocket) {
+			// Socket lost. Try to find it again!
+			WARN_LOG(Log::sceNet, "Reaquiring P2P Socket for Signaling Receiver Thread");
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			ConnSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
 			continue;
 		}
 		u8 buf[1500];
