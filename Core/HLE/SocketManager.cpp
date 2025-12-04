@@ -203,16 +203,24 @@ int InetSocket::recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
 		{
 			// Clear the error
+#if PPSSPP_PLATFORM(WINDOWS)
 			SetLastError(0);
+#else
+			errno = 0;
+#endif
 
 			// We can't receive without a master socket
 			auto dccp_sock = g_socketManager.GetDCCP();
 			if (!dccp_sock) {
+#if PPSSPP_PLATFORM(WINDOWS)
 				SetLastError(WSAEINVAL);
+#else
+				errno = EINVAL;
+#endif
 				return -1;
 			}
 			sockaddr_storage src;
-			int src_len = sizeof(src);
+			socklen_t src_len = sizeof(src);
 			char newbuf[2048];
 			int ret = ::recvfrom(dccp_sock->sock, newbuf, sizeof(newbuf), MSG_PEEK | flags, reinterpret_cast<sockaddr*>(&src), &src_len);
 			if (ret <= 2)
@@ -223,7 +231,11 @@ int InetSocket::recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_
 			int data_len = ret - 2;
 
 			if (vport != port) {
+#if PPSSPP_PLATFORM(WINDOWS)
 				SetLastError(WSAEWOULDBLOCK);
+#else
+				errno = EWOULDBLOCK;
+#endif
 				return -1; // Not for this vsock, wait for the next one
 			}
 
@@ -267,7 +279,11 @@ int InetSocket::sendto(const char* buf, int len, int flags, const sockaddr* to, 
 			// We only send data when we have a master socket
 			auto dccp_sock = g_socketManager.GetDCCP();
 			if (!dccp_sock) {
+#if PPSSPP_PLATFORM(WINDOWS)
 				SetLastError(WSAEINVAL);
+#else
+				errno = EINVAL;
+#endif
 				return -1;
 			}
 
