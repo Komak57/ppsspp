@@ -124,6 +124,33 @@ namespace net {
 		static_assert(sizeof(T) % sizeof(array[0]) == 0);
 		std::memcpy(static_cast<void*>(&array[pos]), &value, sizeof(value));
 	}
+	// Send data on the raw DCCP socket, not the CONN_DGRAM sockets
+	bool send_packet_ipv4(const std::vector<u8>& data, sockaddr_in dest) {
+
+		INFO_LOG(Log::sceNet, "Sending packet(%d bytes) to %s:%d", data.size(), ip2str(dest.sin_addr).c_str(), ntohs(dest.sin_port));
+
+		std::string datahex;
+		DEBUG_HEXLOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size(), 386);
+		auto inetSocket = g_socketManager.GetDCCP();
+		if (!inetSocket) {
+			ERROR_LOG(Log::sceNet, "Socket not found");
+			return false;
+		}
+		int ret = inetSocket->sendto(reinterpret_cast<const char*>(data.data()), data.size(), 0, reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+		if (ret < 0)
+		{
+			int errorCode = 0;
+#if PPSSPP_PLATFORM(WINDOWS)
+			errorCode = WSAGetLastError();
+#else
+			errorCode = errno;
+#endif
+			ERROR_LOG(Log::sceNet, "SendTo Failed: %d", errorCode);
+			return false;
+		}
+		DEBUG_LOG(Log::sceNet, "Sent %i bytes", ret);
+		return true;
+	}
 
 	std::chrono::microseconds RPCNAgent::HandleResponses() {
 		DEBUG_LOG(Log::sceNet, "Signaling RPCN Handler Thread Started");
@@ -230,7 +257,7 @@ namespace net {
 			addr->sin_port = htons(SCE_RPCN_PORT);
 
 			INFO_LOG(Log::sceNet, "PING -> RPCN");
-			if (!g_signaling.send_packet_ipv4(ping, *addr))
+			if (!send_packet_ipv4(ping, *addr))
 				ERROR_LOG(Log::sceNet, "Failed to send IPv4 PING to RPCN");
 
 			last_ping_time_ipv4 = now;
