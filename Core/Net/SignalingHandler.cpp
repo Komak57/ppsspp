@@ -1370,41 +1370,11 @@ void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket
 			}
 			continue;
 			default:
-				// Not for our internal system, forward to game system.
+			// Not for our internal system
+			auto header = "recv_loop::UNHANDLED " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
+			WARN_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(buf), n, 386);
 				break;
 			}
-		}
-
-		// Handle unfamiliar packets as game specific signaling
-		auto header = "recv_loop::GAME " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
-		INFO_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(buf), n, 386);
-
-		auto sign_sock = g_socketManager.FindSocketByPort(SCE_SIGN_PORT);
-		if (sign_sock == nullptr) {
-			// This is okay. The game controls when this is set up and shut down.
-			WARN_LOG(Log::sceNet, "GAME Signaling Socket not configured", subset);
-			continue;
-		}
-
-		sockaddr_in dst{};
-		dst.sin_family = AF_INET;
-		dst.sin_port = htons(SCE_SIGN_PORT);
-		dst.sin_addr.s_addr = local_addr_sig.load();
-
-		int sent = sendto(sign_sock->sock,
-			reinterpret_cast<const char*>(buf),
-			n, 0,
-			reinterpret_cast<sockaddr*>(&dst),
-			sizeof(dst));
-		if (sent < 0) {
-#if PPSSPP_PLATFORM(WINDOWS)
-			int err = WSAGetLastError();
-#else
-			int err = errno;
-#endif
-			WARN_LOG(Log::sceNet, "Unable to forward to SCE_SIGN_PORT: %d", err);
-		}
-
 	}
 }
 #pragma endregion
