@@ -1107,17 +1107,6 @@ int signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 	resp.stream = new vec_stream(resp.data);
 	//auto noti = new vec_stream(resp.data);
 
-	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
-	SceNpMatching2RoomMemberId member_id = resp.stream->get<u16>();
-	NOTICE_LOG(Log::sceNet, " - room: %d, member: %d)", room_id, member_id);
-
-	const auto* message_info = resp.stream->get_flatbuffer<RoomMessageInfo>();
-
-	if (resp.stream->is_error())
-	{
-		ERROR_LOG(Log::sceNet, " - Malformed RoomMessageReceived notification");
-		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
-	}
 
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_MSG_EVENT);
 	if (def == defaultOptParams.end()) {
@@ -1128,6 +1117,18 @@ int signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 	if (_context == ctx.end()) {
 		ERROR_LOG(Log::sceNet, "Context not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
+	}
+
+	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
+	SceNpMatching2RoomMemberId member_id = resp.stream->get<u16>();
+	NOTICE_LOG(Log::sceNet, " - room: %d, member: %d)", room_id, member_id);
+
+	const auto* message_info = resp.stream->get_flatbuffer<RoomMessageInfo>();
+
+	if (resp.stream->is_error())
+	{
+		ERROR_LOG(Log::sceNet, " - Malformed RoomMessageReceived notification");
+		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
 	u32 _size = sizeof(SceNpMatching2RoomMessageInfo);
