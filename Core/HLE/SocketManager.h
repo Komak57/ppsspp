@@ -35,6 +35,7 @@ struct InetSocket {
 
 	int bind(_In_reads_bytes_(namelen) const struct sockaddr FAR* name, _In_ int namelen);
 	int closesocket();
+	int shutdown(int how);
 };
 
 // Only use this for sockets whose ID are exposed to the game.

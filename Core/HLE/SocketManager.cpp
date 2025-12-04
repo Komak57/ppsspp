@@ -299,6 +299,17 @@ int InetSocket::bind(_In_reads_bytes_(namelen) const struct sockaddr FAR* name, 
 	}
 }
 
+
+int InetSocket::shutdown(int how) {
+	switch (type) {
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		_dbg_assert_msg_(false, "shutdown not implemented for this socket type");
+		return 0;
+	default:
+		return ::shutdown(sock, how);
+	}
+}
+
 // Close a virtual socket
 int InetSocket::closesocket() {
 	switch (type) {

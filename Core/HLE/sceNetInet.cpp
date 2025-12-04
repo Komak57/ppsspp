@@ -827,7 +827,8 @@ static int sceNetInetShutdown(int socket, int how) {
 	case PSP_NET_INET_SHUT_RDWR: hostHow = SHUT_RDWR; break;
 	}
 
-	int retVal = shutdown(inetSock->sock, hostHow);  // no translation
+	int retVal = inetSock->shutdown(hostHow);
+	//retVal = shutdown(inetSock->sock, hostHow);  // no translation
 	if (retVal < 0) {
 #ifdef PPSSPP_PLATFORM_WINDOWS
 		auto err = WSAGetLastError();
@@ -873,7 +874,8 @@ static int sceNetInetSocketAbort(int socket) {
 	}
 
 	// FIXME: either using shutdown/close or select? probably using select if blocking mode is being simulated with non-blocking
-	int retVal = shutdown(inetSock->sock, SHUT_RDWR);
+	int retVal = inetSock->shutdown(SHUT_RDWR);
+	//retVal = shutdown(inetSock->sock, SHUT_RDWR);
 	return hleLogInfo(Log::sceNet, retVal);
 }
 
