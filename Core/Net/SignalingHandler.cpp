@@ -1293,7 +1293,7 @@ void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket
 		u8 buf[1500];
 		sockaddr_in src{};
 		socklen_t slen = sizeof(src);
-		int n = recvfrom(inetSocket->sock, reinterpret_cast<char*>(buf), sizeof(buf), 0,
+		int n = ConnSocket->recvfrom(reinterpret_cast<char*>(buf), sizeof(buf), 0,
 			reinterpret_cast<sockaddr*>(&src), &slen);
 		if (n < 0) {
 			int errorCode = 0;
@@ -1302,9 +1302,10 @@ void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket
 			if (errorCode == WSAEWOULDBLOCK) {
 				fd_set readfds;
 				FD_ZERO(&readfds);
-				FD_SET(inetSocket->sock, &readfds);
+				// FIXME: vsocks should technically point to the master socket for these
+				FD_SET(DccpSocket->sock, &readfds);
 				// Nothing wrong here, just check again after a short recess
-				int ready = select(inetSocket->sock, &readfds, nullptr, nullptr, &tv);
+				int ready = DccpSocket->select(&readfds, nullptr, nullptr, &tv);
 				continue;
 			}
 #else
@@ -1312,9 +1313,9 @@ void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket
 			if (errorCode == EAGAIN || errorCode == EWOULDBLOCK) {
 				fd_set readfds;
 				FD_ZERO(&readfds);
-				FD_SET(inetSocket->sock, &readfds);
+				FD_SET(DccpSocket->sock, &readfds);
 				// Nothing wrong here, just check again after a short recess
-				int ready = select(inetSocket->sock, &readfds, nullptr, nullptr, &tv);
+				int ready = vsock->select(DccpSocket->sock, &readfds, nullptr, nullptr, &tv);
 				continue;
 			}
 #endif
