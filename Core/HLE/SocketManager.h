@@ -27,6 +27,7 @@ struct InetSocket {
 	// Metadata for debug use only.
 	std::string addr;
 	int port;
+	int recvfrom(_Out_writes_bytes_to_(len, return) __out_data_source(NETWORK) char FAR* buf, _In_ int len, _In_ int flags, _Out_writes_bytes_to_opt_(*fromlen, *fromlen) struct sockaddr FAR* from, _Inout_opt_ int FAR* fromlen);
 };
 
 // Only use this for sockets whose ID are exposed to the game.

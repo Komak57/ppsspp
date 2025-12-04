@@ -178,3 +178,45 @@ const char *SocketStateToString(SocketState state) {
 		return "N/A";
 	}
 }
+
+int InetSocket::recvfrom(_Out_writes_bytes_to_(len, return) __out_data_source(NETWORK) char FAR* buf, _In_ int len, _In_ int flags, _Out_writes_bytes_to_opt_(*fromlen, *fromlen) struct sockaddr FAR* from, _Inout_opt_ int FAR* fromlen) {
+	switch (type) {
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		{
+			// Clear the error
+			SetLastError(0);
+
+			// We can't receive without a master socket
+			auto dccp_sock = g_socketManager.GetDCCP();
+			if (!dccp_sock) {
+				SetLastError(WSAEINVAL);
+				return -1;
+			}
+			sockaddr_storage src;
+			int src_len = sizeof(src);
+			char newbuf[2048];
+			int ret = ::recvfrom(dccp_sock->sock, newbuf, sizeof(newbuf), MSG_PEEK | flags, reinterpret_cast<sockaddr*>(&src), &src_len);
+			if (ret <= 2)
+				return (ret < 0 ? ret : -1); // Malformed
+
+			// vport headers are attached to all packets for filtering
+			u16 vport = ntohs(*(u16*)newbuf);
+			int data_len = ret - 2;
+
+			if (vport != port) {
+				SetLastError(WSAEWOULDBLOCK);
+				return -1; // Not for this vsock, wait for the next one
+			}
+
+			// Receive the packet and return
+			ret = ::recvfrom(dccp_sock->sock, newbuf, sizeof(newbuf), flags, reinterpret_cast<sockaddr*>(&src), &src_len);
+
+			memcpy(buf, newbuf + 2, data_len);
+			memcpy(from, &src, src_len);
+			*fromlen = src_len;
+			return data_len;
+		}
+	default:
+		return ::recvfrom(sock, buf, len, flags, from, fromlen);
+	}
+}
