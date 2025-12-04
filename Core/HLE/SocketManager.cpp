@@ -8,6 +8,15 @@
 SocketManager g_socketManager;
 static std::mutex g_socketMutex;  // TODO: Remove once the adhoc thread is gone
 
+int SocketManager::NextUnusedSocket() {
+	for (int i = MIN_VALID_INET_SOCKET; i < ARRAY_SIZE(inetSockets_); i++) {
+		if (inetSockets_[i].state == SocketState::Unused) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketState state, int domain, int type, int protocol) {
 	_dbg_assert_(state != SocketState::Unused);
 

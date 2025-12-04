@@ -55,6 +55,7 @@ public:
 	InetSocket* GetDCCP() { return dccp_sock; }
 
 private:
+	int NextUnusedSocket();
 	// We use this array from MIN_VALID_INET_SOCKET and forward. It's probably not a good idea to return 0 as a socket.
 	InetSocket inetSockets_[VALID_INET_SOCKET_COUNT];
 	// SOCK_DCCP should only have 1 instance, ever. Each CONN_DGRAM should point to this for it's sock
