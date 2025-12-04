@@ -1730,6 +1730,11 @@ static int sceNetApctl_lib2_C20A144C(int connIndex, u32 ps3MacAddressPtr) {
 // Patapon3			sceNetUpnpInit(0x3800, 0x32)
 static int sceNetUpnpInit(int size,int offset) {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(0x%04x, 0x%02x)", __FUNCTION__, size, offset);
+	// Create the Master Socket for transmissions
+	// NOTE: Fat Princess creates a SOCK_CONN_DGRAM after sceNetUpnpStart. If this socket isn't prepared before then, it has some issues.
+	// NOTE: Patapon3 doesn't call sceNetUpnpStart, so I guess this goes in Init instead?
+	WARN_LOG(Log::sceNet, "Creating new socket for port %d", SCE_SIGN_PORT);
+	g_signaling.create_socket(SCE_SIGN_PORT, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_DCCP, PSP_NET_INET_IPPROTO_UNSPEC);
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 

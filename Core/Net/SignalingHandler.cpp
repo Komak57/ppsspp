@@ -312,9 +312,7 @@ void signaling_handler::stop_sig(u32 conn_id, bool forceful)
 #pragma region Connection Functions
 
 bool signaling_handler::create_connection() {
-	// Create the Master Socket for transmissions
-	WARN_LOG(Log::sceNet, "Creating new socket for port %d", SCE_SIGN_PORT);
-	auto DccpSocket = create_socket(SCE_SIGN_PORT, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_DCCP, PSP_NET_INET_IPPROTO_UNSPEC);
+	auto DccpSocket = g_socketManager.GetDCCP();
 	// Create the Virtual Socket for p2p handshakes
 	WARN_LOG(Log::sceNet, "Creating new socket for vport %d", SCE_INTERNAL_PORT);
 	auto ConnSocket = create_socket(SCE_INTERNAL_PORT, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_CONN_DGRAM, PSP_NET_INET_IPPROTO_UNSPEC);
