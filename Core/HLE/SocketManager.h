@@ -33,13 +33,13 @@ struct InetSocket {
 	std::string addr;
 	int port; // WARNING: vsocks rely on this, will break if changed
 
-	int recvfrom(_Out_writes_bytes_to_(len, return) __out_data_source(NETWORK) char FAR* buf, _In_ int len, _In_ int flags, _Out_writes_bytes_to_opt_(*fromlen, *fromlen) struct sockaddr FAR* from, _Inout_opt_ int FAR* fromlen);
+	int recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_t* fromlen);
 	int select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout);
 	int sendto(const char* buf, int len, int flags, const sockaddr* to, int tolen);
-	int setsockopt(int level, int optname, const char* optval, int optlen);
-	int getsockopt(int level, int optname, char* optval, int* optlen);
+	int setsockopt(int level, int optname, const char* optval, socklen_t optlen);
+	int getsockopt(int level, int optname, char* optval, socklen_t* optlen);
 
-	int bind(_In_reads_bytes_(namelen) const struct sockaddr FAR* name, _In_ int namelen);
+	int bind(sockaddr* name, int namelen);
 	int closesocket();
 	int shutdown(int how);
 
@@ -48,7 +48,7 @@ struct InetSocket {
 	int recv(char* buf, int len, int flags);
 	int connect(sockaddr* name, int namelen);
 	int listen(int backlog);
-	int accept(sockaddr* addr, int* addrlen);
+	int accept(sockaddr* addr, socklen_t* addrlen);
 
 };
 

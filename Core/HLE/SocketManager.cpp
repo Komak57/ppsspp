@@ -1,7 +1,7 @@
 #include "Common/Net/SocketCompat.h"
 #include "Core/HLE/NetInetConstants.h"
 #include "Core/HLE/SocketManager.h"
-
+#include <cstring> // Required by linux
 #include <mutex>
 
 SocketManager g_socketManager;
@@ -198,7 +198,7 @@ int InetSocket::recv(char* buf, int len, int flags) {
 	}
 }
 
-int InetSocket::recvfrom(_Out_writes_bytes_to_(len, return) __out_data_source(NETWORK) char FAR* buf, _In_ int len, _In_ int flags, _Out_writes_bytes_to_opt_(*fromlen, *fromlen) struct sockaddr FAR* from, _Inout_opt_ int FAR* fromlen) {
+int InetSocket::recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_t* fromlen) {
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
 		{
@@ -289,7 +289,7 @@ int InetSocket::sendto(const char* buf, int len, int flags, const sockaddr* to, 
 	}
 }
 
-int InetSocket::setsockopt(int level, int optname, const char* optval, int optlen) {
+int InetSocket::setsockopt(int level, int optname, const char* optval, socklen_t optlen) {
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
 		_dbg_assert_msg_(false, "setsockopt not implemented for this socket type");
@@ -299,7 +299,7 @@ int InetSocket::setsockopt(int level, int optname, const char* optval, int optle
 	}
 }
 
-int InetSocket::getsockopt(int level, int optname, char* optval, int* optlen) {
+int InetSocket::getsockopt(int level, int optname, char* optval, socklen_t* optlen) {
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
 		_dbg_assert_msg_(false, "getsockopt not implemented for this socket type");
@@ -309,7 +309,7 @@ int InetSocket::getsockopt(int level, int optname, char* optval, int* optlen) {
 	}
 }
 
-int InetSocket::bind(_In_reads_bytes_(namelen) const struct sockaddr FAR* name, _In_ int namelen) {
+int InetSocket::bind(sockaddr* name, int namelen) {
 	port = ntohs(((sockaddr_in*)name)->sin_port);
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
@@ -339,7 +339,7 @@ int InetSocket::listen(int backlog) {
 	}
 }
 
-int InetSocket::accept(sockaddr* addr, int* addrlen) {
+int InetSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
 		_dbg_assert_msg_(false, "accept not implemented for this socket type");
