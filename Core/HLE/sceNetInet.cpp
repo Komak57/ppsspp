@@ -475,14 +475,14 @@ static int sceNetInetSocket(int domain, int type, int protocol) {
 		return hleLogError(Log::sceNet, -1);
 	}
 	if (inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM) {
-	// Ignore SIGPIPE when supported (ie. BSD/MacOS)
-	setSockNoSIGPIPE(inetSock->sock, 1);
-	// TODO: We should always use non-blocking mode and simulate blocking mode
-	changeBlockingMode(inetSock->sock, 1);
-	// Enable Port Re-use, required for multiple-instance
-	setSockReuseAddrPort(inetSock->sock);
-	// Disable Connection Reset error on UDP to avoid strange behavior
-	setUDPConnReset(inetSock->sock, false);
+		// Ignore SIGPIPE when supported (ie. BSD/MacOS)
+		setSockNoSIGPIPE(inetSock->sock, 1);
+		// TODO: We should always use non-blocking mode and simulate blocking mode
+		changeBlockingMode(inetSock->sock, 1);
+		// Enable Port Re-use, required for multiple-instance
+		setSockReuseAddrPort(inetSock->sock);
+		// Disable Connection Reset error on UDP to avoid strange behavior
+		setUDPConnReset(inetSock->sock, false);
 	}
 	return hleLogDebug(Log::sceNet, socket);
 }
@@ -906,7 +906,8 @@ static int sceNetInetCloseWithRST(int socket) {
 	struct linger sl {};
 	sl.l_onoff = 1;		// non-zero value enables linger option in kernel
 	sl.l_linger = 0;	// timeout interval in seconds
-	setsockopt(inetSock->sock, SOL_SOCKET, SO_LINGER, (const char*)&sl, sizeof(sl));
+	inetSock->setsockopt(SOL_SOCKET, SO_LINGER, (const char*)&sl, sizeof(sl));
+	//setsockopt(inetSock->sock, SOL_SOCKET, SO_LINGER, (const char*)&sl, sizeof(sl));
 	g_socketManager.Close(inetSock);
 	return hleLogInfo(Log::sceNet, 0);
 }
