@@ -2,6 +2,10 @@
 
 #include "Common/Net/SocketCompat.h"
 
+// These should be safe between Windows and Linux?
+#define SOCK_DCCP 18
+#define SOCK_CONN_DGRAM 19
+
 // Keep track of who's using a socket.
 enum class SocketState {
 	Unused = 0,

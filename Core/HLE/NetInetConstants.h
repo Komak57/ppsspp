@@ -71,7 +71,7 @@ enum {
 #define	PSP_NET_INET_SOCK_RDM			4			// reliably-delivered message 
 #define	PSP_NET_INET_SOCK_SEQPACKET		5			// sequenced packet stream 
 #define	PSP_NET_INET_SOCK_CONN_DGRAM	6			// connection-orientated datagram
-#define PSP_NET_INET_SOCK_DCCP			PSP_NET_INET_SOCK_CONN_DGRAM	// Special Datagram Congestion Control Protocol (must be explicitely connected)
+#define PSP_NET_INET_SOCK_DCCP			7			// Special Datagram Congestion Control Protocol (must be explicitely connected)
 #define PSP_NET_INET_SOCK_PACKET		10			// Linux specific way of getting packets at the dev level. For writing rarp and other similar things on the user level // SOCK_PACKET is an obsolete socket type to receive raw packets directly from the device driver
 #define	PSP_NET_INET_SOCK_TYPE_MASK		0x000F		// mask that covers the above
 // Flags to be ORed into the type parameter of socket and socketpair and used for the flags parameter of paccept.

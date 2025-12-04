@@ -10,6 +10,7 @@
 #ifdef __MINGW32__
 #include <mswsock.h>
 #endif
+#include "SocketManager.h"
 
 int convertMsgFlagPSP2Host(int flag) {
 	switch (flag) {
@@ -213,14 +214,15 @@ int convertSocketTypePSP2Host(int type) {
 	case PSP_NET_INET_SOCK_DGRAM:
 		return SOCK_DGRAM;
 	case PSP_NET_INET_SOCK_RAW:
-		// FIXME: SOCK_RAW have some restrictions on newer Windows?
-		return SOCK_RAW;
+		return SOCK_RAW;				// FIXME: SOCK_RAW have some restrictions on newer Windows?
 	case PSP_NET_INET_SOCK_RDM:
 		return SOCK_RDM;
 	case PSP_NET_INET_SOCK_SEQPACKET:
 		return SOCK_SEQPACKET;
-	case PSP_NET_INET_SOCK_CONN_DGRAM:	// PSP_NET_INET_SOCK_DCCP?
-		return SOCK_DGRAM;				// SOCK_RAW?
+	case PSP_NET_INET_SOCK_DCCP:		// Parent socket for CONN_DGRAM sockets
+		return SOCK_DGRAM;				// SOCK_RAW compatible
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		return SOCK_CONN_DGRAM;			// Virtual Socket
 	case PSP_NET_INET_SOCK_PACKET:
 		return SOCK_STREAM;				// SOCK_RAW?
 	}
@@ -267,7 +269,9 @@ std::string inetSocketType2str(int type) {
 	case PSP_NET_INET_SOCK_SEQPACKET:
 		return "SOCK_SEQPACKET";
 	case PSP_NET_INET_SOCK_DCCP:
-		return "SOCK_DCCP/SOCK_CONN_DGRAM?";
+		return "SOCK_DCCP?";
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		return "SOCK_CONN_DGRAM?";
 	case PSP_NET_INET_SOCK_PACKET:
 		return "SOCK_PACKET?";
 	}
