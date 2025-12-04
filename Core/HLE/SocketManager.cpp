@@ -258,3 +258,13 @@ int InetSocket::sendto(const char* buf, int len, int flags, const sockaddr* to, 
 		return ::sendto(sock, buf, len, flags, to, tolen);
 	}
 }
+
+int InetSocket::setsockopt(int level, int optname, const char* optval, int optlen) {
+	switch (type) {
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		_dbg_assert_msg_(false, "setsockopt not implemented for this socket type");
+		return 0;
+	default:
+		return ::setsockopt(sock, level, optname, optval, optlen);
+	}
+}

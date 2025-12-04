@@ -550,9 +550,13 @@ static int sceNetInetSetsockopt(int socket, int level, int optname, u32 optvalPt
 	if (level == PSP_NET_INET_SOL_SOCKET && optval && (optname == PSP_NET_INET_SO_RCVTIMEO || optname == PSP_NET_INET_SO_SNDTIMEO)) {
 		tval.tv_sec = optval / 1000000; // seconds
 		tval.tv_usec = (optval % 1000000); // microseconds
-		retval = setsockopt(inetSock->sock, convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&tval, sizeof(tval));
-	} else {
-		retval = setsockopt(inetSock->sock, convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&optval, optlen);
+		
+		retval = inetSock->setsockopt(convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&tval, sizeof(tval));
+		//retval = setsockopt(inetSock->sock, convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&tval, sizeof(tval));
+	}
+	else {
+		retval = inetSock->setsockopt(convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&optval, optlen);
+		//retval = setsockopt(inetSock->sock, convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&optval, optlen);
 	}
 	if (retval < 0) {
 		UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
