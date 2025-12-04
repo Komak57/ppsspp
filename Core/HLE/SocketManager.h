@@ -4,8 +4,12 @@
 #include "Common/Log.h"
 
 // These should be safe between Windows and Linux?
+#ifndef SOCK_DCCP
 #define SOCK_DCCP 18
+#endif
+#ifndef SOCK_CONN_DGRAM
 #define SOCK_CONN_DGRAM 19
+#endif
 
 // Keep track of who's using a socket.
 enum class SocketState {
