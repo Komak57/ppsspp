@@ -24,29 +24,52 @@ InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketS
 	int hostType = convertSocketTypePSP2Host(type);
 	int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
-	SOCKET hostSock = ::socket(hostDomain, hostType, hostProtocol);
-	if (hostSock < 0) {
-		*returned_errno = socket_errno;
+	std::lock_guard<std::mutex> guard(g_socketMutex);
+	InetSocket* inetSock = nullptr;
+	{
+		int i = NextUnusedSocket();
+		if (i < 0 || i > VALID_INET_SOCKET_COUNT) {
+			*returned_errno = ENOMEM; // or something..
 		return nullptr;
 	}
 
-	std::lock_guard<std::mutex> guard(g_socketMutex);
-
-	for (int i = MIN_VALID_INET_SOCKET; i < ARRAY_SIZE(inetSockets_); i++) {
-		if (inetSockets_[i].state == SocketState::Unused) {
 			*index = i;
-			InetSocket *inetSock = inetSockets_ + i;
+		inetSock = inetSockets_ + i;
 			*inetSock = {};  // Reset to default.
-			inetSock->sock = hostSock;
-			inetSock->state = state;
 			inetSock->domain = domain;
 			inetSock->type = type;
 			inetSock->protocol = protocol;
 			inetSock->nonblocking = false;
-			*returned_errno = 0;
-			return inetSock;
-		}
 	}
+
+	SOCKET hostSock;
+	switch (type) {
+	case PSP_NET_INET_SOCK_DCCP: // Parent to all Virtual Sockets
+		inetSock->sock = ::socket(hostDomain, SOCK_DGRAM, hostProtocol);
+		
+		if (inetSock->sock < 0) {
+			*returned_errno = socket_errno;
+			return nullptr;
+		}
+
+		inetSock->state = state;
+		dccp_sock = inetSock;
+			return inetSock;
+	case PSP_NET_INET_SOCK_CONN_DGRAM: // Virtual Socket
+		inetSock->sock = 0; // This helps find unhandled uses
+		inetSock->state = state;
+		return inetSock;
+	default: // Normal Socket
+		inetSock->sock = ::socket(hostDomain, hostType, hostProtocol);
+
+		if (inetSock->sock < 0) {
+			*returned_errno = socket_errno;
+			return nullptr;
+		}
+		inetSock->state = state;
+		return inetSock;
+	}
+
 	_dbg_assert_(false);
 
 	ERROR_LOG(Log::sceNet, "Ran out of socket handles! This is BAD.");
