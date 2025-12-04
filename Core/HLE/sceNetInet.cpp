@@ -424,7 +424,8 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags) {
 
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
-	int retval = recv(inetSock->sock, (char*)Memory::GetPointer(bufPtr), bufLen, flgs | MSG_NOSIGNAL);
+	int retval = inetSock->recv((char*)Memory::GetPointer(bufPtr), bufLen, flgs | MSG_NOSIGNAL);
+	//int retval = recv(inetSock->sock, (char*)Memory::GetPointer(bufPtr), bufLen, flgs | MSG_NOSIGNAL);
 	if (retval < 0) {
 		if (UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__) == ERROR_INET_EAGAIN) {
 			retval = hleLogDebug(Log::sceNet, retval, "EAGAIN");

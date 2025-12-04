@@ -189,6 +189,16 @@ const char *SocketStateToString(SocketState state) {
 	}
 }
 
+int InetSocket::recv(char* buf, int len, int flags) {
+	switch (type) {
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		_dbg_assert_msg_(false, "recv not implemented for this socket type");
+		return 0;
+	default:
+		return ::recv(sock, buf, len, flags);
+	}
+}
+
 int InetSocket::recvfrom(_Out_writes_bytes_to_(len, return) __out_data_source(NETWORK) char FAR* buf, _In_ int len, _In_ int flags, _Out_writes_bytes_to_opt_(*fromlen, *fromlen) struct sockaddr FAR* from, _Inout_opt_ int FAR* fromlen) {
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
