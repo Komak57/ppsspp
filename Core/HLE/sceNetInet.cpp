@@ -231,6 +231,7 @@ static int sceNetInetGetsockname(int socket, u32 namePtr, u32 namelenPtr) {
 	return hleLogInfo(Log::sceNet, 0);
 }
 
+// FIXME: select is being used here without an inetSocket pointer
 // FIXME: nfds is number of fd(s) as in posix poll, or was it maximum fd value as in posix select? Star Wars Battlefront Renegade seems to set the nfds to 64, while Coded Arms Contagion is using 256
 int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr, u32 timeoutPtr) {
 	SceNetInetFdSet	*readfds = readfdsPtr ? (SceNetInetFdSet*)Memory::GetPointerWrite(readfdsPtr) : nullptr;
@@ -261,7 +262,9 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < nfds; i++) {
 		if (readfds && (NetInetFD_ISSET(i, readfds))) {
 			SOCKET sock = g_socketManager.GetHostSocketFromInetSocket(i);
-			_dbg_assert_(sock != 0);
+			if (sock == 0)
+				continue; // Assume this is a VSOCK /*sock = (!g_socketManager.GetDCCP()? 0 : g_socketManager.GetDCCP()->sock);*/
+			_dbg_assert_(sock != 0); // False-Positive on VSocks
 			hostSockets[i] = sock;
 			if (sock > maxHostSocket)
 				maxHostSocket = sock;
@@ -275,6 +278,8 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		}
 		if (writefds && (NetInetFD_ISSET(i, writefds))) {
 			SOCKET sock = g_socketManager.GetHostSocketFromInetSocket(i);
+			if (sock == 0)
+				continue; // Assume this is a VSOCK /*sock = (!g_socketManager.GetDCCP()? 0 : g_socketManager.GetDCCP()->sock);*/
 			_dbg_assert_(sock != 0);
 			hostSockets[i] = sock;
 			if (sock > maxHostSocket)
@@ -289,6 +294,8 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		}
 		if (exceptfds && (NetInetFD_ISSET(i, exceptfds))) {
 			SOCKET sock = g_socketManager.GetHostSocketFromInetSocket(i);
+			if (sock == 0)
+				continue; // Assume this is a VSOCK /*sock = (!g_socketManager.GetDCCP()? 0 : g_socketManager.GetDCCP()->sock);*/
 			_dbg_assert_(sock != 0);
 			hostSockets[i] = sock;
 			if (sock > maxHostSocket)

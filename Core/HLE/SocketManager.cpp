@@ -220,3 +220,13 @@ int InetSocket::recvfrom(_Out_writes_bytes_to_(len, return) __out_data_source(NE
 		return ::recvfrom(sock, buf, len, flags, from, fromlen);
 	}
 }
+
+int InetSocket::select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout) {
+	switch (type) {
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		_dbg_assert_msg_(false, "select not implemented for this socket type");
+		return 0;
+	default:
+		return ::select(sock, readfds, writefds, exceptfds, timeout);
+	}
+}
