@@ -1248,6 +1248,7 @@ InetSocket* signaling_handler::create_socket(u16 port, int domain, int type, int
 		}
 		return inetSocket;
 	}
+	return inetSocket; // Socket already exists
 }
 // This function assumes addr and port are in network order
 bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, sockaddr_in dest) const {
