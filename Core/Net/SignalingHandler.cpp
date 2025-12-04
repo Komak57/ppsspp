@@ -1252,7 +1252,7 @@ bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, sockaddr_i
 		ERROR_LOG(Log::sceNet, "Socket not found");
 		return false;
 	}
-	int ret = sendto(inetSocket->sock, reinterpret_cast<const char*>(data.data()), data.size(), 0, reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+	int ret = inetSocket->sendto(reinterpret_cast<const char*>(data.data()), data.size(), 0, reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
 	if (ret < 0)
 	{
 		int errorCode = 0;
