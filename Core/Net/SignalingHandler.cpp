@@ -335,11 +335,21 @@ bool signaling_handler::create_connection() {
 }
 
 bool signaling_handler::destroy_connection() {
+	{
+		// Close our master socket
+		auto inetSocket = g_socketManager.GetDCCP();
+		if (inetSocket != nullptr) {
+			g_socketManager.Close(inetSocket);
+			g_PortManager.Remove("UDP", SCE_SIGN_PORT);
+		}
+	}
+	{
+		// Close our virtual socket
 	auto inetSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
-	if (inetSocket == nullptr)
-		return true;
+		if (inetSocket != nullptr) {
 	g_socketManager.Close(inetSocket);
-	g_PortManager.Remove("UDP", SCE_INTERNAL_PORT);
+		}
+	}
 	return true;
 }
 
