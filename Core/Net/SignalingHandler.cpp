@@ -333,21 +333,25 @@ bool signaling_handler::create_connection() {
 }
 
 bool signaling_handler::destroy_connection() {
-	{
-		// Close our master socket
-		auto inetSocket = g_socketManager.GetDCCP();
-		if (inetSocket != nullptr) {
-			g_socketManager.Close(inetSocket);
-			g_PortManager.Remove("UDP", SCE_SIGN_PORT);
-		}
-	}
-	{
-		// Close our virtual socket
-		auto inetSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
-		if (inetSocket != nullptr) {
-			g_socketManager.Close(inetSocket);
-		}
-	}
+	//{
+	//	// Close our master socket
+	//	auto inetSocket = g_socketManager.GetDCCP();
+	//	if (inetSocket != nullptr) {
+	//		inetSocket->shutdown(SHUT_RDWR);
+	//		inetSocket->state = SocketState::Unused;
+	//		g_socketManager.Close(inetSocket);
+	//		g_PortManager.Remove("UDP", SCE_SIGN_PORT);
+	//	}
+	//}
+	//{
+	//	// Close our virtual socket
+	//	auto inetSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
+	//	if (inetSocket != nullptr) {
+	//		inetSocket->shutdown(SHUT_RDWR);
+	//		inetSocket->state = SocketState::Unused;
+	//		g_socketManager.Close(inetSocket);
+	//	}
+	//}
 	return true;
 }
 
