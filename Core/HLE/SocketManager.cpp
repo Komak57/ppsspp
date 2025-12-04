@@ -278,3 +278,13 @@ int InetSocket::getsockopt(int level, int optname, char* optval, int* optlen) {
 		return ::getsockopt(sock, level, optname, optval, optlen);
 	}
 }
+
+int InetSocket::bind(_In_reads_bytes_(namelen) const struct sockaddr FAR* name, _In_ int namelen) {
+	port = ntohs(((sockaddr_in*)name)->sin_port);
+	switch (type) {
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		return 0;
+	default:
+		return ::bind(sock, name, namelen);
+	}
+}

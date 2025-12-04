@@ -671,7 +671,8 @@ static int sceNetInetBind(int socket, u32 namePtr, int namelen) {
 	inetSock->port = ntohs(saddr.in.sin_port);
 
 	changeBlockingMode(inetSock->sock, 0);
-	int retval = bind(inetSock->sock, (struct sockaddr*)&saddr, len);
+	int retval = inetSock->bind((struct sockaddr*)&saddr, len);
+	//retval = bind(inetSock->sock, (struct sockaddr*)&saddr, len);
 	if (retval < 0) {
 		UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
 		changeBlockingMode(inetSock->sock, 1);
