@@ -50,6 +50,7 @@ struct InetSocket {
 	int listen(int backlog);
 	int accept(sockaddr* addr, socklen_t* addrlen);
 
+	int wait_thread = 0;
 };
 
 // Only use this for sockets whose ID are exposed to the game.

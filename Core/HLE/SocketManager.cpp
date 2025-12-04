@@ -3,6 +3,7 @@
 #include "Core/HLE/SocketManager.h"
 #include <cstring> // Required by linux
 #include <mutex>
+#include "sceKernelThread.h"
 
 SocketManager g_socketManager;
 static std::mutex g_socketMutex;  // TODO: Remove once the adhoc thread is gone
@@ -213,9 +214,9 @@ int InetSocket::recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_
 			auto dccp_sock = g_socketManager.GetDCCP();
 			if (!dccp_sock) {
 #if PPSSPP_PLATFORM(WINDOWS)
-				SetLastError(WSAEINVAL);
+				SetLastError(WSAEWOULDBLOCK);
 #else
-				errno = EINVAL;
+				errno = EWOULDBLOCK;
 #endif
 				return -1;
 			}
@@ -255,8 +256,24 @@ int InetSocket::recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_
 int InetSocket::select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout) {
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
-		_dbg_assert_msg_(false, "select not implemented for this socket type");
-		return 0;
+	{
+		if (wait_thread != 0) {
+#if PPSSPP_PLATFORM(WINDOWS)
+			SetLastError(WSAEINVAL);
+#else
+			errno = EINVAL;
+#endif
+			return -1;
+		}
+
+		// Simulate a select + timeout
+		wait_thread = sceKernelGetThreadId();
+		u32 _timeout = 1000000;
+		int retval = 0;
+		__KernelWaitCurThread(WAITTYPE_ASYNCIO, wait_thread, retval, _timeout, false, "InetSocket.select()");
+		wait_thread = 0;
+		return retval;
+	}
 	default:
 		return ::select(sock, readfds, writefds, exceptfds, timeout);
 	}
@@ -329,6 +346,7 @@ int InetSocket::bind(sockaddr* name, int namelen) {
 	port = ntohs(((sockaddr_in*)name)->sin_port);
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		// vport 0 is used for P2P signaling, and would error if we actually bind it here
 		return 0;
 	default:
 		return ::bind(sock, name, namelen);
@@ -368,7 +386,7 @@ int InetSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 int InetSocket::shutdown(int how) {
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
-		_dbg_assert_msg_(false, "shutdown not implemented for this socket type");
+		// Patapon3 will shut this socket down when you disband a party
 		return 0;
 	default:
 		return ::shutdown(sock, how);
