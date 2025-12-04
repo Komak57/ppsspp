@@ -230,3 +230,31 @@ int InetSocket::select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, tim
 		return ::select(sock, readfds, writefds, exceptfds, timeout);
 	}
 }
+int InetSocket::sendto(const char* buf, int len, int flags, const sockaddr* to, int tolen) {
+	switch (type) {
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		{
+			// We only send data when we have a master socket
+			auto dccp_sock = g_socketManager.GetDCCP();
+			if (!dccp_sock) {
+				SetLastError(WSAEINVAL);
+				return -1;
+			}
+
+			// Pad the packet
+			int newlen = 2 + len;
+			char* packet = new char[newlen];
+
+			// Pack the vport
+			u16 net = htons(port);
+			memcpy(packet, &net, 2);
+			// Pack the message body
+			memcpy(packet + 2, buf, len);
+
+			return ::sendto(dccp_sock->sock, packet, newlen, flags, to, tolen);
+		}
+		return 0;
+	default:
+		return ::sendto(sock, buf, len, flags, to, tolen);
+	}
+}

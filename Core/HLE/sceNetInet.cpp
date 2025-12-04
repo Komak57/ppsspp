@@ -977,7 +977,8 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 				continue;
 
 			saddr.in.sin_addr.s_addr = peer->ip_addr;
-			retval = sendto(inetSock->sock, (char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, dstlen);
+			retval = inetSock->sendto((char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, dstlen);
+			//retval = sendto(inetSock->sock, (char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, dstlen);
 			if (retval < 0) {
 				DEBUG_LOG(Log::sceNet, "SendTo(BC): Socket error %d", socket_errno);
 			} else {
@@ -1003,7 +1004,9 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 			saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
 			DEBUG_LOG(Log::sceNet, "SendTo(BC): Address Replacement = %s", ip2str(saddr.in.sin_addr).c_str());
 		}*/
-		retval = sendto(inetSock->sock, (char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, dstlen);
+
+		retval = inetSock->sendto((char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, dstlen);
+		//retval = sendto(inetSock->sock, (char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, dstlen);
 	}
 	if (retval < 0) {
 		if (UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__) == ERROR_INET_EAGAIN) {
