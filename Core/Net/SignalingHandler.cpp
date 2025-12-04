@@ -327,7 +327,7 @@ bool signaling_handler::create_connection() {
 
 	// If not running, spin up the recv thread
 	if (!running_) {
-		recv_thread_ = std::thread(&signaling_handler::recv_loop, this, inetSocket);
+		recv_thread_ = std::thread(&signaling_handler::recv_loop, this, DccpSocket, ConnSocket);
 		//signaling_thread_ = std::thread(&signaling_handler::signaling_thread, this);
 		//npServer->start_signal_thread();
 	}
@@ -1268,7 +1268,7 @@ bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, sockaddr_i
 	return true;
 }
 
-void signaling_handler::recv_loop(InetSocket* inetSocket) {
+void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket) {
 	NOTICE_LOG(Log::sceNet, "Signaling Receiver Thread Started");
 	// single-threaded receive path; no busy wait
 	running_ = true;

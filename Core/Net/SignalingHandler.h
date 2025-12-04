@@ -253,7 +253,7 @@ public:
 	std::atomic<u8> nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
 	std::atomic<u64> latency = 0;
 private:
-	void recv_loop(InetSocket* inetSocket);
+	void recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket);
 	std::vector<signaling_message> get_sign_msgs() {
 		std::vector<signaling_message> msgs;
 		std::lock_guard lock(sign_mtx_);
