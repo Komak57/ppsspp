@@ -732,7 +732,8 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen) {
 		setSockTimeout(inetSock->sock, SO_RCVTIMEO, 5000000);
 	}
 	INFO_LOG(Log::sceNet, "Connect(%s, %i)", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-	int retval = connect(inetSock->sock, (struct sockaddr*)&saddr, dstlen);
+	int retval = inetSock->connect((struct sockaddr*)&saddr, dstlen);
+	//retval = connect(inetSock->sock, (struct sockaddr*)&saddr, dstlen);
 	int hostErrno = socket_errno;
 	if (!inetSock->nonblocking) {
 		// Change the blocking mode back to nonblocking

@@ -40,6 +40,7 @@ struct InetSocket {
 	// These aren't normally used by this socket type
 	int send(const char* buf, int len, int flags);
 	int recv(char* buf, int len, int flags);
+	int connect(sockaddr* name, int namelen);
 };
 
 // Only use this for sockets whose ID are exposed to the game.

@@ -320,6 +320,15 @@ int InetSocket::bind(_In_reads_bytes_(namelen) const struct sockaddr FAR* name, 
 	}
 }
 
+int InetSocket::connect(sockaddr* name, int namelen) {
+	switch (type) {
+	case PSP_NET_INET_SOCK_CONN_DGRAM:
+		_dbg_assert_msg_(false, "connect not implemented for this socket type");
+		return 0;
+	default:
+		return ::connect(sock, name, namelen);
+	}
+}
 
 int InetSocket::shutdown(int how) {
 	switch (type) {
