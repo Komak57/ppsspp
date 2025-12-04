@@ -1325,7 +1325,7 @@ void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket
 				FD_ZERO(&readfds);
 				FD_SET(DccpSocket->sock, &readfds);
 				// Nothing wrong here, just check again after a short recess
-				int ready = vsock->select(DccpSocket->sock, &readfds, nullptr, nullptr, &tv);
+				int ready = DccpSocket->select(&readfds, nullptr, nullptr, &tv);
 				continue;
 			}
 #endif
