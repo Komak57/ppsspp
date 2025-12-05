@@ -41,6 +41,7 @@ std::unique_ptr<net::NPAuthAgent> npAuthServer;
 bool npAuthInited = false;
 int npSigninState = NP_SIGNIN_STATUS_NONE;
 SceNpAuthMemoryStat npAuthMemStat = {};
+SceNpAuthMemoryStat npServiceMemStat = {};
 PSPTimeval npSigninTimestamp{};
 
 // TODO: These should probably be grouped in a struct, since they're used to generate an auth ticket
@@ -653,6 +654,9 @@ void np2ValidateLoopMemory() {
 
 static int sceNpServiceInit(u32 poolSize, u32 stackSize, u32 threadPrio) 
 {
+	npServiceMemStat.npMemSize = poolSize - 0x20;
+	npServiceMemStat.npMaxMemSize = 0x4050; // Dummy maximum foot print
+	npServiceMemStat.npFreeMemSize = npServiceMemStat.npMemSize;
 	// Create APctl fake-Thread
 	np2ValidateLoopMemory();
 
@@ -660,6 +664,19 @@ static int sceNpServiceInit(u32 poolSize, u32 stackSize, u32 threadPrio)
 	np2P2PThreadID = __KernelCreateThread("np2P2PThreadHack", __KernelGetCurThreadModuleId(), np2P2PThreadHackAddr, threadPrio, stackSize, PSP_THREAD_ATTR_USER, 0, true);
 
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
+}
+
+static int sceNpServiceGetMemoryStat(u32 memStatAddr) {
+	ERROR_LOG(Log::sceNet, "UNIMPL %s(%08x) at %08x", __FUNCTION__, memStatAddr, currentMIPS->pc);
+
+	auto memStat = PSPPointer<SceNpAuthMemoryStat>::Create(memStatAddr);
+	if (!memStat.IsValid())
+		return hleLogError(Log::sceNet, SCE_NP_AUTH_ERROR_INVALID_ARGUMENT, "invalid arg");
+
+	*memStat = npServiceMemStat;
+	memStat.NotifyWrite("NpAuthGetMemoryStat");
+
+	return hleLogWarning(Log::sceNet, 0);
 }
 
 // FIXME: On Patapon 3 the Arg is pointing to a String, but based on RPCS3 the Arg is an Id integer ?
@@ -764,7 +781,7 @@ const HLEFunction sceNpService[] = {
 	{0X58251346, nullptr,											"sceNpRosterGetFriendListEntryCount",   'i', "" },
 	{0X788F2B5E, nullptr,											"sceNpRosterAddFriendListEntry",        'i', "" },
 	{0XA01443AA, nullptr,											"sceNpRosterGetBlockListEntryCount",    'i', "" },
-	{0X250488F9, nullptr,											"sceNpServiceGetMemoryStat",            'i', "" },
+	{0X250488F9, &WrapI_U<sceNpServiceGetMemoryStat>,											"sceNpServiceGetMemoryStat",            'i', "" },
 	{0X4B4E4E71, nullptr,											"sceNpLookupAbortTransaction ",         'i', "" },
 	// Extracted from PSP2i Debugging - FoxLovesYou
 	{0x1da3e950, &WrapI_U<sceNpManagerSigninUpdateInitStart>,		"sceNpManagerSigninUpdateInitStart",	'i', "x"   },
