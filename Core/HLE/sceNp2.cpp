@@ -834,7 +834,7 @@ static int sceNpMatching2GetMemoryStat(u32 memStatPtr)
 	*memStat = npMatching2MemStat;
 	memStat.NotifyWrite("NpMatching2GetMemoryStat");
 
-	return SCE_NP_MATCHING2_OKAY;
+	return hleLogWarning(Log::sceNet, SCE_NP_MATCHING2_OKAY);
 }
 
 /* Register Signaling Callback
