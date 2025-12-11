@@ -314,17 +314,21 @@ namespace np
 		// Prevent warning about bogus size, we have no results, we don't need to proceed further.
 		if (search_resp->range.size == 0)
 			return;
+
+		u32 alloc = sizeof(SceNpMatching2RoomDataExternal) * search_resp->range.size;
+		search_resp->roomDataExternal = PSPPointer<SceNpMatching2RoomDataExternal>::Create(edata.Alloc(alloc));
+
 		for (flatbuffers::uoffset_t i = 0; i < search_resp->range.size; i++)
 		{
 			auto* fb_room = resp->rooms()->Get(i);
+			auto cur_room = search_resp->roomDataExternal + i;
 			//cur_room = edata.allocate<SceNpMatching2RoomDataExternal>(sizeof(SceNpMatching2RoomDataExternal), (i > 0) ? prev_room->next : search_resp->roomDataExternal);
-			u32 alloc = sizeof(SceNpMatching2RoomDataExternal);
-			PSPPointer<SceNpMatching2RoomDataExternal> cur_room = PSPPointer<SceNpMatching2RoomDataExternal>::Create(edata.Alloc(alloc));
-			if (i > 0)
+
+			if (i > 0) {
+				auto prev_room = search_resp->roomDataExternal + (i - 1);
 				prev_room->next = cur_room;
-			search_resp->roomDataExternal = cur_room;
+			}
 			RoomDataExternal_to_SceNpMatching2RoomDataExternal(edata, fb_room, cur_room, true, true);
-			prev_room = cur_room;
 		}
 	}
 
