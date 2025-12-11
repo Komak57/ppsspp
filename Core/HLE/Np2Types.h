@@ -1010,13 +1010,8 @@ struct SceNpMatching2RoomDataExternal
 	u16 privateSlotNum;
 	SceNpMatching2LobbyId lobbyId;
 	SceNpMatching2RoomId roomId;
-	// PSP uses PS3 < 3.3.0 SDK for this
-	u32 maxSlot;
-	u32 curMemberNum;
-	//u16 openPublicSlotNum;
-	//u16 maxSlot;
-	//u16 openPrivateSlotNum;
-	//u16 curMemberNum;
+	u32 maxSlot; // PS3 contains (u16) openPublicSlotNum (u16) maxSlot
+	u32 curMemberNum; // PS3 contains (u16) openPrivateSlotNum (u16) curMemeberNum
 	SceNpMatching2RoomPasswordSlotMask passwordSlotMask;
 	PSPPointer<SceNpUserInfo2> owner;
 	PSPPointer<SceNpMatching2RoomGroup> roomGroup;
@@ -1265,13 +1260,14 @@ struct PS3NpMatching2CreateJoinRoomRequest
 	u8 padding3[4];
 };
 // Create-and-join room request parameters
+// PSP2i has a memset defining this as 0x70
 struct SceNpMatching2CreateJoinRoomRequest
 {
 	SceNpMatching2WorldId worldId;
 	u8 padding1[4];
 	SceNpMatching2LobbyId lobbyId;
 	u32 maxSlot;
-	u32 flagAttr;
+	SceNpMatching2FlagAttr flagAttr;
 	PSPPointer<SceNpMatching2BinAttr> roomBinAttrInternal;
 	u32 roomBinAttrInternalNum;
 	PSPPointer<SceNpMatching2IntAttr> roomSearchableIntAttrExternal;
@@ -1283,7 +1279,7 @@ struct SceNpMatching2CreateJoinRoomRequest
 	PSPPointer<SceNpMatching2SessionPassword> roomPassword;
 	PSPPointer<SceNpMatching2RoomGroupConfig> groupConfig;
 	u32 groupConfigNum;
-	PSPPointer<SceNpMatching2RoomPasswordSlotMask> passwordSlotMask;
+	PSPPointer<SceNpMatching2RoomPasswordSlotMask> passwordSlotMask; 
 	PSPPointer<SceNpMatching2GroupLabel> joinRoomGroupLabel;
 	PSPPointer<SceNpId> allowedUser;
 	u32 allowedUserNum;
@@ -1350,6 +1346,7 @@ struct SceNpMatching2KickoutRoomMemberRequest
 };
 
 // Room search parameters
+// Fat Princess defines this as 0x38 Bytes
 struct SceNpMatching2SearchRoomRequest
 {
 	s32 option;
