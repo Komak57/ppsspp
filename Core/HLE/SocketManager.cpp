@@ -228,10 +228,11 @@ int InetSocket::recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_
 				return (ret < 0 ? ret : -1); // Malformed
 
 			// vport headers are attached to all packets for filtering
-			u16 vport = ntohs(*(u16*)newbuf);
+			u16 port_header = ntohs(*(u16*)newbuf);
+			//u16 vport_header = ntohs(*(u16*)(newbuf+2));
 			int data_len = ret - 2;
 
-			if (vport != port) {
+			if (port_header != port /*|| vport_header != vport*/) {
 #if PPSSPP_PLATFORM(WINDOWS)
 				SetLastError(WSAEWOULDBLOCK);
 #else
@@ -308,9 +309,12 @@ int InetSocket::sendto(const char* buf, int len, int flags, const sockaddr* to, 
 			int newlen = 2 + len;
 			char* packet = new char[newlen];
 
+			// Pack the port
+			u16 port_header = htons(port);
+			memcpy(packet, &port_header, 2);
 			// Pack the vport
-			u16 net = htons(port);
-			memcpy(packet, &net, 2);
+			/*u16 vport_header = htons(vport);
+			memcpy(packet + 2, &port_header, 2);*/
 			// Pack the message body
 			memcpy(packet + 2, buf, len);
 
