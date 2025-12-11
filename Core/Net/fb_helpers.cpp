@@ -67,9 +67,20 @@ namespace np
 	{
 		NOTICE_LOG(Log::sceNet, "RoomMemberBinAttrInternal_to_SceNpMatching2RoomMemberBinAttrInternal()");
 		binattr_info->updateDate.tick = fb_attr->updateDate();
-		BinAttr_to_SceNpMatching2BinAttr(edata, fb_attr->data(), &binattr_info->data);
+		//BinAttr_to_SceNpMatching2BinAttr(edata, fb_attr->data(), binattr_info->data);
+		{
+			binattr_info->data.id = fb_attr->data()->id();
+			binattr_info->data.size = fb_attr->data()->data()->size();
 			NOTICE_LOG(Log::sceNet, " - ID:   %d", binattr_info->data.id);
 			NOTICE_LOG(Log::sceNet, " - Size: %d", binattr_info->data.size);
+			//auto* ptr = edata.allocate<u8>(binattr_info->size, binattr_info->ptr);
+			u32 alloc = binattr_info->data.size;
+			binattr_info->data.ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
+			for (flatbuffers::uoffset_t i = 0; i < fb_attr->data()->data()->size(); i++)
+			{
+				binattr_info->data.ptr[i] = fb_attr->data()->data()->Get(i);
+	}
+		}
 	}
 
 	void RoomBinAttrInternal_to_SceNpMatching2RoomBinAttrInternal(BlockAllocator& edata, const BinAttrInternal* fb_attr, PSPPointer<SceNpMatching2RoomBinAttrInternal> binattr_info)
@@ -77,9 +88,20 @@ namespace np
 		NOTICE_LOG(Log::sceNet, "RoomBinAttrInternal_to_SceNpMatching2RoomBinAttrInternal()");
 		binattr_info->updateDate.tick = fb_attr->updateDate();
 		binattr_info->updateMemberId = fb_attr->updateMemberId();
-		BinAttr_to_SceNpMatching2BinAttr(edata, fb_attr->data(), &binattr_info->data);
+		//BinAttr_to_SceNpMatching2BinAttr(edata, fb_attr->data(), binattr_info->data);
+		{
+			binattr_info->data.id = fb_attr->data()->id();
+			binattr_info->data.size = fb_attr->data()->data()->size();
 			NOTICE_LOG(Log::sceNet, " - ID:   %d", binattr_info->data.id);
 			NOTICE_LOG(Log::sceNet, " - Size: %d", binattr_info->data.size);
+			//auto* ptr = edata.allocate<u8>(binattr_info->size, binattr_info->ptr);
+			u32 alloc = binattr_info->data.size;
+			binattr_info->data.ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
+			for (flatbuffers::uoffset_t i = 0; i < fb_attr->data()->data()->size(); i++)
+			{
+				binattr_info->data.ptr[i] = fb_attr->data()->data()->Get(i);
+	}
+		}
 	}
 
 	void RoomGroup_to_SceNpMatching2RoomGroup(const RoomGroup* fb_group, PSPPointer<SceNpMatching2RoomGroup> sce_group)
