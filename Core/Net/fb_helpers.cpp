@@ -46,7 +46,7 @@ namespace np
 		binattr_info->ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
 		for (flatbuffers::uoffset_t i = 0; i < bin_attr->data()->size(); i++)
 		{
-			ptr[i] = bin_attr->data()->Get(i);
+			binattr_info->ptr[i] = bin_attr->data()->Get(i);
 		}
 	}
 
@@ -105,7 +105,7 @@ namespace np
 		for (flatbuffers::uoffset_t i = 0; i < fb_groups->size(); i++)
 		{
 			const auto* fb_group = fb_groups->Get(i);
-			SceNpMatching2RoomGroup* sce_group = sce_groups + i;
+			auto sce_group = sce_groups + i;
 			RoomGroup_to_SceNpMatching2RoomGroup(fb_group, sce_group);
 		}
 	}
@@ -235,9 +235,8 @@ namespace np
 			INFO_LOG(Log::sceNet, " - room->owner()");
 			//auto* ptr_owner = edata.allocate<SceNpUserInfo2>(sizeof(SceNpUserInfo2), room_info->owner);
 			u32 alloc = sizeof(SceNpUserInfo2);
-			auto ptr_owner = PSPPointer<SceNpUserInfo2>::Create(edata.Alloc(alloc));
-			room_info->owner = ptr_owner;
-			UserInfo_to_SceNpUserInfo2(edata, owner, ptr_owner, include_onlinename, include_avatarurl);
+			room_info->owner = PSPPointer<SceNpUserInfo2>::Create(edata.Alloc(alloc));
+			UserInfo_to_SceNpUserInfo2(edata, owner, room_info->owner, include_onlinename, include_avatarurl);
 		}
 
 		if (room->roomGroup() && room->roomGroup()->size() != 0)
@@ -245,9 +244,8 @@ namespace np
 			room_info->roomGroupNum = room->roomGroup()->size();
 			//auto* ptr_groups = edata.allocate<SceNpMatching2RoomGroup>(sizeof(SceNpMatching2RoomGroup) * room_info->roomGroupNum, room_info->roomGroup);
 			u32 alloc = sizeof(SceNpMatching2RoomGroup) * room_info->roomGroupNum;
-			auto ptr_groups = PSPPointer<SceNpMatching2RoomGroup>::Create(edata.Alloc(alloc));
-			room_info->roomGroup = ptr_groups;
-			RoomGroups_to_SceNpMatching2RoomGroups(room->roomGroup(), ptr_groups);
+			room_info->roomGroup = PSPPointer<SceNpMatching2RoomGroup>::Create(edata.Alloc(alloc));
+			RoomGroups_to_SceNpMatching2RoomGroups(room->roomGroup(), room_info->roomGroup);
 		}
 
 		room_info->flagAttr = room->flagAttr();
@@ -272,9 +270,8 @@ namespace np
 			room_info->roomSearchableBinAttrExternalNum = room->roomSearchableBinAttrExternal()->size();
 			//auto* ptr_bin_attr = edata.allocate<SceNpMatching2BinAttr>(sizeof(SceNpMatching2BinAttr) * room_info->roomSearchableBinAttrExternalNum, room_info->roomSearchableBinAttrExternal);
 			u32 alloc = sizeof(SceNpMatching2BinAttr) * room_info->roomSearchableBinAttrExternalNum;
-			auto ptr_bin_attr = PSPPointer<SceNpMatching2BinAttr>::Create(edata.Alloc(alloc));
-			room_info->roomSearchableBinAttrExternal = ptr_bin_attr;
-			BinAttrs_to_SceNpMatching2BinAttrs(edata, room->roomSearchableBinAttrExternal(), ptr_bin_attr);
+			room_info->roomSearchableBinAttrExternal = PSPPointer<SceNpMatching2BinAttr>::Create(edata.Alloc(alloc));
+			BinAttrs_to_SceNpMatching2BinAttrs(edata, room->roomSearchableBinAttrExternal(), room_info->roomSearchableBinAttrExternal);
 		}
 
 		if (room->roomBinAttrExternal() && room->roomBinAttrExternal()->size() != 0)
@@ -282,9 +279,8 @@ namespace np
 			room_info->roomBinAttrExternalNum = room->roomBinAttrExternal()->size();
 			//auto* ptr_bin_attr = edata.allocate<SceNpMatching2BinAttr>(sizeof(SceNpMatching2BinAttr) * room_info->roomBinAttrExternalNum, room_info->roomBinAttrExternal);
 			u32 alloc = sizeof(SceNpMatching2BinAttr) * room_info->roomBinAttrExternalNum;
-			auto ptr_bin_attr = PSPPointer<SceNpMatching2BinAttr>::Create(edata.Alloc(alloc));
-			room_info->roomBinAttrExternal = ptr_bin_attr;
-			BinAttrs_to_SceNpMatching2BinAttrs(edata, room->roomBinAttrExternal(), ptr_bin_attr);
+			room_info->roomBinAttrExternal = PSPPointer<SceNpMatching2BinAttr>::Create(edata.Alloc(alloc));
+			BinAttrs_to_SceNpMatching2BinAttrs(edata, room->roomBinAttrExternal(), room_info->roomBinAttrExternal);
 		}
 	}
 
@@ -350,9 +346,8 @@ namespace np
 			room_info->roomGroupNum = resp->roomGroup()->size();
 			//auto* ptr_groups = edata.allocate<SceNpMatching2RoomGroup>(sizeof(SceNpMatching2RoomGroup) * room_info->roomGroupNum, room_info->roomGroup);
 			u32 alloc = sizeof(SceNpMatching2RoomGroup) * room_info->roomGroupNum;
-			auto ptr_groups = PSPPointer<SceNpMatching2RoomGroup>::Create(edata.Alloc(alloc));
-			room_info->roomGroup = ptr_groups;
-			RoomGroups_to_SceNpMatching2RoomGroups(resp->roomGroup(), ptr_groups);
+			room_info->roomGroup = PSPPointer<SceNpMatching2RoomGroup>::Create(edata.Alloc(alloc));
+			RoomGroups_to_SceNpMatching2RoomGroups(resp->roomGroup(), room_info->roomGroup);
 		}
 
 		NOTICE_LOG(Log::sceNet, " - processing %d members", resp->memberList()->size());
@@ -458,9 +453,8 @@ namespace np
 				// Otherwise we allocate for it
 				//auto* ptr_group = edata.allocate<SceNpMatching2RoomGroup>(sizeof(SceNpMatching2RoomGroup), sce_member_data->roomGroup);
 				u32 alloc = sizeof(SceNpMatching2RoomGroup);
-				auto ptr_group = PSPPointer<SceNpMatching2RoomGroup>::Create(edata.Alloc(alloc));
-				sce_member_data->roomGroup = ptr_group;
-				RoomGroup_to_SceNpMatching2RoomGroup(fb_roomgroup, ptr_group);
+				sce_member_data->roomGroup = PSPPointer<SceNpMatching2RoomGroup>::Create(edata.Alloc(alloc));
+				RoomGroup_to_SceNpMatching2RoomGroup(fb_roomgroup, sce_member_data->roomGroup);
 			}
 		}
 
@@ -473,10 +467,10 @@ namespace np
 			sce_member_data->roomMemberBinAttrInternalNum = member_data->roomMemberBinAttrInternal()->size();
 			//auto* sce_binattrs = edata.allocate<SceNpMatching2RoomMemberBinAttrInternal>(sizeof(SceNpMatching2RoomMemberBinAttrInternal) * sce_member_data->roomMemberBinAttrInternalNum, sce_member_data->roomMemberBinAttrInternal);
 			u32 alloc = sizeof(SceNpMatching2RoomMemberBinAttrInternal) * sce_member_data->roomMemberBinAttrInternalNum;
-			auto sce_binattrs = PSPPointer<SceNpMatching2RoomMemberBinAttrInternal>::Create(edata.Alloc(alloc));
-			sce_member_data->roomMemberBinAttrInternal = sce_binattrs;
+			sce_member_data->roomMemberBinAttrInternal = PSPPointer<SceNpMatching2RoomMemberBinAttrInternal>::Create(edata.Alloc(alloc));
 			for (u32 b_index = 0; b_index < sce_member_data->roomMemberBinAttrInternalNum; b_index++)
 			{
+				auto binAttr = sce_member_data->roomMemberBinAttrInternal + b_index;
 				const auto fb_battr = member_data->roomMemberBinAttrInternal()->Get(b_index);
 				ScePspDateTime updateDate;
 				{
@@ -517,15 +511,16 @@ namespace np
 					updateDate.year = out_y;
 				}
 				INFO_LOG(Log::sceNet, " - entry #%d[%d] - update: %d/%d/%d, size: %d", b_index, fb_battr->data()->id(), updateDate.day, updateDate.month, updateDate.year, fb_battr->data()->data()->size());
-				sce_binattrs[b_index].updateDate.tick = fb_battr->updateDate();
+				binAttr->updateDate.tick = fb_battr->updateDate();
 
-				sce_binattrs[b_index].data.id = fb_battr->data()->id();
-				sce_binattrs[b_index].data.size = fb_battr->data()->data()->size();
+				binAttr->data.id = fb_battr->data()->id();
+				binAttr->data.size = fb_battr->data()->data()->size();
 				//auto* sce_binattr_data = edata.allocate<u8>(sce_binattrs[b_index].data.size, sce_binattrs[b_index].data.ptr);
-				if (sce_binattrs[b_index].data.size > 0) {
+				if (binAttr->data.size > 0) {
 					u32 alloc = binAttr->data.size;
 					auto sce_binattr_data = PSPPointer<u8>::Create(edata.Alloc(alloc));
-					for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < sce_binattrs[b_index].data.size; tmp_index++)
+					binAttr->data.ptr = sce_binattr_data;
+					for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < binAttr->data.size; tmp_index++)
 					{
 						sce_binattr_data[tmp_index] = fb_battr->data()->data()->Get(tmp_index);
 					}
