@@ -139,7 +139,7 @@ u32 BlockAllocator::AllocAligned(u32 &size, u32 sizeGrain, u32 grain, bool fromT
 	ERROR_LOG(Log::sceKernel, "Block Allocator (%08x-%08x) failed to allocate %i (%08x) bytes of contiguous memory", rangeStart_, rangeStart_ + rangeSize_, size, size);
 	return -1;
 }
-
+// WARNING! May resize size
 u32 BlockAllocator::Alloc(u32 &size, bool fromTop, const char *tag)
 {
 	// We want to make sure it's aligned in case AllocAt() was used.
