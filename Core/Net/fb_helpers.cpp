@@ -34,7 +34,7 @@ u32 RegisterIp(const flatbuffers::Vector<u8>* vec) {
 
 namespace np
 {
-	void BinAttr_to_SceNpMatching2BinAttr(BlockAllocator& edata, const BinAttr* bin_attr, SceNpMatching2BinAttr* binattr_info)
+	void BinAttr_to_SceNpMatching2BinAttr(BlockAllocator& edata, const BinAttr* bin_attr, PSPPointer<SceNpMatching2BinAttr> binattr_info)
 	{
 		NOTICE_LOG(Log::sceNet, "BinAttr_to_SceNpMatching2BinAttr()");
 		binattr_info->id = bin_attr->id();
@@ -50,7 +50,7 @@ namespace np
 		}
 	}
 
-	void BinAttrs_to_SceNpMatching2BinAttrs(BlockAllocator& edata, const flatbuffers::Vector<flatbuffers::Offset<BinAttr>>* fb_attr, SceNpMatching2BinAttr* binattr_info)
+	void BinAttrs_to_SceNpMatching2BinAttrs(BlockAllocator& edata, const flatbuffers::Vector<flatbuffers::Offset<BinAttr>>* fb_attr, PSPPointer<SceNpMatching2BinAttr> binattr_info)
 	{
 		NOTICE_LOG(Log::sceNet, "BinAttrs_to_SceNpMatching2BinAttrs()");
 		NOTICE_LOG(Log::sceNet, " - Size:                  %d", fb_attr->size());
@@ -63,7 +63,7 @@ namespace np
 		}
 	}
 
-	void RoomMemberBinAttrInternal_to_SceNpMatching2RoomMemberBinAttrInternal(BlockAllocator& edata, const RoomMemberBinAttrInternal* fb_attr, SceNpMatching2RoomMemberBinAttrInternal* binattr_info)
+	void RoomMemberBinAttrInternal_to_SceNpMatching2RoomMemberBinAttrInternal(BlockAllocator& edata, const RoomMemberBinAttrInternal* fb_attr, PSPPointer<SceNpMatching2RoomMemberBinAttrInternal> binattr_info)
 	{
 		NOTICE_LOG(Log::sceNet, "RoomMemberBinAttrInternal_to_SceNpMatching2RoomMemberBinAttrInternal()");
 		binattr_info->updateDate.tick = fb_attr->updateDate();
@@ -72,7 +72,7 @@ namespace np
 			NOTICE_LOG(Log::sceNet, " - Size: %d", binattr_info->data.size);
 	}
 
-	void RoomBinAttrInternal_to_SceNpMatching2RoomBinAttrInternal(BlockAllocator& edata, const BinAttrInternal* fb_attr, SceNpMatching2RoomBinAttrInternal* binattr_info)
+	void RoomBinAttrInternal_to_SceNpMatching2RoomBinAttrInternal(BlockAllocator& edata, const BinAttrInternal* fb_attr, PSPPointer<SceNpMatching2RoomBinAttrInternal> binattr_info)
 	{
 		NOTICE_LOG(Log::sceNet, "RoomBinAttrInternal_to_SceNpMatching2RoomBinAttrInternal()");
 		binattr_info->updateDate.tick = fb_attr->updateDate();
@@ -82,7 +82,7 @@ namespace np
 			NOTICE_LOG(Log::sceNet, " - Size: %d", binattr_info->data.size);
 	}
 
-	void RoomGroup_to_SceNpMatching2RoomGroup(const RoomGroup* fb_group, SceNpMatching2RoomGroup* sce_group)
+	void RoomGroup_to_SceNpMatching2RoomGroup(const RoomGroup* fb_group, PSPPointer<SceNpMatching2RoomGroup> sce_group)
 	{
 		NOTICE_LOG(Log::sceNet, "RoomGroup_to_SceNpMatching2RoomGroup(group: %d)", sce_group->groupId);
 		sce_group->groupId = fb_group->groupId();
@@ -99,7 +99,7 @@ namespace np
 		sce_group->curGroupMemberNum = fb_group->curGroupMemberNum();
 	}
 
-	void RoomGroups_to_SceNpMatching2RoomGroups(const flatbuffers::Vector<flatbuffers::Offset<RoomGroup>>* fb_groups, SceNpMatching2RoomGroup* sce_groups)
+	void RoomGroups_to_SceNpMatching2RoomGroups(const flatbuffers::Vector<flatbuffers::Offset<RoomGroup>>* fb_groups, PSPPointer<SceNpMatching2RoomGroup> sce_groups)
 	{
 		NOTICE_LOG(Log::sceNet, "RoomGroups_to_SceNpMatching2RoomGroups(groups: %d)", fb_groups->size());
 		for (flatbuffers::uoffset_t i = 0; i < fb_groups->size(); i++)
@@ -136,7 +136,7 @@ namespace np
 	}
 
 	// This can sometimes recycle memory, and the NpId may contain garbage. Clean it thoroughly before writing data
-	void UserInfo_to_SceNpUserInfo2(BlockAllocator& edata, const UserInfo* user, SceNpUserInfo2* user_info, bool include_onlinename, bool include_avatarurl)
+	void UserInfo_to_SceNpUserInfo2(BlockAllocator& edata, const UserInfo* user, PSPPointer<SceNpUserInfo2> owner, bool include_onlinename, bool include_avatarurl)
 	{
 		NOTICE_LOG(Log::sceNet, "UserInfo_to_SceNpUserInfo2()");
 		if (user->npId()) {
@@ -162,6 +162,32 @@ namespace np
 			user_info->avatarUrl = ptr;
 			std::memset(ptr->data, 0, 127);
 			std::memcpy(ptr->data, user->avatarUrl()->c_str(), std::min<std::size_t>(127, user->avatarUrl()->size()));
+		}
+	}
+	void UserInfo_to_SceNpUserInfo2(BlockAllocator& edata, const UserInfo* user, PSPPointer<SceNpMatching2RoomMemberDataInternal> sce_member_data, bool include_onlinename, bool include_avatarurl)
+	{
+		NOTICE_LOG(Log::sceNet, "UserInfo_to_SceNpUserInfo2()");
+		if (user->npId()) {
+			NOTICE_LOG(Log::sceNet, " - NPID: %s", user->npId()->c_str());
+			std::memset(sce_member_data->userInfo.npId.handle.data, 0, 16);
+			std::memcpy(sce_member_data->userInfo.npId.handle.data, user->npId()->c_str(), std::min<std::size_t>(16, user->npId()->size()));
+		}
+
+		if (include_onlinename && user->onlineName())
+		{
+			NOTICE_LOG(Log::sceNet, " - OnlineName: %s", user->onlineName()->c_str());
+			u32 alloc = sizeof(SceNpOnlineName);
+			sce_member_data->userInfo.onlineName = PSPPointer<SceNpOnlineName>::Create(edata.Alloc(alloc));
+			std::memset(sce_member_data->userInfo.onlineName->data, 0, 48);
+			std::memcpy(sce_member_data->userInfo.onlineName->data, user->onlineName()->c_str(), std::min<std::size_t>(48, user->onlineName()->size()));
+		}
+		if (include_avatarurl && user->avatarUrl())
+		{
+			NOTICE_LOG(Log::sceNet, " - Avatar: %s", user->avatarUrl()->c_str());
+			u32 alloc = sizeof(SceNpAvatarUrl);
+			sce_member_data->userInfo.avatarUrl = PSPPointer<SceNpAvatarUrl>::Create(edata.Alloc(alloc));
+			std::memset(sce_member_data->userInfo.avatarUrl->data, 0, 127);
+			std::memcpy(sce_member_data->userInfo.avatarUrl->data, user->avatarUrl()->c_str(), std::min<std::size_t>(127, user->avatarUrl()->size()));
 		}
 	}
 
@@ -262,7 +288,7 @@ namespace np
 		}
 	}
 
-	void SearchRoomResponse_to_SceNpMatching2SearchRoomResponse(BlockAllocator& edata, const SearchRoomResponse* resp, SceNpMatching2SearchRoomResponse* search_resp)
+	void SearchRoomResponse_to_SceNpMatching2SearchRoomResponse(BlockAllocator& edata, const SearchRoomResponse* resp, PSPPointer<SceNpMatching2SearchRoomResponse> search_resp)
 	{
 		NOTICE_LOG(Log::sceNet, "SearchRoomResponse_to_SceNpMatching2SearchRoomResponse()");
 		search_resp->range.size = resp->rooms() ? resp->rooms()->size() : 0;
@@ -307,7 +333,7 @@ namespace np
 		}
 	}
 
-	u16 RoomDataInternal_to_SceNpMatching2RoomDataInternal(BlockAllocator& edata, const RoomDataInternal* resp, SceNpMatching2RoomDataInternal* room_info, const SceNpId* npid, bool include_onlinename, bool include_avatarurl)
+	u16 RoomDataInternal_to_SceNpMatching2RoomDataInternal(BlockAllocator& edata, const RoomDataInternal* resp, PSPPointer<SceNpMatching2RoomDataInternal> room_info, const SceNpId* npid, bool include_onlinename, bool include_avatarurl)
 	{
 		NOTICE_LOG(Log::sceNet, "RoomDataInternal_to_SceNpMatching2RoomDataInternal(server: %d, world: %d, lobby: %d, room: %d)", resp->serverId(), resp->worldId(), resp->lobbyId(), resp->roomId());
 		u16 member_id = 0;
@@ -410,7 +436,7 @@ namespace np
 		return member_id;
 	}
 
-	void RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(BlockAllocator& edata, const RoomMemberDataInternal* member_data, const SceNpMatching2RoomDataInternal* room_info, SceNpMatching2RoomMemberDataInternal* sce_member_data, bool include_onlinename, bool include_avatarurl)
+	void RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(BlockAllocator& edata, const RoomMemberDataInternal* member_data, const PSPPointer<SceNpMatching2RoomDataInternal> room_info, PSPPointer<SceNpMatching2RoomMemberDataInternal> sce_member_data, bool include_onlinename, bool include_avatarurl)
 	{
 		NOTICE_LOG(Log::sceNet, "RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(joinDate: %d, memberId: %d, teamId: %d)", member_data->joinDate(), member_data->memberId(), member_data->teamId());
 		UserInfo_to_SceNpUserInfo2(edata, member_data->userInfo(), &sce_member_data->userInfo, include_onlinename, include_avatarurl);
