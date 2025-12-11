@@ -386,6 +386,19 @@ void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
 void signaling_handler::stop(const char* reason) {
 	if (!running_) return;
 
+	// Tell everyone goodbye
+	std::scoped_lock lk(mtx_);
+	for (auto& [conn_id, si] : sig_peers)
+	{
+		std::shared_ptr<signaling_info> si = sig_peers.at(conn_id);
+		retire_all_packets(si);
+
+		auto& sent_packet = sig_packet;
+		sent_packet.command = SignalingCommand::Finished;
+		INFO_LOG(Log::sceNet, "FINISHED -> P2P");
+		send_signaling_packet(sent_packet, si->addr, si->port);
+	}
+
 	running_ = false;
 	if (recv_thread_.joinable())
 		recv_thread_.join();
@@ -398,7 +411,6 @@ void signaling_handler::stop(const char* reason) {
 
 	destroy_connection();
 	// optional: clear contexts after all callbacks are done
-	std::scoped_lock lk(mtx_);
 	contexts_.clear();
 }
 
