@@ -1303,35 +1303,22 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomDataInternal");
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
 		}
-		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
+		respData->roomDataInternal = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
 		SceNpId* npId = NpGetNpId();
-		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomData, room_info, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
+		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomData, respData->roomDataInternal, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
 
-		room_info->worldId = room_info->worldId;
 		// Cache Rooms
 		//rooms.push_back(roomData);
-		npServer->cache.AddRoom(*room_info);
-		npServer->cache.SavePassword(room_info->roomId);
-
-		SceNpMatching2CreateJoinRoomResponse respData{};
-		respData.roomDataInternal = room_info;
-
-		u32 respSize = sizeof(respData);
-		u32 respPtr = np_memory.Alloc(respSize);
-
-		if (!Memory::IsValidAddress(respPtr)) {
-			ERROR_LOG(Log::sceNet, "Unable to allocate memory for RoomResponse");
-			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
-		}
-		Memory::Write_Struct(respData, respPtr, "SceNpMatching2CreateJoinRoomResponse", 37);
+		npServer->cache.AddRoom(*respData->roomDataInternal);
+		npServer->cache.SavePassword(respData->roomDataInternal->roomId);
 
 		if (np2P2PThreadID)
 			__KernelStartThread(np2P2PThreadID, 0, 0);
 		// RPCS3 triggers this in sceNpSignalingActivateConnection
-		g_signaling.init_sig(*npId, room_info->roomId, room_info->memberList.me->memberId);
-		g_signaling.init_sig(*npId);
+		//g_signaling.init_sig(*npId, respData->roomDataInternal->roomId, respData->roomDataInternal->memberList.me->memberId);
+		//g_signaling.init_sig(*npId);
 
-		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respPtr);
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respData.ptr);
 	}
 	//async
 	int RPCNAgent::JoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) {
