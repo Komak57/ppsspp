@@ -901,8 +901,8 @@ namespace net {
 			addr = g_signaling.local_addr_sig.load();
 
 		u16 port = sigAddr->port();
-		if (port == SCE_SIGN_PORT)
-			port = SCE_INTERNAL_PORT;
+		/*if (port == SCE_SIGN_PORT)
+			port = SCE_INTERNAL_PORT;*/
 
 		g_signaling.connect(conn_id, addr, port);
 		return SCE_NP_MATCHING2_OKAY;
