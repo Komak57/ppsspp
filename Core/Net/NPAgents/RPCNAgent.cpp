@@ -1331,7 +1331,7 @@ namespace net {
 		if (req->joinRoomGroupLabel.IsValid())
 			final_grouplabel = builder.CreateVector(req->joinRoomGroupLabel->data, 8);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_memberbinattrinternal_vec;
-		if (req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal)
+		if (req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal.IsValid())
 		{
 			std::vector<flatbuffers::Offset<BinAttr>> davec;
 			for (u32 i = 0; i < req->roomMemberBinAttrInternalNum; i++)
@@ -1633,7 +1633,7 @@ namespace net {
 			dst.push_back(req->dst.unicastTarget);
 			break;
 		case SCE_NP_MATCHING2_CASTTYPE_MULTICAST:
-			for (u32 i = 0; i < req->dst.multicastTarget.memberIdNum && req->dst.multicastTarget.memberId; i++)
+			for (u32 i = 0; i < req->dst.multicastTarget.memberIdNum && req->dst.multicastTarget.memberId.IsValid(); i++)
 			{
 				dst.push_back(req->dst.multicastTarget.memberId[i]);
 			}
@@ -1775,7 +1775,7 @@ namespace net {
 	int RPCNAgent::SetRoomDataExternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntAttr>>> final_searchintattrexternal_vec;
-		if (req->roomSearchableIntAttrExternalNum && req->roomSearchableIntAttrExternal)
+		if (req->roomSearchableIntAttrExternalNum && req->roomSearchableIntAttrExternal.IsValid())
 		{
 			std::vector<flatbuffers::Offset<IntAttr>> davec;
 			for (u32 i = 0; i < req->roomSearchableIntAttrExternalNum; i++)
@@ -1809,7 +1809,7 @@ namespace net {
 			}
 		};
 
-		if (req->roomSearchableBinAttrExternalNum && req->roomSearchableBinAttrExternal)
+		if (req->roomSearchableBinAttrExternalNum && req->roomSearchableBinAttrExternal.IsValid())
 		{
 			for (u32 i = 0; i < req->roomSearchableBinAttrExternalNum; i++)
 			{
@@ -1818,7 +1818,7 @@ namespace net {
 			}
 		}
 
-		if (req->roomBinAttrExternalNum && req->roomBinAttrExternal)
+		if (req->roomBinAttrExternalNum && req->roomBinAttrExternal.IsValid())
 		{
 			for (u32 i = 0; i < req->roomBinAttrExternalNum; i++)
 			{
@@ -1886,7 +1886,7 @@ namespace net {
 	int RPCNAgent::SetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomMemberDataInternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_binattrinternal_vec;
-		if (req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal)
+		if (req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal.IsValid())
 		{
 			std::vector<flatbuffers::Offset<BinAttr>> davec;
 			for (u32 i = 0; i < req->roomMemberBinAttrInternalNum; i++)
@@ -1936,7 +1936,7 @@ namespace net {
 	int RPCNAgent::GetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomMemberDataInternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<u16>> final_attrid_vec;
-		if (req->attrIdNum && req->attrId)
+		if (req->attrIdNum && req->attrId.IsValid())
 		{
 			std::vector<u16> attrid_vec;
 			for (u32 i = 0; i < req->attrIdNum; i++)
@@ -1986,7 +1986,7 @@ namespace net {
 	int RPCNAgent::SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_memberbinattr_vec;
-		if (req->userBinAttrNum && req->userBinAttr)
+		if (req->userBinAttrNum && req->userBinAttr.IsValid())
 		{
 			std::vector<flatbuffers::Offset<BinAttr>> davec;
 			for (u32 i = 0; i < req->userBinAttrNum; i++)
@@ -2046,12 +2046,12 @@ namespace net {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
 		std::vector<uint64_t> roomIds;
-		for (u32 i = 0; i < req->roomIdNum && req->roomId; i++)
+		for (u32 i = 0; i < req->roomIdNum && req->roomId.IsValid(); i++)
 		{
 			roomIds.push_back(req->roomId[i]);
 		}
 		std::vector<u16> attrIds;
-		for (u32 i = 0; i < req->attrIdNum && req->attrId; i++)
+		for (u32 i = 0; i < req->attrIdNum && req->attrId.IsValid(); i++)
 		{
 			attrIds.push_back(req->attrId[i]);
 		}
