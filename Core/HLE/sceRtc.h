@@ -29,6 +29,7 @@ struct PSPTimeval {
 	s32_le tv_usec;
 };
 
+#define TICKS_PER_MINUTE 1000000000ULL
 #define TICKS_PER_SECOND 1000000ULL
 #define TICKS_PER_MILLI 1000ULL
 #define TICKS_PER_MICRO 1ULL

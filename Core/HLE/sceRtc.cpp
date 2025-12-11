@@ -929,9 +929,13 @@ static int sceRtcFormatRFC3339LocalTime(u32 outPtr, u32 srcTickPtr)
 }
 
 s64 lastNetworkTimeUs = 0;
-// Returning anything other than 0 is usually flagged as an error
-// This function should return a value similar to GetTicks()
-// A Network Tick > 72000 can trigger a PSN Update request
+
+/* Produces the time in microseconds
+ * @param timeDiffPtr PSPTimeval containing the current time in microseconds with respect to rtcMagicOffset
+ * @return 0; Returning anything other than 0 is usually flagged as an error
+ * @note A Network Tick > 72000 can trigger a PSN Update request
+ * @note Uses CoreTiming to reduce network requests, and supports speed controls
+ */
 static int sceRtcGetCurrentNetworkTick(u32 timeDiffPtr)
 {
 	DEBUG_LOG(Log::sceRtc, "UNTESTED %s(%08x) at %08x", __FUNCTION__, timeDiffPtr, currentMIPS->pc);
@@ -939,27 +943,25 @@ static int sceRtcGetCurrentNetworkTick(u32 timeDiffPtr)
 
 	if (lastNetworkTimeUs == 0) {
 		CoreTiming::InitializeNetworkTime();
-		lastNetworkTimeUs = CoreTiming::GetNetworkTimeUs() - 1;
+		lastNetworkTimeUs = CoreTiming::GetNetworkTimeUs() - rtcMagicOffset;
 	}
-	s64 currentNetworkTimeUs = CoreTiming::GetNetworkTimeUs();
+	s64 currentNetworkTimeUs = CoreTiming::GetNetworkTimeUs() - rtcMagicOffset;
+	lastNetworkTimeUs = currentNetworkTimeUs;
+
+	time->tv_sec = (s32)(currentNetworkTimeUs & 0xFFFFFFFF);
+	time->tv_usec = (s32)(currentNetworkTimeUs >> 32);
 
 	s64 deltaTimeUs = currentNetworkTimeUs - lastNetworkTimeUs;
 	// Update cached time
 	if (deltaTimeUs < 0) {
-		time->tv_sec = 0;
-		time->tv_usec = 0;
-		lastNetworkTimeUs = currentNetworkTimeUs;
 		return hleLogWarning(Log::sceRtc, 0, "Network Time Rollback Detected: %ds / %dus", time->tv_sec, time->tv_usec);
 	}
 
-	time->tv_sec = usToTicks(deltaTimeUs) / TICKS_PER_SECOND;
-	time->tv_usec = usToTicks(deltaTimeUs) % TICKS_PER_SECOND;
 	// Some error occured
 	//_dbg_assert_msg_(deltaTimeUs < 72000, "Network Ticks exceed threshold: %llu", deltaTimeUs);
-
-	lastNetworkTimeUs = currentNetworkTimeUs;
 	if (deltaTimeUs > 72000)
 		return hleLogWarning(Log::sceRtc, 0, "Ticks: %ds / %dus", time->tv_sec, time->tv_usec);
+
 	return 0;
 }
 
