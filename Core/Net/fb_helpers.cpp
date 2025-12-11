@@ -39,6 +39,8 @@ namespace np
 		NOTICE_LOG(Log::sceNet, "BinAttr_to_SceNpMatching2BinAttr()");
 		binattr_info->id = bin_attr->id();
 		binattr_info->size = bin_attr->data()->size();
+		NOTICE_LOG(Log::sceNet, " - ID:                    %d", binattr_info->id);
+		NOTICE_LOG(Log::sceNet, " - Size:                  %d", binattr_info->size);
 		//auto* ptr = edata.allocate<u8>(binattr_info->size, binattr_info->ptr);
 		auto ptr = PSPPointer<u8>::Create(edata.Alloc(binattr_info->size));
 		binattr_info->ptr = ptr;
@@ -51,6 +53,7 @@ namespace np
 	void BinAttrs_to_SceNpMatching2BinAttrs(BlockAllocator& edata, const flatbuffers::Vector<flatbuffers::Offset<BinAttr>>* fb_attr, SceNpMatching2BinAttr* binattr_info)
 	{
 		NOTICE_LOG(Log::sceNet, "BinAttrs_to_SceNpMatching2BinAttrs()");
+		NOTICE_LOG(Log::sceNet, " - Size:                  %d", fb_attr->size());
 		for (flatbuffers::uoffset_t i = 0; i < fb_attr->size(); i++)
 		{
 			auto cur_fb_attr = fb_attr->Get(i);
@@ -65,6 +68,8 @@ namespace np
 		NOTICE_LOG(Log::sceNet, "RoomMemberBinAttrInternal_to_SceNpMatching2RoomMemberBinAttrInternal()");
 		binattr_info->updateDate.tick = fb_attr->updateDate();
 		BinAttr_to_SceNpMatching2BinAttr(edata, fb_attr->data(), &binattr_info->data);
+			NOTICE_LOG(Log::sceNet, " - ID:   %d", binattr_info->data.id);
+			NOTICE_LOG(Log::sceNet, " - Size: %d", binattr_info->data.size);
 	}
 
 	void RoomBinAttrInternal_to_SceNpMatching2RoomBinAttrInternal(BlockAllocator& edata, const BinAttrInternal* fb_attr, SceNpMatching2RoomBinAttrInternal* binattr_info)
@@ -73,6 +78,8 @@ namespace np
 		binattr_info->updateDate.tick = fb_attr->updateDate();
 		binattr_info->updateMemberId = fb_attr->updateMemberId();
 		BinAttr_to_SceNpMatching2BinAttr(edata, fb_attr->data(), &binattr_info->data);
+			NOTICE_LOG(Log::sceNet, " - ID:   %d", binattr_info->data.id);
+			NOTICE_LOG(Log::sceNet, " - Size: %d", binattr_info->data.size);
 	}
 
 	void RoomGroup_to_SceNpMatching2RoomGroup(const RoomGroup* fb_group, SceNpMatching2RoomGroup* sce_group)
