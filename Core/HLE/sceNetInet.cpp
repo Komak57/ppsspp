@@ -672,6 +672,9 @@ static int sceNetInetBind(int socket, u32 namePtr, int namelen) {
 	// Update socket debug metadata
 	inetSock->addr = ip2str(saddr.in.sin_addr);
 	inetSock->port = ntohs(saddr.in.sin_port);
+	// Attempt to pull vport
+	if (inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM)
+		inetSock->vport = ntohs(*(u16*)&name->sa_data[8]);
 
 	changeBlockingMode(inetSock->sock, 0);
 	int retval = inetSock->bind((struct sockaddr*)&saddr, len);
