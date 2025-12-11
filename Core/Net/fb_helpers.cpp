@@ -42,8 +42,8 @@ namespace np
 		NOTICE_LOG(Log::sceNet, " - ID:                    %d", binattr_info->id);
 		NOTICE_LOG(Log::sceNet, " - Size:                  %d", binattr_info->size);
 		//auto* ptr = edata.allocate<u8>(binattr_info->size, binattr_info->ptr);
-		auto ptr = PSPPointer<u8>::Create(edata.Alloc(binattr_info->size));
-		binattr_info->ptr = ptr;
+		u32 alloc = bin_attr->data()->size();
+		binattr_info->ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
 		for (flatbuffers::uoffset_t i = 0; i < bin_attr->data()->size(); i++)
 		{
 			ptr[i] = bin_attr->data()->Get(i);
@@ -397,7 +397,8 @@ namespace np
 				ptr_bin_attr[b_index].data.size = fb_bin_attr->data()->data()->size();
 				//auto* ptr_bin_attr_data = edata.allocate<u8>(ptr_bin_attr[b_index].data.size, ptr_bin_attr[b_index].data.ptr);
 				if (ptr_bin_attr[b_index].data.size > 0) {
-					auto ptr_bin_attr_data = PSPPointer<u8>::Create(edata.Alloc(ptr_bin_attr[b_index].data.size));
+					u32 alloc = ptr_bin_attr[b_index].data.size;
+					auto ptr_bin_attr_data = PSPPointer<u8>::Create(edata.Alloc(alloc));
 					for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < ptr_bin_attr[b_index].data.size; tmp_index++)
 					{
 						ptr_bin_attr_data[tmp_index] = fb_bin_attr->data()->data()->Get(tmp_index);
@@ -496,8 +497,8 @@ namespace np
 				sce_binattrs[b_index].data.size = fb_battr->data()->data()->size();
 				//auto* sce_binattr_data = edata.allocate<u8>(sce_binattrs[b_index].data.size, sce_binattrs[b_index].data.ptr);
 				if (sce_binattrs[b_index].data.size > 0) {
-					auto sce_binattr_data = PSPPointer<u8>::Create(edata.Alloc(sce_binattrs[b_index].data.size));
-					sce_binattrs[b_index].data.ptr = sce_binattr_data;
+					u32 alloc = binAttr->data.size;
+					auto sce_binattr_data = PSPPointer<u8>::Create(edata.Alloc(alloc));
 					for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < sce_binattrs[b_index].data.size; tmp_index++)
 					{
 						sce_binattr_data[tmp_index] = fb_battr->data()->data()->Get(tmp_index);
