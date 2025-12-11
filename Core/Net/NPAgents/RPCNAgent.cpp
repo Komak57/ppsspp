@@ -1158,8 +1158,8 @@ namespace net {
 
 		flatbuffers::Offset<flatbuffers::Vector<u8>> final_roompassword;
 		if (req->passwordSlotMask.IsValid()) {
-		if (req->roomPassword.IsValid())
-			final_roompassword = builder.CreateVector(req->roomPassword->data, 8);
+			if (req->roomPassword.IsValid())
+				final_roompassword = builder.CreateVector(req->roomPassword->data, 8);
 			else {
 				auto default_pwd = new u8[SCE_NP_MATCHING2_SESSION_PASSWORD_SIZE];
 				final_roompassword = builder.CreateVector(default_pwd, 8);
@@ -1687,7 +1687,8 @@ namespace net {
 			std::vector<flatbuffers::Offset<BinAttr>> davec;
 			for (u32 i = 0; i < req->roomBinAttrInternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomBinAttrInternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomBinAttrInternal[i].ptr.ptr), req->roomBinAttrInternal[i].size));
+				auto binAttr = req->roomBinAttrInternal + i;
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
 				davec.push_back(bin);
 			}
 			final_binattrinternal_vec = builder.CreateVector(davec);
@@ -1698,11 +1699,14 @@ namespace net {
 			std::vector<flatbuffers::Offset<RoomGroupPasswordConfig>> davec;
 			for (u32 i = 0; i < req->passwordConfigNum; i++)
 			{
-				auto rg = CreateRoomGroupPasswordConfig(builder, req->passwordConfig[i].groupId, req->passwordConfig[i].withPassword);
+				auto pwConfig = req->passwordConfig + i;
+				auto rg = CreateRoomGroupPasswordConfig(builder, pwConfig->groupId, pwConfig->withPassword);
 				davec.push_back(rg);
 			}
 			final_grouppasswordconfig_vec = builder.CreateVector(davec);
 		}
+		// This should be optional, but RPCN overwrites it
+		// We'll default to 0 if there is no password, and replace if we have a slot mask
 		u64 final_passwordSlotMask = 0;
 		if (req->passwordSlotMask.IsValid())
 			final_passwordSlotMask = *req->passwordSlotMask;
@@ -1780,7 +1784,8 @@ namespace net {
 			std::vector<flatbuffers::Offset<IntAttr>> davec;
 			for (u32 i = 0; i < req->roomSearchableIntAttrExternalNum; i++)
 			{
-				auto bin = CreateIntAttr(builder, req->roomSearchableIntAttrExternal[i].id, req->roomSearchableIntAttrExternal[i].num);
+				auto intAttr = req->roomSearchableIntAttrExternal + i;
+				auto bin = CreateIntAttr(builder, intAttr->id, intAttr->num);
 				davec.push_back(bin);
 			}
 			final_searchintattrexternal_vec = builder.CreateVector(davec);
@@ -1813,8 +1818,9 @@ namespace net {
 		{
 			for (u32 i = 0; i < req->roomSearchableBinAttrExternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomSearchableBinAttrExternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomSearchableBinAttrExternal[i].ptr.ptr), req->roomSearchableBinAttrExternal[i].size));
-				put_binattr(req->roomSearchableBinAttrExternal[i].id, bin);
+				auto binAttr = req->roomSearchableBinAttrExternal + i;
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
+				put_binattr(binAttr->id, bin);
 			}
 		}
 
@@ -1822,8 +1828,9 @@ namespace net {
 		{
 			for (u32 i = 0; i < req->roomBinAttrExternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomBinAttrExternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomBinAttrExternal[i].ptr.ptr), req->roomBinAttrExternal[i].size));
-				put_binattr(req->roomBinAttrExternal[i].id, bin);
+				auto binAttr = req->roomBinAttrExternal + i;
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
+				put_binattr(binAttr->id, bin);
 			}
 		}
 
