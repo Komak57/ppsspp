@@ -971,13 +971,13 @@ int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	//if (conn_id) {
 	//	//stop_sig(conn_id.value(), false);
 	//}
-	auto connId = get_conn_id_from_npid(notif_data->roomMemberDataInternal->userInfo.npId);
+	auto conn_id = get_conn_id_from_npid(notif_data->roomMemberDataInternal->userInfo.npId);
 
 	npServer->cache.RemoveMember(room_id, notif_data->roomMemberDataInternal->memberId);
 
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
 
-	return notifyRoomEventHandler(room_id, notif_data->roomMemberDataInternal->memberId, *connId, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, notif_data.ptr);
+	return notifyRoomEventHandler(room_id, notif_data->roomMemberDataInternal->memberId, (!conn_id ? 0 : *conn_id), SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, notif_data.ptr);
 }
 
 int signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
@@ -1015,9 +1015,9 @@ int signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 
 	DisconnectUsers(room_id);
 	//disconnect_sig2_users(room_id);
-	auto connId = get_conn_id_from_npid(*NpGetNpId());
+	auto conn_id = get_conn_id_from_npid(*NpGetNpId());
 
-	return notifyRoomEventHandler(room_id, 0, *connId, SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, notif_data.ptr);
+	return notifyRoomEventHandler(room_id, 0, (!conn_id ? 0 : *conn_id), SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, notif_data.ptr);
 }
 
 int signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
@@ -1052,7 +1052,7 @@ int signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 	//np_cache.insert_room(notif_data->newRoomDataInternal.get_ptr());
 	npServer->cache.AddRoom(*notif_data->newRoomDataInternal);
 
-	auto connId = get_conn_id_from_npid(notif_data->newRoomDataInternal->memberList.owner->userInfo.npId);
+	auto conn_id = get_conn_id_from_npid(notif_data->newRoomDataInternal->memberList.owner->userInfo.npId);
 	//extra_nps::print_SceNpMatching2RoomDataInternal(notif_data->newRoomDataInternal.get_ptr());
 
 	NOTICE_LOG(Log::sceNet, "NOTI Received notification that room(%d)'s data was updated", room_id);
@@ -1066,7 +1066,7 @@ int signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 		});
 	}*/
 	// FIXME: return self member_id?
-	return notifyRoomEventHandler(room_id, notif_data->newRoomDataInternal->memberList.owner->memberId, *connId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal, notif_data.ptr);
+	return notifyRoomEventHandler(room_id, notif_data->newRoomDataInternal->memberList.owner->memberId, (!conn_id ? 0 : *conn_id), SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal, notif_data.ptr);
 }
 
 int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
@@ -1109,9 +1109,10 @@ int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 
 	NOTICE_LOG(Log::sceNet, "NOTI User %s(%d) data was updated for room (%d)", notif_data->newRoomMemberDataInternal->userInfo.npId.handle.data, memberId, room_id);
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());
-	auto connId = get_conn_id_from_npid(notif_data->newRoomMemberDataInternal->userInfo.npId);
+	auto conn_id = get_conn_id_from_npid(notif_data->newRoomMemberDataInternal->userInfo.npId);
 
 	return notifyRoomEventHandler(room_id, memberId, *connId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
+	return notifyRoomEventHandler(room_id, memberId, (!conn_id ? 0 : *conn_id), SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
 }
 
 int signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
@@ -1152,7 +1153,7 @@ int signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 
 	auto conn_id = get_conn_id_from_npid(npServer->cache.GetNpId(room_id, member_id));
 
-	return notifyRoomMessageHandler(room_id, member_id, *conn_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
+	return notifyRoomMessageHandler(room_id, member_id, (!conn_id? 0: *conn_id), SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
 }
 
 void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
