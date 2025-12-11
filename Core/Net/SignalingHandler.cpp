@@ -322,7 +322,7 @@ bool signaling_handler::create_connection() {
 		_dbg_assert_msg_(false, "Could not initialize connection.");
 		return false;
 	}
-
+	ConnSocket->vport = SCE_INTERNAL_PORT; // Bind will configure this to a random vport. We need this particular socket to communicate on vport 0
 	// If not running, spin up the recv thread
 	if (!running_) {
 		recv_thread_ = std::thread(&signaling_handler::recv_loop, this, DccpSocket, ConnSocket);
