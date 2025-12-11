@@ -163,27 +163,25 @@ namespace np
 		NOTICE_LOG(Log::sceNet, "UserInfo_to_SceNpUserInfo2()");
 		if (user->npId()) {
 			NOTICE_LOG(Log::sceNet, " - NPID: %s", user->npId()->c_str());
-			std::memset(user_info->npId.handle.data, 0, 16);
-			std::memcpy(user_info->npId.handle.data, user->npId()->c_str(), std::min<std::size_t>(16, user->npId()->size()));
+			std::memset(owner->npId.handle.data, 0, 16);
+			std::memcpy(owner->npId.handle.data, user->npId()->c_str(), std::min<std::size_t>(16, user->npId()->size()));
 		}
 
 		if (include_onlinename && user->onlineName())
 		{
 			NOTICE_LOG(Log::sceNet, " - OnlineName: %s", user->onlineName()->c_str());
 			u32 alloc = sizeof(SceNpOnlineName);
-			auto ptr = PSPPointer<SceNpOnlineName>::Create(edata.Alloc(alloc));
-			user_info->onlineName = ptr;
-			std::memset(ptr->data, 0, 48);
-			std::memcpy(ptr->data, user->onlineName()->c_str(), std::min<std::size_t>(48, user->onlineName()->size()));
+			owner->onlineName = PSPPointer<SceNpOnlineName>::Create(edata.Alloc(alloc));
+			std::memset(owner->onlineName->data, 0, 48);
+			std::memcpy(owner->onlineName->data, user->onlineName()->c_str(), std::min<std::size_t>(48, user->onlineName()->size()));
 		}
 		if (include_avatarurl && user->avatarUrl())
 		{
 			NOTICE_LOG(Log::sceNet, " - Avatar: %s", user->avatarUrl()->c_str());
 			u32 alloc = sizeof(SceNpAvatarUrl);
-			auto ptr = PSPPointer<SceNpAvatarUrl>::Create(edata.Alloc(alloc));
-			user_info->avatarUrl = ptr;
-			std::memset(ptr->data, 0, 127);
-			std::memcpy(ptr->data, user->avatarUrl()->c_str(), std::min<std::size_t>(127, user->avatarUrl()->size()));
+			owner->avatarUrl = PSPPointer<SceNpAvatarUrl>::Create(edata.Alloc(alloc));
+			std::memset(owner->avatarUrl->data, 0, 127);
+			std::memcpy(owner->avatarUrl->data, user->avatarUrl()->c_str(), std::min<std::size_t>(127, user->avatarUrl()->size()));
 		}
 	}
 	void UserInfo_to_SceNpUserInfo2(BlockAllocator& edata, const UserInfo* user, PSPPointer<SceNpMatching2RoomMemberDataInternal> sce_member_data, bool include_onlinename, bool include_avatarurl)
