@@ -79,7 +79,7 @@ namespace np
 			for (flatbuffers::uoffset_t i = 0; i < fb_attr->data()->data()->size(); i++)
 			{
 				binattr_info->data.ptr[i] = fb_attr->data()->data()->Get(i);
-	}
+			}
 		}
 	}
 
@@ -100,7 +100,7 @@ namespace np
 			for (flatbuffers::uoffset_t i = 0; i < fb_attr->data()->data()->size(); i++)
 			{
 				binattr_info->data.ptr[i] = fb_attr->data()->data()->Get(i);
-	}
+			}
 		}
 	}
 
@@ -221,6 +221,7 @@ namespace np
 		room_info->maxSlot = room->maxSlot();
 		room_info->curMemberNum = room->curMemberNum();
 		room_info->passwordSlotMask = room->passwordSlotMask();
+		//room_info->passwordSlotMask = 0xc000000000000000; // Force Password Flag
 
 		// PS3 version control for compatibility
 		//s32 sdk_ver;
@@ -385,11 +386,11 @@ namespace np
 		for (flatbuffers::uoffset_t i = 0; i < resp->memberList()->size(); i++)
 		{
 			auto fb_member												= resp->memberList()->Get(i);
-			PSPPointer<SceNpMatching2RoomMemberDataInternal> sce_member = room_info->memberList.members + i;
+			auto sce_member												= room_info->memberList.members + i;
 
 			if (i < (resp->memberList()->size() - 1))
 			{
-				sce_member->next = room_info->memberList.members + i + 1;
+				sce_member->next = room_info->memberList.members + (i + 1);
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(sce_member->next);
 			}
 
@@ -460,7 +461,7 @@ namespace np
 	void RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(BlockAllocator& edata, const RoomMemberDataInternal* member_data, const PSPPointer<SceNpMatching2RoomDataInternal> room_info, PSPPointer<SceNpMatching2RoomMemberDataInternal> sce_member_data, bool include_onlinename, bool include_avatarurl)
 	{
 		NOTICE_LOG(Log::sceNet, "RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(joinDate: %d, memberId: %d, teamId: %d)", member_data->joinDate(), member_data->memberId(), member_data->teamId());
-		UserInfo_to_SceNpUserInfo2(edata, member_data->userInfo(), &sce_member_data->userInfo, include_onlinename, include_avatarurl);
+		UserInfo_to_SceNpUserInfo2(edata, member_data->userInfo(), sce_member_data, include_onlinename, include_avatarurl);
 		sce_member_data->joinDate.tick = member_data->joinDate();
 		sce_member_data->memberId = member_data->memberId();
 		sce_member_data->teamId = member_data->teamId();
