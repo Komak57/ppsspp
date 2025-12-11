@@ -53,7 +53,8 @@ struct SceNetInetSockaddrIn {
 	uint8_t sin_family;
 	u16_le sin_port; //uint16_t
 	u32_le sin_addr; //uint32_t
-	uint8_t sin_zero[8]; // zero-filled padding?
+	u16_le sin_vport; //uint16_t
+	uint8_t sin_zero[6]; // zero-filled padding?
 };
 
 // Similar to iovec struct on 32-bit platform from BSD's uio.h/_iovec.h
