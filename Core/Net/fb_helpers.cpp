@@ -311,7 +311,9 @@ namespace np
 		search_resp->range.startIndex = resp->startIndex();
 		search_resp->range.total = resp->total();
 
-		PSPPointer<SceNpMatching2RoomDataExternal> prev_room; prev_room.ptr = 0;
+		// Prevent warning about bogus size, we have no results, we don't need to proceed further.
+		if (search_resp->range.size == 0)
+			return;
 		for (flatbuffers::uoffset_t i = 0; i < search_resp->range.size; i++)
 		{
 			auto* fb_room = resp->rooms()->Get(i);
