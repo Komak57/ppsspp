@@ -343,10 +343,26 @@ int InetSocket::getsockopt(int level, int optname, char* optval, socklen_t* optl
 }
 
 int InetSocket::bind(sockaddr* name, int namelen) {
-	port = ntohs(((sockaddr_in*)name)->sin_port);
 	switch (type) {
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
 		// vport 0 is used for P2P signaling, and would error if we actually bind it here
+		if (vport == 0) {
+			// Start vport at 30000, and be 1 higher than all other existing vports
+			vport = 30000;
+			auto sockets = g_socketManager.Sockets();
+			for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < SocketManager::VALID_INET_SOCKET_COUNT; i++) {
+				if (sockets[i].state != SocketState::Unused && sockets[i].type == type && sockets[i].vport >= vport)
+					vport = sockets[i].vport + 1;
+				if (vport > 65535) {
+#if PPSSPP_PLATFORM(WINDOWS)
+					SetLastError(WSAEADDRINUSE);
+#else
+					errno = EADDRINUSE;
+#endif
+					return -1;
+				}
+			}
+		}
 		return 0;
 	default:
 		return ::bind(sock, name, namelen);

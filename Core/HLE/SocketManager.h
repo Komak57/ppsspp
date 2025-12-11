@@ -31,7 +31,8 @@ struct InetSocket {
 	bool nonblocking;
 	// Metadata for debug use only.
 	std::string addr;
-	int port; // WARNING: vsocks rely on this, will break if changed
+	int port;
+	int vport; // WARNING: vsocks rely on this, will break if changed
 
 	int recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_t* fromlen);
 	int select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout);
