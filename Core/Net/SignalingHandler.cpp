@@ -1450,6 +1450,34 @@ bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, sockaddr_i
 	return true;
 }
 
+// Send data on the raw DCCP socket, not the CONN_DGRAM sockets
+bool signaling_handler::send_raw_ipv4(const std::vector<u8>& data, sockaddr_in dest) {
+
+	INFO_LOG(Log::sceNet, "Sending packet(%d bytes) to %s:%d", data.size(), ip2str(dest.sin_addr).c_str(), ntohs(dest.sin_port));
+
+	std::string datahex;
+	DEBUG_HEXLOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size(), 386);
+	auto inetSocket = g_socketManager.GetDCCP();
+	if (!inetSocket) {
+		ERROR_LOG(Log::sceNet, "Socket not found");
+		return false;
+	}
+	int ret = inetSocket->sendto(reinterpret_cast<const char*>(data.data()), data.size(), 0, reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+	if (ret < 0)
+	{
+		int errorCode = 0;
+#if PPSSPP_PLATFORM(WINDOWS)
+		errorCode = WSAGetLastError();
+#else
+		errorCode = errno;
+#endif
+		ERROR_LOG(Log::sceNet, "SendTo Failed: %d", errorCode);
+		return false;
+	}
+	DEBUG_LOG(Log::sceNet, "Sent %i bytes", ret);
+	return true;
+}
+
 void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket) {
 	NOTICE_LOG(Log::sceNet, "Signaling Receiver Thread Started");
 	// single-threaded receive path; no busy wait
