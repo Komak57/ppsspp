@@ -61,53 +61,11 @@ std::atomic<u16> match2_event_cnt = 1;
 
 //std::map<u16, std::unique_ptr<net::NPAgent>> servers;
 std::unique_ptr<net::NPAgent> npServer = nullptr;
-signaling_handler g_signaling;
 
-// RPCN Signaling
-int np2RPCNState = NP_SIGNIN_STATUS_NONE;
-static int np2RPCNStateEvent = -1;
-static int actionAfterRPCNMipsCall;
 // P2P Signaling
 int np2P2PState = NP_SIGNIN_STATUS_NONE;
 static int np2P2PStateEvent = -1;
 static int actionAfterP2PMipsCall;
-
-/*
-* This function is added as a placeholder for FakePSN Savestates to
-*   handle RPCN IP/Port information for the client
-*/
-static void __RPCNState(u64 userdata, int cyclesLate) {
-	SceUID threadID = userdata >> 32;
-	int uid = (int)(userdata & 0xFFFFFFFF);
-	int event = uid - 1;
-
-	s64 result = 0;
-	u32 error = 0;
-
-	SceUID waitID = __KernelGetWaitID(threadID, WAITTYPE_NET, error);
-	if (waitID == 0 || error != 0) {
-		WARN_LOG(Log::sceNet, "sceNp2 State WaitID(%i) on Thread(%i) already woken up? (error: %08x)", uid, threadID, error);
-		return;
-	}
-
-	u32 waitVal = __KernelGetWaitValue(threadID, error);
-	if (error == 0) {
-		np2RPCNState = waitVal;
-	}
-
-	__KernelResumeThreadFromWait(threadID, result);
-	WARN_LOG(Log::sceNet, "Returning (WaitID: %d, error: %08x) Result (%08x) of sceNp2 - Event: %d, State: %d", waitID, error, (int)result, event, np2RPCNState);
-}
-
-int ScheduleRPCNState(int event, int newState, int usec, const char* reason) {
-	int uid = event + 1;
-
-	u64 param = ((u64)__KernelGetCurThread()) << 32 | uid;
-	CoreTiming::ScheduleEvent(usToCycles(usec), np2RPCNStateEvent, param);
-	__KernelWaitCurThread(WAITTYPE_NET, uid, newState, 0, false, reason);
-
-	return 0;
-}
 
 /*
 * This function is added as a placeholder for FakePSN Savestates to
@@ -153,12 +111,9 @@ int ScheduleP2PState(int event, int newState, int usec, const char* reason) {
 void __Np2Init() {
 	npMatching2Inited = false;
 
-	np2RPCNState = NP_SIGNIN_STATUS_NONE;
 	np2P2PState = NP_SIGNIN_STATUS_NONE;
-	np2RPCNStateEvent = CoreTiming::RegisterEvent("__RPCNState", __RPCNState);
 	np2P2PStateEvent = CoreTiming::RegisterEvent("__P2PState", __P2PState);
 
-	np2RPCNThreadHackAddr = __CreateHLELoop(np2RPCNThreadCode, "sceNpMatching2", "__Np2SignalingGetRPCNResponses", "np2RPCNThreadHack");
 	np2P2PThreadHackAddr = __CreateHLELoop(np2P2PThreadCode, "sceNpMatching2", "__Np2SignalingGetP2PResponses", "np2P2PThreadHack");
 	//np2SignalingThreadHackAddr = __CreateHLELoop(np2SignalingThreadCode, "sceNpMatching2", "__NpMatching2GetResponses", "np2SignalingThreadHack");
 
@@ -173,36 +128,11 @@ void __Np2Shutdown() {
 	}
 
 	// Stop fake PSP Thread
-	if (np2RPCNThreadID != 0) {
-		__KernelStopThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread stopped");
-	}
 	if (np2P2PThreadID != 0) {
 		__KernelStopThread(np2P2PThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread stopped");
 	}
 }
 
-/* 
-*   Signaling is made of 3 parts. This is Part 1, which handles the STUN based public/local IP information
-*/
-void __Np2SignalingGetRPCNResponses()
-{
-	hleSkipDeadbeef();
-	int newState = SCE_NP_MATCHING2_STATE_NONE;
-	int delayus = 1000000;
-	if (npServer) {
-		newState = SCE_NP_MATCHING2_STATE_INIT;
-		delayus = 1000000;
-		if (npServer->IsConnected()) {
-			newState = SCE_NP_MATCHING2_STATE_CONNECTED;
-			delayus = npServer->HandleResponses().count();
-		}
-	}
-	//ScheduleRPCNState(1, newState, delayus, "RPCN Wait State");
-	DEBUG_LOG(Log::sceNet, "RPCN Waiting %d ms", (delayus / 1000));
-	//int r = hleDelayResult(0, "RPCN Wait State", delayus);
-	hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
-	hleNoLogVoid();
-}
 
 /*
 *   Signaling is made of 3 parts. This is Part 2, which handles the Internal P2P connections.
@@ -608,9 +538,9 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 	if (npPoolAddr == 0) {
 		return hleLogError(Log::sceNet, SCE_KERNEL_ERROR_NO_MEMORY, "unable to allocate pool");
 	}
-	if (np2RPCNThreadID > 0) {
+	/*if (np2RPCNThreadID > 0) {
 		__KernelStartThread(np2RPCNThreadID, 0, 0);
-	}
+	}*/
 	/*if (np2P2PThreadID > 0) {
 		__KernelStartThread(np2P2PThreadID, 0, 0);
 	}*/
@@ -653,10 +583,10 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 	// RPCS3 has only 1 connection perpetually active
 	//  As such, it has additional functions in sceNp that
 	//  trigger signaling to start, and P2P connect requests
-	if (g_signaling.create_connection())
+	/*if (g_signaling.create_connection())
 		g_signaling.set_self_sig_info(*NpGetNpId());
 	else
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Signaling Loop could not be started");
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Signaling Loop could not be started");*/
 	return SCE_NP_MATCHING2_OKAY;
 }
 
@@ -2555,7 +2485,6 @@ const HLEFunction sceNpMatching2[] = {
 	{0xFBF494C0, &WrapI_IUUU<sceNpMatching2GetRoomMemberDataExternalList>,	"sceNpMatching2GetRoomMemberDataExternalList",	'i', "ixxx"   },
 	{0x97529ECC, &WrapI_IUUU<sceNpMatching2KickoutRoomMember>,				"sceNpMatching2KickoutRoomMember",				'i', "ixxx"   },
 	// Fake function for PPSSPP's use.
-	{0X756E6F1C, &WrapV_V<__Np2SignalingGetRPCNResponses>,					"__Np2SignalingGetRPCNResponses",					'v', ""		  },
 	{0X756E6F28, &WrapV_V<__Np2SignalingGetP2PResponses>,					"__Np2SignalingGetP2PResponses",					'v', ""		  },
 };
 

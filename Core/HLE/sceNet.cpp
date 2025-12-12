@@ -88,8 +88,20 @@ static int actionAfterApctlMipsCall;
 static std::recursive_mutex apctlEvtMtx;
 static std::deque<ApctlArgs> apctlEvents;
 
+// UPnP / P2P Signaling
+signaling_handler g_signaling;
+
+u32 np2RPCNThreadHackAddr = 0;
+u32_le np2RPCNThreadCode[3];
+SceUID np2RPCNThreadID = 0;
+
 // Currently loaded auto-config
 static InfraDNSConfig g_infraDNSConfig;
+
+// RPCN Signaling
+int np2RPCNState = NP_SIGNIN_STATUS_NONE;
+static int np2RPCNStateEvent = -1;
+static int actionAfterRPCNMipsCall;
 
 static u32 Net_Term();
 static int NetApctl_Term();
@@ -560,6 +572,66 @@ int ScheduleApctlState(int event, int newState, int usec, const char* reason) {
 	return 0;
 }
 
+/*
+* This function is added as a placeholder for FakePSN Savestates to
+*   handle RPCN IP/Port information for the client
+*/
+static void __RPCNState(u64 userdata, int cyclesLate) {
+	SceUID threadID = userdata >> 32;
+	int uid = (int)(userdata & 0xFFFFFFFF);
+	int event = uid - 1;
+
+	s64 result = 0;
+	u32 error = 0;
+
+	SceUID waitID = __KernelGetWaitID(threadID, WAITTYPE_NET, error);
+	if (waitID == 0 || error != 0) {
+		WARN_LOG(Log::sceNet, "sceNp2 State WaitID(%i) on Thread(%i) already woken up? (error: %08x)", uid, threadID, error);
+		return;
+	}
+
+	u32 waitVal = __KernelGetWaitValue(threadID, error);
+	if (error == 0) {
+		np2RPCNState = waitVal;
+	}
+
+	__KernelResumeThreadFromWait(threadID, result);
+	WARN_LOG(Log::sceNet, "Returning (WaitID: %d, error: %08x) Result (%08x) of sceNp2 - Event: %d, State: %d", waitID, error, (int)result, event, np2RPCNState);
+}
+
+int ScheduleRPCNState(int event, int newState, int usec, const char* reason) {
+	int uid = event + 1;
+
+	u64 param = ((u64)__KernelGetCurThread()) << 32 | uid;
+	CoreTiming::ScheduleEvent(usToCycles(usec), np2RPCNStateEvent, param);
+	__KernelWaitCurThread(WAITTYPE_NET, uid, newState, 0, false, reason);
+
+	return 0;
+}
+
+/*
+*   Signaling is made of 3 parts. This is Part 1, which handles the STUN based public/local IP information
+*/
+void __Np2SignalingGetRPCNResponses()
+{
+	hleSkipDeadbeef();
+	int newState = SCE_NP_MATCHING2_STATE_NONE;
+	int delayus = 1000000;
+	if (STUN_addr) {
+		newState = SCE_NP_MATCHING2_STATE_INIT;
+		delayus = 1000000;
+		//if (npServer->IsConnected()) {
+			newState = SCE_NP_MATCHING2_STATE_CONNECTED;
+			delayus = g_signaling.HandleUPnPResponses().count();
+		//}
+	}
+	//ScheduleRPCNState(1, newState, delayus, "RPCN Wait State");
+	DEBUG_LOG(Log::sceNet, "RPCN Waiting %d ms", (delayus / 1000));
+	//int r = hleDelayResult(0, "RPCN Wait State", delayus);
+	hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
+	hleNoLogVoid();
+}
+
 void __NetApctlInit() {
 	g_netApctlInited = false;
 	netApctlState = PSP_NET_APCTL_STATE_DISCONNECTED;
@@ -567,6 +639,11 @@ void __NetApctlInit() {
 	apctlHandlers.clear();
 	apctlEvents.clear();
 	memset(&netApctlInfo, 0, sizeof(netApctlInfo));
+
+	np2RPCNState = NP_SIGNIN_STATUS_NONE;
+	np2RPCNStateEvent = CoreTiming::RegisterEvent("__RPCNState", __RPCNState);
+	np2RPCNThreadHackAddr = __CreateHLELoop(np2RPCNThreadCode, "sceNetUpnp", "__Np2SignalingGetRPCNResponses", "np2RPCNThreadHack");
+
 }
 
 static void __ResetInitNetLib() {
@@ -655,6 +732,11 @@ void netValidateLoopMemory() {
 		u32 blockSize = sizeof(apctlThreadCode);
 		apctlThreadHackAddr = kernelMemory.Alloc(blockSize, false, "apctlThreadHack");
 		if (apctlThreadHackAddr) Memory::Memcpy(apctlThreadHackAddr, apctlThreadCode, sizeof(apctlThreadCode));
+	}
+	if (!np2RPCNThreadHackAddr || (np2RPCNThreadHackAddr && strcmp("np2RPCNThreadHack", kernelMemory.GetBlockTag(np2RPCNThreadHackAddr)) != 0)) {
+		u32 blockSize = sizeof(np2RPCNThreadCode);
+		np2RPCNThreadHackAddr = kernelMemory.Alloc(blockSize, false, "np2RPCNThreadHack");
+		if (np2RPCNThreadHackAddr) Memory::Memcpy(np2RPCNThreadHackAddr, np2RPCNThreadCode, sizeof(np2RPCNThreadCode));
 	}
 }
 
@@ -1199,6 +1281,8 @@ static int sceNetApctlInit(int stackSize, int initPriority) {
 	if (apctlThreadID > 0) {
 		__KernelStartThread(apctlThreadID, 0, 0);
 	}
+	np2RPCNThreadID = __KernelCreateThread("np2RPCNThreadHack", __KernelGetCurThreadModuleId(), np2RPCNThreadHackAddr, initPriority, stackSize, PSP_THREAD_ATTR_USER, 0, true);
+
 
 	// Note: Borrowing AdhocServer for Grouping purpose
 	u32 structsz = sizeof(SceNetAdhocctlAdhocId);
@@ -1243,6 +1327,7 @@ int NetApctl_Term() {
 		__KernelDeleteThread(apctlThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "ApctlThread deleted");
 		apctlThreadID = 0;
 	}
+
 
 	// Clear out handlers.
 	apctlHandlers.clear();
@@ -1730,23 +1815,52 @@ static int sceNetApctl_lib2_C20A144C(int connIndex, u32 ps3MacAddressPtr) {
 // Patapon3			sceNetUpnpInit(0x3800, 0x32)
 static int sceNetUpnpInit(int size,int offset) {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(0x%04x, 0x%02x)", __FUNCTION__, size, offset);
+
 	// Create the Master Socket for transmissions
 	// NOTE: Fat Princess creates a SOCK_CONN_DGRAM after sceNetUpnpStart. If this socket isn't prepared before then, it has some issues.
 	// NOTE: Patapon3 doesn't call sceNetUpnpStart, so I guess this goes in Init instead?
 	WARN_LOG(Log::sceNet, "Creating new socket for port %d", SCE_SIGN_PORT);
 	g_signaling.create_socket(SCE_SIGN_PORT, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_DCCP, PSP_NET_INET_IPPROTO_UNSPEC);
+
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 
 static int sceNetUpnpStart() {
+	if (np2RPCNThreadID)
+		__KernelStartThread(np2RPCNThreadID, 0, 0);
+
+	// FIXME: This thread runs even when you trigger break
+	// RPCS3 has only 1 connection perpetually active
+	//  As such, it has additional functions in sceNp that
+	//  trigger signaling to start, and P2P connect requests
+	if (g_signaling.create_connection())
+		g_signaling.set_self_sig_info(*NpGetNpId());
+	else
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Signaling Loop could not be started");
+
+	/*if (g_signaling.create_connection())
+		g_signaling.set_self_sig_info(*NpGetNpId());
+	else
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Signaling Loop could not be started");*/
+
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 // return usually ignored
 static int sceNetUpnpStop() {
+	if (np2RPCNThreadID)
+		__KernelStopThread(np2RPCNThreadID, 0, 0);
+
+	g_signaling.stop("Upnp Terminating");
+
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 // return usually ignored
 static int sceNetUpnpTerm() {
+	if (np2RPCNThreadID != 0) {
+		__KernelStopThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread stopped");
+		__KernelDeleteThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread deleted");
+		np2RPCNThreadID = 0;
+	}
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 
@@ -1754,21 +1868,21 @@ static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x)", __FUNCTION__, unknownPtr);
 	auto uPnPInfo = PSPPointer<SceNpUpnpInfo>::Create(unknownPtr);
 
-	// Load immediate value
-	// If we wait for a valid value, it locks up the thread
-	uPnPInfo->local_address = g_signaling.local_addr_sig.load();
-	uPnPInfo->mapped_address = g_signaling.addr_sig.load();
-	//uPnPInfo->upnp_status = (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
-	//uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
+	// Load immediate value. If we wait for a valid value, it locks up the thread
+	uPnPInfo->public_address = g_signaling.addr_sig.load();
+	// This value seems to reference sceNetUpnpStart, not g_PortManager
+	uPnPInfo->upnp_status = (STUN_addr ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
+	uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
 	uPnPInfo->nat_status = g_signaling.nat_type.load();
 
 
-	if (uPnPInfo->local_address != 0) {
-		//uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
+	if (uPnPInfo->public_address != 0) {
+		uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
 	}
-	NOTICE_LOG(Log::sceNet, " - Local Address: %s", ip2str(uPnPInfo->local_address).c_str());
-	NOTICE_LOG(Log::sceNet, " - Public Address: %s", ip2str(uPnPInfo->mapped_address).c_str());
+	NOTICE_LOG(Log::sceNet, " - NPPort Status: %d", uPnPInfo->npport_status);
+	NOTICE_LOG(Log::sceNet, " - uPNP Status: %d", uPnPInfo->upnp_status);
 	NOTICE_LOG(Log::sceNet, " - NAT Type: %d", uPnPInfo->nat_status); // Only thing PSP2i cares about. 1 byte at offset +8
+	NOTICE_LOG(Log::sceNet, " - Public Address: %s", ip2str(uPnPInfo->public_address).c_str());
 	//NOTICE_LOG(Log::sceNet, " - uPnP Status: %d", uPnPInfo->upnp_status);
 	//NOTICE_LOG(Log::sceNet, " - NPPort Status: %d", uPnPInfo->npport_status);
 
@@ -1835,11 +1949,13 @@ const HLEFunction sceWlanDrv[] = {
 
 // see http://www.kingx.de/forum/showthread.php?tid=35164
 const HLEFunction sceNetUpnp[] = {
-	{0X27045362, &WrapI_U<sceNetUpnpGetNatInfo>,     "sceNetUpnpGetNatInfo",            'i', "x"    },
-	{0X3432B2E5, &WrapI_V<sceNetUpnpStart>,          "sceNetUpnpStart",                 'i', ""     },
-	{0X3E32ED9E, &WrapI_V<sceNetUpnpStop>,           "sceNetUpnpStop",                  'i', ""     },
-	{0X540491EF, &WrapI_V<sceNetUpnpTerm>,           "sceNetUpnpTerm",                  'i', ""     },
-	{0XE24220B5, &WrapI_II<sceNetUpnpInit>,          "sceNetUpnpInit",                  'i', "ii"   },
+	{0X27045362, &WrapI_U<sceNetUpnpGetNatInfo>,			"sceNetUpnpGetNatInfo",            'i', "x"    },
+	{0X3432B2E5, &WrapI_V<sceNetUpnpStart>,					"sceNetUpnpStart",                 'i', ""     },
+	{0X3E32ED9E, &WrapI_V<sceNetUpnpStop>,					"sceNetUpnpStop",                  'i', ""     },
+	{0X540491EF, &WrapI_V<sceNetUpnpTerm>,					"sceNetUpnpTerm",                  'i', ""     },
+	{0XE24220B5, &WrapI_II<sceNetUpnpInit>,					"sceNetUpnpInit",                  'i', "ii"   },
+	// Fake System Call for UPnP / Signaling
+	{0X756E6F1C, &WrapV_V<__Np2SignalingGetRPCNResponses>,	"__Np2SignalingGetRPCNResponses",	'v', ""    },
 };
 
 const HLEFunction sceNetIfhandle[] = {

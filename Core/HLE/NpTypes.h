@@ -22,10 +22,6 @@ const u16 SCE_SIGN_PORT = 3658;
 // Port used to communicate with P2P Signaling; aka vport
 const u16 SCE_INTERNAL_PORT = 0;
 
-extern u32 np2RPCNThreadHackAddr;
-extern u32_le np2RPCNThreadCode[3];
-extern SceUID np2RPCNThreadID;
-
 extern u32 np2P2PThreadHackAddr;
 extern u32_le np2P2PThreadCode[3];
 extern SceUID np2P2PThreadID;
