@@ -185,7 +185,8 @@ public:
 		}
 		return msgs;
 	}
-	std::chrono::microseconds HandleResponses();
+	std::chrono::microseconds HandleUPnPResponses();
+	std::chrono::microseconds HandleP2PResponses();
 
 	// Notification Functions
 
