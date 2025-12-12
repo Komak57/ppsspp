@@ -265,7 +265,7 @@ private:
 	}
 
 	// Packet Helpers
-
+	bool send_raw_ipv4(const std::vector<u8>& data, sockaddr_in dest);
 	void queue_signaling_packet(signaling_packet& sp, std::shared_ptr<signaling_info> si, std::chrono::steady_clock::time_point wakeup_time);
 
 	// P2P Logic Functions
@@ -282,6 +282,8 @@ private:
 	
 private:
 	bool running_ = false;
+	bool cancelled = false;
+
 	std::thread recv_thread_;
 	std::thread signaling_thread_;
 	// This mutex handles general Signaling variables
@@ -306,6 +308,9 @@ private:
 	std::unordered_map<std::string, u32> npid_to_conn_id;               // (npid, conn_id)
 	std::unordered_map<u32, std::shared_ptr<signaling_info>> sig_peers; // (conn_id, sig_info)
 
+	std::mutex sig_mutex;
+	std::chrono::steady_clock::time_point last_ping_time_ipv4{}, last_pong_time_ipv4{};
+	std::chrono::steady_clock::time_point last_ping_time_ipv6{}, last_pong_time_ipv6{};
 };
 
 extern signaling_handler g_signaling;

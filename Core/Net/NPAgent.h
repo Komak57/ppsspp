@@ -548,19 +548,6 @@ namespace net {
 
 		bool IsConnected() { return connected; }
 
-		std::string GetOnlineName() {
-			return online_name;
-		}
-		std::string GetAvatarURL() {
-			return avatar_url;
-		}
-		s64 GetUserID() {
-			return user_id;
-		}
-		u32 GetConnAddr() {
-			struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(conn->ai_addr);
-			return addr->sin_addr.s_addr;
-		}
 	public:
 		// Holds all servers provided by GetServers
 		// <index, NPServerInfo>
@@ -581,29 +568,20 @@ namespace net {
 		std::string host_;
 		int port_ = -1;
 		addrinfo* resolved_ = nullptr;
-		addrinfo* conn = nullptr;
 
 		bool connected = false;
 
 		SceNpCommunicationId commId;
-		std::string online_name;
+		/*std::string online_name;
 		std::string avatar_url;
-		std::atomic<s64> user_id;
+		std::atomic<s64> user_id;*/
 
-		std::mutex sig_mutex;
-
-		std::chrono::steady_clock::time_point last_ping_time_ipv4{}, last_pong_time_ipv4{};
-		std::chrono::steady_clock::time_point last_ping_time_ipv6{}, last_pong_time_ipv6{};
-
-		bool include_onlinename = false;
-		bool include_avatarurl = false;
 	};
 
 	class PSNAgent : public NPAgent {
 	public:
 		~PSNAgent();
 		PSNAgent(std::string host, int port);
-		std::chrono::microseconds HandleResponses();
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) override;
 		void Disconnect() override;
@@ -627,7 +605,6 @@ namespace net {
 		static const u32 PROTOCOL_VERSION = 26;
 		~RPCNAgent();
 		RPCNAgent(std::string host, int port);
-		std::chrono::microseconds HandleResponses();
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) override;
 		void Disconnect() override;
@@ -722,19 +699,7 @@ namespace net {
 		// Only to be used for bring-up and debugging.
 		uintptr_t sock() const { if (tls.enabled) return tls.netCtx.fd; else return sock_; }
 		bool IsConnected() { return connected; }
-		std::string GetOnlineName() {
-			return online_name;
-		}
-		std::string GetAvatarURL() {
-			return avatar_url;
-		}
-		s64 GetUserID() {
-			return user_id;
-		}
-		u32 GetConnAddr() {
-			struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(conn->ai_addr);
-			return htonl(addr->sin_addr.s_addr);
-		}
+
 		int GetConnPort() { return port_; }
 
 		SceNpMatching2ServerInfo GetServerInfo(SceNpMatching2ServerId ServerID) {
@@ -769,15 +734,9 @@ namespace net {
 		std::string host_;
 		int port_ = -1;
 		addrinfo* resolved_ = nullptr;
-		addrinfo* conn = nullptr;
 
 		bool connected = false;
 		SceNpCommunicationId commId;
-
-		std::string online_name;
-		std::string avatar_url;
-		s64 user_id;
-
 	};
 	class PSNAuthAgent : public NPAuthAgent {
 	public:

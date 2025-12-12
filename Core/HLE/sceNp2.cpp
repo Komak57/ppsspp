@@ -221,7 +221,7 @@ void __Np2SignalingGetP2PResponses()
 	if (npMatching2Inited) {
 		newState = SCE_NP_MATCHING2_STATE_INIT;
 		//g_signaling.get_wait_time_ns();
-		delayus = g_signaling.HandleResponses().count();
+		delayus = g_signaling.HandleP2PResponses().count();
 	}
 
 	//ScheduleP2PState(3, newState, delayus, "P2P Wait State");
