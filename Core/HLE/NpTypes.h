@@ -296,12 +296,10 @@ using SceNpTime = s64;
 
 #pragma pack(push,1)
 struct SceNpUpnpInfo {
-	u32 local_address;
-	u32 mapped_address;
-	u32 nat_status;
-	/*u8 upnp_status;
-	u8 npport_status;
-	u8 padding;*/
+	u32 npport_status;	// PSP2i writes 1 here
+	u32 upnp_status;	// PSP2i writes 2 here
+	u32 nat_status;		// PSP2i writes 2 here (and reads)
+	u32 public_address; // PSP2i writes an IP address here
 };
 #pragma pack(pop)
 
