@@ -57,8 +57,10 @@ std::string npServiceId = ""; // UNO game uses EP2006-NPEH00020_00
 //std::string npOnlineId = "DummyOnlineId"; // SceNpOnlineId struct?
 //std::string npAvatarUrl = "http://DummyAvatarUrl"; // SceNpAvatarUrl struct?
 SceNpId npId;
+std::atomic<s64> user_id;
 SceNpOnlineName online_name;
 SceNpAvatarUrl avatar_url;
+addrinfo* STUN_addr = nullptr;
 
 // Game-specific ID, I guess we can use this to auto-choose DNS?
 SceNpCommunicationId npTitleId;
@@ -170,12 +172,6 @@ static int sceNpInit()
 	std::memset(&avatar_url, 0, sizeof(avatar_url));
 
 	NpGetNpId();
-	if (npAuthServer && npAuthServer->IsConnected()) {
-		memcpy(&online_name.data, npAuthServer->GetOnlineName().c_str(),
-			std::min<size_t>(49, npAuthServer->GetOnlineName().length()));
-		memcpy(&avatar_url.data, npAuthServer->GetAvatarURL().c_str(),
-			std::min<size_t>(127, npAuthServer->GetAvatarURL().length()));
-	}
 
 	return hleLogWarning(Log::sceNet, 0);
 }
@@ -223,19 +219,19 @@ static int sceNpGetOnlineId(u32 idPtr)
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_ARGUMENT, "invalid arg");
 
 	id.FillWithZero();
-	memcpy(id->data, npServer->GetOnlineName().c_str(), std::min<size_t>(48+1, npServer->GetOnlineName().length()));
+	memcpy(id->data, online_name.data, std::min<size_t>(48+1, std::strlen(online_name.data)));
 	id.NotifyWrite("NpGetOnlineId");
 
 	return hleLogWarning(Log::sceNet, 0, "Online ID: %s", id->data);
 }
 
-SceNpId* NpGetNpId() {
-	if (npId.handle.data[0] == 0) {
-		WARN_LOG(Log::sceNet, "NpGetNpId() First Call");
+void NpSetNpId(std::string newNpId) {
 		memset(&npId, 0, sizeof(npId));
-		memcpy(&npId.handle.data, g_Config.sInfraNpId.c_str(),
-			std::min<size_t>(16, g_Config.sInfraNpId.length()));
+	memcpy(&npId.handle.data, newNpId.c_str(),
+		std::min<size_t>(16, newNpId.length()));
 	}
+
+SceNpId* NpGetNpId() {
 	return &npId;
 }
 
@@ -327,9 +323,9 @@ static int sceNpGetUserProfile(u32 profilePtr)
 		return hleLogError(Log::sceNet, SCE_NP_ERROR_INVALID_ARGUMENT, "invalid arg");
 
 	profile.FillWithZero();
-	strncpy(profile->userId.handle.data, g_Config.sInfraNpId.c_str(), std::min<size_t>(16, g_Config.sInfraNpId.length()));
-	strncpy(profile->name.data, npAuthServer->GetOnlineName().c_str(), std::min<size_t>(16, npAuthServer->GetOnlineName().length()));
-	truncate_cpy(profile->icon.data, sizeof(profile->icon), npAuthServer->GetAvatarURL());
+	strncpy(profile->userId.handle.data, npId.handle.data, 16);
+	strncpy(profile->name.data, online_name.data, 49);
+	strncpy(profile->icon.data, avatar_url.data, 127);
 
 	INFO_LOG(Log::sceNet, "%s - NpId: %s", __FUNCTION__, profile->userId.handle.data);
 	INFO_LOG(Log::sceNet, "%s - Online Name: %s", __FUNCTION__, profile->name.data);

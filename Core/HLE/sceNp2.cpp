@@ -714,12 +714,12 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 		INFO_LOG(Log::sceNet, "%s - Title ID: %s", __FUNCTION__, npTitleId.data);
 		INFO_LOG(Log::sceNet, "%s - Title NUM: %d", __FUNCTION__, npTitleId.num);
 		//INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npid->handle.data);
-		INFO_LOG(Log::sceNet, "%s - User ID: %d", __FUNCTION__, npAuthServer->GetUserID());
+		INFO_LOG(Log::sceNet, "%s - User ID: %d", __FUNCTION__, user_id.load());
 		INFO_LOG(Log::sceNet, "%s - Login ID: %s", __FUNCTION__, g_Config.sInfraNpId.c_str());
 		INFO_LOG(Log::sceNet, "%s - Use Online ID: %s", __FUNCTION__, (ctx[ctxId]->include_onlinename ? "YES" : "NO"));
-		INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, npAuthServer->GetOnlineName().c_str());
+		INFO_LOG(Log::sceNet, "%s - Online ID: %s", __FUNCTION__, online_name);
 		INFO_LOG(Log::sceNet, "%s - Use Avatar: %s", __FUNCTION__, (ctx[ctxId]->include_avatarurl ? "YES" : "NO"));
-		INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, npAuthServer->GetAvatarURL().c_str());
+		INFO_LOG(Log::sceNet, "%s - Avatar URL: %s", __FUNCTION__, avatar_url.data);
 		std::string datahex;
 		/*DataToHexString(npid->opt, sizeof(npid->opt), &datahex);
 		INFO_LOG(Log::sceNet, "%s - Options?: %s", __FUNCTION__, datahex.c_str());

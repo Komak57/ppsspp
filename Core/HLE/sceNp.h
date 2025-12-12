@@ -48,10 +48,15 @@ extern std::recursive_mutex npAuthEvtMtx;
 
 // Used by sceNp2.cpp
 extern SceNpCommunicationId npTitleId;
+extern std::atomic<s64> user_id;
+extern SceNpOnlineName online_name;
+extern SceNpAvatarUrl avatar_url;
+extern addrinfo* STUN_addr;
 
 void __NpInit();
 void __NpShutdown();
 
+void NpSetNpId(std::string newNpId);
 SceNpId* NpGetNpId();
 std::string* NpGetLogin();
 bool NpAuthProcessEvents();
