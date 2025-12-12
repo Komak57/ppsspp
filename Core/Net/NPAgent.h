@@ -497,7 +497,6 @@ namespace net {
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
 		bool Send(Packet* packet, double timeout, bool* cancelled);
-		virtual std::chrono::microseconds HandleResponses() = 0;
 		int Recv(Packet* packet, bool* cancelled);
 		
 		bool SelectServer(SceNpMatching2ServerId ServerID) {

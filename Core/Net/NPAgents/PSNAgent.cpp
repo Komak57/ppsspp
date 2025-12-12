@@ -79,10 +79,6 @@ namespace net {
 		running = false;
 	}
 
-	std::chrono::microseconds PSNAgent::HandleResponses() {
-		return std::chrono::duration_cast<std::chrono::microseconds>(10s);
-	}
-
 	bool PSNAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
 		WARN_LOG(Log::sceNet, "UNTESTED Connection::SSLConnect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 		if (port_ <= 0) {
