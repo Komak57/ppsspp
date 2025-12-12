@@ -390,7 +390,6 @@ void signaling_handler::stop(const char* reason) {
 	std::scoped_lock lk(mtx_);
 	for (auto& [conn_id, si] : sig_peers)
 	{
-		std::shared_ptr<signaling_info> si = sig_peers.at(conn_id);
 		retire_all_packets(si);
 
 		auto& sent_packet = sig_packet;
