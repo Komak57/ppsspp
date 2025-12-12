@@ -6,6 +6,8 @@
 #include <Core/CoreTiming.h>
 #include <Core/HLE/sceNp2.h>
 #include <Core/Net/SignalingHandler.h>
+#include <Core/HLE/sceNp.h>
+#include <Core/Config.h>
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN
 	RPCNAuthAgent::RPCNAuthAgent(std::string host, int port) {
@@ -330,7 +332,8 @@ namespace net {
 
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful. TLS: %s, Cipher: %s", mbedtls_ssl_get_version(&tls.sslCtx), mbedtls_ssl_get_ciphersuite(&tls.sslCtx));
 				connected = true;
-				conn = std::move(possible);
+				STUN_addr = std::move(possible);
+
 
 				// Obtain our local IP address related to our connection to the RPCN server
 				client_addr_size = sizeof(client_addr);
@@ -384,9 +387,15 @@ namespace net {
 			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
 
-		online_name = resp.stream->get_string(false);
-		avatar_url = resp.stream->get_string(false);
-		user_id = resp.stream->get<s64>();
+		auto name = resp.stream->get_string(false);
+		memcpy(&online_name.data, name.c_str(),
+			std::min<size_t>(49, name.length()));
+		auto avatar = resp.stream->get_string(false);
+		memcpy(&avatar_url.data, avatar.c_str(),
+			std::min<size_t>(127, avatar.length()));
+		user_id.store(resp.stream->get<s64>());
+
+		NpSetNpId(g_Config.sInfraNpId);
 
 		return 0;
 	}
