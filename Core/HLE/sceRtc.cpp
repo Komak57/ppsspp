@@ -934,7 +934,6 @@ s64 lastNetworkTimeUs = 0;
  * @param timeDiffPtr PSPTimeval containing the current time in microseconds with respect to rtcMagicOffset
  * @return 0; Returning anything other than 0 is usually flagged as an error
  * @note A Network Tick > 72000 can trigger a PSN Update request
- * @note Uses CoreTiming to reduce network requests, and supports speed controls
  */
 static int sceRtcGetCurrentNetworkTick(u32 timeDiffPtr)
 {

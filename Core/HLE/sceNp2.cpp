@@ -1405,12 +1405,12 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-/* Sets attributes of a specific Lobby/Party
+/* Sets the party-scope settings for a Lobby/Party
  * @param reqParamPtr SceNpMatching2SetRoomDataInternalRequest Request Information
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; System Errors are entirely ignored
- * @note Performs the operations in an async lambda function
+ * @note Calling this function will normally reset the attributes of a room
  */
 static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
