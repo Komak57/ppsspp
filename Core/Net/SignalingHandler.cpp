@@ -508,7 +508,165 @@ void signaling_handler::retire_all_packets(std::shared_ptr<signaling_info>& si)
 // ====================================
 #pragma region P2P Logic Functions
 
-std::chrono::microseconds signaling_handler::HandleResponses() {
+template <typename T, typename U>
+constexpr void write_to_ptr(U&& array, int pos, const T& value)
+{
+	static_assert(sizeof(T) % sizeof(array[0]) == 0);
+	std::memcpy(static_cast<void*>(&array[pos]), &value, sizeof(value));
+}
+
+std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
+	DEBUG_LOG(Log::sceNet, "Signaling RPCN Handler Thread Started");
+	if (cancelled) {
+		WARN_LOG(Log::sceNet, "RPCN Cancelling");
+		return std::chrono::duration_cast<std::chrono::microseconds>(5s);
+	}
+	const auto now = std::chrono::steady_clock::now();
+	const auto rpcn_msgs = g_signaling.get_rpcn_msgs();
+
+	for (const auto& msg : rpcn_msgs)
+	{
+		if (cancelled) {
+			WARN_LOG(Log::sceNet, "RPCN Cancelling");
+			return std::chrono::duration_cast<std::chrono::microseconds>(5s);
+		}
+		if (msg.size() == 6)
+		{
+			DEBUG_LOG(Log::sceNet, "RPCN Signal Pong Received");
+			// Pull addr in Network Order
+			const u32 new_addr_sig = read_from_ptr<u32_le>(&msg[0]);
+			// Pull port in Host Order
+			const u16 new_port_sig = read_from_ptr<u16_be>(&msg[4]);
+			const u32 old_addr_sig = g_signaling.addr_sig;
+			const u16 old_port_sig = g_signaling.port_sig;
+			g_signaling.latency = std::chrono::duration_cast<std::chrono::microseconds>(now - last_ping_time_ipv4).count() / 2;
+
+			if (new_addr_sig != old_addr_sig)
+			{
+				{
+					std::lock_guard<std::mutex> lock(sig_mutex);
+					g_signaling.addr_sig = new_addr_sig;
+					auto local_ip = g_signaling.local_addr_sig.load();
+
+					if (new_port_sig != SCE_SIGN_PORT)
+						g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1);
+					else
+						g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2);
+					if (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE)
+						g_signaling.nat_type.fetch_add(1);
+				}
+
+				auto n = GetI18NCategory(I18NCat::NETWORKING);
+				g_OSD.Show(OSDType::MESSAGE_SUCCESS, std::string(n->T("SH: Connected")) + std::string(" [") + ip2str(new_addr_sig) + std::string("]:") + std::to_string(new_port_sig), 0.0f, "userjoinroom");
+
+				NOTICE_LOG(Log::sceNet, "New P2P IP: %s", ip2str(new_addr_sig).c_str());
+				if (old_addr_sig == 0)
+				{
+					// wake thread
+					g_signaling.sigv.notify_one();
+				}
+			}
+
+			if (new_port_sig != old_port_sig)
+			{
+				{
+					std::lock_guard<std::mutex> lock(sig_mutex);
+					g_signaling.port_sig = new_port_sig;
+				}
+				NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", new_port_sig);
+				if (old_port_sig == 0)
+				{
+					// wake thread
+					g_signaling.sigv.notify_one();
+				}
+			}
+
+			last_pong_time_ipv4 = now;
+		}
+		else if (msg.size() == 18)
+		{
+			// We don't really need ipv6 info stored so we just update the pong data
+			// std::array<u8, 16> new_ipv6_addr;
+			// std::memcpy(new_ipv6_addr.data(), &msg[3], 16);
+			// const u32 new_ipv6_port = read_from_ptr<be_t<u16>>(&msg[16]);
+
+			//last_pong_time_ipv6 = now;
+		}
+		else
+		{
+			ERROR_LOG(Log::sceNet, "Received faulty RPCN UDP message!");
+		}
+	}
+
+	const std::chrono::nanoseconds time_since_last_ipv4_ping = now - last_ping_time_ipv4;
+	const std::chrono::nanoseconds time_since_last_ipv4_pong = now - last_pong_time_ipv4;
+	auto forge_ping_packet = [&]() -> std::vector<u8>
+		{
+			std::vector<u8> ping(13);
+			ping[0] = 1;
+			//ping.emplace(ping.begin() + 1, _user_id);
+			//ping.emplace(ping.begin() + 9, +local_addr);
+			write_to_ptr<s64_le>(ping, 1, user_id.load());
+			write_to_ptr<u32_le>(ping, 9, +g_signaling.local_addr_sig.load());
+			return ping;
+		};
+
+	// Send a packet every 5 seconds and then every 500 ms until reply is received
+	if (time_since_last_ipv4_pong >= 5s && time_since_last_ipv4_ping > 500ms)
+	{
+		const auto ping = forge_ping_packet();
+
+		struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(STUN_addr->ai_addr);
+		addr->sin_port = htons(SCE_RPCN_PORT);
+
+		INFO_LOG(Log::sceNet, "PING -> RPCN");
+		if (!send_raw_ipv4(ping, *addr))
+			ERROR_LOG(Log::sceNet, "Failed to send IPv4 PING to RPCN");
+
+		last_ping_time_ipv4 = now;
+		return std::chrono::duration_cast<std::chrono::microseconds>(500ms);
+	}
+
+	/*if (np::is_ipv6_supported() && time_since_last_ipv6_pong >= 5s && time_since_last_ipv6_ping > 500ms)
+	{
+		const auto ping = forge_ping_packet();
+
+		if (!send_packet_from_p2p_port_ipv6(ping, addr_rpcn_udp_ipv6))
+			rpcn_log.error("Failed to send IPv6 ping to RPCN!");
+
+		last_ping_time_ipv6 = now;
+		continue;
+	}*/
+	auto min_duration_for = [&](const auto last_ping_time, const auto last_pong_time) -> std::chrono::nanoseconds
+		{
+			auto current_time = std::chrono::steady_clock::now();
+			if ((current_time - last_pong_time) < 5s)
+			{
+				return (std::chrono::duration_cast<std::chrono::nanoseconds>(5s) - (current_time - last_pong_time));
+			}
+			else
+			{
+				return (std::chrono::duration_cast<std::chrono::nanoseconds>(500ms) - (current_time - last_pong_time));
+			}
+		};
+
+	auto duration = min_duration_for(last_ping_time_ipv4, last_pong_time_ipv4);
+	return std::chrono::duration_cast<std::chrono::microseconds>(duration);
+	//g_signaling.wait_for_rpcn(&running, &cancelled, duration);
+	/*if (np::is_ipv6_supported())
+	{
+		const auto duration_ipv6 = min_duration_for(last_ping_time_ipv6, last_pong_time_ipv6);
+		duration = std::min(duration, duration_ipv6);
+	}*/
+
+	// Expected to fail unless rpcn is terminated
+	// The check is there to nuke a msvc warning
+	/*if (!sem_rpcn.try_acquire_for(duration))
+	{
+	}*/
+}
+
+std::chrono::microseconds signaling_handler::HandleP2PResponses() {
 	DEBUG_LOG(Log::sceNet, "Signaling P2P Handler Thread Started");
 	process_incoming_messages();
 
