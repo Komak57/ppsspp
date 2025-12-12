@@ -95,6 +95,18 @@ enum class RegisterInfoSelected {
 	CONTINUE
 };
 
+struct tempvars {
+	std::map<u8, u8> selected;
+	std::string npid = "";
+	std::string email = "";
+	bool validEmail = false;
+	std::string online_name = "";
+	std::string avatar_url = "";
+	std::string password = "";
+	std::string password_confirm = "";
+	std::string token = "";
+};
+
 class PSPNpSigninDialog : public PSPDialog {
 public:
 	PSPNpSigninDialog(UtilityDialogType type) : PSPDialog(type) {}

@@ -25,7 +25,6 @@
 #include "Core/HLE/sceKernelMemory.h"
 #include "Core/HLE/sceCtrl.h"
 #include "Core/HLE/sceUtility.h"
-#include "Core/HLE/sceNp.h"
 #include "Core/HLE/ErrorCodes.h"
 #include "Core/Dialog/PSPNpSigninDialog.h"
 #include "Common/Data/Encoding/Utf8.h"
@@ -33,6 +32,7 @@
 #include <Core/Config.h>
 #include <System/Request.h>
 #include "Common/StringUtils.h"
+#include <Core/HLE/sceNp.h>
 
 // Needs testing.
 const static int NP_INIT_DELAY_US = 200000; 
@@ -40,35 +40,27 @@ const static int NP_SHUTDOWN_DELAY_US = 501000;
 const static int NP_RUNNING_DELAY_US = 1000000; // faked delay to simulate signin process to give chance for players to read the text on the dialog
 const static int NP_TRANSITION_SPEED = 500;
 
-std::map<u8, u8> selected;
-std::string npid = "";
-std::string email = "";
-bool validEmail = false;
-std::string online_name = "";
-std::string avatar_url = "";
-std::string password = "";
-std::string password_confirm = "";
-std::string token = "";
+tempvars tmp;
 
 std::string failMessage = "";
 double deltaTime = 0;
 bool runOnce = false;
 
 void PSPNpSigninDialog::InitForms() {
-	npid = "";
-	email = "";
+	tmp.npid = "";
+	tmp.email = "";
 	bool validEmail = false;
-	online_name = "";
-	avatar_url = "";
-	password = "";
-	password_confirm = "";
-	token = "";
+	tmp.online_name = "";
+	tmp.avatar_url = "";
+	tmp.password = "";
+	tmp.password_confirm = "";
+	tmp.token = "";
 
-	selected[(u8)SigninStage::LOGIN_FORM] = (u8)SigninSelected::SIGNIN;
-	selected[(u8)SigninStage::PASSWORD_FORM] = (u8)PasswordSelected::LOGIN;
-	selected[(u8)SigninStage::PASSWORD_TOKEN_FORM] = (u8)PasswordTokenSelected::TOKEN;
-	selected[(u8)SigninStage::REGISTRATION_FORM] = (u8)RegisterSelected::LOGIN;
-	selected[(u8)SigninStage::REGISTRATION_INFO_FORM] = (u8)RegisterInfoSelected::ONLINE_NAME;
+	tmp.selected[(u8)SigninStage::LOGIN_FORM] = (u8)SigninSelected::SIGNIN;
+	tmp.selected[(u8)SigninStage::PASSWORD_FORM] = (u8)PasswordSelected::LOGIN;
+	tmp.selected[(u8)SigninStage::PASSWORD_TOKEN_FORM] = (u8)PasswordTokenSelected::TOKEN;
+	tmp.selected[(u8)SigninStage::REGISTRATION_FORM] = (u8)RegisterSelected::LOGIN;
+	tmp.selected[(u8)SigninStage::REGISTRATION_INFO_FORM] = (u8)RegisterInfoSelected::ONLINE_NAME;
 }
 
 int PSPNpSigninDialog::Init(u32 paramAddr) {
@@ -230,7 +222,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						Transition(SigninStage::FAIL);
 						break;
 					}
-					int ret = server->SendResetToken(npid.c_str(), email.c_str());
+					int ret = server->SendResetToken(tmp.npid.c_str(), tmp.email.c_str());
 					if (ret != 0) {
 						switch ((ErrorType)ret) {
 						case ErrorType::Blocked:
@@ -293,7 +285,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						Transition(SigninStage::FAIL);
 						break;
 					}
-					int ret = server->ResetPassword(npid.c_str(), token.c_str(), password.c_str());
+					int ret = server->ResetPassword(tmp.npid.c_str(), tmp.token.c_str(), tmp.password.c_str());
 					if (ret != 0) {
 						switch ((ErrorType)ret) {
 						case ErrorType::Invalid:
@@ -353,7 +345,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						Transition(SigninStage::FAIL);
 						break;
 					}
-					int ret = server->CreateAccount(npid.c_str(), password.c_str(), online_name.c_str(), avatar_url.c_str(), email.c_str());
+					int ret = server->CreateAccount(tmp.npid.c_str(), tmp.password.c_str(), tmp.online_name.c_str(), tmp.avatar_url.c_str(), tmp.email.c_str());
 					if (ret != 0) {
 						switch ((ErrorType)ret) {
 						case ErrorType::CreationExistingUsername:
@@ -500,11 +492,11 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 	PPGeStyle leftAligned = FadedStyle(PPGeAlign::BOX_LEFT, 0.6f);
 	PPGeStyle centerAligned = FadedStyle(PPGeAlign::BOX_HCENTER, 0.6f);
 
-	switch ((SigninSelected)selected[(u8)stage]) {
+	switch ((SigninSelected)tmp.selected[(u8)stage]) {
 	case SigninSelected::LOGIN:
 		PPGeDrawRect(70, 70, 405, 90, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(downButtonFlag))
-			selected[(u8)stage] = (u8)SigninSelected::PASSWORD;
+			tmp.selected[(u8)stage] = (u8)SigninSelected::PASSWORD;
 		if (IsButtonPressed(okButtonFlag)) {
 			std::string LoginType = "Username";
 			if (server->GetAuthType() == net::NPAgentType::PSN)
@@ -524,9 +516,9 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 	case SigninSelected::PASSWORD:
 		PPGeDrawRect(70, 115, 405, 135, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)SigninSelected::LOGIN;
+			tmp.selected[(u8)stage] = (u8)SigninSelected::LOGIN;
 		if (IsButtonPressed(downButtonFlag))
-			selected[(u8)stage] = (u8)SigninSelected::AUTOLOGIN;
+			tmp.selected[(u8)stage] = (u8)SigninSelected::AUTOLOGIN;
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", g_Config.sInfraPassword, true,
 				[&](const std::string& value, int) {
@@ -543,9 +535,9 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 	case SigninSelected::AUTOLOGIN:
 		PPGeDrawRect(70, 145, 300, 165, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)SigninSelected::PASSWORD;
+			tmp.selected[(u8)stage] = (u8)SigninSelected::PASSWORD;
 		if (IsButtonPressed(downButtonFlag))
-			selected[(u8)stage] = (u8)SigninSelected::REMEMBERME;
+			tmp.selected[(u8)stage] = (u8)SigninSelected::REMEMBERME;
 		if (IsButtonPressed(okButtonFlag)) {
 			g_Config.bInfraAutoSignIn = !g_Config.bInfraAutoSignIn;
 			if (g_Config.bInfraAutoSignIn)
@@ -555,9 +547,9 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 	case SigninSelected::REMEMBERME:
 		PPGeDrawRect(70, 170, 200, 190, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)SigninSelected::AUTOLOGIN;
+			tmp.selected[(u8)stage] = (u8)SigninSelected::AUTOLOGIN;
 		if (IsButtonPressed(downButtonFlag))
-			selected[(u8)stage] = (u8)SigninSelected::SIGNIN;
+			tmp.selected[(u8)stage] = (u8)SigninSelected::SIGNIN;
 		if (IsButtonPressed(okButtonFlag)) {
 			g_Config.bInfraRememberPwd = !g_Config.bInfraRememberPwd;
 			if (!g_Config.bInfraRememberPwd)
@@ -567,9 +559,9 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 	case SigninSelected::SIGNIN:
 		PPGeDrawRect(200, 200, 280, 220, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)SigninSelected::REMEMBERME;
+			tmp.selected[(u8)stage] = (u8)SigninSelected::REMEMBERME;
 		if (IsButtonPressed(downButtonFlag))
-			selected[(u8)stage] = (u8)SigninSelected::FORGOTPSWD;
+			tmp.selected[(u8)stage] = (u8)SigninSelected::FORGOTPSWD;
 		if (IsButtonPressed(okButtonFlag)) {
 			// Sanity Check
 			if (g_Config.sInfraNpId.empty() || g_Config.sInfraPassword.empty())
@@ -596,7 +588,7 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 	case SigninSelected::FORGOTPSWD:
 		PPGeDrawRect(170, 230, 310, 250, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)SigninSelected::SIGNIN;
+			tmp.selected[(u8)stage] = (u8)SigninSelected::SIGNIN;
 		if (IsButtonPressed(okButtonFlag))
 			Transition(SigninStage::PASSWORD_FORM);
 		break;
@@ -650,16 +642,16 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 	// Button Color: 0xFF884300
 
 	DrawFormBG();
-	switch ((PasswordSelected)selected[(u8)stage]) {
+	switch ((PasswordSelected)tmp.selected[(u8)stage]) {
 	case PasswordSelected::LOGIN:
 		PPGeDrawRect(243, 115, 413, 132, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(downButtonFlag))
-			selected[(u8)stage] = (u8)RegisterSelected::EMAIL;
+			tmp.selected[(u8)stage] = (u8)RegisterSelected::EMAIL;
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Login ID", npid, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Login ID", tmp.npid, false,
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
-				npid = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
+					tmp.npid = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 			},
 				[&]() {
 				// Failure callback
@@ -670,25 +662,25 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 	case PasswordSelected::EMAIL:
 		PPGeDrawRect(243, 135, 413, 152, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)RegisterSelected::LOGIN;
+			tmp.selected[(u8)stage] = (u8)RegisterSelected::LOGIN;
 		if (IsButtonPressed(downButtonFlag)) {
 			// Simple logic for default selection
-			if (validEmail)
-				selected[(u8)stage] = (u8)PasswordSelected::CONTINUE;
+			if (tmp.validEmail)
+				tmp.selected[(u8)stage] = (u8)PasswordSelected::CONTINUE;
 			else
-				selected[(u8)stage] = (u8)PasswordSelected::CANCEL;
+				tmp.selected[(u8)stage] = (u8)PasswordSelected::CANCEL;
 		}
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "E-mail Address", email, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "E-mail Address", tmp.email, false,
 				[&](const std::string& value, int) {
-					validEmail = true;
+					tmp.validEmail = true;
 					// TODO: Alert the user that some characters are not allowed
 					if (value != SanitizeString(value, StringRestriction::EmailSanity, 5, (64 + 1 + 255)))
-						validEmail = false;
+						tmp.validEmail = false;
 					// TODO: Alert the user that the email is invalid
 					if (!IsValidEmail(value))
-						validEmail = false;
-					email = value;
+						tmp.validEmail = false;
+					tmp.email = value;
 				},
 				[&]() {
 					// Failure callback
@@ -698,36 +690,36 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 		break;
 	case PasswordSelected::CANCEL:
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)PasswordSelected::EMAIL;
+			tmp.selected[(u8)stage] = (u8)PasswordSelected::EMAIL;
 		if (IsButtonPressed(rightButtonFlag)) {
 			// Skip Continue if email is empty
-			if (validEmail)
-				selected[(u8)stage] = (u8)PasswordSelected::CONTINUE;
+			if (tmp.validEmail)
+				tmp.selected[(u8)stage] = (u8)PasswordSelected::CONTINUE;
 			else
-				selected[(u8)stage] = (u8)PasswordSelected::REGISTER;
+				tmp.selected[(u8)stage] = (u8)PasswordSelected::REGISTER;
 		}
 		if (IsButtonPressed(okButtonFlag))
 			Transition(SigninStage::LOGIN_FORM);
 		break;
 	case PasswordSelected::CONTINUE:
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)PasswordSelected::EMAIL;
+			tmp.selected[(u8)stage] = (u8)PasswordSelected::EMAIL;
 		if (IsButtonPressed(leftButtonFlag))
-			selected[(u8)stage] = (u8)PasswordSelected::CANCEL;
+			tmp.selected[(u8)stage] = (u8)PasswordSelected::CANCEL;
 		if (IsButtonPressed(rightButtonFlag))
-			selected[(u8)stage] = (u8)PasswordSelected::REGISTER;
+			tmp.selected[(u8)stage] = (u8)PasswordSelected::REGISTER;
 		if (IsButtonPressed(okButtonFlag))
 			Transition(SigninStage::PASSWORD_TOKEN_REQUEST, true);
 		break;
 	case PasswordSelected::REGISTER:
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)PasswordSelected::EMAIL;
+			tmp.selected[(u8)stage] = (u8)PasswordSelected::EMAIL;
 		if (IsButtonPressed(leftButtonFlag)) {
 			// Skip Continue if email is empty
-			if (validEmail)
-				selected[(u8)stage] = (u8)PasswordSelected::CONTINUE;
+			if (tmp.validEmail)
+				tmp.selected[(u8)stage] = (u8)PasswordSelected::CONTINUE;
 			else
-				selected[(u8)stage] = (u8)PasswordSelected::CANCEL;
+				tmp.selected[(u8)stage] = (u8)PasswordSelected::CANCEL;
 		}
 		if (IsButtonPressed(okButtonFlag))
 			Transition(SigninStage::REGISTRATION_FORM, true);
@@ -742,16 +734,16 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 	PPGeDrawText(di->T("Enter the following information."), 65, 54, descText);
 
 	PPGeDrawText(di->T("Login ID"), 235, 115, formText);
-	DrawInputBox(npid, 243, 115, 413, 132, CalcFadedColor(0x40000000), inputBox);
+	DrawInputBox(tmp.npid, 243, 115, 413, 132, CalcFadedColor(0x40000000), inputBox);
 
 	PPGeDrawText(di->T("Sign-In ID"), 235, 141, formText);
 	PPGeDrawText(di->T("(E-mail Address)"), 235, 151, formText);
 
-	DrawInputBox(email, 243, 135, 413, 152, CalcFadedColor(0x40000000), inputBox);
+	DrawInputBox(tmp.email, 243, 135, 413, 152, CalcFadedColor(0x40000000), inputBox);
 
-	DrawButton(di->T("Cancel"), 50, 210, 120, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)selected[(u8)stage] == PasswordSelected::CANCEL);
-	DrawButton(di->T("Continue"), 205, 210, 275, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)selected[(u8)stage] == PasswordSelected::CONTINUE);
-	DrawButton(di->T("Register"), 358, 210, 428, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)selected[(u8)stage] == PasswordSelected::REGISTER);
+	DrawButton(di->T("Cancel"), 50, 210, 120, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)tmp.selected[(u8)stage] == PasswordSelected::CANCEL);
+	DrawButton(di->T("Continue"), 205, 210, 275, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)tmp.selected[(u8)stage] == PasswordSelected::CONTINUE);
+	DrawButton(di->T("Register"), 358, 210, 428, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)tmp.selected[(u8)stage] == PasswordSelected::REGISTER);
 }
 
 void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
@@ -772,16 +764,16 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 	// Button Color: 0xFF884300
 
 	DrawFormBG();
-	switch ((PasswordTokenSelected)selected[(u8)stage]) {
+	switch ((PasswordTokenSelected)tmp.selected[(u8)stage]) {
 	case PasswordTokenSelected::TOKEN:
 		PPGeDrawRect(243, 115, 413, 132, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(downButtonFlag))
-			selected[(u8)stage] = (u8)PasswordTokenSelected::PASSWORD;
+			tmp.selected[(u8)stage] = (u8)PasswordTokenSelected::PASSWORD;
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "TOKEN", token, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "TOKEN", tmp.token, false,
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
-				token = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 1, 20);
+					tmp.token = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 1, 20);
 			},
 				[&]() {
 				// Failure callback
@@ -792,14 +784,14 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 	case PasswordTokenSelected::PASSWORD:
 		PPGeDrawRect(243, 135, 413, 152, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)PasswordTokenSelected::TOKEN;
+			tmp.selected[(u8)stage] = (u8)PasswordTokenSelected::TOKEN;
 		if (IsButtonPressed(downButtonFlag))
-			selected[(u8)stage] = (u8)PasswordTokenSelected::PASSCONFIRM;
+			tmp.selected[(u8)stage] = (u8)PasswordTokenSelected::PASSCONFIRM;
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", password, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", tmp.password, false,
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
-				password = value;
+					tmp.password = value;
 			},
 				[&]() {
 				// Failure callback
@@ -810,19 +802,19 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 	case PasswordTokenSelected::PASSCONFIRM:
 		PPGeDrawRect(243, 155, 413, 172, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)PasswordTokenSelected::PASSWORD;
+			tmp.selected[(u8)stage] = (u8)PasswordTokenSelected::PASSWORD;
 		if (IsButtonPressed(downButtonFlag)) {
 			// Simple logic for default selection
-			if (!token.empty() && token.length() == 16)
-				selected[(u8)stage] = (u8)PasswordTokenSelected::CONTINUE;
+			if (!tmp.token.empty() && tmp.token.length() == 16)
+				tmp.selected[(u8)stage] = (u8)PasswordTokenSelected::CONTINUE;
 			else
-				selected[(u8)stage] = (u8)PasswordTokenSelected::CANCEL;
+				tmp.selected[(u8)stage] = (u8)PasswordTokenSelected::CANCEL;
 		}
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Confirm Password", password_confirm, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Confirm Password", tmp.password_confirm, false,
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
-				password_confirm = value;
+					tmp.password_confirm = value;
 			},
 				[&]() {
 				// Failure callback
@@ -832,20 +824,20 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 		break;
 	case PasswordTokenSelected::CANCEL:
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)PasswordTokenSelected::PASSCONFIRM;
+			tmp.selected[(u8)stage] = (u8)PasswordTokenSelected::PASSCONFIRM;
 		if (IsButtonPressed(rightButtonFlag)) {
 			// Skip Continue if email is empty
-			if (!token.empty() && token.length() == 16)
-				selected[(u8)stage] = (u8)PasswordTokenSelected::CONTINUE;
+			if (!tmp.token.empty() && tmp.token.length() == 16)
+				tmp.selected[(u8)stage] = (u8)PasswordTokenSelected::CONTINUE;
 		}
 		if (IsButtonPressed(okButtonFlag))
 			Transition(SigninStage::LOGIN_FORM);
 		break;
 	case PasswordTokenSelected::CONTINUE:
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)PasswordTokenSelected::PASSCONFIRM;
+			tmp.selected[(u8)stage] = (u8)PasswordTokenSelected::PASSCONFIRM;
 		if (IsButtonPressed(leftButtonFlag))
-			selected[(u8)stage] = (u8)PasswordTokenSelected::CANCEL;
+			tmp.selected[(u8)stage] = (u8)PasswordTokenSelected::CANCEL;
 		if (IsButtonPressed(okButtonFlag))
 			Transition(SigninStage::PASSWORD_REQUEST, true);
 		break;
@@ -860,16 +852,16 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 
 	PPGeDrawText(di->T("Token"), 235, 111, formText);
 	PPGeDrawText(di->T("(Check your E-mail)"), 235, 122, formText);
-	DrawInputBox(token, 243, 115, 413, 132, CalcFadedColor(0x40000000), inputBox);
+	DrawInputBox(tmp.token, 243, 115, 413, 132, CalcFadedColor(0x40000000), inputBox);
 
 	PPGeDrawText(di->T("New Password"), 235, 135, formText);
-	DrawInputBox(password, 243, 135, 413, 152, CalcFadedColor(0x40000000), inputBox, true);
+	DrawInputBox(tmp.password, 243, 135, 413, 152, CalcFadedColor(0x40000000), inputBox, true);
 
 	PPGeDrawText(di->T("Confirm Password"), 235, 155, formText);
-	DrawInputBox(password_confirm, 243, 155, 413, 172, CalcFadedColor(0x40000000), inputBox, true);
+	DrawInputBox(tmp.password_confirm, 243, 155, 413, 172, CalcFadedColor(0x40000000), inputBox, true);
 
-	DrawButton(di->T("Cancel"), 50, 210, 120, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordTokenSelected)selected[(u8)stage] == PasswordTokenSelected::CANCEL);
-	DrawButton(di->T("Continue"), 205, 210, 275, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordTokenSelected)selected[(u8)stage] == PasswordTokenSelected::CONTINUE);
+	DrawButton(di->T("Cancel"), 50, 210, 120, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordTokenSelected)tmp.selected[(u8)stage] == PasswordTokenSelected::CANCEL);
+	DrawButton(di->T("Continue"), 205, 210, 275, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordTokenSelected)tmp.selected[(u8)stage] == PasswordTokenSelected::CONTINUE);
 }
 
 void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
@@ -890,16 +882,16 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 	// Button Color: 0xFF884300
 
 	DrawFormBG();
-	switch ((RegisterSelected)selected[(u8)stage]) {
+	switch ((RegisterSelected)tmp.selected[(u8)stage]) {
 	case RegisterSelected::LOGIN:
 		PPGeDrawRect(243, 115, 413, 132, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(downButtonFlag))
-			selected[(u8)stage] = (u8)RegisterSelected::EMAIL;
+			tmp.selected[(u8)stage] = (u8)RegisterSelected::EMAIL;
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Login ID", npid, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Login ID", tmp.npid, false,
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
-				npid = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
+					tmp.npid = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 			},
 				[&]() {
 				// Failure callback
@@ -910,20 +902,20 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 	case RegisterSelected::EMAIL:
 		PPGeDrawRect(243, 135, 413, 152, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)RegisterSelected::LOGIN;
+			tmp.selected[(u8)stage] = (u8)RegisterSelected::LOGIN;
 		if (IsButtonPressed(downButtonFlag))
-			selected[(u8)stage] = (u8)RegisterSelected::PASSWORD;
+			tmp.selected[(u8)stage] = (u8)RegisterSelected::PASSWORD;
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "E-mail Address", email, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "E-mail Address", tmp.email, false,
 				[&](const std::string& value, int) {
-					validEmail = true;
+					tmp.validEmail = true;
 					// TODO: Alert the user that some characters are not allowed
 					if (value != SanitizeString(value, StringRestriction::EmailSanity, 5, (64 + 1 + 255)))
-						validEmail = false;
+						tmp.validEmail = false;
 					// TODO: Alert the user that the email is invalid
 					if (!IsValidEmail(value))
-						validEmail = false;
-					email = value;
+						tmp.validEmail = false;
+					tmp.email = value;
 				},
 					[&]() {
 					// Failure callback
@@ -934,14 +926,14 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 	case RegisterSelected::PASSWORD:
 		PPGeDrawRect(243, 155, 413, 172, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)RegisterSelected::EMAIL;
+			tmp.selected[(u8)stage] = (u8)RegisterSelected::EMAIL;
 		if (IsButtonPressed(downButtonFlag))
-			selected[(u8)stage] = (u8)RegisterSelected::PASSCONFIRM;
+			tmp.selected[(u8)stage] = (u8)RegisterSelected::PASSCONFIRM;
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", password, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", tmp.password, false,
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
-				password = value;
+					tmp.password = value;
 			},
 				[&]() {
 				// Failure callback
@@ -952,18 +944,18 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 	case RegisterSelected::PASSCONFIRM:
 		PPGeDrawRect(243, 175, 413, 192, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)RegisterSelected::PASSWORD;
+			tmp.selected[(u8)stage] = (u8)RegisterSelected::PASSWORD;
 		if (IsButtonPressed(downButtonFlag)) {
-			if (!npid.empty() && (!email.empty() && IsValidEmail(email)) && !password.empty() && !password_confirm.empty() && password == password_confirm)
-				selected[(u8)stage] = (u8)RegisterSelected::CONTINUE;
+			if (!tmp.npid.empty() && (!tmp.email.empty() && IsValidEmail(tmp.email)) && !tmp.password.empty() && !tmp.password_confirm.empty() && tmp.password == tmp.password_confirm)
+				tmp.selected[(u8)stage] = (u8)RegisterSelected::CONTINUE;
 			else
-				selected[(u8)stage] = (u8)RegisterSelected::CANCEL;
+				tmp.selected[(u8)stage] = (u8)RegisterSelected::CANCEL;
 		}
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Confirm Password", password_confirm, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Confirm Password", tmp.password_confirm, false,
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
-				password_confirm = value;
+					tmp.password_confirm = value;
 			},
 				[&]() {
 				// Failure callback
@@ -973,20 +965,20 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 		break;
 	case RegisterSelected::CANCEL:
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)RegisterSelected::PASSCONFIRM;
+			tmp.selected[(u8)stage] = (u8)RegisterSelected::PASSCONFIRM;
 		if (IsButtonPressed(rightButtonFlag)) {
 			// Skip Continue if email is empty
-			if (!npid.empty() && (!email.empty() && IsValidEmail(email)) && !password.empty() && !password_confirm.empty() && password == password_confirm)
-				selected[(u8)stage] = (u8)RegisterSelected::CONTINUE;
+			if (!tmp.npid.empty() && (!tmp.email.empty() && IsValidEmail(tmp.email)) && !tmp.password.empty() && !tmp.password_confirm.empty() && tmp.password == tmp.password_confirm)
+				tmp.selected[(u8)stage] = (u8)RegisterSelected::CONTINUE;
 		}
 		if (IsButtonPressed(okButtonFlag))
 			Transition(SigninStage::LOGIN_FORM);
 		break;
 	case RegisterSelected::CONTINUE:
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)RegisterSelected::PASSCONFIRM;
+			tmp.selected[(u8)stage] = (u8)RegisterSelected::PASSCONFIRM;
 		if (IsButtonPressed(leftButtonFlag))
-			selected[(u8)stage] = (u8)RegisterSelected::CANCEL;
+			tmp.selected[(u8)stage] = (u8)RegisterSelected::CANCEL;
 		if (IsButtonPressed(okButtonFlag))
 			Transition(SigninStage::REGISTRATION_INFO_FORM, true);
 		break;
@@ -1000,19 +992,19 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 	PPGeDrawText(di->T("Enter the following information."), 65, 54, descText);
 
 	PPGeDrawText(di->T("Login ID"), 235, 115, formText);
-	DrawInputBox(npid, 243, 115, 413, 132, CalcFadedColor(0x40000000), inputBox);
+	DrawInputBox(tmp.npid, 243, 115, 413, 132, CalcFadedColor(0x40000000), inputBox);
 
 	PPGeDrawText(di->T("E-mail"), 235, 135, formText);
-	DrawInputBox(email, 243, 135, 413, 152, CalcFadedColor(0x40000000), inputBox);
+	DrawInputBox(tmp.email, 243, 135, 413, 152, CalcFadedColor(0x40000000), inputBox);
 
 	PPGeDrawText(di->T("Password"), 235, 155, formText);
-	DrawInputBox(password, 243, 155, 413, 172, CalcFadedColor(0x40000000), inputBox, true);
+	DrawInputBox(tmp.password, 243, 155, 413, 172, CalcFadedColor(0x40000000), inputBox, true);
 
 	PPGeDrawText(di->T("Confirm Password"), 235, 175, formText);
-	DrawInputBox(password_confirm, 243, 175, 413, 192, CalcFadedColor(0x40000000), inputBox, true);
+	DrawInputBox(tmp.password_confirm, 243, 175, 413, 192, CalcFadedColor(0x40000000), inputBox, true);
 
-	DrawButton(di->T("Cancel"), 50, 210, 120, 225, CalcFadedColor(0xFF884300), 0.5f, (RegisterSelected)selected[(u8)stage] == RegisterSelected::CANCEL);
-	DrawButton(di->T("Continue"), 205, 210, 275, 225, CalcFadedColor(0xFF884300), 0.5f, (RegisterSelected)selected[(u8)stage] == RegisterSelected::CONTINUE);
+	DrawButton(di->T("Cancel"), 50, 210, 120, 225, CalcFadedColor(0xFF884300), 0.5f, (RegisterSelected)tmp.selected[(u8)stage] == RegisterSelected::CANCEL);
+	DrawButton(di->T("Continue"), 205, 210, 275, 225, CalcFadedColor(0xFF884300), 0.5f, (RegisterSelected)tmp.selected[(u8)stage] == RegisterSelected::CONTINUE);
 }
 
 void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
@@ -1033,16 +1025,16 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 	// Button Color: 0xFF884300
 
 	DrawFormBG();
-	switch ((RegisterInfoSelected)selected[(u8)stage]) {
+	switch ((RegisterInfoSelected)tmp.selected[(u8)stage]) {
 	case RegisterInfoSelected::ONLINE_NAME:
 		PPGeDrawRect(243, 115, 413, 132, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(downButtonFlag))
-			selected[(u8)stage] = (u8)RegisterInfoSelected::AVATAR_URL;
+			tmp.selected[(u8)stage] = (u8)RegisterInfoSelected::AVATAR_URL;
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Online Nickname", online_name, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Online Nickname", tmp.online_name, false,
 				[&](const std::string& value, int) {
 				// TODO: Alert the user that some characters are not allowed
-				online_name = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
+					tmp.online_name = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 			},
 				[&]() {
 				// Failure callback
@@ -1053,17 +1045,17 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 	case RegisterInfoSelected::AVATAR_URL:
 		PPGeDrawRect(243, 135, 413, 152, CalcFadedColor(0xC0C8B2AC));
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)RegisterInfoSelected::ONLINE_NAME;
+			tmp.selected[(u8)stage] = (u8)RegisterInfoSelected::ONLINE_NAME;
 		if (IsButtonPressed(downButtonFlag)) {
-			if (!online_name.empty() && !avatar_url.empty())
-				selected[(u8)stage] = (u8)RegisterInfoSelected::CONTINUE;
+			if (!tmp.online_name.empty() && !tmp.avatar_url.empty())
+				tmp.selected[(u8)stage] = (u8)RegisterInfoSelected::CONTINUE;
 			else
-				selected[(u8)stage] = (u8)RegisterInfoSelected::CANCEL;
+				tmp.selected[(u8)stage] = (u8)RegisterInfoSelected::CANCEL;
 		}
 		if (IsButtonPressed(okButtonFlag)) {
-			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Avatar URL", avatar_url, false,
+			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Avatar URL", tmp.avatar_url, false,
 				[&](const std::string& value, int) {
-				avatar_url = value;
+					tmp.avatar_url = value;
 			},
 				[&]() {
 				// Failure callback
@@ -1073,20 +1065,20 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 		break;
 	case RegisterInfoSelected::CANCEL:
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)RegisterInfoSelected::AVATAR_URL;
+			tmp.selected[(u8)stage] = (u8)RegisterInfoSelected::AVATAR_URL;
 		if (IsButtonPressed(rightButtonFlag)) {
 			// Skip Continue if email is empty
-			if (!online_name.empty() && !avatar_url.empty())
-				selected[(u8)stage] = (u8)RegisterInfoSelected::CONTINUE;
+			if (!tmp.online_name.empty() && !tmp.avatar_url.empty())
+				tmp.selected[(u8)stage] = (u8)RegisterInfoSelected::CONTINUE;
 		}
 		if (IsButtonPressed(okButtonFlag))
 			Transition(SigninStage::LOGIN_FORM);
 		break;
 	case RegisterInfoSelected::CONTINUE:
 		if (IsButtonPressed(upButtonFlag))
-			selected[(u8)stage] = (u8)RegisterInfoSelected::AVATAR_URL;
+			tmp.selected[(u8)stage] = (u8)RegisterInfoSelected::AVATAR_URL;
 		if (IsButtonPressed(leftButtonFlag))
-			selected[(u8)stage] = (u8)RegisterInfoSelected::CANCEL;
+			tmp.selected[(u8)stage] = (u8)RegisterInfoSelected::CANCEL;
 		if (IsButtonPressed(okButtonFlag))
 			Transition(SigninStage::REGISTRATION_REQUEST, true);
 		break;
@@ -1100,13 +1092,13 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 	PPGeDrawText(di->T("Enter the following information."), 65, 54, descText);
 
 	PPGeDrawText(di->T("Online Name"), 235, 111, formText);
-	DrawInputBox(online_name, 243, 115, 413, 132, CalcFadedColor(0x40000000), inputBox);
+	DrawInputBox(tmp.online_name, 243, 115, 413, 132, CalcFadedColor(0x40000000), inputBox);
 
 	PPGeDrawText(di->T("Avatar URL"), 235, 135, formText);
-	DrawInputBox(avatar_url, 243, 135, 413, 152, CalcFadedColor(0x40000000), inputBox);
+	DrawInputBox(tmp.avatar_url, 243, 135, 413, 152, CalcFadedColor(0x40000000), inputBox);
 
-	DrawButton(di->T("Cancel"), 50, 210, 120, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)selected[(u8)stage] == PasswordSelected::CANCEL);
-	DrawButton(di->T("Continue"), 205, 210, 275, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)selected[(u8)stage] == PasswordSelected::CONTINUE);
+	DrawButton(di->T("Cancel"), 50, 210, 120, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)tmp.selected[(u8)stage] == PasswordSelected::CANCEL);
+	DrawButton(di->T("Continue"), 205, 210, 275, 225, CalcFadedColor(0xFF884300), 0.5f, (PasswordSelected)tmp.selected[(u8)stage] == PasswordSelected::CONTINUE);
 }
 
 int PSPNpSigninDialog::Shutdown(bool force) {
