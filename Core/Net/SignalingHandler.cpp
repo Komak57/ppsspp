@@ -1268,7 +1268,6 @@ int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());
 	auto conn_id = get_conn_id_from_npid(notif_data->newRoomMemberDataInternal->userInfo.npId);
 
-	return notifyRoomEventHandler(room_id, memberId, *connId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
 	return notifyRoomEventHandler(room_id, memberId, (!conn_id ? 0 : *conn_id), SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
 }
 
