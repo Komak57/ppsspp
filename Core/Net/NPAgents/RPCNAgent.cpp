@@ -681,7 +681,7 @@ namespace net {
 		packet.Write(npid);
 		packet.Write((u8)0);
 
-		auto reqId = generate_uid(DEFAULT_CONTEXT, conn_id);
+		auto reqId = generate_uid(1, conn_id);
 		packet.Pack(CommandType::RequestSignalingInfos, reqId);
 
 		INFO_LOG(Log::sceNet, "Requesting Signaling Info for %s", npid.c_str());

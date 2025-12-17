@@ -63,9 +63,9 @@ u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_i
 		notifySignalingHandler(si->room_id, si->member_id, si->conn_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
 	}
 	else
-		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_PENDING;
+		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 
-	si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1;
+	si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
 
 	return conn_id;
 }
@@ -80,8 +80,15 @@ u32 signaling_handler::get_always_conn_id(const SceNpId& npid)
 	if (npid_to_conn_id.find(npid_str) != npid_to_conn_id.end())
 		return npid_to_conn_id.at(npid_str);
 
+	u32 conn_id = 0;
+	if (IsSelf(npid)) {
+		WARN_LOG(Log::sceNet, "Creating ConnID for Self for '%s'", npid_str.c_str());
+	}
+	else {
 	WARN_LOG(Log::sceNet, "ConnID for member '%s' not found. Creating.", npid_str.c_str());
-	const u32 conn_id = cur_conn_id++;
+		conn_id = cur_conn_id++;
+	}
+
 	npid_to_conn_id.emplace(std::move(npid_str), conn_id);
 	sig_peers.emplace(conn_id, std::make_shared<signaling_info>());
 	auto& si = sig_peers.at(conn_id);
@@ -366,6 +373,7 @@ void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
 	sent_packet.timestamp_sender = get_micro_timestamp(std::chrono::steady_clock::now());
 
 	std::shared_ptr<signaling_info> si = sig_peers.at(conn_id);
+	si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_PENDING;
 	const auto now = std::chrono::steady_clock::now();
 	si->time_last_msg_recvd = now;
 
