@@ -1317,28 +1317,26 @@ namespace net {
 		if (resp.stream->is_error())
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
 
-		u32 alloc = sizeof(SceNpMatching2RoomDataInternal);
-		u32 roomInfoPtr = np_memory.Alloc(alloc);
-		if (!Memory::IsValidAddress(roomInfoPtr)) {
-			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomData"), 0);
-		}
-		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
-		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomDataInternal, room_info, NpGetNpId(), _context->second->include_onlinename, _context->second->include_avatarurl);
-		print_SceNpMatching2RoomDataInternal(room_resp->roomDataInternal);
-		// Cache the new Room Info
-		npServer->cache.AddRoom(*room_info);
-
-		alloc = sizeof(SceNpMatching2GetRoomDataInternalResponse);
+		u32 alloc = sizeof(SceNpMatching2GetRoomDataInternalResponse);
 		u32 roomRespPtr = np_memory.Alloc(alloc);
 		if (!Memory::IsValidAddress(roomRespPtr)) {
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomResponse"), 0);
 		}
 		auto room_resp = PSPPointer<SceNpMatching2GetRoomDataInternalResponse>::Create(roomRespPtr);
-		room_resp->roomDataInternal = room_info;
+
+		alloc = sizeof(SceNpMatching2RoomDataInternal);
+		u32 roomInfoPtr = np_memory.Alloc(alloc);
+		if (!Memory::IsValidAddress(roomInfoPtr)) {
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomData"), 0);
+		}
+		room_resp->roomDataInternal = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
+		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomDataInternal, room_resp->roomDataInternal, NpGetNpId(), _context->second->include_onlinename, _context->second->include_avatarurl);
+		print_SceNpMatching2RoomDataInternal(room_resp->roomDataInternal);
+		// Cache the new Room Info
+		npServer->cache.AddRoom(*room_resp->roomDataInternal);
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, SCE_NP_MATCHING2_OKAY, room_resp.ptr);
 	}
-
 	int RPCNAgent::SendRoomMessage(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
