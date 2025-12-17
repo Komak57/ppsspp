@@ -1133,8 +1133,6 @@ namespace net {
 		npServer->cache.AddRoom(*respData->roomDataInternal);
 		npServer->cache.SavePassword(respData->roomDataInternal->roomId);
 
-		if (np2P2PThreadID)
-			__KernelStartThread(np2P2PThreadID, 0, 0);
 		// RPCS3 triggers this in sceNpSignalingActivateConnection
 		g_signaling.init_sig(*npId, respData->roomDataInternal->roomId, respData->roomDataInternal->memberList.me->memberId);
 		g_signaling.init_sig(*npId);
@@ -1259,9 +1257,6 @@ namespace net {
 
 		// Cache room_info
 		npServer->cache.AddRoom(*room_resp->roomDataInternal);
-
-		if (np2P2PThreadID)
-			__KernelStartThread(np2P2PThreadID, 0, 0);
 
 		// RPCS3 triggers this in sceNpSignalingActivateConnection
 		g_signaling.init_sig(*npId, room_resp->roomDataInternal->roomId, room_resp->roomDataInternal->memberList.me->memberId);

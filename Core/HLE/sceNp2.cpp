@@ -579,6 +579,8 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 	if (ret != SCE_NP_MATCHING2_OKAY)
 		return hleLogError(Log::sceNet, ret);
 
+	if (np2P2PThreadID)
+		__KernelStartThread(np2P2PThreadID, 0, 0);
 	// FIXME: This thread runs even when you trigger break
 	// RPCS3 has only 1 connection perpetually active
 	//  As such, it has additional functions in sceNp that
@@ -601,6 +603,9 @@ static int sceNpMatching2Term()
 		g_signaling.stop("NpMatching2 Terminating");
 		npServer->Disconnect();
 	}
+
+	if (np2P2PThreadID != 0)
+		__KernelStopThread(np2P2PThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread stopped");
 
 	npMatching2Inited = false;
 	npMatching2Handlers.clear();
@@ -793,10 +798,6 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 cbFuncPtr, u32
 
 	hleCall(sceNpMatching2, int, sceNpMatching2SetSignalingOptParam, ctxId, signalingOptParam.ptr);
 
-	// This is normally started 
-	if (np2P2PThreadID > 0) {
-		__KernelStartThread(np2P2PThreadID, 0, 0);
-	}
 	// We should probably move most of the signaling calls to SignalingHandler
 	// And, you know, rename it to sceNpMatching2Signaling
 
@@ -1242,8 +1243,6 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u
 	INFO_HEXLOG(Log::sceNet, " - optData:", reinterpret_cast<const u8*>(&*req->optData.data), sizeof(u8) * req->optData.length, 386);
 	INFO_LOG(Log::sceNet, " - teamId:		%d", req->teamId);
 
-	if (np2P2PThreadID)
-		__KernelStartThread(np2P2PThreadID, 0, 0);
 	// FIXME: Get roomData from PSN
 	int ret = npServer->JoinRoom(ctxId, request_id, req);
 

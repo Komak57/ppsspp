@@ -413,8 +413,6 @@ void signaling_handler::stop(const char* reason) {
 		signaling_thread_.join();*/
 	//if (np2RPCNThreadID)
 		//__KernelStopThread(np2RPCNThreadID, 0, "");
-	if (np2P2PThreadID)
-		__KernelStopThread(np2P2PThreadID, 0, "");
 
 	destroy_connection();
 	// optional: clear contexts after all callbacks are done
