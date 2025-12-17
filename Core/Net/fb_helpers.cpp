@@ -506,11 +506,10 @@ namespace np
 				//auto* sce_binattr_data = edata.allocate<u8>(sce_binattrs[b_index].data.size, sce_binattrs[b_index].data.ptr);
 				if (binAttr->data.size > 0) {
 					u32 alloc = binAttr->data.size;
-					auto sce_binattr_data = PSPPointer<u8>::Create(edata.Alloc(alloc));
-					binAttr->data.ptr = sce_binattr_data;
+					binAttr->data.ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
 					for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < binAttr->data.size; tmp_index++)
 					{
-						sce_binattr_data[tmp_index] = fb_battr->data()->data()->Get(tmp_index);
+						binAttr->data.ptr[tmp_index] = fb_battr->data()->data()->Get(tmp_index);
 					}
 				}
 			}
