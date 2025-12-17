@@ -432,8 +432,8 @@ namespace np
 			//auto* ptr_bin_attr = edata.allocate<SceNpMatching2RoomBinAttrInternal>(sizeof(SceNpMatching2RoomBinAttrInternal) * room_info->roomBinAttrInternalNum, room_info->roomBinAttrInternal);
 
 			u32 alloc = sizeof(SceNpMatching2RoomBinAttrInternal) * room_info->roomBinAttrInternalNum;
-			auto ptr_bin_attr = PSPPointer<SceNpMatching2RoomBinAttrInternal>::Create(edata.Alloc(alloc));
-			room_info->roomBinAttrInternal = ptr_bin_attr;
+			room_info->roomBinAttrInternal = PSPPointer<SceNpMatching2RoomBinAttrInternal>::Create(edata.Alloc(alloc));
+			auto ptr_bin_attr = room_info->roomBinAttrInternal;
 
 			for (u32 b_index = 0; b_index < room_info->roomBinAttrInternalNum; b_index++)
 			{
@@ -446,10 +446,10 @@ namespace np
 				//auto* ptr_bin_attr_data = edata.allocate<u8>(ptr_bin_attr[b_index].data.size, ptr_bin_attr[b_index].data.ptr);
 				if (ptr_bin_attr[b_index].data.size > 0) {
 					u32 alloc = ptr_bin_attr[b_index].data.size;
-					auto ptr_bin_attr_data = PSPPointer<u8>::Create(edata.Alloc(alloc));
+					ptr_bin_attr[b_index].data.ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
 					for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < ptr_bin_attr[b_index].data.size; tmp_index++)
 					{
-						ptr_bin_attr_data[tmp_index] = fb_bin_attr->data()->data()->Get(tmp_index);
+						ptr_bin_attr[b_index].data.ptr[tmp_index] = fb_bin_attr->data()->data()->Get(tmp_index);
 					}
 				}
 			}
