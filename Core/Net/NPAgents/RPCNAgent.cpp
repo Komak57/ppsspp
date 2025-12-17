@@ -394,7 +394,6 @@ namespace net {
 		}
 		return false;
 	}
-
 	int RPCNAgent::Login(const char* npid, const char* token, const char* password) {
 		// npid
 		// password
@@ -467,7 +466,6 @@ namespace net {
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
 		Packet packet = Packet();
 		packet.Write(npid);
@@ -511,7 +509,6 @@ namespace net {
 		INFO_LOG(Log::sceNet, "NPAgent::Recv('%s')", hexdata.c_str());*/
 		return true;
 	}
-
 	int RPCNAgent::GetServers(SceNpCommunicationId npTitleId) {
 		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 
@@ -566,7 +563,6 @@ namespace net {
 		//serversPtr->emplace(2, net::CreateNPAgent(net::NPAgentType::RPCN, 2, "rpcn.revurb.us", 3657, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	u64 RPCNAgent::GetNetworkTime() {
 		Packet packet = Packet();
 
@@ -594,7 +590,6 @@ namespace net {
 		}
 		return tick;
 	}
-	// async
 	int RPCNAgent::GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) {
 		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 
@@ -616,7 +611,6 @@ namespace net {
 		//worldInfoOut->emplace(worldInfo.worldId, worldInfo);
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::GetWorldInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError)
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
@@ -676,7 +670,6 @@ namespace net {
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_OKAY, response.ptr);
 	}
-
 	int RPCNAgent::RequestSignalingInfo(std::string npid, u32 conn_id) {
 		Packet packet = Packet();
 		packet.Write(npid);
@@ -694,7 +687,6 @@ namespace net {
 		}
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::RequestSignalingInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId conn_id, RPCNResponse resp) {
 
 		switch ((ErrorType)resp.error)
@@ -729,7 +721,6 @@ namespace net {
 		g_signaling.connect(conn_id, addr, port);
 		return SCE_NP_MATCHING2_OKAY;
 	}
-	//async
 	int RPCNAgent::SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
@@ -804,7 +795,6 @@ namespace net {
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::SearchRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError)
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_PARSER_FAILED), 0);
@@ -836,7 +826,6 @@ namespace net {
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, SCE_NP_MATCHING2_OKAY, respData.ptr);
 	}
-	//async
 	int RPCNAgent::CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) {
 
 		flatbuffers::FlatBufferBuilder builder(4096);
@@ -1020,7 +1009,6 @@ namespace net {
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::CreateJoinRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
 			switch ((ErrorType)resp.error) {
@@ -1084,7 +1072,6 @@ namespace net {
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respData.ptr);
 	}
-	//async
 	int RPCNAgent::JoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 
@@ -1127,7 +1114,6 @@ namespace net {
 		return SCE_NP_MATCHING2_OKAY;
 		//return forge_request_with_com_id(builder, communication_id, CommandType::CreateRoomGUI, req_id);
 	}
-
 	int RPCNAgent::JoinRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError:
@@ -1212,7 +1198,6 @@ namespace net {
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, SCE_NP_MATCHING2_OKAY, room_resp.ptr);
 	}
-	//async
 	int RPCNAgent::LeaveRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<PresenceOptionData> final_optdata = CreatePresenceOptionData(builder, builder.CreateVector(req->optData.data, 16), req->optData.length);
@@ -1242,7 +1227,6 @@ namespace net {
 		
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::LeaveRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError:
@@ -1275,7 +1259,6 @@ namespace net {
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);
 	}
-	//async
 	int RPCNAgent::GetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 
@@ -1309,7 +1292,6 @@ namespace net {
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::GetRoomDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
 			int errorCode;
@@ -1401,7 +1383,6 @@ namespace net {
 		}
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::SendRoomMessage_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError: break;
@@ -1415,7 +1396,6 @@ namespace net {
 		resp.stream = new vec_stream(resp.data, 1);
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, SCE_NP_MATCHING2_OKAY, 0);
 	}
-	//async
 	int RPCNAgent::SetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_binattrinternal_vec;
@@ -1480,7 +1460,6 @@ namespace net {
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::SetRoomDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
 			int errorCode;
@@ -1512,7 +1491,6 @@ namespace net {
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, SCE_NP_MATCHING2_OKAY, 0);
 	}
-	//async
 	int RPCNAgent::SetRoomDataExternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<IntAttr>>> final_searchintattrexternal_vec;
@@ -1597,7 +1575,6 @@ namespace net {
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::SetRoomDataExternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
 			int errorCode;
@@ -1626,7 +1603,6 @@ namespace net {
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, SCE_NP_MATCHING2_OKAY, 0);
 	}
-
 	int RPCNAgent::SetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomMemberDataInternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_binattrinternal_vec;
@@ -1661,7 +1637,6 @@ namespace net {
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::SetRoomMemberDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 
 		switch ((ErrorType)resp.error)
@@ -1676,7 +1651,6 @@ namespace net {
 		
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, SCE_NP_MATCHING2_OKAY, 0);
 	}
-
 	int RPCNAgent::GetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomMemberDataInternalRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<u16>> final_attrid_vec;
@@ -1710,9 +1684,7 @@ namespace net {
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::GetRoomMemberDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
-
 		switch ((ErrorType)resp.error)
 		{
 		case ErrorType::NoError: break;
@@ -1725,8 +1697,6 @@ namespace net {
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, SCE_NP_MATCHING2_OKAY, 0);
 	}
-
-	//async
 	int RPCNAgent::SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_memberbinattr_vec;
@@ -1761,7 +1731,6 @@ namespace net {
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::SetUserInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError) {
 			int errorCode;
@@ -1785,7 +1754,6 @@ namespace net {
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, SCE_NP_MATCHING2_OKAY, 0);
 	}
-	//async
 	int RPCNAgent::GetRoomDataExternalList(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req) {
 
 		flatbuffers::FlatBufferBuilder builder(1024);
@@ -1820,7 +1788,6 @@ namespace net {
 
 		return SCE_NP_MATCHING2_OKAY;
 	}
-
 	int RPCNAgent::GetRoomDataExternalList_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		INFO_LOG(Log::sceNet, "RoomDataExternalList Response obtained");
 		switch ((ErrorType)resp.error) {

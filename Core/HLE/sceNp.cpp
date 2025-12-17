@@ -226,10 +226,10 @@ static int sceNpGetOnlineId(u32 idPtr)
 }
 
 void NpSetNpId(std::string newNpId) {
-		memset(&npId, 0, sizeof(npId));
+	memset(&npId, 0, sizeof(npId));
 	memcpy(&npId.handle.data, newNpId.c_str(),
 		std::min<size_t>(16, newNpId.length()));
-	}
+}
 
 SceNpId* NpGetNpId() {
 	return &npId;
