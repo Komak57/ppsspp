@@ -748,11 +748,10 @@ namespace np
 			sce_mi->msgLen = msg->size();
 			//auto* ptr_msg_data = static_cast<u8*>(edata.allocate<void>(msg->size(), sce_mi->msg));
 			u32 alloc = msg->size();
-			auto ptr_msg_data = PSPPointer<u8>::Create(edata.Alloc(alloc));
-			sce_mi->msg = ptr_msg_data;
+			sce_mi->msg = PSPPointer<u8>::Create(edata.Alloc(alloc));
 			for (u32 i = 0; i < msg->size(); i++)
 			{
-				ptr_msg_data[i] = msg->Get(i);
+				sce_mi->msg[i] = msg->Get(i);
 			}
 		}
 	}
