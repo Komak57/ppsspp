@@ -15,6 +15,7 @@
 #include <Core/Net/fb_helpers.h>
 #include <Core/Config.h>
 #include <Core/Util/PortManager.h>
+#include <Core/Debugger/Np2Printer.h>
 
 using namespace std::literals::chrono_literals;
 
@@ -831,65 +832,7 @@ namespace net {
 		auto respData = PSPPointer<SceNpMatching2SearchRoomResponse>::Create(respPtr);
 
 		::np::SearchRoomResponse_to_SceNpMatching2SearchRoomResponse(np_memory, roomResp, respData);
-
-		INFO_LOG(Log::sceNet, " - Range Size:        %d", respData->range.size);
-		INFO_LOG(Log::sceNet, " - Range Start:       %d", respData->range.startIndex);
-		INFO_LOG(Log::sceNet, " - Range Total:       %d", respData->range.total);
-		if (Memory::IsValidAddress(respData->roomDataExternal.ptr)) {
-			INFO_HEXLOG(Log::sceNet, "roomDataExternal: ", reinterpret_cast<const u8*>(&*respData->roomDataExternal), sizeof(SceNpMatching2RoomDataExternal), 386);
-
-			INFO_LOG(Log::sceNet, " - Next:              %d", respData->roomDataExternal->next.ptr);
-			INFO_LOG(Log::sceNet, " - Server ID:         %d", respData->roomDataExternal->serverId);
-			INFO_LOG(Log::sceNet, " - World ID:          %d", respData->roomDataExternal->worldId);
-			INFO_LOG(Log::sceNet, " - Public Slot:       %d", respData->roomDataExternal->publicSlotNum);
-			INFO_LOG(Log::sceNet, " - Private Slot:      %d", respData->roomDataExternal->privateSlotNum);
-			INFO_LOG(Log::sceNet, " - Lobby ID:          %llx", respData->roomDataExternal->lobbyId);
-			INFO_LOG(Log::sceNet, " - Room ID:           %llx", respData->roomDataExternal->roomId);
-			//INFO_LOG(Log::sceNet, " - Open Plubic Slot:  %d", respData->roomDataExternal->openPublicSlotNum);
-			INFO_LOG(Log::sceNet, " - Max Slot:          %d", respData->roomDataExternal->maxSlot);
-			//INFO_LOG(Log::sceNet, " - Open Private Slot: %d", respData->roomDataExternal->openPrivateSlotNum);
-			INFO_LOG(Log::sceNet, " - Cur Member Num:    %d", respData->roomDataExternal->curMemberNum);
-			INFO_LOG(Log::sceNet, " - Password Mask:     %llx", respData->roomDataExternal->passwordSlotMask);
-
-			if (respData->roomDataExternal->owner.IsValid())
-				INFO_HEXLOG(Log::sceNet, "owner: ", reinterpret_cast<const u8*>(&*respData->roomDataExternal->owner), sizeof(SceNpUserInfo2), 386);
-			else
-				INFO_LOG(Log::sceNet, " - owner:             NONE");
-
-			for (int i = 0; i < respData->roomDataExternal->roomGroupNum; i++) {
-				auto data = PSPPointer<SceNpMatching2RoomGroup>::Create(respData->roomDataExternal->roomGroup.ptr + i * sizeof(SceNpMatching2RoomGroup));
-				INFO_HEXLOG(Log::sceNet, "roomGroup: ", reinterpret_cast<const u8*>(&data), sizeof(SceNpMatching2RoomGroup), 386);
-			}
-			INFO_LOG(Log::sceNet, " - Room Group Num:    %d", respData->roomDataExternal->roomGroupNum);
-
-			INFO_LOG(Log::sceNet, " - Flag Attr:         %08x", respData->roomDataExternal->flagAttr);
-
-			for (int i = 0; i < respData->roomDataExternal->roomSearchableIntAttrExternalNum; i++) {
-				auto data = PSPPointer<SceNpMatching2IntAttr>::Create(respData->roomDataExternal->roomSearchableIntAttrExternal.ptr + i * sizeof(SceNpMatching2IntAttr));
-				INFO_LOG(Log::sceNet, " - roomSearchableIntAttrExternal[%d]:", i);
-				INFO_LOG(Log::sceNet, " - - Id:   %d", data->id);
-				INFO_LOG(Log::sceNet, " - - Num:  %d", data->num);
-			}
-			INFO_LOG(Log::sceNet, " - sIntAttrNum:       %d", respData->roomDataExternal->roomSearchableIntAttrExternalNum);
-
-			for (int i = 0; i < respData->roomDataExternal->roomSearchableBinAttrExternalNum; i++) {
-				auto data = PSPPointer<SceNpMatching2BinAttr>::Create(respData->roomDataExternal->roomSearchableBinAttrExternal.ptr + i * sizeof(SceNpMatching2BinAttr));
-				INFO_HEXLOG(Log::sceNet, "roomSearchableBinAttrExternal: ", reinterpret_cast<const u8*>(&*data), sizeof(SceNpMatching2BinAttr), 386);
-				if (data->ptr.IsValid())
-					INFO_HEXLOG(Log::sceNet, "roomSearchableBinAttrExternal.ptr: ", reinterpret_cast<const u8*>(&*data->ptr), sizeof(u8) * data->size, 386);
-			}
-			INFO_LOG(Log::sceNet, " - sBinAttrNum:       %d", respData->roomDataExternal->roomSearchableBinAttrExternalNum);
-
-			for (int i = 0; i < respData->roomDataExternal->roomBinAttrExternalNum; i++) {
-				auto data = PSPPointer<SceNpMatching2BinAttr>::Create(respData->roomDataExternal->roomBinAttrExternal.ptr + i * sizeof(SceNpMatching2BinAttr));
-				INFO_HEXLOG(Log::sceNet, "roomBinAttrExternalNum: ", reinterpret_cast<const u8*>(&*data), sizeof(SceNpMatching2BinAttr), 386);
-				if (data->ptr.IsValid())
-					INFO_HEXLOG(Log::sceNet, "roomBinAttrExternalNum.ptr: ", reinterpret_cast<const u8*>(&*data->ptr), sizeof(u8) * data->size, 386);
-			}
-			INFO_LOG(Log::sceNet, " - BinAttrNum:        %d", respData->roomDataExternal->roomBinAttrExternalNum);
-		}
-		else
-			INFO_LOG(Log::sceNet, " - Empty Search Request");
+		print_SceNpMatching2SearchRoomResponse(respData);
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, SCE_NP_MATCHING2_OKAY, respData.ptr);
 	}
@@ -1127,6 +1070,7 @@ namespace net {
 		respData->roomDataInternal = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
 		SceNpId* npId = NpGetNpId();
 		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomData, respData->roomDataInternal, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
+		print_SceNpMatching2CreateJoinRoomResponse(respData);
 
 		// Cache Rooms
 		//rooms.push_back(roomData);
@@ -1228,33 +1172,7 @@ namespace net {
 
 		SceNpId* npId = NpGetNpId();
 		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, joinRoomResp->room_data(), room_resp->roomDataInternal, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
-
-		INFO_LOG(Log::sceNet, "JoinRoom_Reply(%08X)", room_resp.ptr);
-		if (room_resp->roomDataInternal.IsValid())
-		{
-			INFO_LOG(Log::sceNet, " - Server ID:         %d", room_resp->roomDataInternal->serverId);
-			INFO_LOG(Log::sceNet, " - World ID:          %d", room_resp->roomDataInternal->worldId);
-			INFO_LOG(Log::sceNet, " - Lobby ID:          %d", room_resp->roomDataInternal->lobbyId);
-			INFO_LOG(Log::sceNet, " - Room ID:           %d", room_resp->roomDataInternal->roomId);
-			INFO_LOG(Log::sceNet, " - PasswordSlotMask:  %llx", room_resp->roomDataInternal->passwordSlotMask);
-			INFO_LOG(Log::sceNet, " - maxSlot:           %d", room_resp->roomDataInternal->maxSlot);
-			INFO_LOG(Log::sceNet, " - members.Num:       %d", room_resp->roomDataInternal->memberList.membersNum);
-			for (int i = 0; i < room_resp->roomDataInternal->roomGroupNum; i++) {
-				auto data = PSPPointer<SceNpMatching2RoomGroup>::Create(room_resp->roomDataInternal->roomGroup.ptr + i * sizeof(SceNpMatching2RoomGroup));
-				INFO_HEXLOG(Log::sceNet, "roomGroup: ", reinterpret_cast<const u8*>(&*data), sizeof(SceNpMatching2RoomGroup), 386);
-			}
-			INFO_LOG(Log::sceNet, " - roomGroupNum:      %d", room_resp->roomDataInternal->roomGroupNum);
-
-			INFO_LOG(Log::sceNet, " - flagAttr:          %08x", room_resp->roomDataInternal->flagAttr);
-			for (int i = 0; i < room_resp->roomDataInternal->roomBinAttrInternalNum; i++) {
-				auto data = PSPPointer<SceNpMatching2RoomBinAttrInternal>::Create(room_resp->roomDataInternal->roomBinAttrInternal.ptr + i * sizeof(SceNpMatching2RoomBinAttrInternal));
-				INFO_HEXLOG(Log::sceNet, "roomBinAttrInternal: ", reinterpret_cast<const u8*>(&*data), sizeof(SceNpMatching2RoomBinAttrInternal), 386);
-			}
-			INFO_LOG(Log::sceNet, " - roomBinAttrInternalNum: %d", room_resp->roomDataInternal->roomBinAttrInternalNum);
-		}
-		else
-			ERROR_LOG(Log::sceNet, " - No Room Attached", room_resp->roomDataInternal);
-
+		print_SceNpMatching2RoomDataInternal(room_resp->roomDataInternal);
 		// Cache room_info
 		npServer->cache.AddRoom(*room_resp->roomDataInternal);
 
@@ -1424,6 +1342,7 @@ namespace net {
 		}
 		auto room_info = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
 		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomDataInternal, room_info, NpGetNpId(), _context->second->include_onlinename, _context->second->include_avatarurl);
+		print_SceNpMatching2RoomDataInternal(room_resp->roomDataInternal);
 		// Cache the new Room Info
 		npServer->cache.AddRoom(*room_info);
 
@@ -1929,6 +1848,7 @@ namespace net {
 		u32 alloc = sizeof(SceNpMatching2GetRoomDataExternalListResponse);
 		auto getRoomDataExtListResponse = PSPPointer<SceNpMatching2GetRoomDataExternalListResponse>::Create(np_memory.Alloc(alloc));
 		::np::GetRoomDataExternalListResponse_to_SceNpMatching2GetRoomDataExternalListResponse(np_memory, roomDataExternal, getRoomDataExtListResponse, _context->second->include_onlinename, _context->second->include_avatarurl);
+		print_SceNpMatching2GetRoomDataExternalListResponse(getRoomDataExtListResponse);
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, SCE_NP_MATCHING2_OKAY, getRoomDataExtListResponse.ptr);
 	}

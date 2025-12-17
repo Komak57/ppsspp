@@ -39,6 +39,7 @@
 #include "Core/Net/fb_helpers.h"
 #include "Core/HLE/proAdhoc.h" // For Local IP
 #include <Core/Util/PortManager.h>
+#include <Core/Debugger/Np2Printer.h>
 //#include "NpMatchingContext.h"
 //#include "Np2SignalingHandler.h"
 
@@ -968,47 +969,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 	const PSPPointer<SceNpMatching2SearchRoomRequest> req = PSPPointer<SceNpMatching2SearchRoomRequest>::Create(reqParamPtr);
-
-	
-	INFO_LOG(Log::sceNet, "SceNpMatching2SearchRoomRequest(%08X)", req.ptr);
-	INFO_HEXLOG(Log::sceNet, "SearchRoom Request: ", reinterpret_cast<const u8*>(&*req), sizeof(SceNpMatching2SearchRoomRequest), 386);
-
-	INFO_LOG(Log::sceNet, " - option:       %d", req->option);
-	INFO_LOG(Log::sceNet, " - worldId:      %d", req->worldId);
-	INFO_LOG(Log::sceNet, " - lobbyId:      %d", req->lobbyId);
-	INFO_LOG(Log::sceNet, " - rangeFilter:  %d", req->rangeFilter);
-	INFO_LOG(Log::sceNet, " - flagFilter:   %d", req->flagFilter);
-	INFO_LOG(Log::sceNet, " - flagAttr:     %d", req->flagAttr);
-	for (int i = 0; i < req->intFilterNum; i++) {
-		auto data = req->intFilter + i;
-
-		INFO_LOG(Log::sceNet, " - intFilter[%d]", i);
-		INFO_LOG(Log::sceNet, " - - searchOp:     %d", data->searchOperator);
-		INFO_LOG(Log::sceNet, " - - attr.id:      %d", data->attr.id);
-		INFO_LOG(Log::sceNet, " - - attr.num:     %d", data->attr.num);
-	}
-	INFO_LOG(Log::sceNet, " - intFilterNum: %d", req->intFilterNum);
-	
-	for (int i = 0; i < req->binFilterNum; i++) {
-		auto data = req->binFilter + i;
-
-		INFO_LOG(Log::sceNet, " - binFilter[%d]", i);
-		INFO_LOG(Log::sceNet, " - - searchOp:     %d", data->searchOperator);
-		INFO_LOG(Log::sceNet, " - - attr:");
-		INFO_LOG(Log::sceNet, " - - - id:         %d", data->attr.id);
-		INFO_HEXLOG(Log::sceNet, "- - - binFilter: ", reinterpret_cast<const u8*>(&*data->attr.ptr), data->attr.size, 386);
-		INFO_LOG(Log::sceNet, " - - - size:       %d", data->attr.size);
-	}
-	INFO_LOG(Log::sceNet, " - binFilterNum: %d", req->binFilterNum);
-	
-	for (int i = 0; i < req->attrIdNum; i++) {
-		auto data = Memory::Read_U32(req->attrId.ptr + i * 4);
-		INFO_LOG(Log::sceNet, " - attrId[%d]", i);
-		INFO_LOG(Log::sceNet, " - - id:         %d", i, data);
-	}
-	INFO_LOG(Log::sceNet, " - attrIdNum:    %d", req->attrIdNum);
-
-	INFO_LOG(Log::sceNet, "End of Request", req.ptr);
+	print_SceNpMatching2SearchRoomRequest(req);
 
 	if (!npServer->cache.Exists(req->worldId)) {
 		ERROR_LOG(Log::sceNet, " - Invalid World ID");
@@ -1058,112 +1019,10 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		hleCall(sceNpMatching2, int, sceNpMatching2SetDefaultRoomMessageOptParam, ctxId, roomMessageCbPtr);
 
 	auto req = PSPPointer<SceNpMatching2CreateJoinRoomRequest>::Create(reqParamPtr);
-	//Memory::Memcpy(&req, reqParamPtr, sizeof(req));
-	auto world_exists = npServer->cache.Exists(req->worldId);
-	INFO_LOG(Log::sceNet, "SceNpMatching2CreateJoinRoomRequest(%08X)", req.ptr);
-	if (world_exists) {
-		INFO_LOG(Log::sceNet, " - worldId:          %d", req->worldId);
-	}
-	else {
-		ERROR_LOG(Log::sceNet, " - worldId:         NONE");
-	}
-	INFO_LOG(Log::sceNet, " - lobbyId:          %d", req->lobbyId);
-	INFO_LOG(Log::sceNet, " - maxSlot:          %d", req->maxSlot);
-	INFO_LOG(Log::sceNet, " - flagAttr:         %lx", req->flagAttr);
-
-	for (int i = 0; i < req->roomBinAttrInternalNum; i++) {
-		auto data = req->roomBinAttrInternal + i;
-		INFO_LOG(Log::sceNet, " - roomBinAttrInternal[%d]:", i);
-		INFO_LOG(Log::sceNet, " - - id:         %d", data->id);
-		if (data->ptr.IsValid())
-			INFO_HEXLOG(Log::sceNet, " - - ptr:", reinterpret_cast<const u8*>(&*data->ptr), sizeof(u8) * data->size, 386);
-		else
-			INFO_LOG(Log::sceNet, " - - ptr:         0x%08x", 0);
-		INFO_LOG(Log::sceNet, " - - size:       %d", data->size);
-	}
-	INFO_LOG(Log::sceNet, " - roomBinAttrInternalNum:         %d", req->roomBinAttrInternalNum);
-
-	for (int i = 0; i < req->roomSearchableIntAttrExternalNum; i++) {
-		auto data = PSPPointer<SceNpMatching2IntAttr>::Create(req->roomSearchableIntAttrExternal.ptr + i * sizeof(SceNpMatching2IntAttr));
-		INFO_LOG(Log::sceNet, " - roomSearchableIntAttrExternal[%d]:", i);
-		INFO_LOG(Log::sceNet, " - - Id:   %d", data->id);
-		INFO_LOG(Log::sceNet, " - - Num:  %04x", data->num);
-	}
-	INFO_LOG(Log::sceNet, " - roomSearchableIntAttrExternalNum: %d", req->roomSearchableIntAttrExternalNum);
-
-	for (int i = 0; i < req->roomSearchableBinAttrExternalNum; i++) {
-		auto data = req->roomSearchableBinAttrExternal + i;
-		INFO_LOG(Log::sceNet, " - roomSearchableBinAttrExternal[%d]:", i);
-		INFO_LOG(Log::sceNet, " - - id:         %d", data->id);
-		if (data->ptr.IsValid())
-			INFO_HEXLOG(Log::sceNet, " - - ptr:", reinterpret_cast<const u8*>(&*data->ptr), sizeof(u8) * data->size, 386);
-		else
-			INFO_LOG(Log::sceNet, " - - ptr:         0x%08x", 0);
-		INFO_LOG(Log::sceNet, " - - size:       %d", data->size);
-	}
-	INFO_LOG(Log::sceNet, " - roomSearchableBinAttrExternalNum: %d", req->roomSearchableBinAttrExternalNum);
-
-	for (int i = 0; i < req->roomBinAttrExternalNum; i++) {
-		auto data = req->roomBinAttrExternal + i;
-		INFO_LOG(Log::sceNet, " - roomBinAttrExternal[%d]:", i);
-		INFO_LOG(Log::sceNet, " - - id:         %d", data->id);
-		if (data->ptr.IsValid())
-			INFO_HEXLOG(Log::sceNet, " - - ptr:", reinterpret_cast<const u8*>(&*data->ptr), sizeof(u8) * data->size, 386);
-		else
-			INFO_LOG(Log::sceNet, " - - ptr:         0x%08x", 0);
-		INFO_LOG(Log::sceNet, " - - size:       %d", data->size);
-	}
-	INFO_LOG(Log::sceNet, " - roomBinAttrExternalNum:         %d", req->roomBinAttrExternalNum);
-
-	char* pwd = "EMPTY";
-	if (req->roomPassword.IsValid()) {
-		npServer->cache.SetPassword(*req->roomPassword);
-		pwd = reinterpret_cast<char*>(req->roomPassword->data);
-	}
-	INFO_LOG(Log::sceNet, " - roomPassword:		'%s'", pwd);
-
-	for (int i = 0; i < req->groupConfigNum; i++) {
-		auto data = req->groupConfig + i;
-		INFO_HEXLOG(Log::sceNet, "groupConfig: ", reinterpret_cast<const u8*>(&data), sizeof(SceNpMatching2RoomGroupConfig), 386);
-	}
-	INFO_LOG(Log::sceNet, " - groupConfigNum:   %d", req->groupConfigNum);
-
-	INFO_LOG(Log::sceNet, " - passwordSlotMask: %llx", (req->passwordSlotMask.IsValid() ? *req->passwordSlotMask : 0));
-
-	if (req->joinRoomGroupLabel.IsValid())
-		INFO_HEXLOG(Log::sceNet, "joinRoomGroupLabel: ", reinterpret_cast<const u8*>(&*req->joinRoomGroupLabel), sizeof(SceNpMatching2GroupLabel), 386);
-
-	if (req->allowedUser.IsValid())
-		INFO_HEXLOG(Log::sceNet, "allowedUser: ", reinterpret_cast<const u8*>(&*req->allowedUser), sizeof(SceNpId) * req->allowedUserNum, 386);
-	INFO_LOG(Log::sceNet, " - allowedUserNum:   %d", req->allowedUserNum);
-
-	if (req->blockedUser.IsValid())
-		INFO_HEXLOG(Log::sceNet, "blockedUser: ", reinterpret_cast<const u8*>(&*req->blockedUser), sizeof(SceNpId) * req->blockedUserNum, 386);
-	INFO_LOG(Log::sceNet, " - blockedUserNum:   %d", req->blockedUserNum);
-
-	for (int i = 0; i < req->roomMemberBinAttrInternalNum; i++) {
-		auto data = req->roomMemberBinAttrInternal + i;
-		INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternal[%d]:", i);
-		INFO_LOG(Log::sceNet, " - - id:         %d", data->id);
-		if (data->ptr.IsValid())
-			INFO_HEXLOG(Log::sceNet, " - - ptr:", reinterpret_cast<const u8*>(&*data->ptr), sizeof(u8) * data->size, 386);
-		else
-			INFO_LOG(Log::sceNet, " - - ptr:         0x%08x", 0);
-		INFO_LOG(Log::sceNet, " - - size:       %d", data->size);
-	}
-	INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternalNum:         %d", req->roomMemberBinAttrInternalNum);
-
-	INFO_LOG(Log::sceNet, " - teamId:           %d", req->teamId);
-
-	INFO_LOG(Log::sceNet, " - sigOptions:       0x%08x", req->sigOptions.ptr);
-	if (req->sigOptions.IsValid()) {
-		INFO_LOG(Log::sceNet, " - - type:           %d", req->sigOptions->type);
-		INFO_LOG(Log::sceNet, " - - flag:           %01x", req->sigOptions->flag);
-		INFO_LOG(Log::sceNet, " - - memberId:       %d", req->sigOptions->hubMemberId);
-		INFO_LOG(Log::sceNet, " - - reserved:       %01x%01x%01x%01x", req->sigOptions->reserved2[0], req->sigOptions->reserved2[1], req->sigOptions->reserved2[2], req->sigOptions->reserved2[3]);
-	}
+	print_SceNpMatching2CreateJoinRoomRequest(req);
 
 	// When a game requests world_id 0, it implies an error occurred in the game's logic
+	auto world_exists = npServer->cache.Exists(req->worldId);
 	if (!world_exists) {
 		ERROR_LOG(Log::sceNet, " - Invalid worldId");
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ROOM_ID), 0);
@@ -1219,29 +1078,7 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u
 		hleCall(sceNpMatching2, int, sceNpMatching2SetDefaultRoomMessageOptParam, ctxId, roomMessageCbPtr);
 
 	auto req = PSPPointer<SceNpMatching2JoinRoomRequest>::Create(reqParamPtr);
-
-	INFO_HEXLOG(Log::sceNet, "JoinRoom Request: ", reinterpret_cast<const u8*>(&*req), sizeof(SceNpMatching2JoinRoomRequest), 386);
-
-	INFO_LOG(Log::sceNet, " - roomId:		%ll", req->roomId);
-	if (req->roomPassword.IsValid())
-		INFO_HEXLOG(Log::sceNet, "roomPassword: ", reinterpret_cast<const u8*>(&*req->roomPassword), sizeof(SceNpMatching2SessionPassword), 386);
-
-	if (req->joinRoomGroupLabel.IsValid())
-		INFO_HEXLOG(Log::sceNet, "joinRoomGroupLabel: ", reinterpret_cast<const u8*>(&*req->joinRoomGroupLabel), sizeof(SceNpMatching2GroupLabel), 386);
-
-	for (int i = 0; i < req->roomMemberBinAttrInternalNum; i++) {
-		auto data = req->roomMemberBinAttrInternal + i;
-		INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternal[%d]:", i);
-		INFO_LOG(Log::sceNet, " - - id:         %d", data->id);
-		if (data->ptr.IsValid())
-			INFO_HEXLOG(Log::sceNet, " - - ptr:", reinterpret_cast<const u8*>(&*data->ptr), sizeof(u8) * data->size, 386);
-		else
-			INFO_LOG(Log::sceNet, " - - ptr:         0x%08x", 0);
-		INFO_LOG(Log::sceNet, " - - size:       %d", data->size);
-	}
-	INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternalNum:		%d", req->roomMemberBinAttrInternalNum);
-	INFO_HEXLOG(Log::sceNet, " - optData:", reinterpret_cast<const u8*>(&*req->optData.data), sizeof(u8) * req->optData.length, 386);
-	INFO_LOG(Log::sceNet, " - teamId:		%d", req->teamId);
+	print_SceNpMatching2JoinRoomRequest(req);
 
 	// FIXME: Get roomData from PSN
 	int ret = npServer->JoinRoom(ctxId, request_id, req);
@@ -1363,40 +1200,7 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
 	auto req = PSPPointer<SceNpMatching2SetRoomDataExternalRequest>::Create(reqParamPtr);
-
-	INFO_LOG(Log::sceNet, " - roomId:             %d", req->roomId);
-
-	for (int i = 0; i < req->roomSearchableIntAttrExternalNum; i++) {
-		auto data = req->roomSearchableIntAttrExternal + i;
-		INFO_LOG(Log::sceNet, " - roomSearchableIntAttrExternal[%d]:", i);
-		INFO_LOG(Log::sceNet, " - - id:               %d", data->id);
-		INFO_LOG(Log::sceNet, " - - num:              %d", data->num);
-	}
-	INFO_LOG(Log::sceNet, " - roomSearchableIntAttrExternalNum:		%d", req->roomSearchableIntAttrExternalNum);
-
-	for (int i = 0; i < req->roomSearchableBinAttrExternalNum; i++) {
-		auto data = req->roomSearchableBinAttrExternal + i;
-		INFO_LOG(Log::sceNet, " - roomSearchableBinAttrExternal[%d]:", i);
-		INFO_LOG(Log::sceNet, " - - id:               %d", data->id);
-		if (data->ptr.IsValid())
-			INFO_HEXLOG(Log::sceNet, " - - ptr:              %d", reinterpret_cast<const u8*>(&*data->ptr), sizeof(u8) * data->size, 386);
-		else
-			INFO_LOG(Log::sceNet, " - - ptr:              0x00000000");
-		INFO_LOG(Log::sceNet, " - - size:             %d", data->size);
-	}
-	INFO_LOG(Log::sceNet, " - roomSearchableBinAttrExternalNum:		%d", req->roomSearchableBinAttrExternalNum);
-
-	for (int i = 0; i < req->roomBinAttrExternalNum; i++) {
-		auto data = req->roomBinAttrExternal + i;
-		INFO_LOG(Log::sceNet, " - roomBinAttrExternal[%d]:", i);
-		INFO_LOG(Log::sceNet, " - - id:               %d", data->id);
-		if (data->ptr.IsValid())
-			INFO_HEXLOG(Log::sceNet, " - - ptr:              %d", reinterpret_cast<const u8*>(&*data->ptr), sizeof(u8) * data->size, 386);
-		else
-			INFO_LOG(Log::sceNet, " - - ptr:              0x00000000");
-		INFO_LOG(Log::sceNet, " - - size:             %d", data->size);
-	}
-	INFO_LOG(Log::sceNet, " - roomBinAttrExternalNum:		%d", req->roomBinAttrExternalNum);
+	print_SceNpMatching2SetRoomDataExternalRequest(req);
 
 	int ret = npServer->SetRoomDataExternal(ctxId, request_id, req);
 
@@ -1434,42 +1238,7 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 	auto req = PSPPointer<SceNpMatching2SetRoomDataInternalRequest>::Create(reqParamPtr);
-
-	INFO_HEXLOG(Log::sceNet, "SetRoomDataInternal Request: ", reinterpret_cast<const u8*>(&*req), sizeof(SceNpMatching2SetRoomDataInternalRequest), 386);
-
-	INFO_LOG(Log::sceNet, " - roomId:         %d", req->roomId);
-	INFO_LOG(Log::sceNet, " - flagFilter:     %04x", req->flagFilter);
-	INFO_LOG(Log::sceNet, " - flagAttr:       %04x", req->flagAttr);
-
-	for (int i = 0; i < req->roomBinAttrInternalNum; i++) {
-		auto data = req->roomBinAttrInternal + i;
-		INFO_LOG(Log::sceNet, " - roomSearchableBinAttrExternal[%d]:", i);
-		INFO_LOG(Log::sceNet, " - - id:               %d", data->id);
-		if (data->ptr.IsValid())
-			INFO_HEXLOG(Log::sceNet, " - - ptr:              %d", reinterpret_cast<const u8*>(&*data->ptr), sizeof(u8) * data->size, 386);
-		else
-			INFO_LOG(Log::sceNet, " - - ptr:              0x00000000");
-		INFO_LOG(Log::sceNet, " - - size:             %d", data->size);
-	}
-	INFO_LOG(Log::sceNet, " - roomBinAttrInternalNum:		%d", req->roomBinAttrInternalNum);
-
-	if (req->passwordConfig.ptr != 0)
-		INFO_HEXLOG(Log::sceNet, "passwordConfig: ", reinterpret_cast<const u8*>(&*req->passwordConfig), sizeof(SceNpMatching2RoomGroupPasswordConfig) * req->passwordConfigNum, 386);
-	INFO_LOG(Log::sceNet, " - passwordConfigNum:          %d", req->passwordConfigNum);
-
-	if (req->passwordSlotMask.ptr != 0)
-		INFO_HEXLOG(Log::sceNet, "passwordSlotMask: ", reinterpret_cast<const u8*>(&*req->passwordSlotMask), sizeof(SceNpMatching2RoomPasswordSlotMask), 386);
-	else
-		INFO_LOG(Log::sceNet, " - passwordSlotMask:           NONE");
-
-	if (req->ownerPrivilegeRank.ptr != 0)
-		INFO_LOG(Log::sceNet, " - ownerPrivilegeRankNum:      %d", req->ownerPrivilegeRank);
-
-	for (int i = 0; i < req->ownerPrivilegeRankNum; i++) {
-		auto data = req->ownerPrivilegeRank + i;
-		INFO_LOG(Log::sceNet, " - ownerPrivilegeRank[%d]: %d", i, data);
-	}
-	INFO_LOG(Log::sceNet, " - ownerPrivilegeRankNum:      %d", req->ownerPrivilegeRankNum);
+	print_SceNpMatching2SetRoomDataInternalRequest(req);
 
 	//return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, SCE_NP_MATCHING2_OKAY, 0);
 	int ret = npServer->SetRoomDataInternal(ctxId, request_id, req);
@@ -2103,6 +1872,8 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 	auto req = PSPPointer<SceNpMatching2GetRoomDataExternalListRequest>::Create(reqParamPtr);
+	print_SceNpMatching2GetRoomDataExternalListRequest(req);
+
 	int ret = npServer->GetRoomDataExternalList(ctxId, request_id, req);
 
 	return SCE_NP_MATCHING2_OKAY;
@@ -2277,24 +2048,7 @@ static int sceNpMatching2SetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 	auto req = PSPPointer<SceNpMatching2SetRoomMemberDataInternalRequest>::Create(reqParamPtr);
-
-	INFO_LOG(Log::sceNet, " - roomId:             %d", req->roomId);
-	INFO_LOG(Log::sceNet, " - memberId:           %d", req->memberId);
-	INFO_LOG(Log::sceNet, " - teamId:             %d", req->teamId);
-	INFO_LOG(Log::sceNet, " - flagFilter:         %d", req->flagFilter);
-	INFO_LOG(Log::sceNet, " - flagAttr:           %d", req->flagAttr);
-
-	for (int i = 0; i < req->roomMemberBinAttrInternalNum; i++) {
-		auto data = req->roomMemberBinAttrInternal + i;
-		INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternal[%d]:", i);
-		INFO_LOG(Log::sceNet, " - - id:               %d", data->id);
-		if (data->ptr.IsValid())
-			INFO_HEXLOG(Log::sceNet, " - - ptr:", reinterpret_cast<const u8*>(&*data->ptr), sizeof(u8) * data->size, 386);
-		else
-			INFO_LOG(Log::sceNet, " - - ptr:              0x00000000");
-		INFO_LOG(Log::sceNet, " - - size:             %d", data->size);
-	}
-	INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternalNum:		%d", req->roomMemberBinAttrInternalNum);
+	print_SceNpMatching2SetRoomMemberDataInternalRequest(req);
 
 	npServer->SetRoomMemberDataInternal(ctxId, request_id, req);
 
@@ -2348,6 +2102,8 @@ static int sceNpMatching2GetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
 	auto req = PSPPointer<SceNpMatching2GetRoomMemberDataInternalRequest>::Create(reqParamPtr);
+	print_SceNpMatching2GetRoomMemberDataInternalRequest(req);
+
 	npServer->GetRoomMemberDataInternal(ctxId, request_id, req);
 
 	return hleLogWarning(Log::sceNet, SCE_NP_MATCHING2_OKAY, "UNTESTED");

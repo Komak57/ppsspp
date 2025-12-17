@@ -11,6 +11,7 @@
 #include <System/OSD.h>
 #include <Data/Text/I18n.h>
 #include "fb_helpers.h"
+#include <Core/Debugger/Np2Printer.h>
 // Used for things like 10s
 using namespace std::chrono_literals;
 
@@ -27,7 +28,7 @@ u64 signaling_handler::get_micro_timestamp(const std::chrono::steady_clock::time
 // Signaling Helper Functions
 // ====================================
 #pragma region Signaling Helpers
-// Creates Signaling connection to RPCN
+// Creates Signaling connection to SELF
 u32 signaling_handler::init_sig(const SceNpId& npid)
 {
 	std::lock_guard lock(mtx_);
@@ -73,7 +74,7 @@ u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_i
 u32 signaling_handler::get_always_conn_id(const SceNpId& npid)
 {
 	//std::string npid_str(reinterpret_cast<const char*>(npid.handle.data));
-
+	
 	std::string npid_str = npid.ToString();
 
 	if (npid_to_conn_id.find(npid_str) != npid_to_conn_id.end())
@@ -84,7 +85,7 @@ u32 signaling_handler::get_always_conn_id(const SceNpId& npid)
 		WARN_LOG(Log::sceNet, "Creating ConnID for Self for '%s'", npid_str.c_str());
 	}
 	else {
-	WARN_LOG(Log::sceNet, "ConnID for member '%s' not found. Creating.", npid_str.c_str());
+		WARN_LOG(Log::sceNet, "ConnID for member '%s' not found. Creating.", npid_str.c_str());
 		conn_id = cur_conn_id++;
 	}
 
@@ -187,10 +188,10 @@ void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& s
 		if (si->addr == si->mapped_addr) // Direct Connection
 			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1;
 		else if(si->port == si->mapped_port) // Direct Port
-				si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
+			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
 		else // We don't currently have a secondary STUN server to confirm TYPE 2 vs TYPE 3
 			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3;
-		}
+	}
 }
 
 void signaling_handler::update_si_status(std::shared_ptr<signaling_info>& si, s32 new_status, s32 error_code)
@@ -1201,7 +1202,7 @@ int signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 	auto notif_data = PSPPointer<SceNpMatching2RoomDataInternalUpdateInfo>::Create(ptr);
 	SceNpId* npId = NpGetNpId();
 	np::RoomDataInternalUpdateInfo_to_SceNpMatching2RoomDataInternalUpdateInfo(np_memory, update_info, notif_data, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
-
+	print_SceNpMatching2RoomDataInternal(notif_data->newRoomDataInternal);
 	//np_cache.insert_room(notif_data->newRoomDataInternal.get_ptr());
 	npServer->cache.AddRoom(*notif_data->newRoomDataInternal);
 
@@ -1249,7 +1250,7 @@ int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	u32 ptr = np_memory.Alloc(_size);
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberDataInternalUpdateInfo>::Create(ptr);
 	np::RoomMemberDataInternalUpdateInfo_to_SceNpMatching2RoomMemberDataInternalUpdateInfo(np_memory, update_info, notif_data, _context->second->include_onlinename, _context->second->include_avatarurl);
-
+	print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal);
 	// Does this room exist?
 	if (!npServer->cache.Exists(room_id)) {
 		//notifyRoomEventHandler(ctxId, room_id, memberId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
@@ -1263,7 +1264,7 @@ int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	NOTICE_LOG(Log::sceNet, "NOTI User %s(%d) data was updated for room (%d)", notif_data->newRoomMemberDataInternal->userInfo.npId.handle.data, memberId, room_id);
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());
 	auto conn_id = get_conn_id_from_npid(notif_data->newRoomMemberDataInternal->userInfo.npId);
-
+	
 	return notifyRoomEventHandler(room_id, memberId, (!conn_id ? 0 : *conn_id), SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
 }
 

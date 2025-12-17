@@ -499,45 +499,6 @@ namespace np
 			{
 				auto binAttr = sce_member_data->roomMemberBinAttrInternal + b_index;
 				const auto fb_battr = member_data->roomMemberBinAttrInternal()->Get(b_index);
-				ScePspDateTime updateDate;
-				{
-					uint64_t ticks = fb_battr->updateDate();
-					int tz_seconds;
-#ifdef _WIN32
-					long timezone_val;
-					_get_timezone(&timezone_val);
-					tz_seconds = -timezone_val;
-#elif !defined(_AIX) && !defined(__sgi) && !defined(__hpux) && !defined(HAVE_LIBNX)
-					time_t timezone = 0;
-					tm* time = localtime(&timezone);
-					tz_seconds = time->tm_gmtoff;
-#endif
-
-					u64 Day = 24ull * 60ull * 60ull * TICKS_PER_SECOND;
-					updateDate.microsecond = ticks % TICKS_PER_SECOND;
-					updateDate.second = ticks / TICKS_PER_SECOND % 60ull;
-					updateDate.minute = ticks / TICKS_PER_SECOND / 60ull % 60ull;
-					updateDate.hour = ticks / TICKS_PER_SECOND / 60ull / 60ull % 24ull;
-					s64 z = s64(ticks / Day) - s64(rtcMagicOffset / Day);
-					s64 out_y;
-					u32 out_m, out_d;
-					{
-						z += 719468;
-						const s64 era = (z >= 0 ? z : z - 146096) / 146097;
-						const u32 doe = static_cast<u32>(z - era * 146097);              // [0, 146096]
-						const u32 yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365; // [0, 399]
-						const s64 y = static_cast<s64>(yoe) + era * 400;
-						const u32 doy = doe - (365 * yoe + yoe / 4 - yoe / 100);               // [0, 365]
-						const u32 mp = (5 * doy + 2) / 153;                                  // [0, 11]
-						out_d = doy - (153 * mp + 2) / 5 + 1;                                  // [1, 31]
-						out_m = mp < 10 ? mp + 3 : mp - 9;                                   // [1, 12]
-						out_y = y + (out_m <= 2);
-					}
-					updateDate.day = out_d;
-					updateDate.month = out_m;
-					updateDate.year = out_y;
-				}
-				INFO_LOG(Log::sceNet, " - entry #%d[%d] - update: %d/%d/%d, size: %d", b_index, fb_battr->data()->id(), updateDate.day, updateDate.month, updateDate.year, fb_battr->data()->data()->size());
 				binAttr->updateDate.tick = fb_battr->updateDate();
 
 				binAttr->data.id = fb_battr->data()->id();
