@@ -1833,9 +1833,7 @@ static int sceNetUpnpStart() {
 	// RPCS3 has only 1 connection perpetually active
 	//  As such, it has additional functions in sceNp that
 	//  trigger signaling to start, and P2P connect requests
-	if (g_signaling.create_connection())
-		g_signaling.set_self_sig_info(*NpGetNpId());
-	else
+	if (!g_signaling.create_connection())
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Signaling Loop could not be started");
 
 	/*if (g_signaling.create_connection())

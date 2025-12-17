@@ -1136,8 +1136,9 @@ namespace net {
 		if (np2P2PThreadID)
 			__KernelStartThread(np2P2PThreadID, 0, 0);
 		// RPCS3 triggers this in sceNpSignalingActivateConnection
-		//g_signaling.init_sig(*npId, respData->roomDataInternal->roomId, respData->roomDataInternal->memberList.me->memberId);
-		//g_signaling.init_sig(*npId);
+		g_signaling.init_sig(*npId, respData->roomDataInternal->roomId, respData->roomDataInternal->memberList.me->memberId);
+		g_signaling.init_sig(*npId);
+		g_signaling.set_self_sig_info(*npId);
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respData.ptr);
 	}
@@ -1263,8 +1264,9 @@ namespace net {
 			__KernelStartThread(np2P2PThreadID, 0, 0);
 
 		// RPCS3 triggers this in sceNpSignalingActivateConnection
-		g_signaling.init_sig(*NpGetNpId(), room_resp->roomDataInternal->roomId, room_resp->roomDataInternal->memberList.me->memberId);
-		g_signaling.init_sig(*NpGetNpId());
+		g_signaling.init_sig(*npId, room_resp->roomDataInternal->roomId, room_resp->roomDataInternal->memberList.me->memberId);
+		g_signaling.init_sig(*npId);
+		g_signaling.set_self_sig_info(*npId);
 
 		// We initiate signaling if necessary
 		if (const auto* signaling_data = joinRoomResp->signaling_data())
