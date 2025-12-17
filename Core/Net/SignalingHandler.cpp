@@ -161,13 +161,6 @@ void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32 
 
 		si->addr = new_addr;
 		si->port = new_port;
-
-		if (si->port != SCE_SIGN_PORT)
-			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1;
-		else
-			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
-		if (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE)
-			si->nat_type += 1;
 	}
 }
 
@@ -194,14 +187,13 @@ void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& s
 		si->mapped_addr = new_addr;
 		si->mapped_port = new_port;
 
-		if (si->port != SCE_SIGN_PORT) {
-			if (g_Config.bEnableUPnP)
+		if (si->addr == si->mapped_addr) // Direct Connection
+			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1;
+		else if(si->port == si->mapped_port) // Direct Port
 				si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
-			else
-				si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1;
+		else // We don't currently have a secondary STUN server to confirm TYPE 2 vs TYPE 3
+			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3;
 		}
-		else si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3;
-	}
 }
 
 void signaling_handler::update_si_status(std::shared_ptr<signaling_info>& si, s32 new_status, s32 error_code)
@@ -554,12 +546,13 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 					g_signaling.addr_sig = new_addr_sig;
 					auto local_ip = g_signaling.local_addr_sig.load();
 
-					if (new_port_sig != SCE_SIGN_PORT)
+
+					if (new_addr_sig == local_ip) // Direct Connection
 						g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1);
-					else
+					else if (new_port_sig == SCE_SIGN_PORT) // Direct Port
 						g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2);
-					if (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE)
-						g_signaling.nat_type.fetch_add(1);
+					else // We don't currently have a secondary STUN server to confirm TYPE 2 vs TYPE 3
+						g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3);
 				}
 
 				auto n = GetI18NCategory(I18NCat::NETWORKING);

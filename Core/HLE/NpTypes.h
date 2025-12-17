@@ -225,9 +225,9 @@ enum
 enum
 {
 	SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN = 0,
-	SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1 = 1,
-	SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2 = 2,
-	SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3 = 3,
+	SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1 = 1, // OPEN: The connection has no firewall between the connections
+	SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2 = 2, // MODERATE: UPnP or Port Forwarding allows the connection through a firewall
+	SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3 = 3, // STRICT: The connection is limited by the firewall, and may struggle connecting
 };
 
 // UPnP status
