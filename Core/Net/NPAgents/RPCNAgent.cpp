@@ -1459,33 +1459,14 @@ namespace net {
 		return SCE_NP_MATCHING2_OKAY;
 	}
 	int RPCNAgent::SetRoomDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
-		if (resp.error != (u8)ErrorType::NoError) {
-			int errorCode;
 			switch ((ErrorType)resp.error) {
-			case ErrorType::Malformed:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST;
-				ERROR_LOG(Log::sceNet, "Malformed Request");
-				break;
-			case ErrorType::NotFound:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-				ERROR_LOG(Log::sceNet, "Send Failed");
+		case ErrorType::NoError:
 				break;
 			case ErrorType::RoomMissing:
-				errorCode = SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM;
-				ERROR_LOG(Log::sceNet, "Room doesn't exist");
-				break;
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't exist"), 0);
 			default:
-				errorCode = resp.error;
-				ERROR_LOG(Log::sceNet, "Unknown Error: %08X", resp.error);
-				break;
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Unknown Error: %08X", resp.error), 0);
 			}
-			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, errorCode), 0);
-		}
-		resp.stream = new vec_stream(resp.data, 1);
-
-		/*auto [r, self] = npServer->GetSelf(req->roomId);
-		if (r == 0)
-			g_signaling.init_sig(self->userInfo.npId);*/
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, SCE_NP_MATCHING2_OKAY, 0);
 	}
