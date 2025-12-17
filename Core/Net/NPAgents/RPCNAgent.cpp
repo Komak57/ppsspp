@@ -1459,15 +1459,15 @@ namespace net {
 		return SCE_NP_MATCHING2_OKAY;
 	}
 	int RPCNAgent::SetRoomDataInternal_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
-			switch ((ErrorType)resp.error) {
+		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError:
-				break;
-			case ErrorType::RoomMissing:
+			break;
+		case ErrorType::RoomMissing:
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_ROOM, "Room doesn't exist"), 0);
-			default:
+		default:
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST, "Unknown Error: %08X", resp.error), 0);
-			}
-
+		}
+		
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, SCE_NP_MATCHING2_OKAY, 0);
 	}
 	int RPCNAgent::SetRoomDataExternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req) {
@@ -1673,8 +1673,26 @@ namespace net {
 		default:
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, hleLogError(Log::sceNet, resp.error, "Unexpected Reply"), 0);
 		}
+		resp.stream = new vec_stream(resp.data, 1);
 
-		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, SCE_NP_MATCHING2_OKAY, 0);
+		auto _context = ctx.find(ctxId);
+		if (_context == ctx.end())
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND, "Context not Found"), 0);
+
+		const auto* resp_data = resp.stream->get_flatbuffer<RoomMemberDataInternal>();
+
+		if (resp.stream->is_error())
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+
+		u32 alloc = sizeof(SceNpMatching2GetRoomMemberDataInternalResponse);
+		auto mdata_resp = PSPPointer<SceNpMatching2GetRoomMemberDataInternalResponse>::Create(np_memory.Alloc(alloc));
+		u32 _alloc = sizeof(SceNpMatching2RoomMemberDataInternal);
+		mdata_resp->roomMemberDataInternal = PSPPointer<SceNpMatching2RoomMemberDataInternal>::Create(np_memory.Alloc(_alloc));
+
+		::np::RoomMemberDataInternal_to_SceNpMatching2RoomMemberDataInternal(np_memory, resp_data, PSPPointer<SceNpMatching2RoomDataInternal>(), mdata_resp->roomMemberDataInternal, _context->second->include_onlinename, _context->second->include_avatarurl);
+		print_SceNpMatching2RoomMemberDataInternal(mdata_resp->roomMemberDataInternal);
+
+		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, SCE_NP_MATCHING2_OKAY, mdata_resp.ptr);
 	}
 	int RPCNAgent::SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) {
 		flatbuffers::FlatBufferBuilder builder(1024);
