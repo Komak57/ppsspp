@@ -73,15 +73,14 @@ u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_i
 u32 signaling_handler::get_always_conn_id(const SceNpId& npid)
 {
 	//std::string npid_str(reinterpret_cast<const char*>(npid.handle.data));
-	char npid_buf[17]{};
-	memcpy(npid_buf, npid.handle.data, 16);
-	std::string npid_str(npid_buf);
+
+	std::string npid_str = npid.ToString();
 
 	if (npid_to_conn_id.find(npid_str) != npid_to_conn_id.end())
 		return npid_to_conn_id.at(npid_str);
 
 	u32 conn_id = 0;
-	if (IsSelf(npid)) {
+	if (npid.Equals(*NpGetNpId())) {
 		WARN_LOG(Log::sceNet, "Creating ConnID for Self for '%s'", npid_str.c_str());
 	}
 	else {
@@ -128,9 +127,7 @@ std::shared_ptr<signaling_info> signaling_handler::get_signaling_ptr(const signa
 {
 	u32 conn_id;
 
-	char npid_buf[17]{};
-	memcpy(npid_buf, sp->npid.handle.data, 16);
-	std::string npid(npid_buf);
+	std::string npid = sp->npid.ToString();
 
 	if (npid_to_conn_id.find(npid) == npid_to_conn_id.end())
 		return nullptr;

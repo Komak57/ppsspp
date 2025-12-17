@@ -349,6 +349,21 @@ struct SceNpId
 	SceNpOnlineId handle;
 	u8 opt[8];
 	u8 reserved[8];
+
+	bool Equals(SceNpId npid) const {
+		char target[17]{};
+		memcpy(target, npid.handle.data, 16);
+
+		char source[17]{};
+		memcpy(source, handle.data, 16);
+
+		return (std::strcmp(source, target) == 0);
+	}
+	const char* ToString() const {
+		char target[17]{};
+		memcpy(target, handle.data, 16);
+		return target;
+	}
 };
 
 struct SceNpAvatarUrl
