@@ -468,7 +468,7 @@ namespace np
 
 		if (const auto* fb_roomgroup = member_data->roomGroup())
 		{
-			if (room_info)
+			if (room_info.IsValid())
 			{
 				INFO_LOG(Log::sceNet, " - Valid Room");
 				sce_member_data->roomGroup = room_info->roomGroup + (fb_roomgroup->groupId() - 1);
