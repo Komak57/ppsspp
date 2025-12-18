@@ -229,6 +229,7 @@ void NpSetNpId(std::string newNpId) {
 	memset(&npId, 0, sizeof(npId));
 	memcpy(&npId.handle.data, newNpId.c_str(),
 		std::min<size_t>(16, newNpId.length()));
+	g_signaling.set_self_sig_info(npId);
 }
 
 SceNpId* NpGetNpId() {
