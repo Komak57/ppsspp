@@ -69,8 +69,7 @@ void print_SceNpMatching2BinAttr(const SceNpMatching2BinAttr* bin)
 	const auto ptr = +bin->ptr;
 	const u32 size = bin->size;
 
-	INFO_LOG(Log::sceNet, "Id: %d, Size: %d, ptr: *0x%x", bin->id, size, bin->padding[0], bin->padding[1], ptr);
-
+	INFO_LOG(Log::sceNet, "Id: %d, Size: %d, ptr: *0x%x", bin->id, size, bin->ptr.ptr);
 	if (bin->ptr.IsValid() && size)
 	{
 		INFO_HEXLOG(Log::sceNet, "Data:", reinterpret_cast<const u8*>(&*bin->ptr), size, 386);
@@ -80,7 +79,7 @@ void print_SceNpMatching2BinAttr(const SceNpMatching2BinAttr* bin)
 void print_SceNpMatching2BinAttr_internal(const SceNpMatching2RoomBinAttrInternal* bin)
 {
 	print_ScePspDateTime("updateDate", bin->updateDate.tick);
-	INFO_LOG(Log::sceNet, "updateMemberId: %d", bin->updateDate.tick, bin->updateMemberId);
+	INFO_LOG(Log::sceNet, "updateMemberId: %d", bin->updateMemberId);
 	print_SceNpMatching2BinAttr(&bin->data);
 }
 
