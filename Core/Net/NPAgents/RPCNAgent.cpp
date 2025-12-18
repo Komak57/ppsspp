@@ -858,13 +858,16 @@ namespace net {
 			{
 			case SCE_NP_MATCHING2_ROOM_BIN_ATTR_INTERNAL_1_ID:
 			case SCE_NP_MATCHING2_ROOM_BIN_ATTR_INTERNAL_2_ID:
+				NOTICE_LOG(Log::sceNet, "Added %d to BinAttrInternal", id);
 				davec_binattrinternal.push_back(bin);
 				break;
 			case SCE_NP_MATCHING2_ROOM_BIN_ATTR_EXTERNAL_1_ID:
 			case SCE_NP_MATCHING2_ROOM_BIN_ATTR_EXTERNAL_2_ID:
+				NOTICE_LOG(Log::sceNet, "Added %d to BinAttrExternal", id);
 				davec_binattrexternal.push_back(bin);
 				break;
 			case SCE_NP_MATCHING2_ROOM_SEARCHABLE_BIN_ATTR_EXTERNAL_1_ID:
+				NOTICE_LOG(Log::sceNet, "Added %d to sBinAttrInternal", id);
 				davec_searchable_binattrexternal.push_back(bin);
 				break;
 			default:
@@ -877,8 +880,9 @@ namespace net {
 		{
 			for (u32 i = 0; i < req->roomBinAttrInternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomBinAttrInternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomBinAttrInternal[i].ptr.ptr), req->roomBinAttrInternal[i].size));
-				put_binattr(req->roomBinAttrInternal[i].id, bin);
+				auto binAttr = req->roomBinAttrInternal + i;
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
+				put_binattr(binAttr->id, bin);
 			}
 		}
 
@@ -886,8 +890,9 @@ namespace net {
 		{
 			for (u32 i = 0; i < req->roomSearchableBinAttrExternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomSearchableBinAttrExternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomSearchableBinAttrExternal[i].ptr.ptr), req->roomSearchableBinAttrExternal[i].size));
-				put_binattr(req->roomSearchableBinAttrExternal[i].id, bin);
+				auto binAttr = req->roomSearchableBinAttrExternal + i;
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
+				put_binattr(binAttr->id, bin);
 			}
 		}
 
@@ -895,8 +900,9 @@ namespace net {
 		{
 			for (u32 i = 0; i < req->roomBinAttrExternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomBinAttrExternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomBinAttrExternal[i].ptr.ptr), req->roomBinAttrExternal[i].size));
-				put_binattr(req->roomBinAttrExternal[i].id, bin);
+				auto binAttr = req->roomBinAttrExternal + i;
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
+				put_binattr(binAttr->id, bin);
 			}
 		}
 
@@ -969,13 +975,16 @@ namespace net {
 		if (req->joinRoomGroupLabel.IsValid())
 			final_grouplabel = builder.CreateVector(req->joinRoomGroupLabel->data, 8);
 		flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<BinAttr>>> final_memberbinattrinternal_vec;
+
+		NOTICE_LOG(Log::sceNet, "Compiling %d memberBinAttrs from structured request", req->roomMemberBinAttrInternalNum);
 		if (req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal.IsValid())
 		{
 			std::vector<flatbuffers::Offset<BinAttr>> davec;
 			for (u32 i = 0; i < req->roomMemberBinAttrInternalNum; i++)
 			{
-				auto bin = CreateBinAttr(
-					builder, req->roomMemberBinAttrInternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomMemberBinAttrInternal[i].ptr.ptr), req->roomMemberBinAttrInternal[i].size));
+				auto binAttr = req->roomMemberBinAttrInternal + i;
+				NOTICE_LOG(Log::sceNet, " - ID: %d, Size: %d", binAttr->id, binAttr->size);
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
 				davec.push_back(bin);
 			}
 			final_memberbinattrinternal_vec = builder.CreateVector(davec);
@@ -1066,9 +1075,9 @@ namespace net {
 		npServer->cache.SavePassword(respData->roomDataInternal->roomId);
 
 		// RPCS3 triggers this in sceNpSignalingActivateConnection
-		g_signaling.init_sig(*npId, respData->roomDataInternal->roomId, respData->roomDataInternal->memberList.me->memberId);
-		g_signaling.init_sig(*npId);
-		g_signaling.set_self_sig_info(*npId);
+		//g_signaling.init_sig(*npId, respData->roomDataInternal->roomId, respData->roomDataInternal->memberList.me->memberId);
+		//g_signaling.init_sig(*npId);
+		//g_signaling.set_self_sig_info(*npId);
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respData.ptr);
 	}
@@ -1163,9 +1172,9 @@ namespace net {
 		npServer->cache.AddRoom(*room_resp->roomDataInternal);
 
 		// RPCS3 triggers this in sceNpSignalingActivateConnection
-		g_signaling.init_sig(*npId, room_resp->roomDataInternal->roomId, room_resp->roomDataInternal->memberList.me->memberId);
-		g_signaling.init_sig(*npId);
-		g_signaling.set_self_sig_info(*npId);
+		//g_signaling.init_sig(*npId, room_resp->roomDataInternal->roomId, room_resp->roomDataInternal->memberList.me->memberId);
+		//g_signaling.init_sig(*npId);
+		//g_signaling.set_self_sig_info(*npId);
 
 		// We initiate signaling if necessary
 		if (const auto* signaling_data = joinRoomResp->signaling_data())
