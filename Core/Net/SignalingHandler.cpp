@@ -37,12 +37,12 @@ u32 signaling_handler::init_sig(const SceNpId& npid)
 
 	if (sig_peers[conn_id]->conn_status == SCE_NP_SIGNALING_CONN_STATUS_INACTIVE)
 	{
-		INFO_LOG(Log::sceNet, "SIGSERV: Creating new sig1 connection and requesting infos from RPCN");
+	INFO_LOG(Log::sceNet, "SIGSERV: Creating new sig1 connection and requesting infos from RPCN");
 		sig_peers[conn_id]->conn_status = SCE_NP_SIGNALING_CONN_STATUS_PENDING;
 
-		// Request peer infos from RPCN
+	// Request peer infos from RPCN
 	if (npServer->RequestSignalingInfo(npid.ToString(), conn_id) < 0)
-			ERROR_LOG(Log::sceNet, "SIGSERV: RPCN Request Failed");
+		ERROR_LOG(Log::sceNet, "SIGSERV: RPCN Request Failed");
 	}
 
 	return conn_id;
@@ -1049,9 +1049,9 @@ int signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		u16 port_p2p = signaling_info->port();
 		auto n = GetI18NCategory(I18NCat::NETWORKING);
 		if (port_p2p != SCE_SIGN_PORT)
-			g_OSD.Show(OSDType::MESSAGE_WARNING, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(SCE_SIGN_PORT) + std::string(" -> ") + std::to_string(port_p2p), 0.0f, "userjoinroom");
+			g_OSD.Show(OSDType::MESSAGE_WARNING, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.ToString()) + std::string("]:") + std::to_string(SCE_SIGN_PORT) + std::string(" -> ") + std::to_string(port_p2p), 0.0f, "userjoinroom");
 		else
-			g_OSD.Show(OSDType::MESSAGE_SUCCESS, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]:") + std::to_string(port_p2p), 0.0f, "userjoinroom");
+			g_OSD.Show(OSDType::MESSAGE_SUCCESS, std::string(n->T("SH: Player Joining")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.ToString()) + std::string("]:") + std::to_string(port_p2p), 0.0f, "userjoinroom");
 
 		const SceNpMatching2RoomMemberId member_id = notif_data->roomMemberDataInternal->memberId;
 		const SceNpId& npid = notif_data->roomMemberDataInternal->userInfo.npId;
@@ -1106,7 +1106,7 @@ int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberUpdateInfo>::Create(ptr);
 	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, update_info, notif_data, _context->second->include_onlinename, _context->second->include_avatarurl);
 
-	NOTICE_LOG(Log::sceNet, "NOTI UserLeftRoom User %s(%d) left room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);
+	NOTICE_LOG(Log::sceNet, "NOTI UserLeftRoom User %s(%d) left room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.ToString().c_str(), notif_data->roomMemberDataInternal->memberId, room_id);
 
 	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
 	if (!npServer->cache.Exists(room_id)) {
@@ -1114,7 +1114,7 @@ int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 		return SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND;
 	}
 	auto n = GetI18NCategory(I18NCat::NETWORKING);
-	g_OSD.Show(OSDType::MESSAGE_ERROR, std::string(n->T("SH: Player Leaving")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.handle.data) + std::string("]"), 0.0f, "userleaveroom");
+	g_OSD.Show(OSDType::MESSAGE_ERROR, std::string(n->T("SH: Player Leaving")) + std::string(" [") + std::string(notif_data->roomMemberDataInternal->userInfo.npId.ToString()) + std::string("]"), 0.0f, "userleaveroom");
 	// FIXME: This forces a disconnect, but the process should be a clean exit.
 	//		This happens when a user stops the emulator, but doesn't log out first
 	//		We should probably log out cleanly when emulation stops, and handle this
