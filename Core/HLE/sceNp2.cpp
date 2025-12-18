@@ -1648,16 +1648,16 @@ static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqI
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-/* Provides known Connection Status, IP, and Port between 2 members
+/* Provides known Connection Status, IP, and Port
  * @param connId Optionally replaces RoomId / MemberId
  * @param roomId Keyed Room where the member is a part of
- * @param memberId Source member to check connection
+ * @param memberId Source member to check connection; PSP reports World_ID here
  * @param peerMemberId Target member to retrieve information about
  * @param connInfoPtr Peer CONNECT_STATUS
  * @param ipAddrPtr Peer IP Address
  * @param portPtr Peer Port
  * @return 0; or System Error
- * @note It looks like 0 is used for "self"
+ * @note connId == peerMemberId while connecting, and 0 when connected
  * @note Fat Princess assigns a local connId? here when requesting information, and then proceeds to call GetConnectionInfo
  */
 static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32 roomId, u32 memberId, u32 peerMemberId, u32 connInfoPtr, u32 ipAddrPtr, u32 portPtr) {
@@ -1690,7 +1690,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 	if (connId != 0) {
 		auto si = g_signaling.get_sig_infos(connId);
 		if (si != std::nullopt)
-		conn_id = connId;
+			conn_id = connId;
 		else
 			WARN_LOG(Log::sceNet, "Invalid Connection ID. Trying Member ID instead.");
 	}
@@ -1737,10 +1737,10 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 		NOTICE_LOG(Log::sceNet, " - PENDING"); break;
 	case SCE_NP_SIGNALING_CONN_STATUS_ACTIVE:
 		NOTICE_LOG(Log::sceNet, " - ACTIVE");
-	Memory::Write_U32(sig_addr, ipAddrPtr);
-	NOTICE_LOG(Log::sceNet, " - IP Addr: %s", ip2str(sig_addr).c_str());
-	Memory::Write_U16(sig_port, portPtr);
-	NOTICE_LOG(Log::sceNet, " - Port: %d", ntohs(sig_port));
+		Memory::Write_U32(sig_addr, ipAddrPtr);
+		NOTICE_LOG(Log::sceNet, " - IP Addr: %s", ip2str(sig_addr).c_str());
+		Memory::Write_U16(sig_port, portPtr);
+		NOTICE_LOG(Log::sceNet, " - Port: %d", ntohs(sig_port));
 		break;
 	}
 
