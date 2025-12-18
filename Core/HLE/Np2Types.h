@@ -1280,11 +1280,11 @@ struct SceNpMatching2CreateJoinRoomRequest
 	PSPPointer<SceNpMatching2RoomGroupConfig> groupConfig;
 	u32 groupConfigNum;
 	PSPPointer<SceNpMatching2RoomPasswordSlotMask> passwordSlotMask; 
-	PSPPointer<SceNpMatching2GroupLabel> joinRoomGroupLabel;
 	PSPPointer<SceNpId> allowedUser;
 	u32 allowedUserNum;
 	PSPPointer<SceNpId> blockedUser;
 	u32 blockedUserNum;
+	PSPPointer<SceNpMatching2GroupLabel> joinRoomGroupLabel;
 	PSPPointer<SceNpMatching2BinAttr> roomMemberBinAttrInternal;
 	u32 roomMemberBinAttrInternalNum;
 	SceNpMatching2TeamId teamId;
