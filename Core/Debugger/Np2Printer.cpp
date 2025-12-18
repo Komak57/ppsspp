@@ -46,7 +46,7 @@ void print_ScePspDateTime(const char* header, const u64 ticks) {
 void print_SceNpUserInfo2(const SceNpUserInfo2* user)
 {
 	INFO_LOG(Log::sceNet, "SceNpUserInfo2:");
-	INFO_LOG(Log::sceNet, "npid: %s", user->npId.ToString());
+	INFO_LOG(Log::sceNet, "npid: %s", user->npId.ToString().c_str());
 	INFO_LOG(Log::sceNet, "onlineName: *0x%x(%s)", user->onlineName, user->onlineName.IsValid() ? static_cast<const char*>(user->onlineName->data) : "");
 	INFO_LOG(Log::sceNet, "avatarUrl: *0x%x(%s)", user->avatarUrl, user->avatarUrl.IsValid() ? static_cast<const char*>(user->avatarUrl->data) : "");
 }
@@ -150,38 +150,38 @@ void print_SceNpMatching2CreateJoinRoomRequest(const SceNpMatching2CreateJoinRoo
 
 	print_SceNpMatching2FlagAttr(req->flagAttr);
 
-	INFO_LOG(Log::sceNet, "roomBinAttrInternal: *0x%x", req->roomBinAttrInternal);
+	INFO_LOG(Log::sceNet, "roomBinAttrInternal: *0x%x", req->roomBinAttrInternal.ptr);
 	INFO_LOG(Log::sceNet, "roomBinAttrInternalNum: %d", req->roomBinAttrInternalNum);
 
 	for (u32 i = 0; i < req->roomBinAttrInternalNum && req->roomBinAttrInternal.IsValid(); i++)
-		print_SceNpMatching2BinAttr(&req->roomBinAttrInternal[i]);
+		print_SceNpMatching2BinAttr(req->roomBinAttrInternal + i);
 
-	INFO_LOG(Log::sceNet, "roomSearchableIntAttrExternal: *0x%x", req->roomSearchableIntAttrExternal);
+	INFO_LOG(Log::sceNet, "roomSearchableIntAttrExternal: *0x%x", req->roomSearchableIntAttrExternal.ptr);
 	INFO_LOG(Log::sceNet, "roomSearchableIntAttrExternalNum: %d", req->roomSearchableIntAttrExternalNum);
 
 	for (u32 i = 0; i < req->roomSearchableIntAttrExternalNum && req->roomSearchableIntAttrExternal.IsValid(); i++)
-		print_int_attr(&req->roomSearchableIntAttrExternal[i]);
+		print_int_attr(req->roomSearchableIntAttrExternal + i);
 
-	INFO_LOG(Log::sceNet, "roomSearchableBinAttrExternal: *0x%x", req->roomSearchableBinAttrExternal);
+	INFO_LOG(Log::sceNet, "roomSearchableBinAttrExternal: *0x%x", req->roomSearchableBinAttrExternal.ptr);
 	INFO_LOG(Log::sceNet, "roomSearchableBinAttrExternalNum: %d", req->roomSearchableBinAttrExternalNum);
 
 	for (u32 i = 0; i < req->roomSearchableBinAttrExternalNum && req->roomSearchableBinAttrExternal.IsValid(); i++)
-		print_SceNpMatching2BinAttr(&req->roomSearchableBinAttrExternal[i]);
+		print_SceNpMatching2BinAttr(req->roomSearchableBinAttrExternal + i);
 
-	INFO_LOG(Log::sceNet, "roomBinAttrExternal: *0x%x", req->roomBinAttrExternal);
+	INFO_LOG(Log::sceNet, "roomBinAttrExternal: *0x%x", req->roomBinAttrExternal.ptr);
 	INFO_LOG(Log::sceNet, "roomBinAttrExternalNum: %d", req->roomBinAttrExternalNum);
 
 	for (u32 i = 0; i < req->roomBinAttrExternalNum && req->roomBinAttrExternal.IsValid(); i++)
-		print_SceNpMatching2BinAttr(&req->roomBinAttrExternal[i]);
+		print_SceNpMatching2BinAttr(req->roomBinAttrExternal + i);
 
-	INFO_LOG(Log::sceNet, "roomPassword: *0x%x", req->roomPassword);
+	INFO_LOG(Log::sceNet, "roomPassword: *0x%x", req->roomPassword.ptr);
 
 	if (req->roomPassword.IsValid())
 		INFO_HEXLOG(Log::sceNet, "data:", reinterpret_cast<const u8*>(&*req->roomPassword->data), sizeof(u8) * 8, 386);
 
 	INFO_LOG(Log::sceNet, "groupConfig: *0x%x", req->groupConfig);
 	INFO_LOG(Log::sceNet, "groupConfigNum: %d", req->groupConfigNum);
-	INFO_LOG(Log::sceNet, "passwordSlotMask: *0x%x, value: 0x%x", req->passwordSlotMask, req->passwordSlotMask.IsValid() ? static_cast<u64>(*req->passwordSlotMask) : 0ull);
+	INFO_LOG(Log::sceNet, "passwordSlotMask: *0x%x, value: 0x%x", req->passwordSlotMask.ptr, req->passwordSlotMask.IsValid() ? static_cast<u64>(*req->passwordSlotMask) : 0ull);
 	INFO_LOG(Log::sceNet, "allowedUser: *0x%x", req->allowedUser);
 	INFO_LOG(Log::sceNet, "allowedUserNum: %d", req->allowedUserNum);
 	INFO_LOG(Log::sceNet, "blockedUser: *0x%x", req->blockedUser);
@@ -191,10 +191,10 @@ void print_SceNpMatching2CreateJoinRoomRequest(const SceNpMatching2CreateJoinRoo
 	INFO_LOG(Log::sceNet, "roomMemberBinAttrInternalNum: %d", req->roomMemberBinAttrInternalNum);
 
 	for (u32 i = 0; i < req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal.IsValid(); i++)
-		print_SceNpMatching2BinAttr(&req->roomMemberBinAttrInternal[i]);
+		print_SceNpMatching2BinAttr(req->roomMemberBinAttrInternal + i);
 
 	INFO_LOG(Log::sceNet, "teamId: %d", req->teamId);
-	INFO_LOG(Log::sceNet, "sigOptParam: *0x%x", req->sigOptions);
+	INFO_LOG(Log::sceNet, "sigOptParam: *0x%x", req->sigOptions.ptr);
 
 	if (req->sigOptions.IsValid())
 		print_SceNpMatching2SignalingOptParam(req->sigOptions);
@@ -204,15 +204,15 @@ void print_SceNpMatching2JoinRoomRequest(const SceNpMatching2JoinRoomRequest* re
 {
 	INFO_LOG(Log::sceNet, "SceNpMatching2JoinRoomRequest:");
 	INFO_LOG(Log::sceNet, "roomId: %d", req->roomId);
-	INFO_LOG(Log::sceNet, "roomPassword: *0x%x", req->roomPassword);
-	INFO_LOG(Log::sceNet, "joinRoomGroupLabel: *0x%x", req->joinRoomGroupLabel);
-	INFO_LOG(Log::sceNet, "roomMemberBinAttrInternal: *0x%x", req->roomMemberBinAttrInternal);
+	INFO_LOG(Log::sceNet, "roomPassword: *0x%x", req->roomPassword.ptr);
+	INFO_LOG(Log::sceNet, "joinRoomGroupLabel: *0x%x", req->joinRoomGroupLabel.ptr);
+	INFO_LOG(Log::sceNet, "roomMemberBinAttrInternal: *0x%x", req->roomMemberBinAttrInternal.ptr);
 	INFO_LOG(Log::sceNet, "roomMemberBinAttrInternalNum: %d", req->roomMemberBinAttrInternalNum);
 	print_SceNpMatching2PresenceOptionData(&req->optData);
 	INFO_LOG(Log::sceNet, "teamId: %d", req->teamId);
 
 	for (u32 i = 0; i < req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal.IsValid(); i++)
-		print_SceNpMatching2BinAttr(&req->roomMemberBinAttrInternal[i]);
+		print_SceNpMatching2BinAttr(req->roomMemberBinAttrInternal + i);
 }
 
 void print_SceNpMatching2SearchRoomRequest(const SceNpMatching2SearchRoomRequest* req)
@@ -226,15 +226,15 @@ void print_SceNpMatching2SearchRoomRequest(const SceNpMatching2SearchRoomRequest
 
 	print_SceNpMatching2FlagAttr(req->flagAttr);
 
-	INFO_LOG(Log::sceNet, "intFilter: *0x%x", req->intFilter);
+	INFO_LOG(Log::sceNet, "intFilter: *0x%x", req->intFilter.ptr);
 	INFO_LOG(Log::sceNet, "intFilterNum: %d", req->intFilterNum);
 	for (u32 i = 0; i < req->intFilterNum && req->intFilter.IsValid(); i++)
 		print_int_search_filter(&req->intFilter[i]);
-	INFO_LOG(Log::sceNet, "binFilter: *0x%x", req->binFilter);
+	INFO_LOG(Log::sceNet, "binFilter: *0x%x", req->binFilter.ptr);
 	INFO_LOG(Log::sceNet, "binFilterNum: %d", req->binFilterNum);
 	for (u32 i = 0; i < req->binFilterNum && req->binFilter.IsValid(); i++)
 		print_bin_search_filter(&req->binFilter[i]);
-	INFO_LOG(Log::sceNet, "attrId: *0x%x", req->attrId);
+	INFO_LOG(Log::sceNet, "attrId: *0x%x", req->attrId.ptr);
 	INFO_LOG(Log::sceNet, "attrIdNum: %d", req->attrIdNum);
 	for (u32 i = 0; i < req->attrIdNum && req->attrId.IsValid(); i++)
 		INFO_LOG(Log::sceNet, "attrId[%d] = 0x%x", i, req->attrId[i]);
@@ -257,15 +257,15 @@ void print_SceNpMatching2SearchRoomResponse(const SceNpMatching2SearchRoomRespon
 void print_SceNpMatching2RoomMemberDataInternal(const SceNpMatching2RoomMemberDataInternal* member)
 {
 	INFO_LOG(Log::sceNet, "SceNpMatching2RoomMemberDataInternal:");
-	INFO_LOG(Log::sceNet, "next: *0x%x", member->next);
-	INFO_LOG(Log::sceNet, "npId: %s", member->userInfo.npId.ToString());
+	INFO_LOG(Log::sceNet, "next: *0x%x", member->next.ptr);
+	INFO_LOG(Log::sceNet, "npId: %s", member->userInfo.npId.ToString().c_str());
 	INFO_LOG(Log::sceNet, "onlineName: %s", member->userInfo.onlineName.IsValid() ? member->userInfo.onlineName->data : "");
 	INFO_LOG(Log::sceNet, "avatarUrl: %s", member->userInfo.avatarUrl.IsValid() ? member->userInfo.avatarUrl->data : "");
 	//INFO_LOG(Log::sceNet, "joinDate: %lld", member->joinDate.tick);
 	print_ScePspDateTime("joinDate", member->joinDate.tick);
 	INFO_LOG(Log::sceNet, "memberId: %d", member->memberId);
 	INFO_LOG(Log::sceNet, "teamId: %d", member->teamId);
-	INFO_LOG(Log::sceNet, "roomGroup: *0x%x", member->roomGroup);
+	INFO_LOG(Log::sceNet, "roomGroup: *0x%x", member->roomGroup.ptr);
 	INFO_LOG(Log::sceNet, "natType: %d", member->natType);
 
 	std::vector<std::string> flags;
@@ -280,7 +280,7 @@ void print_SceNpMatching2RoomMemberDataInternal(const SceNpMatching2RoomMemberDa
 	std::string _flags = std::accumulate(flags.begin(), flags.end(), std::string(""));
 	INFO_LOG(Log::sceNet, "flagAttr: 0x%x => %s", member->flagAttr, _flags.substr(0, _flags.length() - 3).c_str());
 
-	INFO_LOG(Log::sceNet, "roomMemberBinAttrInternal: *0x%x", member->roomMemberBinAttrInternal);
+	INFO_LOG(Log::sceNet, "roomMemberBinAttrInternal: *0x%x", member->roomMemberBinAttrInternal.ptr);
 	INFO_LOG(Log::sceNet, "roomMemberBinAttrInternalNum: %d", member->roomMemberBinAttrInternalNum);
 	for (u32 i = 0; i < member->roomMemberBinAttrInternalNum && member->roomMemberBinAttrInternal.IsValid(); i++)
 		print_member_bin_attr_internal(&member->roomMemberBinAttrInternal[i]);
@@ -296,7 +296,7 @@ void print_SceNpMatching2RoomDataInternal(const SceNpMatching2RoomDataInternal* 
 	INFO_LOG(Log::sceNet, "passwordSlotMask: %lld", room->passwordSlotMask);
 	INFO_LOG(Log::sceNet, "maxSlot: %d", room->maxSlot);
 
-	INFO_LOG(Log::sceNet, "members: *0x%x", room->memberList.members);
+	INFO_LOG(Log::sceNet, "members: *0x%x", room->memberList.members.ptr);
 	auto cur_member = room->memberList.members;
 	while (cur_member.IsValid())
 	{
@@ -304,24 +304,24 @@ void print_SceNpMatching2RoomDataInternal(const SceNpMatching2RoomDataInternal* 
 		cur_member = cur_member->next;
 	}
 	INFO_LOG(Log::sceNet, "membersNum: %d", room->memberList.membersNum);
-	INFO_LOG(Log::sceNet, "me: *0x%x", room->memberList.me);
-	INFO_LOG(Log::sceNet, "owner: *0x%x", room->memberList.owner);
+	INFO_LOG(Log::sceNet, "me: *0x%x", room->memberList.me.ptr);
+	INFO_LOG(Log::sceNet, "owner: *0x%x", room->memberList.owner.ptr);
 
-	INFO_LOG(Log::sceNet, "roomGroup: *0x%x", room->roomGroup);
+	INFO_LOG(Log::sceNet, "roomGroup: *0x%x", room->roomGroup.ptr);
 	INFO_LOG(Log::sceNet, "roomGroupNum: %d", room->roomGroupNum);
 
 	print_SceNpMatching2FlagAttr(room->flagAttr);
 
-	INFO_LOG(Log::sceNet, "roomBinAttrInternal: *0x%x", room->roomBinAttrInternal);
+	INFO_LOG(Log::sceNet, "roomBinAttrInternal: *0x%x", room->roomBinAttrInternal.ptr);
 	INFO_LOG(Log::sceNet, "roomBinAttrInternalNum: %d", room->roomBinAttrInternalNum);
 	for (u32 i = 0; i < room->roomBinAttrInternalNum && room->roomBinAttrInternal.IsValid(); i++)
-		print_SceNpMatching2BinAttr_internal(&room->roomBinAttrInternal[i]);
+		print_SceNpMatching2BinAttr_internal(room->roomBinAttrInternal + i);
 }
 
 void print_SceNpMatching2RoomDataExternal(const SceNpMatching2RoomDataExternal* room)
 {
 	INFO_LOG(Log::sceNet, "SceNpMatching2RoomDataExternal:");
-	INFO_LOG(Log::sceNet, "next: *0x%x", room->next);
+	INFO_LOG(Log::sceNet, "next: *0x%x", room->next.ptr);
 	INFO_LOG(Log::sceNet, "serverId: %d", room->serverId);
 	INFO_LOG(Log::sceNet, "worldId: %d", room->worldId);
 	INFO_LOG(Log::sceNet, "publicSlotNum: %d", room->publicSlotNum);
@@ -333,40 +333,40 @@ void print_SceNpMatching2RoomDataExternal(const SceNpMatching2RoomDataExternal* 
 	//INFO_LOG(Log::sceNet, "openPrivateSlotNum: %d", room->openPrivateSlotNum);
 	INFO_LOG(Log::sceNet, "curMemberNum: %d", room->curMemberNum);
 	INFO_LOG(Log::sceNet, "SceNpMatching2RoomPasswordSlotMask: 0x%x", room->passwordSlotMask);
-	INFO_LOG(Log::sceNet, "owner: *0x%x", room->owner);
+	INFO_LOG(Log::sceNet, "owner: *0x%x", room->owner.ptr);
 
 	if (room->owner.IsValid())
 		print_SceNpUserInfo2(room->owner);
 
-	INFO_LOG(Log::sceNet, "roomGroup: *0x%x", room->roomGroup);
+	INFO_LOG(Log::sceNet, "roomGroup: *0x%x", room->roomGroup.ptr);
 	// TODO: print roomGroup
 	INFO_LOG(Log::sceNet, "roomGroupNum: %d", room->roomGroupNum);
 
 	print_SceNpMatching2FlagAttr(room->flagAttr);
 
-	INFO_LOG(Log::sceNet, "roomSearchableIntAttrExternal: *0x%x", room->roomSearchableIntAttrExternal);
+	INFO_LOG(Log::sceNet, "roomSearchableIntAttrExternal: *0x%x", room->roomSearchableIntAttrExternal.ptr);
 	INFO_LOG(Log::sceNet, "roomSearchableIntAttrExternalNum: %d", room->roomSearchableIntAttrExternalNum);
 
 	for (u32 i = 0; i < room->roomSearchableIntAttrExternalNum && room->roomSearchableIntAttrExternal.IsValid(); i++)
 		print_int_attr(&room->roomSearchableIntAttrExternal[i]);
 
-	INFO_LOG(Log::sceNet, "roomSearchableBinAttrExternal: *0x%x", room->roomSearchableBinAttrExternal);
+	INFO_LOG(Log::sceNet, "roomSearchableBinAttrExternal: *0x%x", room->roomSearchableBinAttrExternal.ptr);
 	INFO_LOG(Log::sceNet, "roomSearchableBinAttrExternalNum: %d", room->roomSearchableBinAttrExternalNum);
 
 	for (u32 i = 0; i < room->roomSearchableBinAttrExternalNum && room->roomSearchableBinAttrExternal.IsValid(); i++)
-		print_SceNpMatching2BinAttr(&room->roomSearchableBinAttrExternal[i]);
+		print_SceNpMatching2BinAttr(room->roomSearchableBinAttrExternal + i);
 
-	INFO_LOG(Log::sceNet, "roomBinAttrExternal: *0x%x", room->roomBinAttrExternal);
+	INFO_LOG(Log::sceNet, "roomBinAttrExternal: *0x%x", room->roomBinAttrExternal.ptr);
 	INFO_LOG(Log::sceNet, "roomBinAttrExternalNum: %d", room->roomBinAttrExternalNum);
 
 	for (u32 i = 0; i < room->roomBinAttrExternalNum && room->roomBinAttrExternal.IsValid(); i++)
-		print_SceNpMatching2BinAttr(&room->roomBinAttrExternal[i]);
+		print_SceNpMatching2BinAttr(room->roomBinAttrExternal + i);
 }
 
 void print_SceNpMatching2CreateJoinRoomResponse(const SceNpMatching2CreateJoinRoomResponse* resp)
 {
 	INFO_LOG(Log::sceNet, "SceNpMatching2CreateJoinRoomResponse:");
-	INFO_LOG(Log::sceNet, "roomDataInternal: *0x%x", resp->roomDataInternal);
+	INFO_LOG(Log::sceNet, "roomDataInternal: *0x%x", resp->roomDataInternal.ptr);
 	if (resp->roomDataInternal.IsValid())
 		print_SceNpMatching2RoomDataInternal(resp->roomDataInternal);
 }
@@ -375,23 +375,23 @@ void print_SceNpMatching2SetRoomDataExternalRequest(const SceNpMatching2SetRoomD
 {
 	INFO_LOG(Log::sceNet, "SceNpMatching2SetRoomDataExternalRequest:");
 	INFO_LOG(Log::sceNet, "roomId: %d", req->roomId);
-	INFO_LOG(Log::sceNet, "roomSearchableIntAttrExternal: *0x%x", req->roomSearchableIntAttrExternal);
+	INFO_LOG(Log::sceNet, "roomSearchableIntAttrExternal: *0x%x", req->roomSearchableIntAttrExternal.ptr);
 	INFO_LOG(Log::sceNet, "roomSearchableIntAttrExternalNum: %d", req->roomSearchableIntAttrExternalNum);
 
 	for (u32 i = 0; i < req->roomSearchableIntAttrExternalNum && req->roomSearchableIntAttrExternal.IsValid(); i++)
 		print_int_attr(&req->roomSearchableIntAttrExternal[i]);
 
-	INFO_LOG(Log::sceNet, "roomSearchableBinAttrExternal: *0x%x", req->roomSearchableBinAttrExternal);
+	INFO_LOG(Log::sceNet, "roomSearchableBinAttrExternal: *0x%x", req->roomSearchableBinAttrExternal.ptr);
 	INFO_LOG(Log::sceNet, "roomSearchableBinAttrExternalNum: %d", req->roomSearchableBinAttrExternalNum);
 
 	for (u32 i = 0; i < req->roomSearchableBinAttrExternalNum && req->roomSearchableBinAttrExternal.IsValid(); i++)
-		print_SceNpMatching2BinAttr(&req->roomSearchableBinAttrExternal[i]);
+		print_SceNpMatching2BinAttr(req->roomSearchableBinAttrExternal + i);
 
-	INFO_LOG(Log::sceNet, "roomBinAttrExternal: *0x%x", req->roomBinAttrExternal);
+	INFO_LOG(Log::sceNet, "roomBinAttrExternal: *0x%x", req->roomBinAttrExternal.ptr);
 	INFO_LOG(Log::sceNet, "roomBinAttrExternalNum: %d", req->roomBinAttrExternalNum);
 
 	for (u32 i = 0; i < req->roomBinAttrExternalNum && req->roomBinAttrExternal.IsValid(); i++)
-		print_SceNpMatching2BinAttr(&req->roomBinAttrExternal[i]);
+		print_SceNpMatching2BinAttr(req->roomBinAttrExternal + i);
 }
 
 void print_SceNpMatching2SetRoomDataInternalRequest(const SceNpMatching2SetRoomDataInternalRequest* req)
@@ -402,16 +402,16 @@ void print_SceNpMatching2SetRoomDataInternalRequest(const SceNpMatching2SetRoomD
 
 	print_SceNpMatching2FlagAttr(req->flagAttr);
 
-	INFO_LOG(Log::sceNet, "roomBinAttrInternal: *0x%x", req->roomBinAttrInternal);
+	INFO_LOG(Log::sceNet, "roomBinAttrInternal: *0x%x", req->roomBinAttrInternal.ptr);
 	INFO_LOG(Log::sceNet, "roomBinAttrInternalNum: %d", req->roomBinAttrInternalNum);
 
 	for (u32 i = 0; i < req->roomBinAttrInternalNum && req->roomBinAttrInternal.IsValid(); i++)
-		print_SceNpMatching2BinAttr(&req->roomBinAttrInternal[i]);
+		print_SceNpMatching2BinAttr(req->roomBinAttrInternal + i);
 
-	INFO_LOG(Log::sceNet, "passwordConfig: *0x%x", req->passwordConfig);
+	INFO_LOG(Log::sceNet, "passwordConfig: *0x%x", req->passwordConfig.ptr);
 	INFO_LOG(Log::sceNet, "passwordConfigNum: %d", req->passwordConfigNum);
-	INFO_LOG(Log::sceNet, "passwordSlotMask: *0x%x", req->passwordSlotMask);
-	INFO_LOG(Log::sceNet, "ownerPrivilegeRank: *0x%x", req->ownerPrivilegeRank);
+	INFO_LOG(Log::sceNet, "passwordSlotMask: *0x%x", req->passwordSlotMask.ptr);
+	INFO_LOG(Log::sceNet, "ownerPrivilegeRank: *0x%x", req->ownerPrivilegeRank.ptr);
 	INFO_LOG(Log::sceNet, "ownerPrivilegeRankNum: %d", req->ownerPrivilegeRankNum);
 }
 
@@ -420,7 +420,7 @@ void print_SceNpMatching2GetRoomMemberDataInternalRequest(const SceNpMatching2Ge
 	INFO_LOG(Log::sceNet, "SceNpMatching2GetRoomMemberDataInternalRequest:");
 	INFO_LOG(Log::sceNet, "roomId: %d", req->roomId);
 	INFO_LOG(Log::sceNet, "memberId: %d", req->memberId);
-	INFO_LOG(Log::sceNet, "attrId: *0x%x", req->attrId);
+	INFO_LOG(Log::sceNet, "attrId: *0x%x", req->attrId.ptr);
 	INFO_LOG(Log::sceNet, "attrIdNum: %d", req->attrIdNum);
 	for (u32 i = 0; i < req->attrIdNum && req->attrId.IsValid(); i++)
 	{
@@ -438,22 +438,22 @@ void print_SceNpMatching2SetRoomMemberDataInternalRequest(const SceNpMatching2Se
 
 	print_SceNpMatching2FlagAttr(req->flagAttr);
 
-	INFO_LOG(Log::sceNet, "roomMemberBinAttrInternal: *0x%x", req->roomMemberBinAttrInternal);
+	INFO_LOG(Log::sceNet, "roomMemberBinAttrInternal: *0x%x", req->roomMemberBinAttrInternal.ptr);
 	INFO_LOG(Log::sceNet, "roomMemberBinAttrInternalNum: %d", req->roomMemberBinAttrInternalNum);
 	for (u32 i = 0; i < req->roomMemberBinAttrInternalNum && req->roomMemberBinAttrInternal.IsValid(); i++)
-		print_SceNpMatching2BinAttr(&req->roomMemberBinAttrInternal[i]);
+		print_SceNpMatching2BinAttr(req->roomMemberBinAttrInternal + i);
 }
 
 void print_SceNpMatching2GetRoomDataExternalListRequest(const SceNpMatching2GetRoomDataExternalListRequest* req)
 {
 	INFO_LOG(Log::sceNet, "SceNpMatching2GetRoomDataExternalListRequest:");
-	INFO_LOG(Log::sceNet, "roomId: *0x%x", req->roomId);
+	INFO_LOG(Log::sceNet, "roomId: *0x%x", req->roomId.ptr);
 	INFO_LOG(Log::sceNet, "roomIdNum: %d", req->roomIdNum);
 	for (u32 i = 0; i < req->roomIdNum && req->roomId.IsValid(); i++)
 	{
 		INFO_LOG(Log::sceNet, "RoomId[%d] = %d", i, req->roomId[i]);
 	}
-	INFO_LOG(Log::sceNet, "attrId: *0x%x", req->attrId);
+	INFO_LOG(Log::sceNet, "attrId: *0x%x", req->attrId.ptr);
 	INFO_LOG(Log::sceNet, "attrIdNum: %d", req->attrIdNum);
 	for (u32 i = 0; i < req->attrIdNum && req->attrId.IsValid(); i++)
 	{
@@ -464,7 +464,7 @@ void print_SceNpMatching2GetRoomDataExternalListRequest(const SceNpMatching2GetR
 void print_SceNpMatching2GetRoomDataExternalListResponse(const SceNpMatching2GetRoomDataExternalListResponse* resp)
 {
 	INFO_LOG(Log::sceNet, "SceNpMatching2GetRoomDataExternalListResponse:");
-	INFO_LOG(Log::sceNet, "roomDataExternal: *0x%x", resp->roomDataExternal);
+	INFO_LOG(Log::sceNet, "roomDataExternal: *0x%x", resp->roomDataExternal.ptr);
 	INFO_LOG(Log::sceNet, "roomDataExternalNum: %d", resp->roomDataExternalNum);
 
 	auto cur_room = resp->roomDataExternal;
@@ -483,7 +483,7 @@ void print_SceNpMatching2GetLobbyInfoListRequest(const SceNpMatching2GetLobbyInf
 	INFO_LOG(Log::sceNet, "worldId: %d", resp->worldId);
 	print_SceNpMatching2RangeFilter(&resp->rangeFilter);
 	INFO_LOG(Log::sceNet, "attrIdNum: %d", resp->attrIdNum);
-	INFO_LOG(Log::sceNet, "attrId: *0x%x", resp->attrId);
+	INFO_LOG(Log::sceNet, "attrId: *0x%x", resp->attrId.ptr);
 
 	if (resp->attrId.IsValid())
 	{
