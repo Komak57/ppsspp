@@ -1129,7 +1129,10 @@ int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	//	//stop_sig(conn_id.value(), false);
 	//}
 	auto conn_id = get_conn_id_from_npid(notif_data->roomMemberDataInternal->userInfo.npId);
-
+	if (conn_id) {
+		auto si = sig_peers.at(conn_id.value());
+		retire_all_packets(si);
+	}
 	npServer->cache.RemoveMember(room_id, notif_data->roomMemberDataInternal->memberId);
 
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
