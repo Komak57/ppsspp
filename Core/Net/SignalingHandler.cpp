@@ -41,7 +41,7 @@ u32 signaling_handler::init_sig(const SceNpId& npid)
 		sig_peers[conn_id]->conn_status = SCE_NP_SIGNALING_CONN_STATUS_PENDING;
 
 		// Request peer infos from RPCN
-		std::string npid_str(reinterpret_cast<const char*>(npid.handle.data));
+	if (npServer->RequestSignalingInfo(npid.ToString(), conn_id) < 0)
 		if (npServer->RequestSignalingInfo(npid_str, conn_id) < 0)
 			ERROR_LOG(Log::sceNet, "SIGSERV: RPCN Request Failed");
 	}
@@ -73,8 +73,6 @@ u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_i
 
 u32 signaling_handler::get_always_conn_id(const SceNpId& npid)
 {
-	//std::string npid_str(reinterpret_cast<const char*>(npid.handle.data));
-	
 	std::string npid_str = npid.ToString();
 
 	if (npid_to_conn_id.find(npid_str) != npid_to_conn_id.end())
@@ -102,7 +100,8 @@ std::optional<u32> signaling_handler::get_conn_id_from_npid(const SceNpId& npid)
 {
 	std::lock_guard lock(mtx_);
 
-	std::string npid_str(reinterpret_cast<const char*>(npid.handle.data));
+	std::string npid_str = npid.ToString();
+
 	if (npid_to_conn_id.find(npid_str) != npid_to_conn_id.end())
 		return npid_to_conn_id.at(npid_str);
 
@@ -410,7 +409,7 @@ void signaling_handler::stop(const char* reason) {
 }
 
 void signaling_handler::queue_signaling_packet(signaling_packet& sp, std::shared_ptr<signaling_info> si, std::chrono::steady_clock::time_point wakeup_time) {
-	INFO_LOG(Log::sceNet, "queue_signaling_packet(command: %d, dest: %s:%d (%s), wake: %d)", sp.command, ip2str(si->addr).c_str(), si->port, si->npid.handle.data, wakeup_time);
+	INFO_LOG(Log::sceNet, "queue_signaling_packet(command: %d, dest: %s:%d (%s), wake: %d)", sp.command, ip2str(si->addr).c_str(), si->port, si->npid.ToString().c_str(), wakeup_time);
 	queued_packet qp;
 	qp.sig_info = std::move(si);
 	qp.packet = sp;
@@ -780,11 +779,15 @@ void signaling_handler::process_incoming_messages() {
 		//if (!validate_signaling_packet(sp))
 			//continue;
 
-		INFO_LOG(Log::sceNet, "SIGSERV %s Packet Received from %s:%d(%s)", SignalingCommandStr[sp->command], ip2str(op_addr).c_str(), op_port, sp->npid.handle.data);
+		if (auto conn_id = get_conn_id_from_npid(sp->npid); conn_id != std::nullopt)
+			INFO_LOG(Log::sceNet, "SIGSERV %s Packet Received from %s:%d(%s:%d)", SignalingCommandStr[sp->command], ip2str(op_addr).c_str(), op_port, sp->npid.ToString().c_str(), conn_id.value());
+		else
+			ERROR_LOG(Log::sceNet, "SIGSERV %s Packet Received from %s:%d(%s:UNK)", SignalingCommandStr[sp->command], ip2str(op_addr).c_str(), op_port, sp->npid.ToString().c_str());
+
 		auto& sent_packet = sig_packet;
 		auto si = get_signaling_ptr(sp);
 		if (si == nullptr)
-			ERROR_LOG(Log::sceNet, "SigPtr for member '%s' not found.", sp->npid.handle.data);
+			ERROR_LOG(Log::sceNet, "SIGSERV SigPtr for member '%s' not found.", sp->npid.ToString().c_str());
 
 		if (sp->command == SignalingCommand::Connect || sp->command == SignalingCommand::Info) {
 			const u32 conn_id = get_always_conn_id(sp->npid);
@@ -1261,7 +1264,7 @@ int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	SceNpMatching2RoomMemberId memberId = notif_data->newRoomMemberDataInternal->memberId;
 	npServer->cache.AddMember(room_id, *notif_data->newRoomMemberDataInternal);
 
-	NOTICE_LOG(Log::sceNet, "NOTI User %s(%d) data was updated for room (%d)", notif_data->newRoomMemberDataInternal->userInfo.npId.handle.data, memberId, room_id);
+	NOTICE_LOG(Log::sceNet, "NOTI User %s(%d) data was updated for room (%d)", notif_data->newRoomMemberDataInternal->userInfo.npId.ToString(), memberId, room_id);
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());
 	auto conn_id = get_conn_id_from_npid(notif_data->newRoomMemberDataInternal->userInfo.npId);
 	
