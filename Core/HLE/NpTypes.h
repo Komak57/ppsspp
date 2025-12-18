@@ -359,10 +359,10 @@ struct SceNpId
 
 		return (std::strcmp(source, target) == 0);
 	}
-	const char* ToString() const {
+	std::string ToString() const {
 		char target[17]{};
 		memcpy(target, handle.data, 16);
-		return target;
+		return std::string(target);
 	}
 };
 
