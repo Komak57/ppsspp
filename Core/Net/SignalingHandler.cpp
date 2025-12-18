@@ -122,14 +122,12 @@ void signaling_handler::set_self_sig_info(SceNpId& npid)
 
 std::shared_ptr<signaling_info> signaling_handler::get_signaling_ptr(const signaling_packet* sp)
 {
-	u32 conn_id;
-
 	std::string npid = sp->npid.ToString();
 
 	if (npid_to_conn_id.find(npid) == npid_to_conn_id.end())
 		return nullptr;
 
-	conn_id = npid_to_conn_id.at(npid);
+	u32 conn_id = npid_to_conn_id.at(npid);
 
 	if (sig_peers.find(conn_id) == sig_peers.end())
 	{
