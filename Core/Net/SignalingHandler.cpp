@@ -58,12 +58,10 @@ u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_i
 	si->member_id = member_id;
 
 	// If connection exists from prior state notify
-	if (si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE)
-	{
-		notifySignalingHandler(si->room_id, si->member_id, si->conn_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
-	}
-	else
+	if (si->conn_status != SCE_NP_SIGNALING_CONN_STATUS_ACTIVE)
 		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
+
+	notifySignalingHandler(si->room_id, si->member_id, si->conn_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
 
 	si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
 
