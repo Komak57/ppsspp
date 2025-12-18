@@ -1572,26 +1572,26 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 roomId, u32 room
 
 	// ThreadStart
 	if (!npMatching2Inited)
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED, "NpMatching2 Not Initialized");
 
 	auto _context = ctx.find(ctxId);
 	if (_context == ctx.end())
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND);
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND, "Invalid Context");
 
 	if (!Memory::IsValidAddress(netInfoPtr))
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "netInfoPtr NullPtr");
 
 	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
 
 	auto member_exists = npServer->cache.Exists(roomId, roomMemberId);
 	if (!member_exists)
-		return SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND;
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
 	auto connId = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, roomMemberId));
 	if (!connId)
-		return SCE_NP_MATCHING2_SIGNALING_ERROR_CONNID_NOT_AVAILABLE;
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_CONNID_NOT_AVAILABLE, "ConnId Not Found"); ;
 	auto si = g_signaling.get_sig_infos(*connId);
 	if (!si)
-		return SCE_NP_MATCHING2_SIGNALING_ERROR_NETINFO_NOT_AVAILABLE;
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_SIGNALING_ERROR_NETINFO_NOT_AVAILABLE, "SigInfo Not Available"); ;
 
 	// FIXME: Use npServer->local_addr_sig
 	netInfo->localAddr = si->addr;
@@ -1720,7 +1720,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 
 	auto si = g_signaling.get_sig_infos(conn_id.value());
 	if (!si) {
-		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
+		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Sig Info Not Found");
 	}
 
 	sig_addr = si->addr;
@@ -1793,11 +1793,13 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_OWN_NP_ID, "Member is Self");
 	}
 
-	auto conn_id = g_signaling.get_always_conn_id(npServer->cache.GetNpId(roomId, peerMemberId));
-
-	auto si = g_signaling.get_sig_infos(conn_id);
-	if (!si) {
+	auto conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, peerMemberId));
+	if (!conn_id)
 		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
+
+	auto si = g_signaling.get_sig_infos(conn_id.value());
+	if (!si) {
+		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Sig Info Not Found");
 	}
 
 	// This is a union. Only the value modified will be passed to the game
