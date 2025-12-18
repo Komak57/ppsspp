@@ -1688,23 +1688,13 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 
 	std::optional<u32> conn_id = std::nullopt;
 	if (connId != 0) {
+		auto si = g_signaling.get_sig_infos(connId);
+		if (si != std::nullopt)
 		conn_id = connId;
-
-		auto si = g_signaling.get_sig_infos(conn_id.value());
-		if (!si) {
-			// PSP2i uses peerMemberId as the connId instead of an actual connId at 08cb4f38
+		else
 			WARN_LOG(Log::sceNet, "Invalid Connection ID. Trying Member ID instead.");
-
-			if (!npServer->cache.Exists((SceNpMatching2RoomId)roomId))
-				return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
-
-			if (!npServer->cache.Exists(roomId, peerMemberId))
-				return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
-
-			conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, peerMemberId));
-		}
 	}
-	else {
+	if (!conn_id) {
 		if (!npServer->cache.Exists((SceNpMatching2RoomId)roomId))
 			return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
 
@@ -1746,14 +1736,13 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 	case SCE_NP_SIGNALING_CONN_STATUS_PENDING:
 		NOTICE_LOG(Log::sceNet, " - PENDING"); break;
 	case SCE_NP_SIGNALING_CONN_STATUS_ACTIVE:
-		NOTICE_LOG(Log::sceNet, " - ACTIVE"); break;
-	}
-
+		NOTICE_LOG(Log::sceNet, " - ACTIVE");
 	Memory::Write_U32(sig_addr, ipAddrPtr);
 	NOTICE_LOG(Log::sceNet, " - IP Addr: %s", ip2str(sig_addr).c_str());
-
 	Memory::Write_U16(sig_port, portPtr);
 	NOTICE_LOG(Log::sceNet, " - Port: %d", ntohs(sig_port));
+		break;
+	}
 
 	return hleLogInfo(Log::sceNet, SCE_NP_MATCHING2_OKAY);
 }
