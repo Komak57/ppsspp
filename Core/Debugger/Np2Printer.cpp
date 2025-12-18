@@ -66,7 +66,7 @@ void print_int_attr(const SceNpMatching2IntAttr* attr)
 
 void print_SceNpMatching2BinAttr(const SceNpMatching2BinAttr* bin)
 {
-	const auto ptr = +bin->ptr;
+	const auto ptr = bin->ptr;
 	const u32 size = bin->size;
 
 	INFO_LOG(Log::sceNet, "Id: %d, Size: %d, ptr: *0x%x", bin->id, size, bin->ptr.ptr);
