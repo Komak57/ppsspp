@@ -1420,11 +1420,13 @@ namespace net {
 			}
 			final_grouppasswordconfig_vec = builder.CreateVector(davec);
 		}
-		// This should be optional, but RPCN overwrites it
-		// We'll default to 0 if there is no password, and replace if we have a slot mask
-		u64 final_passwordSlotMask = 0;
+
+		flatbuffers::Offset<flatbuffers::Vector<u64>> final_passwordSlotMask;
 		if (req->passwordSlotMask.IsValid())
-			final_passwordSlotMask = *req->passwordSlotMask;
+		{
+			const u64 value = *req->passwordSlotMask;
+			final_passwordSlotMask = builder.CreateVector(&value, 1);
+		}
 
 		flatbuffers::Offset<flatbuffers::Vector<u16>> final_ownerprivilege_vec;
 		if (req->ownerPrivilegeRankNum && req->ownerPrivilegeRank.IsValid())
