@@ -42,14 +42,14 @@ namespace np
 		NOTICE_LOG(Log::sceNet, " - ID:                    %d", binattr_info->id);
 		NOTICE_LOG(Log::sceNet, " - Size:                  %d", binattr_info->size);
 		if (binattr_info->size > 0) {
-		//auto* ptr = edata.allocate<u8>(binattr_info->size, binattr_info->ptr);
-		u32 alloc = bin_attr->data()->size();
-		binattr_info->ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
-		for (flatbuffers::uoffset_t i = 0; i < bin_attr->data()->size(); i++)
-		{
-			binattr_info->ptr[i] = bin_attr->data()->Get(i);
+			//auto* ptr = edata.allocate<u8>(binattr_info->size, binattr_info->ptr);
+			u32 alloc = bin_attr->data()->size();
+			binattr_info->ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
+			for (flatbuffers::uoffset_t i = 0; i < bin_attr->data()->size(); i++)
+			{
+				binattr_info->ptr[i] = bin_attr->data()->Get(i);
+			}
 		}
-	}
 	}
 
 	void BinAttrs_to_SceNpMatching2BinAttrs(BlockAllocator& edata, const flatbuffers::Vector<flatbuffers::Offset<BinAttr>>* fb_attr, PSPPointer<SceNpMatching2BinAttr> binattr_info)
@@ -76,15 +76,15 @@ namespace np
 			NOTICE_LOG(Log::sceNet, " - ID:   %d", binattr_info->data.id);
 			NOTICE_LOG(Log::sceNet, " - Size: %d", binattr_info->data.size);
 			if (binattr_info->data.size > 0) {
-			//auto* ptr = edata.allocate<u8>(binattr_info->size, binattr_info->ptr);
-			u32 alloc = binattr_info->data.size;
-			binattr_info->data.ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
-			for (flatbuffers::uoffset_t i = 0; i < fb_attr->data()->data()->size(); i++)
-			{
-				binattr_info->data.ptr[i] = fb_attr->data()->data()->Get(i);
+				//auto* ptr = edata.allocate<u8>(binattr_info->size, binattr_info->ptr);
+				u32 alloc = binattr_info->data.size;
+				binattr_info->data.ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
+				for (flatbuffers::uoffset_t i = 0; i < fb_attr->data()->data()->size(); i++)
+				{
+					binattr_info->data.ptr[i] = fb_attr->data()->data()->Get(i);
+				}
 			}
 		}
-	}
 	}
 
 	void RoomBinAttrInternal_to_SceNpMatching2RoomBinAttrInternal(BlockAllocator& edata, const BinAttrInternal* fb_attr, PSPPointer<SceNpMatching2RoomBinAttrInternal> binattr_info)
@@ -99,15 +99,15 @@ namespace np
 			NOTICE_LOG(Log::sceNet, " - ID:   %d", binattr_info->data.id);
 			NOTICE_LOG(Log::sceNet, " - Size: %d", binattr_info->data.size);
 			if (binattr_info->data.size > 0) {
-			//auto* ptr = edata.allocate<u8>(binattr_info->size, binattr_info->ptr);
-			u32 alloc = binattr_info->data.size;
-			binattr_info->data.ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
-			for (flatbuffers::uoffset_t i = 0; i < fb_attr->data()->data()->size(); i++)
-			{
-				binattr_info->data.ptr[i] = fb_attr->data()->data()->Get(i);
+				//auto* ptr = edata.allocate<u8>(binattr_info->size, binattr_info->ptr);
+				u32 alloc = binattr_info->data.size;
+				binattr_info->data.ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
+				for (flatbuffers::uoffset_t i = 0; i < fb_attr->data()->data()->size(); i++)
+				{
+					binattr_info->data.ptr[i] = fb_attr->data()->data()->Get(i);
+				}
 			}
 		}
-	}
 	}
 
 	void RoomGroup_to_SceNpMatching2RoomGroup(const RoomGroup* fb_group, PSPPointer<SceNpMatching2RoomGroup> sce_group)
@@ -438,9 +438,8 @@ namespace np
 			//auto* ptr_bin_attr = edata.allocate<SceNpMatching2RoomBinAttrInternal>(sizeof(SceNpMatching2RoomBinAttrInternal) * room_info->roomBinAttrInternalNum, room_info->roomBinAttrInternal);
 
 			u32 alloc = sizeof(SceNpMatching2RoomBinAttrInternal) * room_info->roomBinAttrInternalNum;
-			room_info->roomBinAttrInternal = PSPPointer<SceNpMatching2RoomBinAttrInternal>::Create(edata.Alloc(alloc));
-			auto ptr_bin_attr = room_info->roomBinAttrInternal;
-
+			SceNpMatching2RoomBinAttrInternal* ptr_bin_attr = room_info->roomBinAttrInternal = PSPPointer<SceNpMatching2RoomBinAttrInternal>::Create(edata.Alloc(alloc));
+			
 			for (u32 b_index = 0; b_index < room_info->roomBinAttrInternalNum; b_index++)
 			{
 				auto fb_bin_attr = resp->roomBinAttrInternal()->Get(b_index);
@@ -448,14 +447,14 @@ namespace np
 				ptr_bin_attr[b_index].updateMemberId = fb_bin_attr->updateMemberId();
 
 				ptr_bin_attr[b_index].data.id = fb_bin_attr->data()->id();
-				ptr_bin_attr[b_index].data.size = fb_bin_attr->data()->data()->size();
+				const u32 size = ptr_bin_attr[b_index].data.size = fb_bin_attr->data()->data()->size();
 				//auto* ptr_bin_attr_data = edata.allocate<u8>(ptr_bin_attr[b_index].data.size, ptr_bin_attr[b_index].data.ptr);
-				if (ptr_bin_attr[b_index].data.size > 0) {
-					u32 alloc = ptr_bin_attr[b_index].data.size;
-					ptr_bin_attr[b_index].data.ptr = PSPPointer<u8>::Create(edata.Alloc(alloc));
-					for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < ptr_bin_attr[b_index].data.size; tmp_index++)
+				if (size > 0) {
+					u32 _alloc = size;
+					u8* ptr_bin_attr_data = ptr_bin_attr[b_index].data.ptr = PSPPointer<u8>::Create(edata.Alloc(_alloc));
+					for (flatbuffers::uoffset_t tmp_index = 0; tmp_index < size; tmp_index++)
 					{
-						ptr_bin_attr[b_index].data.ptr[tmp_index] = fb_bin_attr->data()->data()->Get(tmp_index);
+						ptr_bin_attr_data[tmp_index] = fb_bin_attr->data()->data()->Get(tmp_index);
 					}
 				}
 			}
@@ -494,7 +493,6 @@ namespace np
 		sce_member_data->natType  = member_data->natType();
 		sce_member_data->flagAttr = member_data->flagAttr();
 
-		INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternal has %d entries", member_data->roomMemberBinAttrInternal()->size());
 		if (member_data->roomMemberBinAttrInternal() && member_data->roomMemberBinAttrInternal()->size() != 0)
 		{
 			sce_member_data->roomMemberBinAttrInternalNum = member_data->roomMemberBinAttrInternal()->size();
@@ -518,8 +516,10 @@ namespace np
 						binAttr->data.ptr[tmp_index] = fb_battr->data()->data()->Get(tmp_index);
 					}
 				}
+				INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternal[%d] size: %d, ptr: 0x%x", fb_battr->data()->id(), fb_battr->data()->data()->size(), binAttr->data.ptr.ptr);
 			}
 		}
+		INFO_LOG(Log::sceNet, " - roomMemberBinAttrInternal has %d entries", sce_member_data->roomMemberBinAttrInternalNum);
 	}
 
 	void RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(BlockAllocator& edata, const RoomMemberUpdateInfo* update_info, SceNpMatching2RoomMemberUpdateInfo* sce_update_info, bool include_onlinename, bool include_avatarurl)
@@ -753,15 +753,15 @@ namespace np
 			NOTICE_HEXLOG(Log::sceNet, " - Message:", msg->Data(), msg->size(), msg->size());
 			sce_mi->msgLen = msg->size();
 			if (sce_mi->msgLen > 0) {
-			//auto* ptr_msg_data = static_cast<u8*>(edata.allocate<void>(msg->size(), sce_mi->msg));
-			u32 alloc = msg->size();
-			sce_mi->msg = PSPPointer<u8>::Create(edata.Alloc(alloc));
-			for (u32 i = 0; i < msg->size(); i++)
-			{
-				sce_mi->msg[i] = msg->Get(i);
+				//auto* ptr_msg_data = static_cast<u8*>(edata.allocate<void>(msg->size(), sce_mi->msg));
+				u32 alloc = msg->size();
+				sce_mi->msg = PSPPointer<u8>::Create(edata.Alloc(alloc));
+				for (u32 i = 0; i < msg->size(); i++)
+				{
+					sce_mi->msg[i] = msg->Get(i);
+				}
 			}
 		}
-	}
 	}
 
 	//void MatchingRoomStatus_to_SceNpMatchingRoomStatus(BlockAllocator& edata, const MatchingRoomStatus* resp, SceNpMatchingRoomStatus* room_status)
