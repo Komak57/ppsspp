@@ -70,6 +70,7 @@ enum class Log {
 	sceKernel,
 	sceModule,
 	sceNet,
+	sceNp2,
 	sceRtc,
 	sceSas,
 	sceUtility,

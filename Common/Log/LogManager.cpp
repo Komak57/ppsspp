@@ -106,6 +106,7 @@ static const char * const g_logTypeNames[] = {
 	"SCEKERNEL",
 	"SCEMODULE",
 	"SCENET",
+	"SCENP2",
 	"SCERTC",
 	"SCESAS",
 	"SCEUTIL",
