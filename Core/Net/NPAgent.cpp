@@ -385,83 +385,83 @@ namespace net {
 	}
 
 	int NPAgent::Login(const char* npid, const char* token, const char* password) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
 	int NPAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
 	u64 NPAgent::GetNetworkTime() {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 1000000ULL * rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
 	}
 
 	int NPAgent::GetServers(SceNpCommunicationId npTitleId) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
 	int NPAgent::GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::JoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2JoinRoomRequest> req) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::LeaveRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2LeaveRoomRequest> req) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::GetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataInternalRequest* req) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::SetRoomDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataInternalRequest* req) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::GetRoomDataExternalList(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::SetRoomDataExternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomDataExternalRequest* req) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::SetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetRoomMemberDataInternalRequest* req) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::GetRoomMemberDataInternal(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomMemberDataInternalRequest* req) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::SendRoomMessage(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::PingRoomOwner(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2RoomId room_id) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 	int NPAgent::RequestSignalingInfo(std::string npid, u32 conn_id) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 #pragma endregion
@@ -469,18 +469,18 @@ namespace net {
 #pragma region NPAuthAgent_Defaults
 	// NPAuthAgent Defaults
 	std::unique_ptr<NPAgent> NPAuthAgent::CreateAgent() {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return nullptr;
 	}
 
 	bool NPAuthAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		connected = true;
 		return true;
 	}
 
 	void NPAuthAgent::Disconnect() {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		connected = false;
 	}
 
@@ -650,42 +650,42 @@ namespace net {
 	}
 
 	int NPAuthAgent::Login(const char* npid, const char* token, const char* password) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
 	int NPAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
 	int NPAuthAgent::ResendToken(const char* npid, const char* password) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
 	int NPAuthAgent::SendResetToken(const char* npid, const char* email) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
 	int NPAuthAgent::ResetPassword(const char* npid, const char* token, const char* password) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
 	u64 NPAuthAgent::GetNetworkTime() {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
 	int NPAuthAgent::GetServers(SceNpCommunicationId npTitleId) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
 	int NPAuthAgent::GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) {
-		WARN_LOG(Log::sceNet, "UNIMPLEMENTED");
+		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 #pragma endregion

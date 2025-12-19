@@ -201,7 +201,7 @@ namespace net {
 		bool cancelled = false;
 		net::RequestProgress progress(&cancelled);
 		if (!client.Resolve(url.Host().c_str(), url.Port())) {
-			return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "HTTP failed to resolve %s", url.Resource().c_str());
+			return hleLogError(Log::Matching, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "HTTP failed to resolve %s", url.Resource().c_str());
 		}
 
 		client.SetDataTimeout(20.0);
@@ -210,12 +210,12 @@ namespace net {
 			snprintf(requestHeaders, sizeof(requestHeaders),
 				"User-Agent: PS3Community-agent/1.0.0 libhttp/1.0.0\r\n");
 
-			DEBUG_LOG(Log::sceNet, "GET URI: %s", url.ToString().c_str());
+			DEBUG_LOG(Log::Matching, "GET URI: %s", url.ToString().c_str());
 			http::RequestParams req(url.Resource(), "*/*");
 			int err = client.SendRequest("GET", req, requestHeaders, &progress);
 			if (err < 0) {
 				client.Disconnect();
-				return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_FORBIDDEN, "HTTP GET Error = %d", err);
+				return hleLogError(Log::Matching, SCE_NP_COMMUNITY_SERVER_ERROR_FORBIDDEN, "HTTP GET Error = %d", err);
 			}
 
 			core::Buffer readbuf;
@@ -224,7 +224,7 @@ namespace net {
 			//int code = client.ReadResponse(&readbuf, &progress);
 			if (code != 200) {
 				client.Disconnect();
-				return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_INTERNAL_SERVER_ERROR, "HTTP Error Code = %d", code);
+				return hleLogError(Log::Matching, SCE_NP_COMMUNITY_SERVER_ERROR_INTERNAL_SERVER_ERROR, "HTTP Error Code = %d", code);
 			}
 			client.Disconnect();
 
@@ -232,18 +232,18 @@ namespace net {
 			size_t readBytes = readbuf.size();
 			readbuf.Take(readBytes, &entity);
 
-			INFO_LOG(Log::sceNet, "Entity Data: %d", entity);
+			INFO_LOG(Log::Matching, "Entity Data: %d", entity);
 
 			// TODO: Use XML Parser to get the Tag and it's attributes instead of searching for keywords on the string
 			std::string text;
 			size_t ofs = entity.find("titleid=");
 			if (ofs == std::string::npos)
-				return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "titleid not found");
+				return hleLogError(Log::Matching, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "titleid not found");
 
 			ofs += 9;
 			size_t ofs2 = entity.find('"', ofs);
 			text = entity.substr(ofs, ofs2 - ofs);
-			INFO_LOG(Log::sceNet, "%s - Title ID: %s", __FUNCTION__, text.c_str());
+			INFO_LOG(Log::Matching, "%s - Title ID: %s", __FUNCTION__, text.c_str());
 
 			int i = 1;
 			while (true) {
@@ -253,7 +253,7 @@ namespace net {
 				ofs = entity.find("<agent-fqdn", ++ofs2);
 				if (ofs == std::string::npos) {
 					if (i == 1)
-						return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent-fqdn not found");
+						return hleLogError(Log::Matching, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent-fqdn not found");
 					else
 						break;
 				}
@@ -261,27 +261,27 @@ namespace net {
 				size_t frontPos = ++ofs;
 				ofs = entity.find("id=", frontPos);
 				if (ofs == std::string::npos)
-					return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent id not found");
+					return hleLogError(Log::Matching, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent id not found");
 
 				ofs += 4;
 				ofs2 = entity.find('"', ofs);
 				text = entity.substr(ofs, ofs2 - ofs);
 				server.id = std::stoi(text.c_str());
-				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d ID: %s", __FUNCTION__, i, text.c_str());
+				INFO_LOG(Log::Matching, "%s - Agent-FQDN#%d ID: %s", __FUNCTION__, i, text.c_str());
 
 				ofs = entity.find("port=", frontPos);
 				if (ofs == std::string::npos)
-					return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent port not found");
+					return hleLogError(Log::Matching, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent port not found");
 
 				ofs += 6;
 				ofs2 = entity.find('"', ofs);
 				text = entity.substr(ofs, ofs2 - ofs);
 				server.port = std::stoi(text.c_str());
-				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Port: %s", __FUNCTION__, i, text.c_str());
+				INFO_LOG(Log::Matching, "%s - Agent-FQDN#%d Port: %s", __FUNCTION__, i, text.c_str());
 
 				ofs = entity.find("status=", frontPos);
 				if (ofs == std::string::npos)
-					return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent status not found");
+					return hleLogError(Log::Matching, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent status not found");
 
 				ofs += 8;
 				ofs2 = entity.find('"', ofs);
@@ -290,16 +290,16 @@ namespace net {
 				server.status = SCE_NP_MATCHING2_SERVER_STATUS_UNAVAILABLE;
 				if (text == alive)
 					server.status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
-				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Status: %s", __FUNCTION__, i, text.c_str());
+				INFO_LOG(Log::Matching, "%s - Agent-FQDN#%d Status: %s", __FUNCTION__, i, text.c_str());
 
 				ofs = entity.find('>', ++ofs2);
 				if (ofs == std::string::npos)
-					return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent host not found");
+					return hleLogError(Log::Matching, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE, "agent host not found");
 
 				ofs2 = entity.find("</agent-fqdn", ++ofs);
 				text = entity.substr(ofs, ofs2 - ofs);
 				server.host = text;
-				INFO_LOG(Log::sceNet, "%s - Agent-FQDN#%d Host: %s", __FUNCTION__, i, text.c_str());
+				INFO_LOG(Log::Matching, "%s - Agent-FQDN#%d Host: %s", __FUNCTION__, i, text.c_str());
 
 				if (!npServer)
 					npServer = net::CreateNPAgent(NPAgentType::PSN, server.host, server.port);
@@ -312,15 +312,15 @@ namespace net {
 	}
 
 	int PSNAgent::GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npCommId) {
-		NOTICE_LOG(Log::sceNet, "NPAgent::GetWorldInfo(%s)", npCommId.data);
+		NOTICE_LOG(Log::Matching, "NPAgent::GetWorldInfo(%s)", npCommId.data);
 #ifndef AGENT_TESTING
 		if (sock_ <= 0) {
-			ERROR_LOG(Log::sceNet, "GetWorldInfo: Socket not connected");
+			ERROR_LOG(Log::Matching, "GetWorldInfo: Socket not connected");
 			return -1;
 		}
 #endif
 		if (cancelled) {
-			ERROR_LOG(Log::sceNet, "GetWorldInfo: Cancelled");
+			ERROR_LOG(Log::Matching, "GetWorldInfo: Cancelled");
 			return -1;
 		}
 		// 1201 0036 10010000 01001000 00000000 e288f336a613981d1f8b0253f34d4028 1010 000c 4e50575230313434365f3030 4073 0002 0001
@@ -355,7 +355,7 @@ namespace net {
 			hexdata += hex_chars[(c & 0xF0) >> 4];
 			hexdata += hex_chars[(c & 0x0F) >> 0];
 		}
-		INFO_LOG(Log::sceNet, "Request: %s", hexdata.c_str());
+		INFO_LOG(Log::Matching, "Request: %s", hexdata.c_str());
 
 		// packet.Pack(0x0112, packet.Length()+4);
 		core::Buffer buffer;
@@ -364,14 +364,14 @@ namespace net {
 
 		bool flushed = buffer.FlushSocketSSL(&tls, 60.0, &cancelled);
 		if (!flushed) {
-			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			ERROR_LOG(Log::Matching, "Unable to Send, returning Empty");
 			return -1;
 		}
 		core::Buffer readbuf;
 		// Read response
 		int ret;
 		if ((ret = readbuf.Read(sock(), 4096, &tls)) < 0) {
-			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
+			ERROR_LOG(Log::Matching, "Failed to read response -0x%04x", -ret);
 			return -1;
 		}
 
@@ -385,7 +385,7 @@ namespace net {
 			hexdata += hex_chars[(c & 0xF0) >> 4];
 			hexdata += hex_chars[(c & 0x0F) >> 0];
 		}
-		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
+		INFO_LOG(Log::Matching, "Response: %s", hexdata.c_str());
 		//worldInfoOut->clear();
 		//// Should get an array of worlds
 		//SceNpMatching2World worldInfo = SceNpMatching2World();
@@ -401,13 +401,13 @@ namespace net {
 	}
 
 	int PSNAgent::SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {
-		NOTICE_LOG(Log::sceNet, "NPAgent::SearchRoom()");
+		NOTICE_LOG(Log::Matching, "NPAgent::SearchRoom()");
 		if (sock() <= 0) {
-			ERROR_LOG(Log::sceNet, "SearchRoom: Socket not connected");
+			ERROR_LOG(Log::Matching, "SearchRoom: Socket not connected");
 			return -1;
 		}
 		if (cancelled) {
-			ERROR_LOG(Log::sceNet, "SearchRoom: Cancelled");
+			ERROR_LOG(Log::Matching, "SearchRoom: Cancelled");
 			return -1;
 		}
 
@@ -422,7 +422,7 @@ namespace net {
 			hexdata += hex_chars[(c & 0xF0) >> 4];
 			hexdata += hex_chars[(c & 0x0F) >> 0];
 		}
-		INFO_LOG(Log::sceNet, "Request: %s", hexdata.c_str());
+		INFO_LOG(Log::Matching, "Request: %s", hexdata.c_str());
 
 		// packet.Pack(0x0112, packet.Length()+4);
 		net::Buffer buffer;
@@ -431,7 +431,7 @@ namespace net {
 
 		bool flushed = buffer.FlushSocket(sock(), 60.0, &cancelled);
 		if (!flushed) {
-			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			ERROR_LOG(Log::Matching, "Unable to Send, returning Empty");
 			return -1;
 		}
 
@@ -439,7 +439,7 @@ namespace net {
 		// Read response
 		int ret;
 		if ((ret = readbuf.Read(sock(), 4096, &tls)) < 0) {
-			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
+			ERROR_LOG(Log::Matching, "Failed to read response -0x%04x", -ret);
 			return -1;
 		}
 
@@ -453,20 +453,20 @@ namespace net {
 		//	hexdata += hex_chars[(c & 0xF0) >> 4];
 		//	hexdata += hex_chars[(c & 0x0F) >> 0];
 		//}
-		//INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
+		//INFO_LOG(Log::Matching, "Response: %s", hexdata.c_str());
 
 		//roomDataOut->roomId = 0; // No Room
 		return 0;
 	}
 
 	int PSNAgent::CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) {
-		NOTICE_LOG(Log::sceNet, "NPAgent::CreatJoinRoom()");
+		NOTICE_LOG(Log::Matching, "NPAgent::CreatJoinRoom()");
 		if (sock_ <= 0) {
-			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Socket not connected");
+			ERROR_LOG(Log::Matching, "CreatJoinRoom: Socket not connected");
 			return -1;
 		}
 		if (cancelled) {
-			ERROR_LOG(Log::sceNet, "CreatJoinRoom: Cancelled");
+			ERROR_LOG(Log::Matching, "CreatJoinRoom: Cancelled");
 			return -1;
 		}
 
@@ -481,7 +481,7 @@ namespace net {
 			hexdata += hex_chars[(c & 0xF0) >> 4];
 			hexdata += hex_chars[(c & 0x0F) >> 0];
 		}
-		INFO_LOG(Log::sceNet, "Request: %s", hexdata.c_str());
+		INFO_LOG(Log::Matching, "Request: %s", hexdata.c_str());
 
 		// packet.Pack(0x0112, packet.Length()+4);
 		net::Buffer buffer;
@@ -490,7 +490,7 @@ namespace net {
 
 		bool flushed = buffer.FlushSocket(sock(), 60.0, &cancelled);
 		if (!flushed) {
-			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
+			ERROR_LOG(Log::Matching, "Unable to Send, returning Empty");
 			return -1;
 		}
 
@@ -498,7 +498,7 @@ namespace net {
 		// Read response
 		int ret;
 		if ((ret = readbuf.Read(sock(), 4096, &tls)) < 0) {
-			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
+			ERROR_LOG(Log::Matching, "Failed to read response -0x%04x", -ret);
 			return -1;
 		}
 
@@ -512,7 +512,7 @@ namespace net {
 			hexdata += hex_chars[(c & 0xF0) >> 4];
 			hexdata += hex_chars[(c & 0x0F) >> 0];
 		}
-		INFO_LOG(Log::sceNet, "Response: %s", hexdata.c_str());
+		INFO_LOG(Log::Matching, "Response: %s", hexdata.c_str());
 		//roomDataOut->roomId = 1;
 
 		return 0;
