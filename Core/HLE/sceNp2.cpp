@@ -748,11 +748,14 @@ static int sceNpMatching2DestroyContext(int ctxId)
 
 	auto it = ctx.find(ctxId);
 	if (it == ctx.end())
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND); //SCE_NP_MATCHING2_ERROR_INVALID_CONTEXT_ID
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND, "Context Not Found"); //SCE_NP_MATCHING2_ERROR_INVALID_CONTEXT_ID
+
+	if (it->second->started.load())
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_CONTEXT_ID, "Invalid Context ID");
 
 	ctx.erase(it);
 
-	ERROR_LOG(Log::sceNet, "%s: Invalid Context ID %d", __FUNCTION__, ctxId);
+	NOTICE_LOG(Log::sceNet, "%s: Context Destroyed", __FUNCTION__, ctxId);
 
 	return SCE_NP_MATCHING2_OKAY;
 }
