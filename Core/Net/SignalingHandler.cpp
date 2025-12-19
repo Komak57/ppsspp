@@ -37,12 +37,12 @@ u32 signaling_handler::init_sig(const SceNpId& npid)
 
 	if (sig_peers[conn_id]->conn_status == SCE_NP_SIGNALING_CONN_STATUS_INACTIVE)
 	{
-	INFO_LOG(Log::sceNet, "SIGSERV: Creating new sig1 connection and requesting infos from RPCN");
+	INFO_LOG(Log::Signaling, "SIGSERV: Creating new sig1 connection and requesting infos from RPCN");
 		sig_peers[conn_id]->conn_status = SCE_NP_SIGNALING_CONN_STATUS_PENDING;
 
 	// Request peer infos from RPCN
 	if (npServer->RequestSignalingInfo(npid.ToString(), conn_id) < 0)
-		ERROR_LOG(Log::sceNet, "SIGSERV: RPCN Request Failed");
+		ERROR_LOG(Log::Signaling, "SIGSERV: RPCN Request Failed");
 	}
 
 	return conn_id;
@@ -77,10 +77,10 @@ u32 signaling_handler::get_always_conn_id(const SceNpId& npid)
 
 	u32 conn_id = 0;
 	if (npid.Equals(*NpGetNpId())) {
-		WARN_LOG(Log::sceNet, "Creating ConnID for Self for '%s'", npid_str.c_str());
+		WARN_LOG(Log::Signaling, "Creating ConnID for Self for '%s'", npid_str.c_str());
 	}
 	else {
-		WARN_LOG(Log::sceNet, "ConnID for member '%s' not found. Creating.", npid_str.c_str());
+		WARN_LOG(Log::Signaling, "ConnID for member '%s' not found. Creating.", npid_str.c_str());
 		conn_id = cur_conn_id++;
 	}
 
@@ -131,7 +131,7 @@ std::shared_ptr<signaling_info> signaling_handler::get_signaling_ptr(const signa
 
 	if (sig_peers.find(conn_id) == sig_peers.end())
 	{
-		ERROR_LOG(Log::sceNet, "SIGSERV: ID Discrepancy");
+		ERROR_LOG(Log::Signaling, "SIGSERV: ID Discrepancy");
 		return nullptr;
 	}
 
@@ -149,7 +149,7 @@ void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32 
 		addr_old.s_addr = si->addr;
 		addr_new.s_addr = new_addr;
 
-		NOTICE_LOG(Log::sceNet, "Updated Address from %s:%d to %s:%d", ip2str(addr_old).c_str(), si->port, ip2str(addr_new).c_str(), new_port);
+		NOTICE_LOG(Log::Signaling, "Updated Address from %s:%d to %s:%d", ip2str(addr_old).c_str(), si->port, ip2str(addr_new).c_str(), new_port);
 
 		si->addr = new_addr;
 		si->port = new_port;
@@ -178,7 +178,7 @@ void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& s
 		addr_old.s_addr = si->mapped_addr;
 		addr_new.s_addr = new_addr;
 
-		NOTICE_LOG(Log::sceNet, "Updated Mapped Address from %s:%d to %s:%d", ip2str(addr_old).c_str(), si->mapped_port, ip2str(addr_new).c_str(), new_port);
+		NOTICE_LOG(Log::Signaling, "Updated Mapped Address from %s:%d to %s:%d", ip2str(addr_old).c_str(), si->mapped_port, ip2str(addr_new).c_str(), new_port);
 
 		si->mapped_addr = new_addr;
 		si->mapped_port = new_port;
@@ -285,7 +285,7 @@ void signaling_handler::stop_sig_nl(u32 conn_id, bool forceful)
 	auto& sent_packet = sig_packet;
 	sent_packet.command = SignalingCommand::Finished;
 
-	INFO_LOG(Log::sceNet, "FINISHED -> P2P");
+	INFO_LOG(Log::Signaling, "FINISHED -> P2P");
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, std::move(si), std::chrono::steady_clock::now() + REPEAT_FINISHED_DELAY);
 	if (np2P2PThreadID)
@@ -307,11 +307,11 @@ void signaling_handler::stop_sig(u32 conn_id, bool forceful)
 bool signaling_handler::create_connection() {
 	auto DccpSocket = g_socketManager.GetDCCP();
 	// Create the Virtual Socket for p2p handshakes
-	WARN_LOG(Log::sceNet, "Creating new socket for vport %d", SCE_INTERNAL_PORT);
+	WARN_LOG(Log::Signaling, "Creating new socket for vport %d", SCE_INTERNAL_PORT);
 	auto ConnSocket = create_socket(SCE_INTERNAL_PORT, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_CONN_DGRAM, PSP_NET_INET_IPPROTO_UNSPEC);
 	
 	if (!DccpSocket || !ConnSocket) {
-		ERROR_LOG(Log::sceNet, "Could not initialize connection.");
+		ERROR_LOG(Log::Signaling, "Could not initialize connection.");
 		_dbg_assert_msg_(false, "Could not initialize connection.");
 		return false;
 	}
@@ -351,7 +351,7 @@ bool signaling_handler::destroy_connection() {
 // This function assumes addr is in network order
 // and port is in host order
 void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
-	NOTICE_LOG(Log::sceNet, "Signaling Connecting to %s:%d", ip2str(addr).c_str(), port);
+	NOTICE_LOG(Log::Signaling, "Signaling Connecting to %s:%d", ip2str(addr).c_str(), port);
 	std::scoped_lock lk(mtx_);
 	// Send Connect?
 	auto& sent_packet = sig_packet;
@@ -370,7 +370,7 @@ void signaling_handler::connect(u32 conn_id, u32 addr, u16 port) {
 		si->port = port;
 	}
 
-	INFO_LOG(Log::sceNet, "CONNECT -> P2P");
+	INFO_LOG(Log::Signaling, "CONNECT -> P2P");
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, si, now + REPEAT_CONNECT_DELAY);
 	if (np2P2PThreadID)
@@ -388,7 +388,7 @@ void signaling_handler::stop(const char* reason) {
 
 		auto& sent_packet = sig_packet;
 		sent_packet.command = SignalingCommand::Finished;
-		INFO_LOG(Log::sceNet, "FINISHED -> P2P");
+		INFO_LOG(Log::Signaling, "FINISHED -> P2P");
 		send_signaling_packet(sent_packet, si->addr, si->port);
 	}
 
@@ -406,7 +406,7 @@ void signaling_handler::stop(const char* reason) {
 }
 
 void signaling_handler::queue_signaling_packet(signaling_packet& sp, std::shared_ptr<signaling_info> si, std::chrono::steady_clock::time_point wakeup_time) {
-	INFO_LOG(Log::sceNet, "queue_signaling_packet(command: %d, dest: %s:%d (%s), wake: %d)", sp.command, ip2str(si->addr).c_str(), si->port, si->npid.ToString().c_str(), wakeup_time);
+	INFO_LOG(Log::Signaling, "queue_signaling_packet(command: %d, dest: %s:%d (%s), wake: %d)", sp.command, ip2str(si->addr).c_str(), si->port, si->npid.ToString().c_str(), wakeup_time);
 	queued_packet qp;
 	qp.sig_info = std::move(si);
 	qp.packet = sp;
@@ -416,7 +416,7 @@ void signaling_handler::queue_signaling_packet(signaling_packet& sp, std::shared
 // Assumes addr is in Network order
 // Assumes port is in Host order
 void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u16 port) const {
-	INFO_LOG(Log::sceNet, "send_signaling_packet(command: %d, ip: %s, port: %d)", sp.command, ip2str(addr).c_str(), port);
+	INFO_LOG(Log::Signaling, "send_signaling_packet(command: %d, ip: %s, port: %d)", sp.command, ip2str(addr).c_str(), port);
 	std::vector<u8> packet(sizeof(signaling_packet) + VPORT_0_HEADER_SIZE);
 	//reinterpret_cast<u16_le&>(packet[0]) = 0; // VPort 0 (LE)
 	packet[0] = SUBSET_SIGNALING;
@@ -433,7 +433,7 @@ void signaling_handler::send_signaling_packet(signaling_packet& sp, u32 addr, u1
 	dest.sin_port = htons(port);
 
 	if (!send_packet_ipv4(packet, dest)) {
-		ERROR_LOG(Log::sceNet, "Failed to send signaling packet on IPv4 socket %s:%d", ip2str(addr).c_str(), port);
+		ERROR_LOG(Log::Signaling, "Failed to send signaling packet on IPv4 socket %s:%d", ip2str(addr).c_str(), port);
 	}
 }
 
@@ -450,7 +450,7 @@ void signaling_handler::send_information_packets(u32 addr, u16 port, const SceNp
 	auto& sent_packet = sig_packet;
 	sent_packet.command = SignalingCommand::Info;
 
-	INFO_LOG(Log::sceNet, "INFO -> P2P");
+	INFO_LOG(Log::Signaling, "INFO -> P2P");
 	send_signaling_packet(sent_packet, si->addr, si->port);
 	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_INFO_DELAY);
 	if (np2P2PThreadID)
@@ -508,9 +508,9 @@ constexpr void write_to_ptr(U&& array, int pos, const T& value)
 }
 
 std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
-	DEBUG_LOG(Log::sceNet, "Signaling RPCN Handler Thread Started");
+	DEBUG_LOG(Log::Signaling, "Signaling RPCN Handler Thread Started");
 	if (cancelled) {
-		WARN_LOG(Log::sceNet, "RPCN Cancelling");
+		WARN_LOG(Log::Signaling, "RPCN Cancelling");
 		return std::chrono::duration_cast<std::chrono::microseconds>(5s);
 	}
 	const auto now = std::chrono::steady_clock::now();
@@ -519,12 +519,12 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 	for (const auto& msg : rpcn_msgs)
 	{
 		if (cancelled) {
-			WARN_LOG(Log::sceNet, "RPCN Cancelling");
+			WARN_LOG(Log::Signaling, "RPCN Cancelling");
 			return std::chrono::duration_cast<std::chrono::microseconds>(5s);
 		}
 		if (msg.size() == 6)
 		{
-			DEBUG_LOG(Log::sceNet, "RPCN Signal Pong Received");
+			DEBUG_LOG(Log::Signaling, "RPCN Signal Pong Received");
 			// Pull addr in Network Order
 			const u32 new_addr_sig = read_from_ptr<u32_le>(&msg[0]);
 			// Pull port in Host Order
@@ -553,7 +553,7 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 				auto n = GetI18NCategory(I18NCat::NETWORKING);
 				g_OSD.Show(OSDType::MESSAGE_SUCCESS, std::string(n->T("SH: Connected")) + std::string(" [") + ip2str(new_addr_sig) + std::string("]:") + std::to_string(new_port_sig), 0.0f, "userjoinroom");
 
-				NOTICE_LOG(Log::sceNet, "New P2P IP: %s", ip2str(new_addr_sig).c_str());
+				NOTICE_LOG(Log::Signaling, "New P2P IP: %s", ip2str(new_addr_sig).c_str());
 				if (old_addr_sig == 0)
 				{
 					// wake thread
@@ -567,7 +567,7 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 					std::lock_guard<std::mutex> lock(sig_mutex);
 					g_signaling.port_sig = new_port_sig;
 				}
-				NOTICE_LOG(Log::sceNet, "New P2P PORT: %d", new_port_sig);
+				NOTICE_LOG(Log::Signaling, "New P2P PORT: %d", new_port_sig);
 				if (old_port_sig == 0)
 				{
 					// wake thread
@@ -588,7 +588,7 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 		}
 		else
 		{
-			ERROR_LOG(Log::sceNet, "Received faulty RPCN UDP message!");
+			ERROR_LOG(Log::Signaling, "Received faulty RPCN UDP message!");
 		}
 	}
 
@@ -613,9 +613,9 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 		struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(STUN_addr->ai_addr);
 		addr->sin_port = htons(SCE_RPCN_PORT);
 
-		INFO_LOG(Log::sceNet, "PING -> RPCN");
+		INFO_LOG(Log::Signaling, "PING -> RPCN");
 		if (!send_raw_ipv4(ping, *addr))
-			ERROR_LOG(Log::sceNet, "Failed to send IPv4 PING to RPCN");
+			ERROR_LOG(Log::Signaling, "Failed to send IPv4 PING to RPCN");
 
 		last_ping_time_ipv4 = now;
 		return std::chrono::duration_cast<std::chrono::microseconds>(500ms);
@@ -661,7 +661,7 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 }
 
 std::chrono::microseconds signaling_handler::HandleP2PResponses() {
-	DEBUG_LOG(Log::sceNet, "Signaling P2P Handler Thread Started");
+	DEBUG_LOG(Log::Signaling, "Signaling P2P Handler Thread Started");
 	process_incoming_messages();
 
 	const auto now = std::chrono::steady_clock::now();
@@ -679,7 +679,7 @@ std::chrono::microseconds signaling_handler::HandleP2PResponses() {
 		if (sig.sig_info->time_last_msg_recvd < now - 60s && cmd != SignalingCommand::Info)
 		{
 			// We had no connection to opponent for 60 seconds, consider the connection dead
-			ERROR_LOG(Log::sceNet, "Timeout disconnection");
+			ERROR_LOG(Log::Signaling, "Timeout disconnection");
 			update_si_status(sig.sig_info, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TIMEOUT);
 			retire_packet(sig.sig_info, SignalingCommand::Ping); // Retire ping packet if necessary
 			break; // qpackets has been emptied of all packets for this user so we're requeuing
@@ -700,7 +700,7 @@ std::chrono::microseconds signaling_handler::HandleP2PResponses() {
 		}
 
 		// Resend the packet
-		INFO_LOG(Log::sceNet, "Re-Send %s -> %s", SignalingCommandStr[sig.packet.command], ip2str(sig.sig_info->addr).c_str());
+		INFO_LOG(Log::Signaling, "Re-Send %s -> %s", SignalingCommandStr[sig.packet.command], ip2str(sig.sig_info->addr).c_str());
 		send_signaling_packet(sig.packet, sig.sig_info->addr, sig.sig_info->port);
 
 		// Reschedule another packet
@@ -766,7 +766,7 @@ void signaling_handler::process_incoming_messages() {
 	for (const auto& msg : msgs)
 	{
 		if (msg.data.size() != sizeof(signaling_packet)) {
-			ERROR_LOG(Log::sceNet, "SIGSERV: Malformed Packet");
+			ERROR_LOG(Log::Signaling, "SIGSERV: Malformed Packet");
 			continue;
 		}
 
@@ -778,14 +778,14 @@ void signaling_handler::process_incoming_messages() {
 			//continue;
 
 		if (auto conn_id = get_conn_id_from_npid(sp->npid); conn_id != std::nullopt)
-			INFO_LOG(Log::sceNet, "SIGSERV %s Packet Received from %s:%d(%s:%d)", SignalingCommandStr[sp->command], ip2str(op_addr).c_str(), op_port, sp->npid.ToString().c_str(), conn_id.value());
+			INFO_LOG(Log::Signaling, "SIGSERV %s Packet Received from %s:%d(%s:%d)", SignalingCommandStr[sp->command], ip2str(op_addr).c_str(), op_port, sp->npid.ToString().c_str(), conn_id.value());
 		else
-			ERROR_LOG(Log::sceNet, "SIGSERV %s Packet Received from %s:%d(%s:UNK)", SignalingCommandStr[sp->command], ip2str(op_addr).c_str(), op_port, sp->npid.ToString().c_str());
+			ERROR_LOG(Log::Signaling, "SIGSERV %s Packet Received from %s:%d(%s:UNK)", SignalingCommandStr[sp->command], ip2str(op_addr).c_str(), op_port, sp->npid.ToString().c_str());
 
 		auto& sent_packet = sig_packet;
 		auto si = get_signaling_ptr(sp);
 		if (si == nullptr)
-			ERROR_LOG(Log::sceNet, "SIGSERV SigPtr for member '%s' not found.", sp->npid.ToString().c_str());
+			ERROR_LOG(Log::Signaling, "SIGSERV SigPtr for member '%s' not found.", sp->npid.ToString().c_str());
 
 		if (sp->command == SignalingCommand::Connect || sp->command == SignalingCommand::Info) {
 			const u32 conn_id = get_always_conn_id(sp->npid);
@@ -810,13 +810,13 @@ void signaling_handler::process_incoming_messages() {
 		case SignalingCommand::Finished:    handle_finished(sp, si, sent_packet, op_addr, op_port); break;
 		case SignalingCommand::FinishedAck: handle_finished_ack(sp, si); break;
 		case SignalingCommand::Info:        handle_info(sp, si, op_addr, op_port); break;
-		default: ERROR_LOG(Log::sceNet, "Invalid signaling command received");  break;
+		default: ERROR_LOG(Log::Signaling, "Invalid signaling command received");  break;
 		}
 	}
 }
 
 void signaling_handler::handle_ping(const signaling_packet* sp, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
-	INFO_LOG(Log::sceNet, "PING <- P2P");
+	INFO_LOG(Log::Signaling, "PING <- P2P");
 	/*reply = true;
 	schedule_repeat = false;
 	sent_packet.command = signal_pong;
@@ -825,13 +825,13 @@ void signaling_handler::handle_ping(const signaling_packet* sp, signaling_packet
 	sent_packet.command = SignalingCommand::Pong;
 	sent_packet.timestamp_sender = sp->timestamp_sender;
 	// Reply
-	INFO_LOG(Log::sceNet, "PONG -> P2P");
+	INFO_LOG(Log::Signaling, "PONG -> P2P");
 	send_signaling_packet(sent_packet, op_addr, op_port);
 	// Don't Schedule Repeat
 }
 
 void signaling_handler::handle_pong(const signaling_packet* sp, std::shared_ptr<signaling_info> si) {
-	INFO_LOG(Log::sceNet, "PONG <- P2P");
+	INFO_LOG(Log::Signaling, "PONG <- P2P");
 	/*update_rtt(sp->timestamp_sender);
 	reply = false;
 	schedule_repeat = false;
@@ -860,7 +860,7 @@ void signaling_handler::handle_pong(const signaling_packet* sp, std::shared_ptr<
 }
 
 void signaling_handler::handle_info(const signaling_packet* sp, std::shared_ptr<signaling_info> si, u32 op_addr, u16 op_port) {
-	INFO_LOG(Log::sceNet, "INFO <- P2P");
+	INFO_LOG(Log::Signaling, "INFO <- P2P");
 	/*update_si_addr(si, op_addr, op_port);
 	reply = false;
 	schedule_repeat = false;*/
@@ -870,7 +870,7 @@ void signaling_handler::handle_info(const signaling_packet* sp, std::shared_ptr<
 }
 
 void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
-	INFO_LOG(Log::sceNet, "CONNECT <- P2P");
+	INFO_LOG(Log::Signaling, "CONNECT <- P2P");
 	/*reply = true;
 	schedule_repeat = true;
 	sent_packet.command = signal_connect_ack;
@@ -882,7 +882,7 @@ void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_p
 	sent_packet.timestamp_receiver = get_micro_timestamp(std::chrono::steady_clock::now());
 	update_si_addr(si, op_addr, op_port);
 	// Reply
-	INFO_LOG(Log::sceNet, "CONNECT_ACK -> P2P");
+	INFO_LOG(Log::Signaling, "CONNECT_ACK -> P2P");
 	send_signaling_packet(sent_packet, op_addr, op_port);
 	// Schedule Repeat
 	queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_CONNECT_DELAY);
@@ -891,7 +891,7 @@ void signaling_handler::handle_connect(const signaling_packet* sp, std::shared_p
 }
 
 void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
-	INFO_LOG(Log::sceNet, "CONNECT_ACK <- P2P");
+	INFO_LOG(Log::Signaling, "CONNECT_ACK <- P2P");
 	/*update_rtt(sp->timestamp_sender);
 	reply = true;
 	schedule_repeat = false;
@@ -914,7 +914,7 @@ void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shar
 
 		sent_packet.command = SignalingCommand::Ping;
 		sent_packet.timestamp_sender = get_micro_timestamp(std::chrono::steady_clock::now());
-		INFO_LOG(Log::sceNet, "PING -> P2P");
+		INFO_LOG(Log::Signaling, "PING -> P2P");
 		send_signaling_packet(sent_packet, si->addr, si->port);
 		queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_PING_DELAY);
 		if (np2P2PThreadID)
@@ -928,13 +928,13 @@ void signaling_handler::handle_connect_ack(const signaling_packet* sp, std::shar
 	update_si_mapped_addr(si, sp->sent_addr, sp->sent_port);
 	update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_ACTIVE, SCE_NP_MATCHING2_OKAY);
 	// Reply
-	INFO_LOG(Log::sceNet, "CONFIRM -> P2P");
+	INFO_LOG(Log::Signaling, "CONFIRM -> P2P");
 	send_signaling_packet(sent_packet, op_addr, op_port);
 	// Don't Schedule Repeat
 }
 
 void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
-	INFO_LOG(Log::sceNet, "CONFIRM <- P2P");
+	INFO_LOG(Log::Signaling, "CONFIRM <- P2P");
 	/*update_rtt(sp->timestamp_receiver);
 	reply = false;
 	schedule_repeat = false;
@@ -955,7 +955,7 @@ void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_p
 
 		sent_packet.command = SignalingCommand::Ping;
 		sent_packet.timestamp_sender = get_micro_timestamp(std::chrono::steady_clock::now());
-		INFO_LOG(Log::sceNet, "PING -> P2P");
+		INFO_LOG(Log::Signaling, "PING -> P2P");
 		send_signaling_packet(sent_packet, si->addr, si->port);
 		queue_signaling_packet(sent_packet, si, std::chrono::steady_clock::now() + REPEAT_PING_DELAY);
 		if (np2P2PThreadID)
@@ -971,7 +971,7 @@ void signaling_handler::handle_confirm(const signaling_packet* sp, std::shared_p
 }
 
 void signaling_handler::handle_finished(const signaling_packet* sp, std::shared_ptr<signaling_info> si, signaling_packet& sent_packet, u32 op_addr, u16 op_port) {
-	INFO_LOG(Log::sceNet, "FINISHED <- P2P");
+	INFO_LOG(Log::Signaling, "FINISHED <- P2P");
 	/*reply = true;
 	schedule_repeat = false;
 	sent_packet.command = signal_finished_ack;
@@ -983,13 +983,13 @@ void signaling_handler::handle_finished(const signaling_packet* sp, std::shared_
 	// RPCS3 handles this in sceNpSignalingDeactivateConnection
 	stop_sig(si->conn_id, false);
 	// Reply
-	INFO_LOG(Log::sceNet, "FINISHED_ACK -> P2P");
+	INFO_LOG(Log::Signaling, "FINISHED_ACK -> P2P");
 	send_signaling_packet(sent_packet, op_addr, op_port);
 	// Don't Schedule Repeat
 }
 
 void signaling_handler::handle_finished_ack(const signaling_packet* sp, std::shared_ptr<signaling_info> si) {
-	INFO_LOG(Log::sceNet, "FINISHED_ACK <- P2P");
+	INFO_LOG(Log::Signaling, "FINISHED_ACK <- P2P");
 	/*reply = false;
 	schedule_repeat = false;
 	update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TERMINATED_BY_MYSELF);
@@ -1006,21 +1006,21 @@ void signaling_handler::handle_finished_ack(const signaling_packet* sp, std::sha
 // ====================================
 #pragma region Notifications
 int signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
-	WARN_LOG(Log::sceNet, "NOTI UserJoinedRoom");
+	WARN_LOG(Log::Signaling, "NOTI UserJoinedRoom");
 	auto notification = resp.stream->get_flatbuffer<NotificationUserJoinedRoom>();
 	if (resp.stream->is_error()) {
-		ERROR_LOG(Log::sceNet, "NOTI Malformed UserJoinedRoom notification");
+		ERROR_LOG(Log::Signaling, "NOTI Malformed UserJoinedRoom notification");
 		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_EVENT);
 	if (def == defaultOptParams.end()) {
-		ERROR_LOG(Log::sceNet, "Default ROOM_EVENT handler not Found");
+		ERROR_LOG(Log::Signaling, "Default ROOM_EVENT handler not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 	auto _context = ctx.find(def->second.ctx_id);
 	if (_context == ctx.end()) {
-		ERROR_LOG(Log::sceNet, "Context not Found");
+		ERROR_LOG(Log::Signaling, "Context not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 
@@ -1035,7 +1035,7 @@ int signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 	snprintf(buffer, sizeof(buffer), "%s Joined the room",
 		notif_data->roomMemberDataInternal->userInfo.npId.handle.data);
 	g_OSD.Show(OSDType::MESSAGE_SUCCESS, buffer, 3.0f);
-	NOTICE_LOG(Log::sceNet, "User %s(%d) joined the room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);*/
+	NOTICE_LOG(Log::Signaling, "User %s(%d) joined the room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.handle.data, notif_data->roomMemberDataInternal->memberId, room_id);*/
 
 	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
 	if (!npServer->cache.Exists(room_id)) {
@@ -1080,25 +1080,25 @@ int signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 }
 
 int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
-	WARN_LOG(Log::sceNet, "NOTI UserLeftRoom");
+	WARN_LOG(Log::Signaling, "NOTI UserLeftRoom");
 
 	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
 	const auto* update_info = resp.stream->get_flatbuffer<RoomMemberUpdateInfo>();
 
 	if (resp.stream->is_error())
 	{
-		ERROR_LOG(Log::sceNet, "NOTI UserLeftRoom Malformed UserLeftRoom notification");
+		ERROR_LOG(Log::Signaling, "NOTI UserLeftRoom Malformed UserLeftRoom notification");
 		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_EVENT);
 	if (def == defaultOptParams.end()) {
-		ERROR_LOG(Log::sceNet, "Default ROOM_EVENT handler not Found");
+		ERROR_LOG(Log::Signaling, "Default ROOM_EVENT handler not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 	auto _context = ctx.find(def->second.ctx_id);
 	if (_context == ctx.end()) {
-		ERROR_LOG(Log::sceNet, "Context not Found");
+		ERROR_LOG(Log::Signaling, "Context not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 
@@ -1109,7 +1109,7 @@ int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	auto notif_data = PSPPointer<SceNpMatching2RoomMemberUpdateInfo>::Create(ptr);
 	np::RoomMemberUpdateInfo_to_SceNpMatching2RoomMemberUpdateInfo(np_memory, update_info, notif_data, _context->second->include_onlinename, _context->second->include_avatarurl);
 
-	NOTICE_LOG(Log::sceNet, "NOTI UserLeftRoom User %s(%d) left room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.ToString().c_str(), notif_data->roomMemberDataInternal->memberId, room_id);
+	NOTICE_LOG(Log::Signaling, "NOTI UserLeftRoom User %s(%d) left room(%d)", notif_data->roomMemberDataInternal->userInfo.npId.ToString().c_str(), notif_data->roomMemberDataInternal->memberId, room_id);
 
 	// Ensures we do not call the callback if the room is not in the cache(ie we left the room already)
 	if (!npServer->cache.Exists(room_id)) {
@@ -1139,25 +1139,25 @@ int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 }
 
 int signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
-	WARN_LOG(Log::sceNet, "NOTI RoomDestroyed");
+	WARN_LOG(Log::Signaling, "NOTI RoomDestroyed");
 
 	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
 	const auto* update_info = resp.stream->get_flatbuffer<RoomUpdateInfo>();
 
 	if (resp.stream->is_error())
 	{
-		ERROR_LOG(Log::sceNet, "NOTI Malformed RoomDestroyed notification");
+		ERROR_LOG(Log::Signaling, "NOTI Malformed RoomDestroyed notification");
 		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_EVENT);
 	if (def == defaultOptParams.end()) {
-		ERROR_LOG(Log::sceNet, "Default ROOM_EVENT handler not Found");
+		ERROR_LOG(Log::Signaling, "Default ROOM_EVENT handler not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 	auto _context = ctx.find(def->second.ctx_id);
 	if (_context == ctx.end()) {
-		ERROR_LOG(Log::sceNet, "Context not Found");
+		ERROR_LOG(Log::Signaling, "Context not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 
@@ -1169,7 +1169,7 @@ int signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 	// Remove room from cache - RPCS3 doesn't do this here?
 	//npServer->cache.RemoveRoom(room_id);
 
-	NOTICE_LOG(Log::sceNet, "NOTI RoomDestroyed Received notification that room(%d) was destroyed", room_id);
+	NOTICE_LOG(Log::Signaling, "NOTI RoomDestroyed Received notification that room(%d) was destroyed", room_id);
 
 	DisconnectUsers(room_id);
 	//disconnect_sig2_users(room_id);
@@ -1179,16 +1179,16 @@ int signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 }
 
 int signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
-	WARN_LOG(Log::sceNet, "NOTI UpdatedRoomDataInternal");
+	WARN_LOG(Log::Signaling, "NOTI UpdatedRoomDataInternal");
 
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_EVENT);
 	if (def == defaultOptParams.end()) {
-		ERROR_LOG(Log::sceNet, "Default ROOM_EVENT handler not Found");
+		ERROR_LOG(Log::Signaling, "Default ROOM_EVENT handler not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 	auto _context = ctx.find(def->second.ctx_id);
 	if (_context == ctx.end()) {
-		ERROR_LOG(Log::sceNet, "Context not Found");
+		ERROR_LOG(Log::Signaling, "Context not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 
@@ -1197,7 +1197,7 @@ int signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 
 	if (resp.stream->is_error())
 	{
-		ERROR_LOG(Log::sceNet, "NOTI Malformed UpdatedRoomDataInternal notification");
+		ERROR_LOG(Log::Signaling, "NOTI Malformed UpdatedRoomDataInternal notification");
 		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
@@ -1213,7 +1213,7 @@ int signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 	auto conn_id = get_conn_id_from_npid(notif_data->newRoomDataInternal->memberList.owner->userInfo.npId);
 	//extra_nps::print_SceNpMatching2RoomDataInternal(notif_data->newRoomDataInternal.get_ptr());
 
-	NOTICE_LOG(Log::sceNet, "NOTI Received notification that room(%d)'s data was updated", room_id);
+	NOTICE_LOG(Log::Signaling, "NOTI Received notification that room(%d)'s data was updated", room_id);
 
 	/*if (room_event_cb)
 	{
@@ -1228,25 +1228,25 @@ int signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 }
 
 int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
-	WARN_LOG(Log::sceNet, "NOTI UpdatedRoomMemberDataInternal");
+	WARN_LOG(Log::Signaling, "NOTI UpdatedRoomMemberDataInternal");
 
 	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
 	const auto* update_info = resp.stream->get_flatbuffer<RoomMemberDataInternalUpdateInfo>();
 
 	if (resp.stream->is_error())
 	{
-		ERROR_LOG(Log::sceNet, "NOTI Malformed UpdatedRoomMemberDataInternal notification");
+		ERROR_LOG(Log::Signaling, "NOTI Malformed UpdatedRoomMemberDataInternal notification");
 		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_EVENT);
 	if (def == defaultOptParams.end()) {
-		ERROR_LOG(Log::sceNet, "Default ROOM_EVENT handler not Found");
+		ERROR_LOG(Log::Signaling, "Default ROOM_EVENT handler not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 	auto _context = ctx.find(def->second.ctx_id);
 	if (_context == ctx.end()) {
-		ERROR_LOG(Log::sceNet, "Context not Found");
+		ERROR_LOG(Log::Signaling, "Context not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 
@@ -1265,7 +1265,7 @@ int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	SceNpMatching2RoomMemberId memberId = notif_data->newRoomMemberDataInternal->memberId;
 	npServer->cache.AddMember(room_id, *notif_data->newRoomMemberDataInternal);
 
-	NOTICE_LOG(Log::sceNet, "NOTI User %s(%d) data was updated for room (%d)", notif_data->newRoomMemberDataInternal->userInfo.npId.ToString(), memberId, room_id);
+	NOTICE_LOG(Log::Signaling, "NOTI User %s(%d) data was updated for room (%d)", notif_data->newRoomMemberDataInternal->userInfo.npId.ToString(), memberId, room_id);
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());
 	auto conn_id = get_conn_id_from_npid(notif_data->newRoomMemberDataInternal->userInfo.npId);
 	
@@ -1273,7 +1273,7 @@ int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 }
 
 int signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
-	WARN_LOG(Log::sceNet, "NOTI RoomMessageReceived");
+	WARN_LOG(Log::Signaling, "NOTI RoomMessageReceived");
 	// 0000000000000010 0090 00000014 00000000000E0014000000070008000C0010000E00000000000001700000006800000004000000580000000500000000000000903D9B08A0F1FF090C79A6089078A6086889A30878A89B0860F4FF09D0F4FF09B01815090000000060F4FF0980F3FF0978567609EFBEADDED06DA60840547609B0181509B46CA308A51894038C6EA608040004000400000000000000
 
 	resp.stream = new vec_stream(resp.data);
@@ -1282,24 +1282,24 @@ int signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 
 	auto def = defaultOptParams.find(SCE_NP_MATCHING2_ROOM_MSG_EVENT);
 	if (def == defaultOptParams.end()) {
-		ERROR_LOG(Log::sceNet, "Default ROOM_EVENT handler not Found");
+		ERROR_LOG(Log::Signaling, "Default ROOM_EVENT handler not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 	auto _context = ctx.find(def->second.ctx_id);
 	if (_context == ctx.end()) {
-		ERROR_LOG(Log::sceNet, "Context not Found");
+		ERROR_LOG(Log::Signaling, "Context not Found");
 		return SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND;
 	}
 
 	SceNpMatching2RoomId room_id = resp.stream->get<u64>();
 	SceNpMatching2RoomMemberId member_id = resp.stream->get<u16>();
-	NOTICE_LOG(Log::sceNet, " - room: %d, member: %d)", room_id, member_id);
+	NOTICE_LOG(Log::Signaling, " - room: %d, member: %d)", room_id, member_id);
 
 	const auto* message_info = resp.stream->get_flatbuffer<RoomMessageInfo>();
 
 	if (resp.stream->is_error())
 	{
-		ERROR_LOG(Log::sceNet, " - Malformed RoomMessageReceived notification");
+		ERROR_LOG(Log::Signaling, " - Malformed RoomMessageReceived notification");
 		return SCE_NP_SIGNALING_ERROR_PARSER_FAILED;
 	}
 
@@ -1314,14 +1314,14 @@ int signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 }
 
 void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
-	WARN_LOG(Log::sceNet, "NOTI SignalingHelper");
+	WARN_LOG(Log::Signaling, "NOTI SignalingHelper");
 	resp.stream = new vec_stream(resp.data);
 
 	const auto* matching_info = resp.stream->get_flatbuffer<MatchingSignalingInfo>();
 
 	if (resp.stream->is_error() || !matching_info->addr() || !matching_info->npid() || !matching_info->addr()->ip())
 	{
-		ERROR_LOG(Log::sceNet, " - Malformed SignalingHelper notification");
+		ERROR_LOG(Log::Signaling, " - Malformed SignalingHelper notification");
 		return;
 	}
 
@@ -1334,38 +1334,38 @@ void signaling_handler::SignalingHelper(net::RPCNResponse resp) {
 	//if (port_p2p == SCE_SIGN_PORT)
 		//port_p2p = SCE_INTERNAL_PORT;
 
-	NOTICE_LOG(Log::sceNet, " - IP at %s", ip2str(addr_p2p));
+	NOTICE_LOG(Log::Signaling, " - IP at %s", ip2str(addr_p2p));
 	send_information_packets(addr_p2p, port_p2p, npid_p2p);
 }
 
 // GUI
 void signaling_handler::MemberJoinedRoomGUI(net::RPCNResponse resp) {
-	ERROR_LOG(Log::sceNet, "NOTI MemberJoinedRoomGUI UNINPLEMENTED");
+	ERROR_LOG(Log::Signaling, "NOTI MemberJoinedRoomGUI UNINPLEMENTED");
 	auto noti = resp.stream;
 }
 
 void signaling_handler::MemberLeftRoomGUI(net::RPCNResponse resp) {
-	ERROR_LOG(Log::sceNet, "NOTI MemberLeftRoomGUI UNINPLEMENTED");
+	ERROR_LOG(Log::Signaling, "NOTI MemberLeftRoomGUI UNINPLEMENTED");
 	auto noti = resp.stream;
 }
 
 void signaling_handler::RoomDisappearedGUI(net::RPCNResponse resp) {
-	ERROR_LOG(Log::sceNet, "NOTI RoomDisappearedGUI UNINPLEMENTED");
+	ERROR_LOG(Log::Signaling, "NOTI RoomDisappearedGUI UNINPLEMENTED");
 	auto noti = resp.stream;
 }
 
 void signaling_handler::RoomOwnerChangedGUI(net::RPCNResponse resp) {
-	ERROR_LOG(Log::sceNet, "NOTI RoomOwnerChangedGUI UNINPLEMENTED");
+	ERROR_LOG(Log::Signaling, "NOTI RoomOwnerChangedGUI UNINPLEMENTED");
 	auto noti = resp.stream;
 }
 
 void signaling_handler::UserKickedGUI(net::RPCNResponse resp) {
-	ERROR_LOG(Log::sceNet, "NOTI UserKickedGUI UNINPLEMENTED");
+	ERROR_LOG(Log::Signaling, "NOTI UserKickedGUI UNINPLEMENTED");
 	auto noti = resp.stream;
 }
 
 void signaling_handler::QuickMatchCompleteGUI(net::RPCNResponse resp) {
-	ERROR_LOG(Log::sceNet, "NOTI QuickMatchCompleteGUI UNINPLEMENTED");
+	ERROR_LOG(Log::Signaling, "NOTI QuickMatchCompleteGUI UNINPLEMENTED");
 	auto noti = resp.stream;
 }
 #pragma endregion
@@ -1385,7 +1385,7 @@ InetSocket* signaling_handler::create_socket(u16 port, int domain, int type, int
 		// Create the master socket
 		inetSocket = g_socketManager.CreateSocket(&index, &hostErrno, SocketState::UsedNetInet, domain, type, protocol);
 		if (!inetSocket) {
-			ERROR_LOG(Log::sceNet, "Unable to create new socket");
+			ERROR_LOG(Log::Signaling, "Unable to create new socket");
 			return nullptr;
 		}
 
@@ -1397,7 +1397,7 @@ InetSocket* signaling_handler::create_socket(u16 port, int domain, int type, int
 
 		int ret = inetSocket->bind((sockaddr*)&addr, sizeof(addr));
 		if (ret < 0) {
-			ERROR_LOG(Log::sceNet, "Unable to bind new socket for listening");
+			ERROR_LOG(Log::Signaling, "Unable to bind new socket for listening");
 			return nullptr;
 		}
 
@@ -1425,10 +1425,10 @@ InetSocket* signaling_handler::create_socket(u16 port, int domain, int type, int
 // This function assumes addr and port are in network order
 bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, sockaddr_in dest) const {
 
-	INFO_LOG(Log::sceNet, "Sending packet(%d bytes) to %s:%d", data.size(), ip2str(dest.sin_addr).c_str(), ntohs(dest.sin_port));
+	INFO_LOG(Log::Signaling, "Sending packet(%d bytes) to %s:%d", data.size(), ip2str(dest.sin_addr).c_str(), ntohs(dest.sin_port));
 
 	std::string datahex;
-	DEBUG_HEXLOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size(), 386);
+	DEBUG_HEXLOG(Log::Signaling, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size(), 386);
 	auto inetSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
 	if (!inetSocket) {
 		ERROR_LOG(Log::sceNet, "Socket not found");
@@ -1453,10 +1453,10 @@ bool signaling_handler::send_packet_ipv4(const std::vector<u8>& data, sockaddr_i
 // Send data on the raw DCCP socket, not the CONN_DGRAM sockets
 bool signaling_handler::send_raw_ipv4(const std::vector<u8>& data, sockaddr_in dest) {
 
-	INFO_LOG(Log::sceNet, "Sending packet(%d bytes) to %s:%d", data.size(), ip2str(dest.sin_addr).c_str(), ntohs(dest.sin_port));
+	INFO_LOG(Log::Signaling, "Sending packet(%d bytes) to %s:%d", data.size(), ip2str(dest.sin_addr).c_str(), ntohs(dest.sin_port));
 
 	std::string datahex;
-	DEBUG_HEXLOG(Log::sceNet, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size(), 386);
+	DEBUG_HEXLOG(Log::Signaling, "signaling_handler::send_signaling_packet", reinterpret_cast<const char*>(data.data()), data.size(), 386);
 	auto inetSocket = g_socketManager.GetDCCP();
 	if (!inetSocket) {
 		ERROR_LOG(Log::sceNet, "Socket not found");
@@ -1479,7 +1479,7 @@ bool signaling_handler::send_raw_ipv4(const std::vector<u8>& data, sockaddr_in d
 }
 
 void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket) {
-	NOTICE_LOG(Log::sceNet, "Signaling Receiver Thread Started");
+	NOTICE_LOG(Log::Signaling, "Signaling Receiver Thread Started");
 	// single-threaded receive path; no busy wait
 	running_ = true;
 	timeval tv{};
@@ -1488,14 +1488,14 @@ void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket
 	while (running_) {
 		if (!DccpSocket) {
 			// Socket lost. Try to find it again!
-			WARN_LOG(Log::sceNet, "Reaquiring DCCP Socket for Signaling Receiver Thread");
+			WARN_LOG(Log::Signaling, "Reaquiring DCCP Socket for Signaling Receiver Thread");
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			DccpSocket = g_socketManager.GetDCCP();
 			continue;
 		}
 		if (!ConnSocket) {
 			// Socket lost. Try to find it again!
-			WARN_LOG(Log::sceNet, "Reaquiring P2P Socket for Signaling Receiver Thread");
+			WARN_LOG(Log::Signaling, "Reaquiring P2P Socket for Signaling Receiver Thread");
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			ConnSocket = g_socketManager.FindSocketByPort(SCE_INTERNAL_PORT);
 			continue;
@@ -1534,7 +1534,7 @@ void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket
 			continue;
 		}
 		if (n < VPORT_0_HEADER_SIZE) {
-			ERROR_LOG(Log::sceNet, "Bad vport %d packet (no subset)", SCE_INTERNAL_PORT);
+			ERROR_LOG(Log::Signaling, "Bad vport %d packet (no subset)", SCE_INTERNAL_PORT);
 			continue;
 		}
 
@@ -1549,7 +1549,7 @@ void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket
 		case SUBSET_RPCN:
 		{
 			auto header = "recv_loop::RPCN " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
-			INFO_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(vport_0_data.data()), vport_0_data.size(), 386);
+			INFO_HEXLOG(Log::Signaling, header.c_str(), reinterpret_cast<const char*>(vport_0_data.data()), vport_0_data.size(), 386);
 			// push_back to rpcn_msgs
 			{
 				std::lock_guard lock(rpcn_mtx_);
@@ -1567,7 +1567,7 @@ void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket
 			msg.src_port = ntohs(src.sin_port);
 			msg.data = std::move(vport_0_data);
 			auto header = "recv_loop::SIGN " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
-			INFO_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(msg.data.data()), msg.data.size(), 386);
+			INFO_HEXLOG(Log::Signaling, header.c_str(), reinterpret_cast<const char*>(msg.data.data()), msg.data.size(), 386);
 
 			{
 				std::lock_guard lock(sign_mtx_);
@@ -1582,7 +1582,7 @@ void signaling_handler::recv_loop(InetSocket* DccpSocket, InetSocket* ConnSocket
 		default:
 			// Not for our internal system
 			auto header = "recv_loop::UNHANDLED " + ip2str(src.sin_addr) + ":" + std::to_string(ntohs(src.sin_port));
-			WARN_HEXLOG(Log::sceNet, header.c_str(), reinterpret_cast<const char*>(buf), n, 386);
+			WARN_HEXLOG(Log::Signaling, header.c_str(), reinterpret_cast<const char*>(buf), n, 386);
 			break;
 		}
 	}

@@ -60,6 +60,7 @@ enum class Log {
 	UI,
 	IAP,
 	Matching,
+	Signaling,
 
 	sceAudio,
 	sceCtrl,
