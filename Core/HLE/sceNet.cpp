@@ -90,6 +90,7 @@ static std::deque<ApctlArgs> apctlEvents;
 
 // UPnP / P2P Signaling
 signaling_handler g_signaling;
+bool uPnPInitialized = false;
 
 u32 np2RPCNThreadHackAddr = 0;
 u32_le np2RPCNThreadCode[3];
@@ -616,19 +617,20 @@ void __Np2SignalingGetRPCNResponses()
 {
 	hleSkipDeadbeef();
 	int newState = SCE_NP_MATCHING2_STATE_NONE;
-	int delayus = 1000000;
-	if (STUN_addr) {
+	int delayus = 10000000;
+	if (uPnPInitialized) {
 		newState = SCE_NP_MATCHING2_STATE_INIT;
-		delayus = 1000000;
-		//if (npServer->IsConnected()) {
+		delayus = 5000000;
+		if (STUN_addr) {
 			newState = SCE_NP_MATCHING2_STATE_CONNECTED;
 			delayus = g_signaling.HandleUPnPResponses().count();
-		//}
+		}
 	}
 	//ScheduleRPCNState(1, newState, delayus, "RPCN Wait State");
-	DEBUG_LOG(Log::sceNet, "RPCN Waiting %d ms", (delayus / 1000));
+	DEBUG_LOG(Log::sceNp2, "RPCN Waiting %d ms", (delayus / 1000));
 	//int r = hleDelayResult(0, "RPCN Wait State", delayus);
-	hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
+	//hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
+	sceKernelDelayThread(delayus);
 	hleNoLogVoid();
 }
 
@@ -1815,7 +1817,7 @@ static int sceNetApctl_lib2_C20A144C(int connIndex, u32 ps3MacAddressPtr) {
 // Patapon3			sceNetUpnpInit(0x3800, 0x32)
 static int sceNetUpnpInit(int size,int offset) {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(0x%04x, 0x%02x)", __FUNCTION__, size, offset);
-
+	uPnPInitialized = true;
 	// Create the Master Socket for transmissions
 	// NOTE: Fat Princess creates a SOCK_CONN_DGRAM after sceNetUpnpStart. If this socket isn't prepared before then, it has some issues.
 	// NOTE: Patapon3 doesn't call sceNetUpnpStart, so I guess this goes in Init instead?
@@ -1854,6 +1856,7 @@ static int sceNetUpnpStop() {
 }
 // return usually ignored
 static int sceNetUpnpTerm() {
+	uPnPInitialized = false;
 	if (np2RPCNThreadID != 0) {
 		__KernelStopThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread stopped");
 		__KernelDeleteThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread deleted");
