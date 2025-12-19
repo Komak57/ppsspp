@@ -2439,6 +2439,31 @@ int sceKernelDelaySysClockThread(u32 sysclockAddr) {
 	return hleLogDebug(Log::sceKernel, 0, "delaying %lld usecs", delayUs);
 }
 
+int sceKernelWakeDelayedThread(SceUID threadID) {
+
+	if (threadID == currentThread) {
+		return hleLogWarning(Log::sceKernel, SCE_KERNEL_ERROR_ILLEGAL_THID, "unable to wakeup current thread");
+	}
+
+	u32 error;
+	PSPThread* t = kernelObjects.Get<PSPThread>(threadID, error);
+	if (t) {
+		if (!t->isWaitingFor(WAITTYPE_SLEEP, 0)) {
+			t->nt.wakeupCount++;
+			return hleLogDebug(Log::sceKernel, 0, "wakeupCount incremented to %i", t->nt.wakeupCount);
+		}
+		else {
+			__KernelCancelWakeup(threadID);
+			__KernelResumeThreadFromWait(threadID, 0);
+			hleReSchedule("thread woken up");
+			return hleLogVerbose(Log::sceKernel, 0, "woke thread at %i", t->nt.wakeupCount);
+		}
+	}
+	else {
+		return hleLogError(Log::sceKernel, error, "bad thread id");
+	}
+}
+
 u32 __KernelGetThreadPrio(SceUID id) {
 	u32 error;
 	PSPThread *thread = kernelObjects.Get<PSPThread>(id, error);
