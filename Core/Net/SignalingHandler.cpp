@@ -58,12 +58,12 @@ u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_i
 	si->member_id = member_id;
 
 	// If connection exists from prior state notify
-	if (si->conn_status != SCE_NP_SIGNALING_CONN_STATUS_ACTIVE)
-		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
+	if (si->conn_status != SCE_NP_SIGNALING_CONN_STATUS_ACTIVE) {
+		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_PENDING;
+		si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3;
+	}
 
 	notifySignalingHandler(si->room_id, si->member_id, si->conn_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
-
-	si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
 
 	return conn_id;
 }
@@ -153,6 +153,10 @@ void signaling_handler::update_si_addr(std::shared_ptr<signaling_info>& si, u32 
 
 		si->addr = new_addr;
 		si->port = new_port;
+
+		// If we get here, and it's not a TYPE3, we are communicating, making it a Type 2
+		if (si->nat_type < SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2)
+			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
 	}
 }
 
@@ -179,12 +183,10 @@ void signaling_handler::update_si_mapped_addr(std::shared_ptr<signaling_info>& s
 		si->mapped_addr = new_addr;
 		si->mapped_port = new_port;
 
-		if (si->addr == si->mapped_addr) // Direct Connection
+		if (si->addr == si->mapped_addr) // Direct Connection, Upgrade to Type 1
 			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1;
-		else if(si->port == si->mapped_port) // Direct Port
+		else if(si->port == si->mapped_port) // Direct Port, Upgrade to Type 2
 			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2;
-		else // We don't currently have a secondary STUN server to confirm TYPE 2 vs TYPE 3
-			si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3;
 	}
 }
 
@@ -538,13 +540,14 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 					g_signaling.addr_sig = new_addr_sig;
 					auto local_ip = g_signaling.local_addr_sig.load();
 
-
 					if (new_addr_sig == local_ip) // Direct Connection
 						g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1);
 					else if (new_port_sig == SCE_SIGN_PORT) // Direct Port
 						g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2);
-					else // We don't currently have a secondary STUN server to confirm TYPE 2 vs TYPE 3
-						g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3);
+
+					// We received data from RPCN PING, meaning we are at least a Type 2
+					if (g_signaling.nat_type.load() < SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2)
+						g_signaling.nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2);
 				}
 
 				auto n = GetI18NCategory(I18NCat::NETWORKING);
