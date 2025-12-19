@@ -575,7 +575,7 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 				}
 			}
 
-			last_pong_time_ipv4 = now;
+			last_pong_time_ipv4 = std::chrono::steady_clock::now();
 		}
 		else if (msg.size() == 18)
 		{
@@ -592,8 +592,8 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 		}
 	}
 
-	const std::chrono::nanoseconds time_since_last_ipv4_ping = now - last_ping_time_ipv4;
-	const std::chrono::nanoseconds time_since_last_ipv4_pong = now - last_pong_time_ipv4;
+	const std::chrono::nanoseconds time_since_last_ipv4_ping = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_ping_time_ipv4);
+	const std::chrono::nanoseconds time_since_last_ipv4_pong = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_pong_time_ipv4);
 	auto forge_ping_packet = [&]() -> std::vector<u8>
 		{
 			std::vector<u8> ping(13);
@@ -617,8 +617,8 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 		if (!send_raw_ipv4(ping, *addr))
 			ERROR_LOG(Log::Signaling, "Failed to send IPv4 PING to RPCN");
 
-		last_ping_time_ipv4 = now;
-		return std::chrono::duration_cast<std::chrono::microseconds>(500ms);
+		last_ping_time_ipv4 = std::chrono::steady_clock::now();
+		//return std::chrono::duration_cast<std::chrono::microseconds>(500ms);
 	}
 
 	/*if (np::is_ipv6_supported() && time_since_last_ipv6_pong >= 5s && time_since_last_ipv6_ping > 500ms)
@@ -633,18 +633,28 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 	}*/
 	auto min_duration_for = [&](const auto last_ping_time, const auto last_pong_time) -> std::chrono::nanoseconds
 		{
-			auto current_time = std::chrono::steady_clock::now();
-			if ((current_time - last_pong_time) < 5s)
+			const auto current_time = std::chrono::steady_clock::now();
+			auto time_since_ping = std::chrono::duration_cast<std::chrono::nanoseconds>(current_time - last_ping_time);
+			auto time_since_pong = std::chrono::duration_cast<std::chrono::nanoseconds>(current_time - last_pong_time);
+
+			if (time_since_pong >= std::chrono::duration_cast<std::chrono::nanoseconds>(5.5s))
 			{
-				return (std::chrono::duration_cast<std::chrono::nanoseconds>(5s) - (current_time - last_pong_time));
+				if (time_since_ping > std::chrono::duration_cast<std::chrono::nanoseconds>(500ms))
+					return 0ns;
+
+				return (std::chrono::duration_cast<std::chrono::nanoseconds>(500ms) - time_since_ping);
 			}
 			else
 			{
-				return (std::chrono::duration_cast<std::chrono::nanoseconds>(500ms) - (current_time - last_pong_time));
+				if (time_since_ping > std::chrono::duration_cast<std::chrono::nanoseconds>(5.5s))
+					return 0ns;
+				return (std::chrono::duration_cast<std::chrono::nanoseconds>(5.5s) - time_since_pong);
 			}
 		};
 
 	auto duration = min_duration_for(last_ping_time_ipv4, last_pong_time_ipv4);
+	if (duration < 0ns)
+		duration = 0ns;
 	return std::chrono::duration_cast<std::chrono::microseconds>(duration);
 	//g_signaling.wait_for_rpcn(&running, &cancelled, duration);
 	/*if (np::is_ipv6_supported())
