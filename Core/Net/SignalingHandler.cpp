@@ -63,7 +63,7 @@ u32 signaling_handler::init_sig(const SceNpId& npid, SceNpMatching2RoomId room_i
 		si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3;
 	}
 
-	notifySignalingHandler(si->room_id, si->member_id, si->conn_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
+	notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
 
 	return conn_id;
 }
@@ -206,7 +206,7 @@ void signaling_handler::update_si_status(std::shared_ptr<signaling_info>& si, s3
 			si->sig_status = SCE_NP_SIGNALING_EVENT_ESTABLISHED;
 
 		if (last_sig_status != SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED && si->sig_status == SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED) {
-			notifySignalingHandler(si->room_id, si->member_id, si->conn_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
+			notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
 		}
 	}
 	else if ((si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_PENDING || si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE) && new_status == SCE_NP_SIGNALING_CONN_STATUS_INACTIVE)
@@ -214,7 +214,7 @@ void signaling_handler::update_si_status(std::shared_ptr<signaling_info>& si, s3
 		si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 		si->sig_status = SCE_NP_SIGNALING_EVENT_DEAD;
 
-		notifySignalingHandler(si->room_id, si->member_id, si->conn_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, error_code);
+		notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, error_code);
 		retire_all_packets(si);
 	}
 }
@@ -236,7 +236,7 @@ void signaling_handler::update_ext_si_status(std::shared_ptr<signaling_info>& si
 			si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED;
 
 		if (last_sig_status != SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED && si->sig_status == SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED) {
-			notifySignalingHandler(si->room_id, si->member_id, si->conn_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
+			notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
 		}
 	}
 	else if (!op_activated && si->op_activated)
@@ -244,7 +244,7 @@ void signaling_handler::update_ext_si_status(std::shared_ptr<signaling_info>& si
 		si->op_activated = false;
 		si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_PEER_DEACTIVATED;
 
-		notifySignalingHandler(si->room_id, si->member_id, si->conn_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, SCE_NP_SIGNALING_ERROR_TERMINATED_BY_PEER);
+		notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, SCE_NP_SIGNALING_ERROR_TERMINATED_BY_PEER);
 		retire_all_packets(si);
 	}
 }
@@ -1064,7 +1064,7 @@ int signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		// Connect to Signaling Server
 		g_signaling.connect(connId, addr_p2p, port_p2p);
 
-		return notifyRoomEventHandler(room_id, notif_data->roomMemberDataInternal->memberId, connId, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, notif_data.ptr);
+		return notifyRoomEventHandler(room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, notif_data.ptr);
 	}
 
 	/*if (room_event_cb)
@@ -1076,7 +1076,7 @@ int signaling_handler::UserJoinedRoom(net::RPCNResponse resp) {
 		});
 	}*/
 	//notifySignalingHandlers(resp.header.uid, room_id, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, event_key, 0, _size);
-	return notifyRoomEventHandler(room_id, notif_data->roomMemberDataInternal->memberId, 0, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, notif_data.ptr);
+	return notifyRoomEventHandler(room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, notif_data.ptr);
 }
 
 int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
@@ -1129,13 +1129,13 @@ int signaling_handler::UserLeftRoom(net::RPCNResponse resp) {
 	auto conn_id = get_conn_id_from_npid(notif_data->roomMemberDataInternal->userInfo.npId);
 	if (conn_id) {
 		auto si = sig_peers.at(conn_id.value());
-		retire_all_packets(si);
+		update_si_status(si, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_MATCHING2_SIGNALING_ERROR_TERMINATED_BY_PEER);
 	}
 	npServer->cache.RemoveMember(room_id, notif_data->roomMemberDataInternal->memberId);
 
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
 
-	return notifyRoomEventHandler(room_id, notif_data->roomMemberDataInternal->memberId, (!conn_id ? 0 : *conn_id), SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, notif_data.ptr);
+	return notifyRoomEventHandler(room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, notif_data.ptr);
 }
 
 int signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
@@ -1175,7 +1175,7 @@ int signaling_handler::RoomDestroyed(net::RPCNResponse resp) {
 	//disconnect_sig2_users(room_id);
 	auto conn_id = get_conn_id_from_npid(*NpGetNpId());
 
-	return notifyRoomEventHandler(room_id, 0, (!conn_id ? 0 : *conn_id), SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, notif_data.ptr);
+	return notifyRoomEventHandler(room_id, 0, SCE_NP_MATCHING2_ROOM_EVENT_RoomDestroyed, notif_data.ptr);
 }
 
 int signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
@@ -1224,7 +1224,7 @@ int signaling_handler::UpdatedRoomDataInternal(net::RPCNResponse resp) {
 		});
 	}*/
 	// FIXME: return self member_id?
-	return notifyRoomEventHandler(room_id, notif_data->newRoomDataInternal->memberList.owner->memberId, (!conn_id ? 0 : *conn_id), SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal, notif_data.ptr);
+	return notifyRoomEventHandler(room_id, notif_data->newRoomDataInternal->memberList.owner->memberId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomDataInternal, notif_data.ptr);
 }
 
 int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
@@ -1269,7 +1269,7 @@ int signaling_handler::UpdatedRoomMemberDataInternal(net::RPCNResponse resp) {
 	//extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->newRoomMemberDataInternal.get_ptr());
 	auto conn_id = get_conn_id_from_npid(notif_data->newRoomMemberDataInternal->userInfo.npId);
 	
-	return notifyRoomEventHandler(room_id, memberId, (!conn_id ? 0 : *conn_id), SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
+	return notifyRoomEventHandler(room_id, memberId, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedRoomMemberDataInternal, notif_data.ptr);
 }
 
 int signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
@@ -1310,7 +1310,7 @@ int signaling_handler::RoomMessageReceived(net::RPCNResponse resp) {
 
 	auto conn_id = get_conn_id_from_npid(npServer->cache.GetNpId(room_id, member_id));
 
-	return notifyRoomMessageHandler(room_id, member_id, (!conn_id? 0: *conn_id), SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
+	return notifyRoomMessageHandler(room_id, member_id, SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message, notif_data.ptr);
 }
 
 void signaling_handler::SignalingHelper(net::RPCNResponse resp) {

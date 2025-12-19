@@ -328,7 +328,7 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
  * @param dataPtr u32 pointer to the data struct we pass back to the system
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  */
-int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, u32 conn_id, RPCNMatching2RequestEvent requestEvent, u32 dataPtr) {
+int notifyRoomMessageHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMemberId memberId, RPCNMatching2RequestEvent requestEvent, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	NpMatching2Handler* handler = nullptr;
@@ -339,8 +339,8 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemb
 
 	u32 args[8];
 	args[0] = 0;		// ContextID
-	args[1] = roomId;	// RoomID
-	args[2] = conn_id;	// ConnId? Ignored by PSP2i
+	args[1] = room_id & 0xFFFFFFFF;			// room_id.lower
+	args[2] = (room_id >> 32) & 0xFFFFFFFF;	// room_id.upper
 	args[3] = 0;		// param_4? Ingored by PSP2i
 	args[4] = memberId;	// MemberID
 	args[5] = requestEvent;// Event [SCE_NP_MATCHING2_ROOM_MSG_EVENT_ChatMessage / SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message]
@@ -371,7 +371,7 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemb
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  * @note This function seems to return a ConnectionID. This is optional, and replaces the requirement of room/member
  */
-int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, u32 conn_id, SceNpMatching2Event event, u32 dataPtr) {
+int notifyRoomEventHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	NpMatching2Handler* handler = nullptr;
@@ -382,8 +382,8 @@ int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
 
 	u32 args[7];
 	args[0] = 0;	// ContextID
-	args[1] = roomId;	// RoomID
-	args[2] = conn_id;  // ConnectionID?
+	args[1] = room_id & 0xFFFFFFFF;			// room_id.lower
+	args[2] = (room_id >> 32) & 0xFFFFFFFF;	// room_id.upper
 	args[3] = memberId;	// MemberID?
 	args[4] = event;	// Event
 	args[5] = dataPtr;	// ErrorCode
@@ -415,7 +415,7 @@ int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMember
  * @note If there are any problems writing to np_memory, it may be prudent to run a thread-sanitized environment instead
  * @note This function seems to return a ConnectionID. This is optional, and replaces the requirement of room/member
  */
-int notifySignalingHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMemberId memberId, u32 conn_id, u32 conn_state, SceNpMatching2Event event, s32 errorCode) {
+int notifySignalingHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMemberId memberId, u32 conn_state, SceNpMatching2Event event, s32 errorCode) {
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 
 	NpMatching2Handler* handler = nullptr;
@@ -427,8 +427,8 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 	// FIXME: Need confirmation on arguments for conn_id, room_id
 	u32 args[8];
 	args[0] = 0;		// ContextID
-	args[1] = room_id;		// room_id?
-	args[2] = conn_id;		// conn_id?
+	args[1] = room_id & 0xFFFFFFFF;			// room_id.lower
+	args[2] = (room_id >> 32) & 0xFFFFFFFF;	// room_id.upper
 	args[3] = conn_state;	// unknown?
 	args[4] = memberId;		// roomMemberId
 	args[5] = event;		// EventCode
@@ -1660,8 +1660,8 @@ static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqI
  * @note connId == peerMemberId while connecting, and 0 when connected
  * @note Fat Princess assigns a local connId? here when requesting information, and then proceeds to call GetConnectionInfo
  */
-static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32 roomId, u32 memberId, u32 peerMemberId, u32 connInfoPtr, u32 ipAddrPtr, u32 portPtr) {
-	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %d, %d, %d, %d, 0x%08X, 0x%08X, 0x%08X) at %08x", __FUNCTION__, ctxId, connId, roomId, memberId, peerMemberId, connInfoPtr, ipAddrPtr, portPtr, currentMIPS->pc);
+static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u64 roomId, u32 peerMemberId, u32 connInfoPtr, u32 ipAddrPtr, u32 portPtr) {
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%d, %d, %d, %d, 0x%08X, 0x%08X, 0x%08X) at %08x", __FUNCTION__, ctxId, connId, roomId, peerMemberId, connInfoPtr, ipAddrPtr, portPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -2197,7 +2197,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0xDFEDB642, &WrapI_IUU<sceNpMatching2SignalingGetPeerNetInfoResult>,	"sceNpMatching2SignalingGetPeerNetInfoResult",	'i', "ixx"    },
 	{0x9462C05A, &WrapI_IU<sceNpMatching2SignalingCancelPeerNetInfo>,		"sceNpMatching2SignalingCancelPeerNetInfo",		'i', "ix"     },
 	{0x3892E9A6, &WrapI_IUUUUUU<sceNpMatching2SignalingGetConnectionInfo>,	"sceNpMatching2SignalingGetConnectionInfo",		'i', "ixxxxxx"},
-	{0x6D6D0C75, &WrapI_IUUUUUUU<sceNpMatching2SignalingGetConnectionStatus>,	"sceNpMatching2SignalingGetConnectionStatus",	'i', "ixxxxxxx" },
+	{0x6D6D0C75, &WrapI_IUXUUUU<sceNpMatching2SignalingGetConnectionStatus>,	"sceNpMatching2SignalingGetConnectionStatus",	'i', "ixxxxxxx" },
 
 	{0x2E61F6E1, &WrapI_IIII<sceNpMatching2Init>,							"sceNpMatching2Init",							'i', "iiii"   },
 	{0x8BF37D8C, &WrapI_V<sceNpMatching2Term>,								"sceNpMatching2Term",							'i', ""       },
