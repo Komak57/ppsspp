@@ -1432,6 +1432,8 @@ static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 optParamPtr)
 	optParam.event_type = SCE_NP_MATCHING2_SIGNALING_EVENT;
 	defaultOptParams[SCE_NP_MATCHING2_SIGNALING_EVENT] = optParam;
 
+	return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedSignalingOptParam, 0);
+
 	return SCE_NP_MATCHING2_OKAY;
 }
 
