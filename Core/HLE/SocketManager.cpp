@@ -220,10 +220,8 @@ int InetSocket::recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_
 #endif
 				return -1;
 			}
-			sockaddr_storage src;
-			socklen_t src_len = sizeof(src);
 			char newbuf[2048];
-			int ret = ::recvfrom(dccp_sock->sock, newbuf, sizeof(newbuf), MSG_PEEK | flags, reinterpret_cast<sockaddr*>(&src), &src_len);
+			int ret = ::recvfrom(dccp_sock->sock, newbuf, sizeof(newbuf), MSG_PEEK | flags, from, fromlen);
 			if (ret <= 2)
 				return (ret < 0 ? ret : -1); // Malformed
 
@@ -242,11 +240,9 @@ int InetSocket::recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_
 			}
 
 			// Receive the packet and return
-			ret = ::recvfrom(dccp_sock->sock, newbuf, sizeof(newbuf), flags, reinterpret_cast<sockaddr*>(&src), &src_len);
+			ret = ::recvfrom(dccp_sock->sock, newbuf, sizeof(newbuf), flags, from, fromlen);
 
 			memcpy(buf, newbuf + 2, data_len);
-			memcpy(from, &src, src_len);
-			*fromlen = src_len;
 			return data_len;
 		}
 	default:
