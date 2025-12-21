@@ -4,6 +4,7 @@
 #include <cstring> // Required by linux
 #include <mutex>
 #include "sceKernelThread.h"
+#include "proAdhoc.h"
 
 SocketManager g_socketManager;
 static std::mutex g_socketMutex;  // TODO: Remove once the adhoc thread is gone
@@ -238,6 +239,11 @@ int InetSocket::recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_
 #endif
 				return -1; // Not for this vsock, wait for the next one
 			}
+			if (port == 3658) {
+				sockaddr_in* _src = reinterpret_cast<sockaddr_in*>(from);
+				auto header = "recvfrom::GAME " + ip2str(_src->sin_addr.s_addr) + ":" + std::to_string(ntohs(_src->sin_port));
+				DEBUG_HEXLOG(Log::Signaling, header.c_str(), newbuf, ret, 386);
+			}
 
 			// Receive the packet and return
 			ret = ::recvfrom(dccp_sock->sock, newbuf, sizeof(newbuf), flags, from, fromlen);
@@ -313,6 +319,12 @@ int InetSocket::sendto(const char* buf, int len, int flags, const sockaddr* to, 
 			memcpy(packet + 2, &port_header, 2);*/
 			// Pack the message body
 			memcpy(packet + 2, buf, len);
+
+			if (port == 3658) {
+				const sockaddr_in* _src = reinterpret_cast<const sockaddr_in*>(to);
+				auto header = "sendto::GAME " + ip2str(_src->sin_addr) + ":" + std::to_string(ntohs(_src->sin_port));
+				INFO_HEXLOG(Log::Signaling, header.c_str(), packet, newlen, 386);
+			}
 
 			return ::sendto(dccp_sock->sock, packet, newlen, flags, to, tolen);
 		}
