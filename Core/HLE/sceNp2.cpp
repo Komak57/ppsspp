@@ -478,12 +478,12 @@ bool NpMatching2ProcessEvents() {
 			event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]);
 		break;
 	case SCE_NP_MATCHING2_ROOM_EVENT:
-		NOTICE_LOG(Log::sceNp2, "SceNpMatching2RoomEventCallback - %s_%08x(ctxId: %d, roomId: %d, connId?: %08x, memberId: %d, requestEvent: %08x, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
-			event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6]);
+		NOTICE_LOG(Log::sceNp2, "SceNpMatching2RoomEventCallback - %s_%08x(ctxId: %d, roomId: %llu, memberId: %d, requestEvent: %08x, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
+			event.args[0], ((u64)event.args[1] | (u64)event.args[2] >> 32), event.args[3], event.args[4], event.args[5], event.args[6]);
 		break;
 	case SCE_NP_MATCHING2_ROOM_MSG_EVENT:
-		NOTICE_LOG(Log::sceNp2, "SceNpMatching2RoomMessageCallback - %s_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %d, param_5: %d, event: %d, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
-			event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
+		NOTICE_LOG(Log::sceNp2, "SceNpMatching2RoomMessageCallback - %s_%08x(ctxId: %d, roomId: %llu, param_4: %d, memberId: %d, event: %08x, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
+			event.args[0], ((u64)event.args[1] | (u64)event.args[2] >> 32), event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
 		break;
 	case SCE_NP_MATCHING2_LOBBY_EVENT:
 		ERROR_LOG(Log::sceNp2, "UNIMPLEMENTED SceNpMatching2LobbyEventCallback - %s_%08x(ctxId: %d)", EventToString(event.event_type).c_str(), event.handler.cb.ptr, event.args[0]);
@@ -492,11 +492,11 @@ bool NpMatching2ProcessEvents() {
 		ERROR_LOG(Log::sceNp2, "UNIMPLEMENTED SceNpMatching2LobbyMessageCallback - %s_%08x(ctxId: %d)", EventToString(event.event_type).c_str(), event.handler.cb.ptr, event.args[0]);
 		return false;
 	case SCE_NP_MATCHING2_SIGNALING_EVENT:
-		NOTICE_LOG(Log::sceNp2, "SceNpMatching2SignalingCallback - %s_%08x(param_1: %d, param_2: %d, param_3: %d, param_4: %d, param_5: %d, param_6: %d, param_7: %d, param_8: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
-			event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
+		NOTICE_LOG(Log::sceNp2, "SceNpMatching2SignalingCallback - %s_%08x(ctxId: %d, roomId: %llu, conn_state: %d, memberId: %d, event: %08x, error_code: %08x, cbArgsPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
+			event.args[0], ((u64)event.args[1] | (u64)event.args[2] >> 32), event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
 		break;
 	default:
-		NOTICE_LOG(Log::sceNp2, "UNHANDLED Callback Type %d - FUN_%08x(ctxId: %d)", event.event_type, event.handler.cb.ptr, event.args[0]);
+		ERROR_LOG(Log::sceNp2, "UNHANDLED Callback Type %d - FUN_%08x(ctxId: %d)", event.event_type, event.handler.cb.ptr, event.args[0]);
 		_dbg_assert_(false);
 		return false;
 	}
@@ -1569,7 +1569,7 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
  * @return 0; or System Error
  * @note This might request the information from the target player, rather than providing what it knows
  */
-static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 roomId, u32 roomMemberId, u32 netInfoPtr)
+static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u64 roomId, u32 roomMemberId, u32 netInfoPtr)
 {
 	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, roomMemberId, netInfoPtr, currentMIPS->pc);
 
@@ -1762,9 +1762,9 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u64
  * @note Most games appear to adhere to this rule of thumb, and rely on roomId/memberId for assigning connection details
  * @note This returns a UNION, not a struct, meaning only specific parts of the struct will be returned
  */
-static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 roomId, u32 memberId, u32 peerMemberId, u32 code, u32 connInfoPtr)
+static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u64 roomId, u32 peerMemberId, u32 code, u32 connInfoPtr)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %d, %d, %d, %d, %d, %08x) at %08x", __FUNCTION__, ctxId, connId, roomId, memberId, peerMemberId, code, connInfoPtr, currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %d, %d, %d, %d, %08x) at %08x", __FUNCTION__, ctxId, connId, roomId, peerMemberId, code, connInfoPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -2005,7 +2005,7 @@ static int sceNpMatching2GrantRoomOwner(int ctxId, u32 reqParamPtr, u32 optParam
  * @param memberIdNum ?
  * @return 0; or System Error
  */
-static int sceNpMatching2GetRoomMemberIdListLocal(int ctxId, u32 roomId, u32 sortMethod, u32 memberId, u32 memberIdNum)
+static int sceNpMatching2GetRoomMemberIdListLocal(int ctxId, u64 roomId, u32 sortMethod, u32 memberId, u32 memberIdNum)
 {
 	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, sortMethod, memberId, memberIdNum, currentMIPS->pc);
 
@@ -2059,7 +2059,7 @@ static int sceNpMatching2SetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
  * @param bufLen ?
  * @return 0; or System Error
  */
-static int sceNpMatching2GetRoomMemberDataInternalLocal(int ctxId, u32 roomId, u32 memberId, u32 attrId, u32 attrIdNum, u32 memberPtr, u32 bufPtr, u32 bufLen)
+static int sceNpMatching2GetRoomMemberDataInternalLocal(int ctxId, u64 roomId, u32 memberId, u32 attrId, u32 attrIdNum, u32 memberPtr, u32 bufPtr, u32 bufLen)
 {
 	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x, %08x, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, memberId, attrId, attrIdNum, memberPtr, bufPtr, bufLen, currentMIPS->pc);
 
@@ -2196,10 +2196,10 @@ const HLEFunction sceNpMatching2[] = {
 	{0x9A67F5D0, &WrapI_IU<sceNpMatching2SetSignalingOptParam>,				"sceNpMatching2SetSignalingOptParam",			'i', "ix"     },
 	{0xC7E72EC5, &WrapI_IUU<sceNpMatching2GetSignalingOptParamLocal>,		"sceNpMatching2GetSignalingOptParamLocal",		'i', "ixx"    },
 	{0xFF32EA05, &WrapI_U<sceNpMatching2SignalingGetLocalNetInfo>,			"sceNpMatching2SignalingGetLocalNetInfo",		'i', "x"      },
-	{0x8CD109E7, &WrapI_IUUU<sceNpMatching2SignalingGetPeerNetInfo>,		"sceNpMatching2SignalingGetPeerNetInfo",		'i', "ixxx"   },
+	{0x8CD109E7, &WrapI_IXUU<sceNpMatching2SignalingGetPeerNetInfo>,		"sceNpMatching2SignalingGetPeerNetInfo",		'i', "ixxx"   },
 	{0xDFEDB642, &WrapI_IUU<sceNpMatching2SignalingGetPeerNetInfoResult>,	"sceNpMatching2SignalingGetPeerNetInfoResult",	'i', "ixx"    },
 	{0x9462C05A, &WrapI_IU<sceNpMatching2SignalingCancelPeerNetInfo>,		"sceNpMatching2SignalingCancelPeerNetInfo",		'i', "ix"     },
-	{0x3892E9A6, &WrapI_IUUUUUU<sceNpMatching2SignalingGetConnectionInfo>,	"sceNpMatching2SignalingGetConnectionInfo",		'i', "ixxxxxx"},
+	{0x3892E9A6, &WrapI_IUXUUU<sceNpMatching2SignalingGetConnectionInfo>,	"sceNpMatching2SignalingGetConnectionInfo",		'i', "ixxxxxx"},
 	{0x6D6D0C75, &WrapI_IUXUUUU<sceNpMatching2SignalingGetConnectionStatus>,	"sceNpMatching2SignalingGetConnectionStatus",	'i', "ixxxxxxx" },
 
 	{0x2E61F6E1, &WrapI_IIII<sceNpMatching2Init>,							"sceNpMatching2Init",							'i', "iiii"   },
@@ -2226,9 +2226,9 @@ const HLEFunction sceNpMatching2[] = {
 	{0x55F7837F, &WrapI_IUUU<sceNpMatching2SendRoomChatMessage>,			"sceNpMatching2SendRoomChatMessage",			'i', "ixxx"   },
 	{0x495E97BD, &WrapI_IUUU<sceNpMatching2GrantRoomOwner>,					"sceNpMatching2GrantRoomOwner",					'i', "ixxx"   },
 
-	{0x80F61558, &WrapI_IUUUU<sceNpMatching2GetRoomMemberIdListLocal>,		"sceNpMatching2GetRoomMemberIdListLocal",		'i', "ixxxx"  },
+	{0x80F61558, &WrapI_IXUUU<sceNpMatching2GetRoomMemberIdListLocal>,		"sceNpMatching2GetRoomMemberIdListLocal",		'i', "ixxxx"  },
 	{0x7DAA8A90, &WrapI_IUUU<sceNpMatching2SetRoomMemberDataInternal>,		"sceNpMatching2SetRoomMemberDataInternal",		'i', "ixxx"   },
-	{0xF22C7ADC, &WrapI_IUUUUUUU<sceNpMatching2GetRoomMemberDataInternalLocal>,	"sceNpMatching2GetRoomMemberDataInternalLocal",	'i', "ixxxxxxx"   },
+	{0xF22C7ADC, &WrapI_IXUUUUUU<sceNpMatching2GetRoomMemberDataInternalLocal>,	"sceNpMatching2GetRoomMemberDataInternalLocal",	'i', "ixxxxxxx"   },
 	{0xA5775DBF, &WrapI_IUUU<sceNpMatching2GetRoomMemberDataInternal>,		"sceNpMatching2GetRoomMemberDataInternal",		'i', "ixxx"   },
 	{0x5C7DB6A4, &WrapI_I<sceNpMatching2GetRoomMemberDataInternalList>,		"sceNpMatching2GetRoomMemberDataInternalList",	'i', ""       },
 	{0xFBF494C0, &WrapI_IUUU<sceNpMatching2GetRoomMemberDataExternalList>,	"sceNpMatching2GetRoomMemberDataExternalList",	'i', "ixxx"   },
