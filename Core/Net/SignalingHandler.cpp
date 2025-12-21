@@ -508,7 +508,6 @@ constexpr void write_to_ptr(U&& array, int pos, const T& value)
 }
 
 std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
-	DEBUG_LOG(Log::Signaling, "Signaling RPCN Handler Thread Started");
 	if (cancelled) {
 		WARN_LOG(Log::Signaling, "RPCN Cancelling");
 		return std::chrono::duration_cast<std::chrono::microseconds>(5s);
@@ -671,7 +670,6 @@ std::chrono::microseconds signaling_handler::HandleUPnPResponses() {
 }
 
 std::chrono::microseconds signaling_handler::HandleP2PResponses() {
-	DEBUG_LOG(Log::Signaling, "Signaling P2P Handler Thread Started");
 	process_incoming_messages();
 
 	const auto now = std::chrono::steady_clock::now();
