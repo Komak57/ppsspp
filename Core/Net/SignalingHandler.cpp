@@ -688,7 +688,7 @@ std::chrono::microseconds signaling_handler::HandleP2PResponses() {
 
 		if (sig.sig_info->time_last_msg_recvd < now - 60s && cmd != SignalingCommand::Info)
 		{
-			// We had no connection to opponent for 60 seconds, consider the connection dead
+			// We had no connection to peer for 60 seconds, consider the connection dead
 			ERROR_LOG(Log::Signaling, "Timeout disconnection");
 			update_si_status(sig.sig_info, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TIMEOUT);
 			retire_packet(sig.sig_info, SignalingCommand::Ping); // Retire ping packet if necessary
@@ -760,12 +760,17 @@ std::chrono::microseconds signaling_handler::HandleP2PResponses() {
 			return 0s;
 		} else {
 			// set thread wait duration to nanoseconds until next queued packet
-			return std::chrono::duration_cast<std::chrono::microseconds>(next_timestamp - current_timestamp);
+			auto _delay = std::chrono::duration_cast<std::chrono::microseconds>(next_timestamp - current_timestamp);
+			if (_delay > REPEAT_PING_DELAY)
+				return std::chrono::duration_cast<std::chrono::microseconds>(REPEAT_PING_DELAY);
+			return _delay;
 		}
 	}
 	else {
 		// set thread wait duration to infinity
-		return std::chrono::duration_cast<std::chrono::microseconds>(5s); // 5000000 == 5s
+		if (sig_peers.size() > 0)
+			return  std::chrono::duration_cast<std::chrono::microseconds>(REPEAT_PING_DELAY);
+		return std::chrono::duration_cast<std::chrono::microseconds>(10s); // 5000000 == 5s
 	}
 }
 
