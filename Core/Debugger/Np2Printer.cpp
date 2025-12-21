@@ -293,7 +293,7 @@ void print_SceNpMatching2RoomDataInternal(const SceNpMatching2RoomDataInternal* 
 	INFO_LOG(Log::sceNet, "worldId: %d", room->worldId);
 	INFO_LOG(Log::sceNet, "lobbyId: %lld", room->lobbyId);
 	INFO_LOG(Log::sceNet, "roomId: %lld", room->roomId);
-	INFO_LOG(Log::sceNet, "passwordSlotMask: %lld", room->passwordSlotMask);
+	INFO_LOG(Log::sceNet, "passwordSlotMask: 0x%x", room->passwordSlotMask);
 	INFO_LOG(Log::sceNet, "maxSlot: %d", room->maxSlot);
 
 	INFO_LOG(Log::sceNet, "members: *0x%x", room->memberList.members.ptr);
