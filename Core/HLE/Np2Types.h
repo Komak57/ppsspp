@@ -255,19 +255,19 @@ enum SceNpError : u32 {
 //	PS3_SCE_NP_MATCHING2_REQUEST_EVENT_GetLobbyMemberDataInternalList = 0x0207,
 //	PS3_SCE_NP_MATCHING2_REQUEST_EVENT_SignalingGetPingInfo = 0x0e01,
 //};
+
+// confirmed in np_matching2.prx
 enum PSPMatching2RequestEvent
 {
 	SCE_NP_MATCHING2_REQUEST_EVENT_Empty = 0x0000,
 	SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo = 0x0001,
 	SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList = 0x0002,
-	SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataExternalList = 0x0003,
-	SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal = 0x0004,
-	SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo = 0x0005, // was 7
-	SCE_NP_MATCHING2_REQUEST_EVENT_GetLobbyInfoList = 0x0006,
-	SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList = 0x0007, // confirmed by Patapon3
-	SCE_NP_MATCHING2_REQUEST_EVENT_GetUserInfoList = 0x0008,
-	SCE_NP_MATCHING2_REQUEST_EVENT_CreateServerContext = 0x0009,
-	SCE_NP_MATCHING2_REQUEST_EVENT_DeleteServerContext = 0x000a,
+	SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo = 0x0003,
+	SCE_NP_MATCHING2_REQUEST_EVENT_GetUserInfoList = 0x0004,
+	SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataExternalList = 0x0005,
+	SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal = 0x0006,
+	SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList = 0x0007, // confirmed by Nemoumbra in Patapon3
+
 	SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom = 0x0101,
 	SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom = 0x0102,
 	SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom = 0x0103,
@@ -280,15 +280,8 @@ enum PSPMatching2RequestEvent
 	SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal = 0x010a,
 	SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal = 0x010b,
 	SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal = 0x010c,
-	SCE_NP_MATCHING2_REQUEST_EVENT_SetSignalingOptParam = 0x010d,
-	SCE_NP_MATCHING2_REQUEST_EVENT_JoinLobby = 0x0201,
-	SCE_NP_MATCHING2_REQUEST_EVENT_LeaveLobby = 0x0202,
-	SCE_NP_MATCHING2_REQUEST_EVENT_SendLobbyChatMessage = 0x0203,
-	SCE_NP_MATCHING2_REQUEST_EVENT_SendLobbyInvitation = 0x0204,
-	SCE_NP_MATCHING2_REQUEST_EVENT_SetLobbyMemberDataInternal = 0x0205,
-	SCE_NP_MATCHING2_REQUEST_EVENT_GetLobbyMemberDataInternal = 0x0206,
-	SCE_NP_MATCHING2_REQUEST_EVENT_GetLobbyMemberDataInternalList = 0x0207,
-	SCE_NP_MATCHING2_REQUEST_EVENT_SignalingGetPingInfo = 0x0e01,
+	SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternalList = 0x010d,
+	SCE_NP_MATCHING2_REQUEST_EVENT_SetSignalingOptParam = 0x010e,
 };
 
 // Based on decompiled np_matching2.prx, commented with syscalls where the event id is being used
