@@ -429,7 +429,7 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 	args[0] = 0;		// ContextID
 	args[1] = room_id & 0xFFFFFFFF;			// room_id.lower
 	args[2] = (room_id >> 32) & 0xFFFFFFFF;	// room_id.upper
-	args[3] = conn_state;	// unknown?
+	args[3] = conn_state;	// unknown? Ace Combat uses this as arg4 of sceNpMatching2SignalingGetPeerNetInfo
 	args[4] = memberId;		// roomMemberId
 	args[5] = event;		// EventCode
 	args[6] = errorCode;	// ErrorCode
@@ -1564,10 +1564,9 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	return SCE_NP_MATCHING2_OKAY;
 }
 
-/* Incomplete - Gets the target Peer's IP, Port, NAT Type, and other flags
+/* Incomplete - Begins a request for the target Peer's IP, Port, NAT Type, and other flags
  * @param roomId The keyed room_id to search for player
  * @param roomMemberId The target players ID to provide in the system request
- * @param netInfoPtr Pointer to SceNpMatching2SignalingNetInfo to be provided requested information
  * @return 0; or System Error
  * @note This might request the information from the target player, rather than providing what it knows
  */
@@ -1584,31 +1583,15 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 room_id_lower, u
 	if (_context == ctx.end())
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND, "Invalid Context");
 
-	if (!Memory::IsValidAddress(netInfoPtr))
-		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "netInfoPtr NullPtr");
-
-	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
-
-	auto member_exists = npServer->cache.Exists(roomId, roomMemberId);
+	auto member_exists = npServer->cache.Exists(room_id, roomMemberId);
 	if (!member_exists)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
-	auto connId = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, roomMemberId));
+	auto connId = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(room_id, roomMemberId));
 	if (!connId)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_CONNID_NOT_AVAILABLE, "ConnId Not Found"); ;
 	auto si = g_signaling.get_sig_infos(*connId);
 	if (!si)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_NETINFO_NOT_AVAILABLE, "SigInfo Not Available"); ;
-
-	// FIXME: Use npServer->local_addr_sig
-	netInfo->localAddr = si->addr;
-	netInfo->mappedAddr = si->mapped_addr;	// PublicIP
-	// Pure speculation
-	//si->conn_status
-	netInfo->natStatus = si->nat_type;
-	// Unverified extra data?
-	netInfo->UPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
-	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-	netInfo->port = htons(si->mapped_port);
 
 	return SCE_NP_MATCHING2_OKAY;
 }
@@ -1632,6 +1615,32 @@ static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingR
 
 	if (!Memory::IsValidAddress(signalingReqIdPtr))
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
+
+	if (!Memory::IsValidAddress(netInfoPtr))
+		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "netInfoPtr NullPtr");
+
+	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
+
+	//auto member_exists = npServer->cache.Exists(room_id, roomMemberId);
+	//if (!member_exists)
+	//	return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
+	//auto connId = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(room_id, roomMemberId));
+	//if (!connId)
+	//	return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_CONNID_NOT_AVAILABLE, "ConnId Not Found"); ;
+	//auto si = g_signaling.get_sig_infos(*connId);
+	//if (!si)
+	//	return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_NETINFO_NOT_AVAILABLE, "SigInfo Not Available"); ;
+
+	//// FIXME: Use npServer->local_addr_sig
+	//netInfo->localAddr = si->addr;
+	//netInfo->mappedAddr = si->mapped_addr;	// PublicIP
+	//// Pure speculation
+	////si->conn_status
+	//netInfo->natStatus = si->nat_type;
+	//// Unverified extra data?
+	//netInfo->UPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
+	//netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
+	//netInfo->port = htons(si->mapped_port);
 
 	return SCE_NP_MATCHING2_OKAY;
 }
