@@ -754,18 +754,8 @@ template<int func(int, u32, u32, u32, u32)> void WrapI_IUUUU() {
 	RETURN(retval);
 }
 
-template<int func(int, u64, u32, u32, u32)> void WrapI_IXUUU() {
-	int retval = func(PARAM(0), PARAM(1) | PARAM(2) << 32, PARAM(3), PARAM(4), PARAM(5));
-	RETURN(retval);
-}
-
 template<int func(int, u32, u32, u32, u32, u32)> void WrapI_IUUUUU() {
 	int retval = func(PARAM(0), PARAM(1), PARAM(2), PARAM(3), PARAM(4), PARAM(5));
-	RETURN(retval);
-}
-
-template<int func(int, u32, u64, u32, u32, u32)> void WrapI_IUXUUU() {
-	int retval = func(PARAM(0), PARAM(1), PARAM(2) | PARAM(3) << 32, PARAM(4), PARAM(5), PARAM(6));
 	RETURN(retval);
 }
 
@@ -827,11 +817,6 @@ template<u32 func(u32, u32, u32, u32, u32, u32)> void WrapU_UUUUUU() {
 
 template<int func(int, u32, u32, u32)> void WrapI_IUUU() {
 	int retval = func(PARAM(0), PARAM(1), PARAM(2), PARAM(3));
-	RETURN(retval);
-}
-
-template<int func(int, u64, u32, u32)> void WrapI_IXUU() {
-	int retval = func(PARAM(0), PARAM(1) | PARAM(2) << 32, PARAM(3), PARAM(4));
 	RETURN(retval);
 }
 
@@ -951,15 +936,10 @@ template<int func(int, u32, u32, u32, u32, u32, u32, u32)> void WrapI_IUUUUUUU()
 	RETURN(retval);
 }
 
-template<int func(int, u32, u64, u32, u32, u32, u32)> void WrapI_IUXUUUU() {
+template<int func(int, u32, u32, u32, u32, u32, u32, u32, u32)> void WrapI_IUUUUUUUU() {
 	// sceNpMatching2GetRoomMemberDataInternalLocal
-	int retval = func(PARAM(0), PARAM(1), PARAM(2) | PARAM(3) << 32, PARAM(4), PARAM(5), PARAM(6), PARAM(7));
+	int retval = func(PARAM(0), PARAM(1), PARAM(2), PARAM(3), PARAM(4), PARAM(5), PARAM(6), PARAM(7), PARAM(8));
 	RETURN(retval);
 }
 
-template<int func(int, u64, u32, u32, u32, u32, u32, u32)> void WrapI_IXUUUUUU() {
-	// sceNpMatching2GetRoomMemberDataInternalLocal
-	int retval = func(PARAM(0), PARAM(1) | PARAM(2) << 32, PARAM(3), PARAM(4), PARAM(5), PARAM(6), PARAM(7), PARAM(8));
-	RETURN(retval);
-}
 

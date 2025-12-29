@@ -1571,9 +1571,10 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
  * @return 0; or System Error
  * @note This might request the information from the target player, rather than providing what it knows
  */
-static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u64 roomId, u32 roomMemberId, u32 netInfoPtr)
+static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 room_id_lower, u32 room_id_upper, u32 roomMemberId)
 {
-	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, roomMemberId, netInfoPtr, currentMIPS->pc);
+	SceNpMatching2RoomId room_id = (u64)room_id_lower | (u64)room_id_upper >> 32;
+	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, room_id, roomMemberId, currentMIPS->pc);
 
 	// ThreadStart
 	if (!npMatching2Inited)
@@ -1665,8 +1666,9 @@ static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqI
  * @note connId == peerMemberId while connecting, and 0 when connected
  * @note Fat Princess assigns a local connId? here when requesting information, and then proceeds to call GetConnectionInfo
  */
-static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u64 roomId, u32 peerMemberId, u32 connInfoPtr, u32 ipAddrPtr, u32 portPtr) {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %d, %d, %d, 0x%08X, 0x%08X, 0x%08X) at %08x", __FUNCTION__, ctxId, connId, roomId, peerMemberId, connInfoPtr, ipAddrPtr, portPtr, currentMIPS->pc);
+static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32 room_id_lower, u32 room_id_upper, u32 peerMemberId, u32 connInfoPtr, u32 ipAddrPtr, u32 portPtr) {
+	SceNpMatching2RoomId room_id = (u64)room_id_lower | (u64)room_id_upper >> 32;
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %d, %d, %d, 0x%08X, 0x%08X, 0x%08X) at %08x", __FUNCTION__, ctxId, connId, room_id, peerMemberId, connInfoPtr, ipAddrPtr, portPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -1700,13 +1702,13 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u64
 			WARN_LOG(Log::sceNp2, "Invalid Connection ID. Trying Member ID instead.");
 	}
 	if (!conn_id) {
-		if (!npServer->cache.Exists((SceNpMatching2RoomId)roomId))
+		if (!npServer->cache.Exists(room_id))
 			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
 
-		if (!npServer->cache.Exists(roomId, peerMemberId))
+		if (!npServer->cache.Exists(room_id, peerMemberId))
 			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
 
-		conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, peerMemberId));
+		conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(room_id, peerMemberId));
 	}
 	// FIXME: This can technically call for p2p info between other members, but should call sceNpMatching2SignalingGetPeerNetInfo instead?
 	if (!conn_id) {
@@ -1764,9 +1766,10 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u64
  * @note Most games appear to adhere to this rule of thumb, and rely on roomId/memberId for assigning connection details
  * @note This returns a UNION, not a struct, meaning only specific parts of the struct will be returned
  */
-static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u64 roomId, u32 peerMemberId, u32 code, u32 connInfoPtr)
+static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 room_id_lower, u32 room_id_upper, u32 peerMemberId, u32 code, u32 connInfoPtr)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %d, %d, %d, %d, %08x) at %08x", __FUNCTION__, ctxId, connId, roomId, peerMemberId, code, connInfoPtr, currentMIPS->pc);
+	SceNpMatching2RoomId room_id = (u64)room_id_lower | (u64)room_id_upper >> 32;
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %d, %d, %d, %d, %08x) at %08x", __FUNCTION__, ctxId, connId, room_id, peerMemberId, code, connInfoPtr, currentMIPS->pc);
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
@@ -1779,15 +1782,15 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u64 r
 	// Fat Princess marks this as 0x24
 	auto connInfo = PSPPointer<SceNpSignalingConnectionInfo>::Create(connInfoPtr);
 
-	if (!npServer->cache.Exists(roomId, peerMemberId))
+	if (!npServer->cache.Exists(room_id, peerMemberId))
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
 
 	// FIXME: Do a memberId check instead?
-	if (strncmp(NpGetNpId()->handle.data, npServer->cache.GetNpId(roomId, peerMemberId).handle.data, 16) == 0) {
+	if (strncmp(NpGetNpId()->handle.data, npServer->cache.GetNpId(room_id, peerMemberId).handle.data, 16) == 0) {
 		return hleLogError(Log::sceNp2, SCE_NP_SIGNALING_ERROR_OWN_NP_ID, "Member is Self");
 	}
 
-	auto conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(roomId, peerMemberId));
+	auto conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(room_id, peerMemberId));
 	if (!conn_id)
 		return hleLogError(Log::sceNp2, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
 
@@ -2007,9 +2010,10 @@ static int sceNpMatching2GrantRoomOwner(int ctxId, u32 reqParamPtr, u32 optParam
  * @param memberIdNum ?
  * @return 0; or System Error
  */
-static int sceNpMatching2GetRoomMemberIdListLocal(int ctxId, u64 roomId, u32 sortMethod, u32 memberId, u32 memberIdNum)
+static int sceNpMatching2GetRoomMemberIdListLocal(int ctxId, u32 room_id_lower, u32 room_id_upper, u32 sortMethod, u32 memberId, u32 memberIdNum)
 {
-	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, sortMethod, memberId, memberIdNum, currentMIPS->pc);
+	SceNpMatching2RoomId room_id = (u64)room_id_lower | (u64)room_id_upper >> 32;
+	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, room_id, sortMethod, memberId, memberIdNum, currentMIPS->pc);
 
 	_dbg_assert_msg_(false, "FoxLovesYou is looking for more information about this system call!");
 	return SCE_NP_MATCHING2_OKAY;
@@ -2061,9 +2065,10 @@ static int sceNpMatching2SetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
  * @param bufLen ?
  * @return 0; or System Error
  */
-static int sceNpMatching2GetRoomMemberDataInternalLocal(int ctxId, u64 roomId, u32 memberId, u32 attrId, u32 attrIdNum, u32 memberPtr, u32 bufPtr, u32 bufLen)
+static int sceNpMatching2GetRoomMemberDataInternalLocal(int ctxId, u32 room_id_lower, u32 room_id_upper, u32 memberId, u32 attrId, u32 attrIdNum, u32 memberPtr, u32 bufPtr, u32 bufLen)
 {
-	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x, %08x, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, roomId, memberId, attrId, attrIdNum, memberPtr, bufPtr, bufLen, currentMIPS->pc);
+	SceNpMatching2RoomId room_id = (u64)room_id_lower | (u64)room_id_upper >> 32;
+	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x, %08x, %08x, %08x, %08x, %08x) at %08x", __FUNCTION__, ctxId, room_id, memberId, attrId, attrIdNum, memberPtr, bufPtr, bufLen, currentMIPS->pc);
 
 	_dbg_assert_msg_(false, "FoxLovesYou is looking for more information about this system call!");
 	return SCE_NP_MATCHING2_OKAY;
@@ -2198,11 +2203,11 @@ const HLEFunction sceNpMatching2[] = {
 	{0x9A67F5D0, &WrapI_IU<sceNpMatching2SetSignalingOptParam>,				"sceNpMatching2SetSignalingOptParam",			'i', "ix"     },
 	{0xC7E72EC5, &WrapI_IUU<sceNpMatching2GetSignalingOptParamLocal>,		"sceNpMatching2GetSignalingOptParamLocal",		'i', "ixx"    },
 	{0xFF32EA05, &WrapI_U<sceNpMatching2SignalingGetLocalNetInfo>,			"sceNpMatching2SignalingGetLocalNetInfo",		'i', "x"      },
-	{0x8CD109E7, &WrapI_IXUU<sceNpMatching2SignalingGetPeerNetInfo>,		"sceNpMatching2SignalingGetPeerNetInfo",		'i', "ixxx"   },
+	{0x8CD109E7, &WrapI_IUUU<sceNpMatching2SignalingGetPeerNetInfo>,		"sceNpMatching2SignalingGetPeerNetInfo",		'i', "ixxx"   },
 	{0xDFEDB642, &WrapI_IUU<sceNpMatching2SignalingGetPeerNetInfoResult>,	"sceNpMatching2SignalingGetPeerNetInfoResult",	'i', "ixx"    },
 	{0x9462C05A, &WrapI_IU<sceNpMatching2SignalingCancelPeerNetInfo>,		"sceNpMatching2SignalingCancelPeerNetInfo",		'i', "ix"     },
-	{0x3892E9A6, &WrapI_IUXUUU<sceNpMatching2SignalingGetConnectionInfo>,	"sceNpMatching2SignalingGetConnectionInfo",		'i', "ixxxxxx"},
-	{0x6D6D0C75, &WrapI_IUXUUUU<sceNpMatching2SignalingGetConnectionStatus>,	"sceNpMatching2SignalingGetConnectionStatus",	'i', "ixxxxxxx" },
+	{0x3892E9A6, &WrapI_IUUUUUU<sceNpMatching2SignalingGetConnectionInfo>,	"sceNpMatching2SignalingGetConnectionInfo",		'i', "ixxxxxx"},
+	{0x6D6D0C75, &WrapI_IUUUUUUU<sceNpMatching2SignalingGetConnectionStatus>,	"sceNpMatching2SignalingGetConnectionStatus",	'i', "ixxxxxxx" },
 
 	{0x2E61F6E1, &WrapI_IIII<sceNpMatching2Init>,							"sceNpMatching2Init",							'i', "iiii"   },
 	{0x8BF37D8C, &WrapI_V<sceNpMatching2Term>,								"sceNpMatching2Term",							'i', ""       },
@@ -2228,9 +2233,9 @@ const HLEFunction sceNpMatching2[] = {
 	{0x55F7837F, &WrapI_IUUU<sceNpMatching2SendRoomChatMessage>,			"sceNpMatching2SendRoomChatMessage",			'i', "ixxx"   },
 	{0x495E97BD, &WrapI_IUUU<sceNpMatching2GrantRoomOwner>,					"sceNpMatching2GrantRoomOwner",					'i', "ixxx"   },
 
-	{0x80F61558, &WrapI_IXUUU<sceNpMatching2GetRoomMemberIdListLocal>,		"sceNpMatching2GetRoomMemberIdListLocal",		'i', "ixxxx"  },
+	{0x80F61558, &WrapI_IUUUUU<sceNpMatching2GetRoomMemberIdListLocal>,		"sceNpMatching2GetRoomMemberIdListLocal",		'i', "ixxxx"  },
 	{0x7DAA8A90, &WrapI_IUUU<sceNpMatching2SetRoomMemberDataInternal>,		"sceNpMatching2SetRoomMemberDataInternal",		'i', "ixxx"   },
-	{0xF22C7ADC, &WrapI_IXUUUUUU<sceNpMatching2GetRoomMemberDataInternalLocal>,	"sceNpMatching2GetRoomMemberDataInternalLocal",	'i', "ixxxxxxx"   },
+	{0xF22C7ADC, &WrapI_IUUUUUUUU<sceNpMatching2GetRoomMemberDataInternalLocal>,	"sceNpMatching2GetRoomMemberDataInternalLocal",	'i', "ixxxxxxx"   },
 	{0xA5775DBF, &WrapI_IUUU<sceNpMatching2GetRoomMemberDataInternal>,		"sceNpMatching2GetRoomMemberDataInternal",		'i', "ixxx"   },
 	{0x5C7DB6A4, &WrapI_I<sceNpMatching2GetRoomMemberDataInternalList>,		"sceNpMatching2GetRoomMemberDataInternalList",	'i', ""       },
 	{0xFBF494C0, &WrapI_IUUU<sceNpMatching2GetRoomMemberDataExternalList>,	"sceNpMatching2GetRoomMemberDataExternalList",	'i', "ixxx"   },
