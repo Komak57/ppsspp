@@ -156,7 +156,7 @@ void __Np2SignalingGetP2PResponses()
 	}
 
 	//ScheduleP2PState(3, newState, delayus, "P2P Wait State");
-	DEBUG_LOG(Log::sceNp2, "P2P Waiting %d ms", (delayus / 1000));
+	VERBOSE_LOG(Log::sceNp2, "P2P Waiting %d ms", (delayus / 1000));
 	//int r = hleDelayResult(0, "P2P Wait State", delayus);
 	hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
 	hleNoLogVoid();
@@ -1505,7 +1505,7 @@ static int sceNpMatching2AbortRequest(int ctxId, u32 reqId)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED, "NpMatching2 Not Initialized");
 
 	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
-
+	
 	// Find the handler matching the request_id
 	auto it = npMatching2Handlers.find(reqId);
 	if (it == npMatching2Handlers.end())
@@ -1899,47 +1899,47 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 	}
 
 	if (si->sig_status == SCE_NP_SIGNALING_EVENT_EXT_PEER_ACTIVATED) {
-	// This is a union. Only the value modified will be passed to the game
-	switch (code) {
+		// This is a union. Only the value modified will be passed to the game
+		switch (code) {
 		default:
 			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_INVALID_ARGUMENT, "Unrecognized Code %d", code);
-	case SCE_NP_SIGNALING_CONN_INFO_RTT:
+		case SCE_NP_SIGNALING_CONN_INFO_RTT:
 		connInfo->rtt = si->rtt;
-		NOTICE_LOG(Log::sceNp2, " - SCE_NP_SIGNALING_CONN_INFO_RTT:");
-		NOTICE_LOG(Log::sceNp2, " - RTT: %d microseconds", connInfo->rtt);
-		break;
-	case SCE_NP_SIGNALING_CONN_INFO_BANDWIDTH:
+			NOTICE_LOG(Log::sceNp2, " - SCE_NP_SIGNALING_CONN_INFO_RTT:");
+			NOTICE_LOG(Log::sceNp2, " - RTT: %d microseconds", connInfo->rtt);
+			break;
+		case SCE_NP_SIGNALING_CONN_INFO_BANDWIDTH:
 		connInfo->bandwidth = 100'000'000; // 100 MBPS HACK
-		NOTICE_LOG(Log::sceNp2, " - SCE_NP_SIGNALING_CONN_INFO_BANDWIDTH:");
-		NOTICE_LOG(Log::sceNp2, " - Bandwidth: %d", connInfo->bandwidth);
-		break;
-	case SCE_NP_SIGNALING_CONN_INFO_PEER_NPID:
+			NOTICE_LOG(Log::sceNp2, " - SCE_NP_SIGNALING_CONN_INFO_BANDWIDTH:");
+			NOTICE_LOG(Log::sceNp2, " - Bandwidth: %d", connInfo->bandwidth);
+			break;
+		case SCE_NP_SIGNALING_CONN_INFO_PEER_NPID:
 		connInfo->npId = si->npid;
-		NOTICE_LOG(Log::sceNp2, " - SCE_NP_SIGNALING_CONN_INFO_PEER_NPID:");
-		NOTICE_LOG(Log::sceNp2, " - NpId: %s", connInfo->npId.handle.data);
-		break;
-	case SCE_NP_SIGNALING_CONN_INFO_PEER_ADDRESS:
-		connInfo->address.port = htons(si->port);
-		connInfo->address.addr.np_s_addr = si->addr;
+			NOTICE_LOG(Log::sceNp2, " - SCE_NP_SIGNALING_CONN_INFO_PEER_NPID:");
+			NOTICE_LOG(Log::sceNp2, " - NpId: %s", connInfo->npId.handle.data);
+			break;
+		case SCE_NP_SIGNALING_CONN_INFO_PEER_ADDRESS:
+			connInfo->address.port = htons(si->port);
+			connInfo->address.addr.np_s_addr = si->addr;
 		NOTICE_LOG(Log::sceNp2, " - SCE_NP_SIGNALING_CONN_INFO_PEER_ADDRESS:");
-		NOTICE_LOG(Log::sceNp2, " - IP Addr: %s", ip2str(connInfo->address.addr.np_s_addr).c_str());
-		NOTICE_LOG(Log::sceNp2, " - Port: %d", ntohs(connInfo->address.port));
-		break;
-	case SCE_NP_SIGNALING_CONN_INFO_MAPPED_ADDRESS:
-		connInfo->address.port = htons(si->mapped_port);
-		connInfo->address.addr.np_s_addr = si->mapped_addr;
+			NOTICE_LOG(Log::sceNp2, " - IP Addr: %s", ip2str(connInfo->address.addr.np_s_addr).c_str());
+			NOTICE_LOG(Log::sceNp2, " - Port: %d", ntohs(connInfo->address.port));
+			break;
+		case SCE_NP_SIGNALING_CONN_INFO_MAPPED_ADDRESS:
+			connInfo->address.port = htons(si->mapped_port);
+			connInfo->address.addr.np_s_addr = si->mapped_addr;
 		NOTICE_LOG(Log::sceNp2, " - SCE_NP_SIGNALING_CONN_INFO_MAPPED_ADDRESS:");
-		NOTICE_LOG(Log::sceNp2, " - IP Addr: %s", ip2str(connInfo->address.addr.np_s_addr).c_str());
-		NOTICE_LOG(Log::sceNp2, " - Port: %d", connInfo->address.port);
-		break;
-	case SCE_NP_SIGNALING_CONN_INFO_PACKET_LOSS:
-		connInfo->packet_loss = 0; // HACK
-		NOTICE_LOG(Log::sceNp2, " - SCE_NP_SIGNALING_CONN_INFO_PACKET_LOSS:");
-		NOTICE_LOG(Log::sceNp2, " - Packet Loss: %d", connInfo->packet_loss);
-		break;
+			NOTICE_LOG(Log::sceNp2, " - IP Addr: %s", ip2str(connInfo->address.addr.np_s_addr).c_str());
+			NOTICE_LOG(Log::sceNp2, " - Port: %d", connInfo->address.port);
+			break;
+		case SCE_NP_SIGNALING_CONN_INFO_PACKET_LOSS:
+			connInfo->packet_loss = 0; // HACK
+			NOTICE_LOG(Log::sceNp2, " - SCE_NP_SIGNALING_CONN_INFO_PACKET_LOSS:");
+			NOTICE_LOG(Log::sceNp2, " - Packet Loss: %d", connInfo->packet_loss);
+			break;
+		}
+		return SCE_NP_MATCHING2_OKAY;
 	}
-	return SCE_NP_MATCHING2_OKAY;
-}
 	return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_CONN_IN_PROGRESS, "Connection In Progress");
 }
 
