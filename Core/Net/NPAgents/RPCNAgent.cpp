@@ -1051,21 +1051,10 @@ namespace net {
 		}
 		
 		u32 respSize = sizeof(SceNpMatching2CreateJoinRoomResponse);
-		u32 respDataPtr = np_memory.Alloc(respSize);
-		if (!Memory::IsValidAddress(respDataPtr)) {
-			ERROR_LOG(Log::Matching, "Unable to allocate memory for CreateJoinRoomResponse");
-			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::Matching, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
-		}
-		auto respData = PSPPointer<SceNpMatching2CreateJoinRoomResponse>::Create(respDataPtr);
+		auto respData = PSPPointer<SceNpMatching2CreateJoinRoomResponse>::Create(np_memory.Alloc(respSize));
 
 		u32 infoSize = sizeof(SceNpMatching2RoomDataInternal);
-		u32 roomDataPtr = np_memory.Alloc(infoSize);
-
-		if (!Memory::IsValidAddress(roomDataPtr)) {
-			ERROR_LOG(Log::Matching, "Unable to allocate memory for RoomDataInternal");
-			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::Matching, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
-		}
-		respData->roomDataInternal = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomDataPtr);
+		respData->roomDataInternal = PSPPointer<SceNpMatching2RoomDataInternal>::Create(np_memory.Alloc(infoSize));
 		SceNpId* npId = NpGetNpId();
 		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomData, respData->roomDataInternal, npId, _context->second->include_onlinename, _context->second->include_avatarurl);
 		print_SceNpMatching2CreateJoinRoomResponse(respData);
@@ -1328,18 +1317,10 @@ namespace net {
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::Matching, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
 
 		u32 alloc = sizeof(SceNpMatching2GetRoomDataInternalResponse);
-		u32 roomRespPtr = np_memory.Alloc(alloc);
-		if (!Memory::IsValidAddress(roomRespPtr)) {
-			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::Matching, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomResponse"), 0);
-		}
-		auto room_resp = PSPPointer<SceNpMatching2GetRoomDataInternalResponse>::Create(roomRespPtr);
+		auto room_resp = PSPPointer<SceNpMatching2GetRoomDataInternalResponse>::Create(np_memory.Alloc(alloc));
 
 		alloc = sizeof(SceNpMatching2RoomDataInternal);
-		u32 roomInfoPtr = np_memory.Alloc(alloc);
-		if (!Memory::IsValidAddress(roomInfoPtr)) {
-			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::Matching, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY, "Unable to allocate memory for RoomData"), 0);
-		}
-		room_resp->roomDataInternal = PSPPointer<SceNpMatching2RoomDataInternal>::Create(roomInfoPtr);
+		room_resp->roomDataInternal = PSPPointer<SceNpMatching2RoomDataInternal>::Create(np_memory.Alloc(alloc));
 		::np::RoomDataInternal_to_SceNpMatching2RoomDataInternal(np_memory, roomDataInternal, room_resp->roomDataInternal, NpGetNpId(), _context->second->include_onlinename, _context->second->include_avatarurl);
 		print_SceNpMatching2RoomDataInternal(room_resp->roomDataInternal);
 		// Cache the new Room Info

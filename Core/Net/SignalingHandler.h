@@ -243,6 +243,7 @@ public:
 		return latency.load();
 	}
 
+	bool initialized = false;
 	// Public and Private addresses
 	std::condition_variable sigv;
 	// Network Order
