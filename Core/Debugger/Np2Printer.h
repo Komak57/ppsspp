@@ -24,7 +24,7 @@ void print_SceNpMatching2SetRoomMemberDataInternalRequest(const SceNpMatching2Se
 void print_SceNpMatching2GetRoomDataExternalListRequest(const SceNpMatching2GetRoomDataExternalListRequest* req);
 void print_SceNpMatching2GetRoomDataExternalListResponse(const SceNpMatching2GetRoomDataExternalListResponse* resp);
 
-void print_SceNpMatching2GetLobbyInfoListRequest(const SceNpMatching2GetLobbyInfoListRequest* resp);
+//void print_SceNpMatching2GetLobbyInfoListRequest(const SceNpMatching2GetLobbyInfoListRequest* resp);
 
 //void print_SceNpBasicAttachmentData(const SceNpBasicAttachmentData* data);
 //void print_SceNpBasicExtendedAttachmentData(const SceNpBasicExtendedAttachmentData* data);

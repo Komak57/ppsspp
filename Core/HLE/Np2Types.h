@@ -445,9 +445,9 @@ enum
 typedef u16 SceNpMatching2ServerId;
 typedef u32 SceNpMatching2WorldId;
 typedef u16 SceNpMatching2WorldNumber;
-typedef u64 SceNpMatching2LobbyId;
-typedef u16 SceNpMatching2LobbyNumber;
-typedef u16 SceNpMatching2LobbyMemberId;
+typedef u64 SceNpMatching2LobbyId;  // Obsolete, for use with the PS3
+typedef u16 SceNpMatching2LobbyNumber;  // Obsolete, for use with the 
+typedef u16 SceNpMatching2LobbyMemberId;  // Obsolete, for use with the 
 typedef u64 SceNpMatching2RoomId;
 typedef u16 SceNpMatching2RoomNumber;
 typedef u16 SceNpMatching2RoomMemberId;
@@ -805,7 +805,7 @@ struct SceNpMatching2JoinedSessionInfo
 	u8 padding1[1];
 	SceNpMatching2ServerId serverId;
 	SceNpMatching2WorldId worldId;
-	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2LobbyId lobbyId; // Obsolete, used by PS3
 	SceNpMatching2RoomId roomId;
 	CellRtcTick joinDate;
 };
@@ -848,94 +848,6 @@ struct SceNpMatching2World
 	u8 withEntitlementId;
 	SceNpEntitlementId entitlementId;
 	u8 padding[3];
-};
-
-// Lobby member internal binary attribute
-struct SceNpMatching2LobbyMemberBinAttrInternal
-{
-	CellRtcTick updateDate;
-	SceNpMatching2BinAttr data;
-	u8 padding[4];
-};
-
-// Lobby-internal lobby member information
-struct SceNpMatching2LobbyMemberDataInternal
-{
-	PSPPointer<SceNpMatching2LobbyMemberDataInternal> next;
-	SceNpUserInfo2 userInfo;
-	CellRtcTick joinDate;
-	SceNpMatching2LobbyMemberId memberId;
-	u8 padding[2];
-	SceNpMatching2FlagAttr flagAttr;
-	PSPPointer<SceNpMatching2JoinedSessionInfo> joinedSessionInfo;
-	u32 joinedSessionInfoNum;
-	PSPPointer<SceNpMatching2LobbyMemberBinAttrInternal> lobbyMemberBinAttrInternal;
-	u32 lobbyMemberBinAttrInternalNum; // Unsigned ints are u32 not uint, right?
-};
-
-// Lobby member ID list
-struct SceNpMatching2LobbyMemberIdList
-{
-	SceNpMatching2LobbyMemberId memberId;
-	u32 memberIdNum;
-	SceNpMatching2LobbyMemberId me;
-	u8 padding[6];
-};
-
-// Lobby-internal binary attribute
-struct SceNpMatching2LobbyBinAttrInternal
-{
-	CellRtcTick updateDate;
-	SceNpMatching2LobbyMemberId updateMemberId;
-	u8 padding[2];
-	SceNpMatching2BinAttr data;
-};
-
-// Lobby-external lobby information
-struct SceNpMatching2LobbyDataExternal
-{
-	PSPPointer<SceNpMatching2LobbyDataExternal> next;
-	SceNpMatching2ServerId serverId;
-	u8 padding1[2];
-	SceNpMatching2WorldId worldId;
-	u8 padding2[4];
-	SceNpMatching2LobbyId	 lobbyId;
-	u32 maxSlot;
-	u32 curMemberNum;
-	u32 flagAttr;
-	PSPPointer<SceNpMatching2IntAttr> lobbySearchableIntAttrExternal;
-	u32 lobbySearchableIntAttrExternalNum;
-	PSPPointer<SceNpMatching2BinAttr> lobbySearchableBinAttrExternal;
-	u32 lobbySearchableBinAttrExternalNum;
-	PSPPointer<SceNpMatching2BinAttr> lobbyBinAttrExternal;
-	u32 lobbyBinAttrExternalNum;
-	u8 padding3[4];
-};
-
-// Lobby-internal lobby information
-struct SceNpMatching2LobbyDataInternal
-{
-	SceNpMatching2ServerId serverId;
-	u8 padding1[2];
-	SceNpMatching2WorldId worldId;
-	SceNpMatching2LobbyId lobbyId;
-	u32 maxSlot;
-	SceNpMatching2LobbyMemberIdList memberIdList;
-	SceNpMatching2FlagAttr flagAttr;
-	PSPPointer<SceNpMatching2LobbyBinAttrInternal> lobbyBinAttrInternal;
-	u32 lobbyBinAttrInternalNum;
-};
-
-// Lobby message transmission destination
-union SceNpMatching2LobbyMessageDestination
-{
-	SceNpMatching2LobbyMemberId unicastTarget;
-
-	struct multicastTarget
-	{
-		PSPPointer<SceNpMatching2LobbyMemberId> memberId;
-		u32 memberIdNum;
-	};
 };
 
 // Group label
@@ -1036,7 +948,7 @@ struct SceNpMatching2RoomDataExternal
 	SceNpMatching2WorldId worldId;
 	u16 publicSlotNum;
 	u16 privateSlotNum;
-	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2LobbyId lobbyId; // Obsolete, used by PS3
 	SceNpMatching2RoomId roomId;
 	u32 maxSlot; // PS3 contains (u16) openPublicSlotNum (u16) maxSlot
 	u32 curMemberNum; // PS3 contains (u16) openPrivateSlotNum (u16) curMemeberNum
@@ -1059,7 +971,7 @@ struct SceNpMatching2RoomDataInternal
 	SceNpMatching2ServerId serverId;
 	u8 padding1[2];
 	SceNpMatching2WorldId worldId;
-	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2LobbyId lobbyId; // Obsolete, used by PS3
 	SceNpMatching2RoomId roomId;
 	SceNpMatching2RoomPasswordSlotMask passwordSlotMask;
 	u32 maxSlot;
@@ -1260,7 +1172,7 @@ struct PS3NpMatching2CreateJoinRoomRequest
 {
 	SceNpMatching2WorldId worldId;
 	u8 padding1[4];
-	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2LobbyId lobbyId; // Obsolete, used by PS3
 	u32 maxSlot;
 	u32 flagAttr;
 	PSPPointer<SceNpMatching2BinAttr> roomBinAttrInternal;
@@ -1293,7 +1205,7 @@ struct SceNpMatching2CreateJoinRoomRequest
 {
 	SceNpMatching2WorldId worldId;
 	u8 padding1[4];
-	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2LobbyId lobbyId; // Obsolete, used by PS3
 	u32 maxSlot;
 	SceNpMatching2FlagAttr flagAttr;
 	PSPPointer<SceNpMatching2BinAttr> roomBinAttrInternal;
@@ -1379,7 +1291,7 @@ struct SceNpMatching2SearchRoomRequest
 {
 	s32 option;
 	SceNpMatching2WorldId worldId;
-	SceNpMatching2LobbyId lobbyId;
+	SceNpMatching2LobbyId lobbyId; // Obsolete, used by PS3
 	SceNpMatching2RangeFilter rangeFilter;
 	SceNpMatching2FlagAttr flagFilter;
 	SceNpMatching2FlagAttr flagAttr;

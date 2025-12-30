@@ -477,22 +477,22 @@ void print_SceNpMatching2GetRoomDataExternalListResponse(const SceNpMatching2Get
 	}
 }
 
-void print_SceNpMatching2GetLobbyInfoListRequest(const SceNpMatching2GetLobbyInfoListRequest* resp)
-{
-	INFO_LOG(Log::sceNet, "SceNpMatching2GetLobbyInfoListRequest:");
-	INFO_LOG(Log::sceNet, "worldId: %d", resp->worldId);
-	print_SceNpMatching2RangeFilter(&resp->rangeFilter);
-	INFO_LOG(Log::sceNet, "attrIdNum: %d", resp->attrIdNum);
-	INFO_LOG(Log::sceNet, "attrId: *0x%x", resp->attrId.ptr);
-
-	if (resp->attrId.IsValid())
-	{
-		for (u32 i = 0; i < resp->attrIdNum; i++)
-		{
-			INFO_LOG(Log::sceNet, "attrId[%d] = %d", i, resp->attrId[i]);
-		}
-	}
-}
+//void print_SceNpMatching2GetLobbyInfoListRequest(const SceNpMatching2GetLobbyInfoListRequest* resp)
+//{
+//	INFO_LOG(Log::sceNet, "SceNpMatching2GetLobbyInfoListRequest:");
+//	INFO_LOG(Log::sceNet, "worldId: %d", resp->worldId);
+//	print_SceNpMatching2RangeFilter(&resp->rangeFilter);
+//	INFO_LOG(Log::sceNet, "attrIdNum: %d", resp->attrIdNum);
+//	INFO_LOG(Log::sceNet, "attrId: *0x%x", resp->attrId.ptr);
+//
+//	if (resp->attrId.IsValid())
+//	{
+//		for (u32 i = 0; i < resp->attrIdNum; i++)
+//		{
+//			INFO_LOG(Log::sceNet, "attrId[%d] = %d", i, resp->attrId[i]);
+//		}
+//	}
+//}
 
 //void print_SceNpBasicAttachmentData(const SceNpBasicAttachmentData* data)
 //{
