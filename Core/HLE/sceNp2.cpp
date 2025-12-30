@@ -939,10 +939,7 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamP
 	SceNpMatching2ServerInfo serverInfo = npServer->GetServerInfo(serverReq);
 
 	u32 respSize = sizeof(SceNpMatching2GetServerInfoResponse);
-	auto serv_info_ptr = np_memory.Alloc(respSize);
-	if (serv_info_ptr == 0)
-		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_OUT_OF_MEMORY), 0);
-	auto serv_info = PSPPointer<SceNpMatching2GetServerInfoResponse>::Create(serv_info_ptr);
+	auto serv_info = PSPPointer<SceNpMatching2GetServerInfoResponse>::Create(np_memory.Alloc(respSize));
 
 	serv_info->server.id = serverInfo.id;
 	serv_info->server.status = serverInfo.status;
