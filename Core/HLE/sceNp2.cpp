@@ -1805,10 +1805,6 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 	//connStatus = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
 	Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connInfoPtr);
 
-	u32 sig_addr = 0;
-	u16 sig_port = 0;
-	u32 conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
-
 	std::optional<u32> conn_id = std::nullopt;
 	if (connId != 0) {
 		auto si = g_signaling.get_sig_infos(connId);
@@ -1822,7 +1818,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
 
 		if (!npServer->cache.Exists(room_id, peerMemberId))
-			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member not found");
+			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND, "Member not found");
 
 		conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(room_id, peerMemberId));
 	}
@@ -1836,34 +1832,21 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 		return hleLogError(Log::sceNp2, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Sig Info Not Found");
 	}
 
-	sig_addr = si->addr;
-	sig_port = htons(si->port);
-	conn_status = si->conn_status;
-	//else {
-	//	// TODO: Use p2p siginfo for self?
-	//	if (memberId == 0)
-	//		sig_addr = g_signaling.GetLocalAddr();
-	//	else
-	//		sig_addr = g_signaling.GetSigAddr();
-	//	member_exists = true;
-	//	sig_port = htons(g_signaling.GetSigPort());
-	//	conn_status = SCE_NP_SIGNALING_CONN_STATUS_ACTIVE;
-	//}
-
 	// Write Connection Status
-	Memory::Write_U32(conn_status, connInfoPtr);
+	Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_PENDING, connInfoPtr);
 
-	switch (conn_status) {
+	switch (si->conn_status) {
 	case SCE_NP_SIGNALING_CONN_STATUS_INACTIVE:
 		NOTICE_LOG(Log::sceNp2, " - INACTIVE"); break;
 	case SCE_NP_SIGNALING_CONN_STATUS_PENDING:
 		NOTICE_LOG(Log::sceNp2, " - PENDING"); break;
 	case SCE_NP_SIGNALING_CONN_STATUS_ACTIVE:
 		NOTICE_LOG(Log::sceNp2, " - ACTIVE");
-		Memory::Write_U32(sig_addr, ipAddrPtr);
-		NOTICE_LOG(Log::sceNp2, " - IP Addr: %s", ip2str(sig_addr).c_str());
-		Memory::Write_U16(sig_port, portPtr);
-		NOTICE_LOG(Log::sceNp2, " - Port: %d", ntohs(sig_port));
+		Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_ACTIVE, connInfoPtr);
+		Memory::Write_U32(si->addr, ipAddrPtr);
+		NOTICE_LOG(Log::sceNp2, " - IP Addr: %s", ip2str(si->addr).c_str());
+		Memory::Write_U16(htons(si->port), portPtr);
+		NOTICE_LOG(Log::sceNp2, " - Port: %d", si->port);
 		break;
 	}
 
