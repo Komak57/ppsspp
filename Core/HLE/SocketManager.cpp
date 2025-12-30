@@ -202,6 +202,9 @@ int InetSocket::recv(char* buf, int len, int flags) {
 
 int InetSocket::recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_t* fromlen) {
 	switch (type) {
+	case PSP_NET_INET_SOCK_DCCP:
+		ERROR_LOG(Log::sceNet, "Cannot recvfrom on SOCK_DCCP [%d/%d]", port, vport);
+		return -1;
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
 		{
 			// Clear the error
