@@ -31,7 +31,8 @@ extern SceUID np2P2PThreadID;
 #define	SCE_NP_ERROR_ALREADY_INITIALIZED				0x80550001
 #define	SCE_NP_ERROR_NOT_INITIALIZED					0x80550002
 #define	SCE_NP_ERROR_INVALID_ARGUMENT					0x80550003
-#define	SCE_NP_ERROR_INVALID_CALLBACK					0x80550004 // noted error for sceNpMatching2RegisterSignalingCallback
+//#define	SCE_NP_ERROR_INVALID_CALLBACK					0x80550004 // noted error for sceNpMatching2RegisterSignalingCallback
+#define	SCE_NP_ERROR_INVALID_THREAD						0x80550004 // Default error code for a bad sceKernelCheckThreadStack()
 
 #define	SCE_NP_AUTH_ERROR_ALREADY_INITIALIZED			0x80550301
 #define	SCE_NP_AUTH_ERROR_NOT_INITIALIZED				0x80550302
