@@ -837,14 +837,14 @@ static int sceNpMatching2RegisterSignalingCallback(int ctxId, u32 cbFuncPtr, u32
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND);
 
 	if (cbFuncPtr == 0 || !Memory::IsValidAddress(cbFuncPtr))
-		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_CALLBACK, "%s - Invalid Callback %08x", __FUNCTION__, cbFuncPtr);
+		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_ARGUMENT, "%s - Invalid Callback %08x", __FUNCTION__, cbFuncPtr);
 
-	u32 alloc_size = sizeof(SceNpMatching2SignalingOptParam);
-	auto signalingOptParam = PSPPointer<SceNpMatching2SignalingOptParam>::Create(np_memory.Alloc(alloc_size));
-	signalingOptParam->cbFunc.ptr = cbFuncPtr;
-	signalingOptParam->cbFuncArg.ptr = cbArgsPtr;
-
-	hleCall(sceNpMatching2, int, sceNpMatching2SetSignalingOptParam, ctxId, signalingOptParam.ptr);
+	NpMatching2Handler optParam{};
+	optParam.ctx_id = ctxId;
+	optParam.cb.ptr = cbFuncPtr;
+	optParam.cb_arg.ptr = cbArgsPtr;
+	optParam.event_type = SCE_NP_MATCHING2_SIGNALING_EVENT;
+	defaultOptParams[SCE_NP_MATCHING2_SIGNALING_EVENT] = optParam;
 
 	// We should probably move most of the signaling calls to SignalingHandler
 	// And, you know, rename it to sceNpMatching2Signaling
@@ -1524,9 +1524,9 @@ static int sceNpMatching2AbortRequest(int ctxId, u32 reqId)
 /* Sets or Changes the registered Signaling Callback information
  * @param optParamPtr Pointer to SceNpMatching2SignalingOptParam containing Callback information
  * @return 0; or System Error
- * @note This should set the information in SignalingHandler for cleaner separation
+ * @note Disassembly suggests this is an async function, and doesn't set the OptParam directly
  */
-static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 optParamPtr)
+static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
 	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x) at %08x", __FUNCTION__, ctxId, optParamPtr, currentMIPS->pc);
 
@@ -1540,14 +1540,6 @@ static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 optParamPtr)
 
 	if (!Memory::IsValidAddress(optParamPtr))
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
-
-	auto signalingOptParam = PSPPointer<SceNpMatching2SignalingOptParam>::Create(optParamPtr);
-	NpMatching2Handler optParam{};
-	optParam.ctx_id = ctxId;
-	optParam.cb.ptr = signalingOptParam->cbFunc.ptr;
-	optParam.cb_arg.ptr = signalingOptParam->cbFuncArg.ptr;
-	optParam.event_type = SCE_NP_MATCHING2_SIGNALING_EVENT;
-	defaultOptParams[SCE_NP_MATCHING2_SIGNALING_EVENT] = optParam;
 
 	return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedSignalingOptParam, 0);
 
@@ -2337,7 +2329,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0xFADBA9DB, &WrapI_IU<sceNpMatching2AbortRequest>,						"sceNpMatching2AbortRequest",					'i', "ix"     },
 
 	{0xA3C298D1, &WrapI_IUU<sceNpMatching2RegisterSignalingCallback>,		"sceNpMatching2RegisterSignalingCallback",		'i', "ixx"    },
-	{0x9A67F5D0, &WrapI_IU<sceNpMatching2SetSignalingOptParam>,				"sceNpMatching2SetSignalingOptParam",			'i', "ix"     },
+	{0x9A67F5D0, &WrapI_IUUU<sceNpMatching2SetSignalingOptParam>,				"sceNpMatching2SetSignalingOptParam",		'i', "ixxx"   },
 	{0xC7E72EC5, &WrapI_IUU<sceNpMatching2GetSignalingOptParamLocal>,		"sceNpMatching2GetSignalingOptParamLocal",		'i', "ixx"    },
 	{0xFF32EA05, &WrapI_U<sceNpMatching2SignalingGetLocalNetInfo>,			"sceNpMatching2SignalingGetLocalNetInfo",		'i', "x"      },
 	{0x8CD109E7, &WrapI_IUUU<sceNpMatching2SignalingGetPeerNetInfo>,		"sceNpMatching2SignalingGetPeerNetInfo",		'i', "ixxx"   },
