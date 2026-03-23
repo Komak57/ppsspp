@@ -819,7 +819,6 @@ struct SceNpMatching2JoinedSessionInfo
 // User information
 struct SceNpMatching2UserInfo
 {
-	PSPPointer<SceNpMatching2UserInfo> next;
 	SceNpUserInfo2 userInfo;
 	PSPPointer<SceNpMatching2BinAttr> userBinAttr;
 	u32 userBinAttrNum;
@@ -844,8 +843,7 @@ struct PS3NpMatching2World
 // Fat Princess suggests this is size 0x40
 struct SceNpMatching2World
 {
-	PSPPointer<SceNpMatching2World> next; // Usually ignored
-	SceNpMatching2WorldId worldId; // offset +4 is vital
+	SceNpMatching2WorldId worldId; // WorldId is at offset +4 in a PSPList
 	u32 numOfLobby;
 	u32 maxNumOfTotalLobbyMember;
 	u32 curNumOfTotalLobbyMember;
@@ -1101,7 +1099,7 @@ struct SceNpMatching2GetWorldInfoListRequest
 // World data list request response data
 struct SceNpMatching2GetWorldInfoListResponse
 {
-	PSPPointer<SceNpMatching2World> world;
+	PSPPointer<PSPList<SceNpMatching2World>> world_list;
 	u32 worldNum;
 };
 
@@ -1129,7 +1127,7 @@ struct SceNpMatching2GetUserInfoListRequest
 // User information list acquisition response data
 struct SceNpMatching2GetUserInfoListResponse
 {
-	PSPPointer<SceNpMatching2UserInfo> userInfo;
+	PSPPointer<PSPList<SceNpMatching2UserInfo>> userInfo;
 	u32 userInfoNum;
 };
 

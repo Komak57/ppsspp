@@ -627,11 +627,11 @@ namespace net {
 		}
 
 		// Allocate space for all worlds
-		u32 worldsSize = sizeof(SceNpMatching2World) * num_worlds;
+		u32 worldsSize = sizeof(PSPList<SceNpMatching2World>) * num_worlds;
 		// We have a maximum size
 		if (worldsSize > SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList)
 			worldsSize = SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList;
-		auto worlds = PSPPointer<SceNpMatching2World>::Create(np_memory.Alloc(worldsSize));
+		response->world_list = PSPPointer<PSPList<SceNpMatching2World>>::Create(np_memory.Alloc(worldsSize));
 		// Transfer WorldID
 		NOTICE_LOG(Log::sceNet, "Received %d worlds", num_worlds);
 

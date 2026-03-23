@@ -633,12 +633,17 @@ namespace net {
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::Matching, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD), 0);
 		}
 
+		static_assert(sizeof(PSPList<SceNpMatching2World>) == 0x40, "Size mismatch!");
+
+		u32 alloc = sizeof(SceNpMatching2GetWorldInfoListResponse);
+		auto response = PSPPointer<SceNpMatching2GetWorldInfoListResponse>::Create(np_memory.Alloc(alloc));
+		response->worldNum = num_worlds;
 		// Allocate space for all worlds
-		u32 worldsSize = sizeof(SceNpMatching2World) * num_worlds;
+		u32 worldsSize = sizeof(PSPList<SceNpMatching2World>) * num_worlds;
 		// We have a maximum size
 		if (worldsSize > SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList)
 			worldsSize = SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList;
-		auto worlds = PSPPointer<SceNpMatching2World>::Create(np_memory.Alloc(worldsSize));
+		response->world_list = PSPPointer<PSPList<SceNpMatching2World>>::Create(np_memory.Alloc(worldsSize));
 		// Transfer WorldID
 		NOTICE_LOG(Log::Matching, "Received %d worlds", num_worlds);
 
@@ -649,14 +654,14 @@ namespace net {
 		// RPCN requests only use the WorldID, so they must be converted prior to sending requests
 		//auto world_id = resp.stream->get<SceNpMatching2WorldId>();
 		for (u32 i = 0; i < num_worlds; ++i) {
-			worlds[i].next = 0;
+			response->world_list[i].next = 0;
 			if (i + 1 < num_worlds)
-				worlds[i].next.ptr = worlds.ptr + (sizeof(SceNpMatching2World) * (i+1));
-			//worlds[i].worldId = resp.stream->get<SceNpMatching2WorldId>();
-			//worlds[i].worldId = world_id;
-			worlds[i].worldId = resp.stream->get<SceNpMatching2WorldId>();
-			NOTICE_LOG(Log::Matching, " - World %d => WorldId: %d", i, worlds[i].worldId);
-			npServer->cache.AddWorld(worlds[i]);
+				response->world_list[i].next = response->world_list + (i+1);
+			response->world_list[i]->worldId = resp.stream->get<SceNpMatching2WorldId>();
+			response->world_list[i]->curNumOfRoom = 0;
+			response->world_list[i]->curNumOfTotalRoomMember = 0;
+			NOTICE_LOG(Log::Matching, " - World %d => WorldId: %d", i, response->world_list[i]->worldId);
+			npServer->cache.AddWorld(response->world_list[i].data);
 		}
 
 		if (resp.stream->is_error()) {
@@ -664,10 +669,6 @@ namespace net {
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD, 0);
 		}
 
-		u32 alloc = sizeof(SceNpMatching2GetWorldInfoListResponse);
-		auto response = PSPPointer<SceNpMatching2GetWorldInfoListResponse>::Create(np_memory.Alloc(alloc));
-		response->worldNum = num_worlds;
-		response->world = worlds;
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_OKAY, response.ptr);
 	}

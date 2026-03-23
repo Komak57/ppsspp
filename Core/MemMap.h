@@ -592,6 +592,22 @@ struct PSPPointer
 	}
 };
 
+// Patapon3 itterates objects with this pointer, indicating a list of items
+// Could just add the pointer to the object, but this method gives greater conversion control
+template<typename T>
+struct PSPList {
+	PSPPointer<PSPList<T>> next;
+	T data;
+
+	// Allow implicit conversion to T for easy access
+	operator T& () { return data; }
+	operator const T& () const { return data; }
+
+	// Arrow operator for direct member access
+	T* operator->() { return &data; }
+	const T* operator->() const { return &data; }
+};
+
 constexpr u32 PSP_GetScratchpadMemoryBase() { return 0x00010000;}
 constexpr u32 PSP_GetScratchpadMemoryEnd() { return 0x00014000;}
 
