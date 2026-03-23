@@ -1413,10 +1413,10 @@ namespace net {
 			final_grouppasswordconfig_vec = builder.CreateVector(davec);
 		}
 
-		flatbuffers::Offset<flatbuffers::Vector<u64>> final_passwordSlotMask;
+		flatbuffers::Offset<flatbuffers::Vector<uint64_t>> final_passwordSlotMask;
 		if (req->passwordSlotMask.IsValid())
 		{
-			const u64 value = *req->passwordSlotMask;
+			const uint64_t value = *req->passwordSlotMask;
 			final_passwordSlotMask = builder.CreateVector(&value, 1);
 		}
 
