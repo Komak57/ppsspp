@@ -338,14 +338,23 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/Math/lin/vec3.cpp.arm \
   $(SRC)/Common/Math/lin/matrix4x4.cpp.arm \
   $(SRC)/Common/Net/HTTPClient.cpp \
+  $(SRC)/Common/Net/URL.cpp \
+  $(SRC)/Common/Net/NetBuffer.cpp \
+  $(SRC)/Common/Net/WebsocketServer.cpp \
+  $(SRC)/Common/Net/Sinks.cpp \
+  $(SRC)/Common/Net/HTTPServer.cpp \
   $(SRC)/Common/Net/HTTPHeaders.cpp \
+  $(SRC)/Common/Net/Resolve.cpp \
   $(SRC)/Common/Net/HTTPRequest.cpp \
   $(SRC)/Common/Net/HTTPNaettRequest.cpp \
-  $(SRC)/Common/Net/HTTPServer.cpp \
-  $(SRC)/Common/Net/NetBuffer.cpp \
-  $(SRC)/Common/Net/Resolve.cpp \
   $(SRC)/Common/Net/Sinks.cpp \
   $(SRC)/Common/Net/URL.cpp \
+  $(SRC)/Common/Net/WebsocketServer.cpp \
+  $(SRC)/Common/Net/HTTPClient.cpp \
+  $(SRC)/Common/Net/HTTPHeaders.cpp \
+  $(SRC)/Common/Net/Resolve.cpp \
+  $(SRC)/Common/Net/URL.cpp \
+  $(SRC)/Common/Net/WebSockets.cpp \
   $(SRC)/Common/Net/WebsocketServer.cpp \
   $(SRC)/Common/Profiler/Profiler.cpp \
   $(SRC)/Common/System/Display.cpp \
@@ -397,7 +406,7 @@ include $(BUILD_STATIC_LIBRARY)
 # Next up, Core, GPU, and other core parts shared by headless.
 include $(CLEAR_VARS)
 include $(LOCAL_PATH)/Locals.mk
-LOCAL_WHOLE_STATIC_LIBRARIES += ppsspp_common libchdr lua
+LOCAL_WHOLE_STATIC_LIBRARIES += ppsspp_common libchdr lua mbedtls flatbuffers
 
 ifeq ($(TARGET_ARCH_ABI),x86_64)
 ARCH_FILES := \
@@ -764,6 +773,18 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/Util/BlockAllocator.cpp \
   $(SRC)/Core/Util/PPGeDraw.cpp \
   $(SRC)/Core/Util/RecentFiles.cpp \
+  $(SRC)/Core/Net/NpMatching2Cache.cpp \
+  $(SRC)/Core/Net/Buffer.cpp \
+  $(SRC)/Core/Net/NPAgents/PSNAuthAgent.cpp \
+  $(SRC)/Core/Net/NPAgents/PSNAgent.cpp \
+  $(SRC)/Core/Net/NPAgents/RPCNAgent.cpp \
+  $(SRC)/Core/Net/NPAgents/RPCNAuthAgent.cpp \
+  $(SRC)/Core/Net/NPAgent.cpp \
+  $(SRC)/Core/Net/HTTPConnection.cpp \
+  $(SRC)/Core/Net/fb_helpers.cpp \
+  $(SRC)/Core/Net/SignalingHandler.cpp \
+  $(SRC)/Core/Net/HTTPS.cpp \
+  $(SRC)/Core/Net/Np2SignalingHandler.cpp \
   $(SRC)/git-version.cpp
 
 LOCAL_MODULE := ppsspp_core
@@ -879,9 +900,68 @@ LOCAL_MODULE := libzstd
 LOCAL_SRC_FILES := $(LIBZSTD_FILES)
 include $(BUILD_STATIC_LIBRARY)
 
+# MDEDTLS
 include $(CLEAR_VARS)
 include $(LOCAL_PATH)/Locals.mk
-LOCAL_STATIC_LIBRARIES += ppsspp_common ppsspp_core libarmips libzstd
+LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/$(SRC)/ext/mbedtls/include
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/$(SRC)/ext/mbedtls/include $(LOCAL_C_INCLUDES)
+
+MBEDTLS_FILES := \
+  $(SRC)/ext/mbedtls/library/aes.c \
+  $(SRC)/ext/mbedtls/library/asn1parse.c \
+  $(SRC)/ext/mbedtls/library/asn1write.c \
+  $(SRC)/ext/mbedtls/library/base64.c \
+  $(SRC)/ext/mbedtls/library/bignum.c \
+  $(SRC)/ext/mbedtls/library/bignum_core.c \
+  $(SRC)/ext/mbedtls/library/bignum_mod.c \
+  $(SRC)/ext/mbedtls/library/cipher.c \
+  $(SRC)/ext/mbedtls/library/cipher_wrap.c \
+  $(SRC)/ext/mbedtls/library/constant_time.c \
+  $(SRC)/ext/mbedtls/library/ctr_drbg.c \
+  $(SRC)/ext/mbedtls/library/debug.c \
+  $(SRC)/ext/mbedtls/library/entropy.c \
+  $(SRC)/ext/mbedtls/library/md.c \
+  $(SRC)/ext/mbedtls/library/oid.c \
+  $(SRC)/ext/mbedtls/library/pem.c \
+  $(SRC)/ext/mbedtls/library/pk.c \
+  $(SRC)/ext/mbedtls/library/pk_wrap.c \
+  $(SRC)/ext/mbedtls/library/pkparse.c \
+  $(SRC)/ext/mbedtls/library/rsa.c \
+  $(SRC)/ext/mbedtls/library/rsa_alt_helpers.c \
+  $(SRC)/ext/mbedtls/library/sha256.c \
+  $(SRC)/ext/mbedtls/library/sha512.c \
+  $(SRC)/ext/mbedtls/library/ssl_ciphersuites.c \
+  $(SRC)/ext/mbedtls/library/ssl_cli.c \
+  $(SRC)/ext/mbedtls/library/ssl_msg.c \
+  $(SRC)/ext/mbedtls/library/ssl_tls.c \
+  $(SRC)/ext/mbedtls/library/x509.c \
+  $(SRC)/ext/mbedtls/library/x509_crt.c
+
+LOCAL_MODULE := mbedtls
+LOCAL_SRC_FILES := $(MBEDTLS_FILES)
+include $(BUILD_STATIC_LIBRARY)
+
+# Google Flatbuffers
+include $(CLEAR_VARS)
+include $(LOCAL_PATH)/Locals.mk
+LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/$(SRC)/ext/flatbuffers/include
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/$(SRC)/ext/flatbuffers/include $(LOCAL_C_INCLUDES)
+
+FLATBUFFERS_FILES := \
+  $(SRC)/ext/flatbuffers/src/idl_parser.cpp \
+  $(SRC)/ext/flatbuffers/src/idl_gen_text.cpp \
+  $(SRC)/ext/flatbuffers/src/reflection.cpp \
+  $(SRC)/ext/flatbuffers/src/util.cpp \
+  $(SRC)/ext/flatbuffers/src/idl_gen_fbs.cpp \
+  $(SRC)/ext/flatbuffers/src/code_generators.cpp
+
+LOCAL_MODULE := flatbuffers
+LOCAL_SRC_FILES := $(FLATBUFFERS_FILES)
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+include $(LOCAL_PATH)/Locals.mk
+LOCAL_STATIC_LIBRARIES += ppsspp_common ppsspp_core libarmips libzstd mbedtls flatbuffers
 
 # These are the files just for ppsspp_jni
 LOCAL_MODULE := ppsspp_jni
@@ -952,7 +1032,7 @@ endif
 ifeq ($(HEADLESS),1)
   include $(CLEAR_VARS)
   include $(LOCAL_PATH)/Locals.mk
-  LOCAL_STATIC_LIBRARIES += ppsspp_common ppsspp_core libarmips libzstd
+  LOCAL_STATIC_LIBRARIES += ppsspp_common ppsspp_core libarmips libzstd mbedtls flatbuffers
 
   # Android 5.0 requires PIE for executables.  Only supported on 4.1+, but this is testing anyway.
   LOCAL_CFLAGS += -fPIE
@@ -974,7 +1054,7 @@ endif
 ifeq ($(UNITTEST),1)
   include $(CLEAR_VARS)
   include $(LOCAL_PATH)/Locals.mk
-  LOCAL_STATIC_LIBRARIES += ppsspp_common ppsspp_core libarmips libzstd
+  LOCAL_STATIC_LIBRARIES += ppsspp_common ppsspp_core libarmips libzstd mbedtls flatbuffers
 
   # Android 5.0 requires PIE for executables.  Only supported on 4.1+, but this is testing anyway.
   LOCAL_CFLAGS += -fPIE
