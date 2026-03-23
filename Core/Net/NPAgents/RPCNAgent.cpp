@@ -922,7 +922,7 @@ namespace net {
 			if (req->roomPassword.IsValid())
 				final_roompassword = builder.CreateVector(req->roomPassword->data, 8);
 			else {
-				auto default_pwd = new u8[SCE_NP_MATCHING2_SESSION_PASSWORD_SIZE];
+				auto default_pwd = new u8[SCE_NP_MATCHING2_SESSION_PASSWORD_SIZE]{ 0x50, 0x77, 0x4E, 0x61, 0x4E, 0x00, 0x00, 0x00 };
 				final_roompassword = builder.CreateVector(default_pwd, 8);
 			}
 		}
