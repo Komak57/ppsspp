@@ -102,9 +102,9 @@ extern SceNetApctlInfoInternal netApctlInfo;
 extern const char * const defaultNetConfigName;
 extern const char * const defaultNetSSID;
 
-extern u32 np2RPCNThreadHackAddr;
-extern u32_le np2RPCNThreadCode[3];
-extern SceUID np2RPCNThreadID;
+extern u32 SceNetUpnpThreadHackAddr;
+extern u32_le SceNetUpnpThreadCode[3];
+extern SceUID SceNetUpnpThreadID;
 
 void Register_sceNet();
 void Register_sceNetApctl();

@@ -92,17 +92,17 @@ static std::deque<ApctlArgs> apctlEvents;
 signaling_handler g_signaling;
 bool uPnPInitialized = false;
 
-u32 np2RPCNThreadHackAddr = 0;
-u32_le np2RPCNThreadCode[3];
-SceUID np2RPCNThreadID = 0;
+u32 SceNetUpnpThreadHackAddr = 0;
+u32_le SceNetUpnpThreadCode[3];
+SceUID SceNetUpnpThreadID = 0;
 
 // Currently loaded auto-config
 static InfraDNSConfig g_infraDNSConfig;
 
-// RPCN Signaling
-int np2RPCNState = NP_SIGNIN_STATUS_NONE;
-static int np2RPCNStateEvent = -1;
-static int actionAfterRPCNMipsCall;
+// UPNP Signaling
+int apctlUpnpState = NP_SIGNIN_STATUS_NONE;
+static int apctlUpnpStateEvent = -1;
+static int actionAfterUpnpMipsCall;
 
 static u32 Net_Term();
 static int NetApctl_Term();
@@ -575,9 +575,9 @@ int ScheduleApctlState(int event, int newState, int usec, const char* reason) {
 
 /*
 * This function is added as a placeholder for FakePSN Savestates to
-*   handle RPCN IP/Port information for the client
+*   handle Public IP/Port information for the client
 */
-static void __RPCNState(u64 userdata, int cyclesLate) {
+static void __UpnpState(u64 userdata, int cyclesLate) {
 	SceUID threadID = userdata >> 32;
 	int uid = (int)(userdata & 0xFFFFFFFF);
 	int event = uid - 1;
@@ -587,24 +587,24 @@ static void __RPCNState(u64 userdata, int cyclesLate) {
 
 	SceUID waitID = __KernelGetWaitID(threadID, WAITTYPE_NET, error);
 	if (waitID == 0 || error != 0) {
-		WARN_LOG(Log::sceNet, "sceNp2 State WaitID(%i) on Thread(%i) already woken up? (error: %08x)", uid, threadID, error);
+		WARN_LOG(Log::sceNet, "Upnp State WaitID(%i) on Thread(%i) already woken up? (error: %08x)", uid, threadID, error);
 		return;
 	}
 
 	u32 waitVal = __KernelGetWaitValue(threadID, error);
 	if (error == 0) {
-		np2RPCNState = waitVal;
+		apctlUpnpState = waitVal;
 	}
 
 	__KernelResumeThreadFromWait(threadID, result);
-	WARN_LOG(Log::sceNet, "Returning (WaitID: %d, error: %08x) Result (%08x) of sceNp2 - Event: %d, State: %d", waitID, error, (int)result, event, np2RPCNState);
+	WARN_LOG(Log::sceNet, "Returning (WaitID: %d, error: %08x) Result (%08x) of Upnp - Event: %d, State: %d", waitID, error, (int)result, event, apctlUpnpState);
 }
 
-int ScheduleRPCNState(int event, int newState, int usec, const char* reason) {
+int ScheduleUpnpState(int event, int newState, int usec, const char* reason) {
 	int uid = event + 1;
 
 	u64 param = ((u64)__KernelGetCurThread()) << 32 | uid;
-	CoreTiming::ScheduleEvent(usToCycles(usec), np2RPCNStateEvent, param);
+	CoreTiming::ScheduleEvent(usToCycles(usec), apctlUpnpStateEvent, param);
 	__KernelWaitCurThread(WAITTYPE_NET, uid, newState, 0, false, reason);
 
 	return 0;
@@ -613,7 +613,7 @@ int ScheduleRPCNState(int event, int newState, int usec, const char* reason) {
 /*
 *   Signaling is made of 3 parts. This is Part 1, which handles the STUN based public/local IP information
 */
-void __Np2SignalingGetRPCNResponses()
+void SceNetUpnpThread()
 {
 	hleSkipDeadbeef();
 	int newState = SCE_NP_MATCHING2_STATE_NONE;
@@ -626,9 +626,9 @@ void __Np2SignalingGetRPCNResponses()
 			delayus = g_signaling.HandleUPnPResponses().count();
 		}
 	}
-	//ScheduleRPCNState(1, newState, delayus, "RPCN Wait State");
-	DEBUG_LOG(Log::sceNp2, "RPCN Waiting %d ms", (delayus / 1000));
-	//int r = hleDelayResult(0, "RPCN Wait State", delayus);
+	//ScheduleUpnpState(1, newState, delayus, "Upnp Wait State");
+	VERBOSE_LOG(Log::sceNp2, "Upnp Waiting %d ms", (delayus / 1000));
+	//int r = hleDelayResult(0, "Upnp Wait State", delayus);
 	//hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
 	sceKernelDelayThread(delayus);
 	hleNoLogVoid();
@@ -642,9 +642,9 @@ void __NetApctlInit() {
 	apctlEvents.clear();
 	memset(&netApctlInfo, 0, sizeof(netApctlInfo));
 
-	np2RPCNState = NP_SIGNIN_STATUS_NONE;
-	np2RPCNStateEvent = CoreTiming::RegisterEvent("__RPCNState", __RPCNState);
-	np2RPCNThreadHackAddr = __CreateHLELoop(np2RPCNThreadCode, "sceNetUpnp", "__Np2SignalingGetRPCNResponses", "np2RPCNThreadHack");
+	apctlUpnpState = NP_SIGNIN_STATUS_NONE;
+	apctlUpnpStateEvent = CoreTiming::RegisterEvent("__UpnpState", __UpnpState);
+	SceNetUpnpThreadHackAddr = __CreateHLELoop(SceNetUpnpThreadCode, "sceNetUpnp", "SceNetUpnpThread", "SceNetUpnpThread");
 
 }
 
@@ -735,10 +735,10 @@ void netValidateLoopMemory() {
 		apctlThreadHackAddr = kernelMemory.Alloc(blockSize, false, "apctlThreadHack");
 		if (apctlThreadHackAddr) Memory::Memcpy(apctlThreadHackAddr, apctlThreadCode, sizeof(apctlThreadCode));
 	}
-	if (!np2RPCNThreadHackAddr || (np2RPCNThreadHackAddr && strcmp("np2RPCNThreadHack", kernelMemory.GetBlockTag(np2RPCNThreadHackAddr)) != 0)) {
-		u32 blockSize = sizeof(np2RPCNThreadCode);
-		np2RPCNThreadHackAddr = kernelMemory.Alloc(blockSize, false, "np2RPCNThreadHack");
-		if (np2RPCNThreadHackAddr) Memory::Memcpy(np2RPCNThreadHackAddr, np2RPCNThreadCode, sizeof(np2RPCNThreadCode));
+	if (!SceNetUpnpThreadHackAddr || (SceNetUpnpThreadHackAddr && strcmp("SceNetUpnpThread", kernelMemory.GetBlockTag(SceNetUpnpThreadHackAddr)) != 0)) {
+		u32 blockSize = sizeof(SceNetUpnpThreadCode);
+		SceNetUpnpThreadHackAddr = kernelMemory.Alloc(blockSize, false, "SceNetUpnpThread");
+		if (SceNetUpnpThreadHackAddr) Memory::Memcpy(SceNetUpnpThreadHackAddr, SceNetUpnpThreadCode, sizeof(SceNetUpnpThreadCode));
 	}
 }
 
@@ -1283,8 +1283,7 @@ static int sceNetApctlInit(int stackSize, int initPriority) {
 	if (apctlThreadID > 0) {
 		__KernelStartThread(apctlThreadID, 0, 0);
 	}
-	np2RPCNThreadID = __KernelCreateThread("np2RPCNThreadHack", __KernelGetCurThreadModuleId(), np2RPCNThreadHackAddr, initPriority, stackSize, PSP_THREAD_ATTR_USER, 0, true);
-
+	SceNetUpnpThreadID = __KernelCreateThread("SceNetUpnpThread", __KernelGetCurThreadModuleId(), SceNetUpnpThreadHackAddr, initPriority, stackSize, PSP_THREAD_ATTR_USER, 0, true);
 
 	// Note: Borrowing AdhocServer for Grouping purpose
 	u32 structsz = sizeof(SceNetAdhocctlAdhocId);
@@ -1828,8 +1827,8 @@ static int sceNetUpnpInit(int size,int offset) {
 }
 
 static int sceNetUpnpStart() {
-	if (np2RPCNThreadID)
-		__KernelStartThread(np2RPCNThreadID, 0, 0);
+	if (SceNetUpnpThreadID)
+		__KernelStartThread(SceNetUpnpThreadID, 0, 0);
 
 	// FIXME: This thread runs even when you trigger break
 	// RPCS3 has only 1 connection perpetually active
@@ -1847,8 +1846,8 @@ static int sceNetUpnpStart() {
 }
 // return usually ignored
 static int sceNetUpnpStop() {
-	if (np2RPCNThreadID)
-		__KernelStopThread(np2RPCNThreadID, 0, 0);
+	if (SceNetUpnpThreadID)
+		__KernelStopThread(SceNetUpnpThreadID, 0, 0);
 
 	g_signaling.stop("Upnp Terminating");
 
@@ -1857,10 +1856,10 @@ static int sceNetUpnpStop() {
 // return usually ignored
 static int sceNetUpnpTerm() {
 	uPnPInitialized = false;
-	if (np2RPCNThreadID != 0) {
-		__KernelStopThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread stopped");
-		__KernelDeleteThread(np2RPCNThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "RPCN Thread deleted");
-		np2RPCNThreadID = 0;
+	if (SceNetUpnpThreadID != 0) {
+		__KernelStopThread(SceNetUpnpThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "Upnp Thread stopped");
+		__KernelDeleteThread(SceNetUpnpThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "Upnp Thread deleted");
+		SceNetUpnpThreadID = 0;
 	}
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
@@ -1956,7 +1955,7 @@ const HLEFunction sceNetUpnp[] = {
 	{0X540491EF, &WrapI_V<sceNetUpnpTerm>,					"sceNetUpnpTerm",                  'i', ""     },
 	{0XE24220B5, &WrapI_II<sceNetUpnpInit>,					"sceNetUpnpInit",                  'i', "ii"   },
 	// Fake System Call for UPnP / Signaling
-	{0X756E6F1C, &WrapV_V<__Np2SignalingGetRPCNResponses>,	"__Np2SignalingGetRPCNResponses",	'v', ""    },
+	{0X756E6F1C, &WrapV_V<SceNetUpnpThread>,				"SceNetUpnpThread",	'v', ""    },
 };
 
 const HLEFunction sceNetIfhandle[] = {
