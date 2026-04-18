@@ -524,53 +524,54 @@ static inline void FreeUser(u32& addr) {
 	addr = 0;
 }
 
-/* Initialization
- * @note This is triggered when any game requires the functions from NpMatching2
- */
-static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityMask, int threadStackSize)
-{
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %d, %d, %d) at %08x", __FUNCTION__, poolSize, threadPriority, cpuAffinityMask, threadStackSize, currentMIPS->pc);
-
-	if (cpuAffinityMask <= 0x37ff)
-		return hleLogError(Log::sceNp2, 0x80550ccb, "Invalid Affinity?");
-
-	int v = sceKernelCheckThreadStack();
-	if (0xfaf >= v)
-		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
-
-	if (npMatching2Inited)
-		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ALREADY_INITIALIZED);
+int _sceNetMemset(int poolSize) {
 
 	if (poolSize == 0) {
 		return hleLogError(Log::sceNp2, SCE_KERNEL_ERROR_ILLEGAL_MEMSIZE, "invalid pool size");
 	}
-	else if (threadPriority < 0x08 || threadPriority > 0x77) {
-		return hleLogError(Log::sceNp2, SCE_KERNEL_ERROR_ILLEGAL_PRIORITY, "invalid init thread priority");
-	}
 
 	npPoolAddr = AllocUser(poolSize, false, "np2pool");
-	if (npPoolAddr == 0) {
+	if (npPoolAddr == 0)
 		return hleLogError(Log::sceNp2, SCE_KERNEL_ERROR_NO_MEMORY, "unable to allocate pool");
-	}
-	/*if (np2RPCNThreadID > 0) {
-		__KernelStartThread(np2RPCNThreadID, 0, 0);
-	}*/
-	/*if (np2P2PThreadID > 0) {
-		__KernelStartThread(np2P2PThreadID, 0, 0);
-	}*/
+	
 	np_memory.Init(npPoolAddr, poolSize, false);
 
 	npMatching2MemStat.npMemSize = poolSize - 0x20;
 	npMatching2MemStat.npMaxMemSize = 0x4050; // Dummy maximum foot print
 	npMatching2MemStat.npFreeMemSize = npMatching2MemStat.npMemSize;
 
+	return 0;
+}
+
+int StartNpMatching2Thread(int threadStackSize, int threadPriority) {
+	if (threadPriority < 0x08 || threadPriority > 0x77)
+		return hleLogError(Log::sceNp2, SCE_KERNEL_ERROR_ILLEGAL_PRIORITY, "invalid init thread priority");
+
+	int ret = __KernelCreateThread("SceNpMatching2", __KernelGetCurThreadModuleId(), npMatching2ThreadHackAddr, threadPriority, threadStackSize, PSP_THREAD_ATTR_USER, 0, true);
+	if (ret < 0) {
+		_assert_msg_(npMatching2ThreadID > 0, "Invalid npMatching2ThreadID: %s (%08X)", KernelErrorToString(npMatching2ThreadID), npMatching2ThreadID);
+		return hleLogError(Log::sceNp2, ret, "Could not start Matching2 Thread");
+	}
+	npMatching2ThreadID = ret;
+
 	npMatching2Handlers.clear();
 	npMatching2Events.clear();
-	npMatching2Inited = true;
 
+	/*if (SceNetUpnpThreadID > 0) {
+		__KernelStartThread(SceNetUpnpThreadID, 0, 0);
+	}*/
+	/*if (npMatching2ThreadID > 0) {
+		__KernelStartThread(npMatching2ThreadID, 0, 0);
+	}*/
+
+	ret = __KernelStartThread(npMatching2ThreadID, 0, 0);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "Could not start Matching2 Thread");
+
+	// FIXME: This isn't technically where this goes.
 	// We can't sign into the RPCN NPAgent if the AuthAgent is still connected
-	if (npAuthServer->GetAuthType() == net::NPAgentType::RPCN && npAuthServer && npAuthServer->IsConnected())
-		npAuthServer->Disconnect();
+	if (npAuthServer->GetAuthType() == net::NPAgentType::RPCN)
+		if (npAuthServer && npAuthServer->IsConnected()) npAuthServer->Disconnect();
 
 	npServer = npAuthServer->CreateAgent();
 
@@ -580,7 +581,7 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 
 	// Just in case the NPAgent is hosted on a different physical server
 	if (!npServer->Resolve()) {
-		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_SERVER_NOT_AVAILABLE, "Unable to find Server.");
+		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_SERVER_NOT_AVAILABLE, "Unable to find Matching Server.");
 	}
 
 	std::string npid = net::RPCNAuthAgent::generate_npid();
@@ -588,13 +589,41 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE, "Could not connect.");
 	}
 
-	//int ret = sceNpSignalingInit(0x2000, threadStackSize); // returns 0x80550e02
-
 	std::string* creds = NpGetLogin();
-	int ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
+	ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
 	if (ret != SCE_NP_MATCHING2_OKAY)
 		return hleLogError(Log::sceNp2, ret);
 
+	return 0;
+}
+
+int NP2Init(int poolSize, int threadStackSize, int threadPriority) {
+	int ret = _sceNetMemset(poolSize);
+	if (ret < 0)
+		return hleLogError(Log::sceNp2, ret, "Unable to Allocate Pool");
+
+	// ret = sceKernelQueryMemoryInfo();
+	// ret = sceKernelCreateVpl("SceNet", in_a0, 0x0, in_a1, 0x0);
+	sceKernelGetCompiledSdkVersion(); // return value ignored here?
+
+	// Initializes some memory                                     
+    // UNK_088322d0 = 1;
+    // UNK_088322b4 = 2;
+    // UNK_088322b8 = 8;
+    // UNK_088322c8 = 2;
+    // UNK_088322bc = 1;
+    // UNK_088322c0 = 2;
+    // UNK_088322c4 = 1;
+    // UNK_088322cc = 1;
+	// Checks and initializes some sceSsl configurations; loading certs?
+
+	return StartNpMatching2Thread(threadStackSize, threadPriority);
+}
+/* Initialization
+ * @note This is triggered when any game requires the functions from NpMatching2
+ * @note Triggers EndContext for cleanup with any error return
+ * @note PSP sets 131072, 40, 16384, 40
+ */
 static int sceNpMatching2Init(int poolSize, int matchingPriority, int threadStackSize, int signalingPriority)
 {
 	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %d, %d, %d) at %08x", __FUNCTION__, poolSize, matchingPriority, threadStackSize, signalingPriority, currentMIPS->pc);
