@@ -144,7 +144,7 @@ void __Np2Shutdown() {
 /* Process Matching server Responses
  * @return void
  * @note Currently processing the P2P responses designated for Signaling
-*/
+ */
 void SceNpMatching2Thread()
 {
 	hleSkipDeadbeef();
@@ -642,9 +642,9 @@ static int sceNpMatching2Init(int poolSize, int matchingPriority, int threadStac
 		if (npMatching2Inited)
 			return hleLogError(Log::sceNp2, ret, "Already initialized");
 		
-	// RPCS3 has only 1 connection perpetually active
-	//  As such, it has additional functions in sceNp that
-	//  trigger signaling to start, and P2P connect requests
+		// RPCS3 has only 1 connection perpetually active
+		//  As such, it has additional functions in sceNp that
+		//  trigger signaling to start, and P2P connect requests
 		
 		if ((ret = NP2Init(poolSize, threadStackSize, matchingPriority)) < 0)
 			return hleLogError(Log::sceNp2, ret, "Unable to Initialize Matching2");
@@ -653,7 +653,7 @@ static int sceNpMatching2Init(int poolSize, int matchingPriority, int threadStac
 			return hleLogError(Log::sceNet, ret, "Could not initialize UPnP Signaling system");
 
 		npMatching2Inited = true; ret = 0;
-	return SCE_NP_MATCHING2_OKAY;
+		return SCE_NP_MATCHING2_OKAY;
 	}
 	//EndContext_08807d3c()
 	return hleLogError(Log::sceNp2, ret, "Invalid Affinity?");
@@ -771,7 +771,7 @@ static int sceNpMatching2ContextStart(int ctxId)
 	if (ctx_it->second->started.load())
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_CONTEXT_ALREADY_STARTED);
 
-	// TODO: use sceNpGetUserProfile and check server availability using sceNpService_76867C01
+		// TODO: use sceNpGetUserProfile and check server availability using sceNpService_76867C01
 	ctx_it->second->started.store(1, std::memory_order_release);
 
 	// PSN Calls this from a static URL, RPCN needs to be logged in
@@ -1727,15 +1727,17 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 }
 
 /* Incomplete - Begins a request for the target Peer's IP, Port, NAT Type, and other flags
+ * @param conn_id Ignored?
  * @param roomId The keyed room_id to search for player
- * @param roomMemberId The target players ID to provide in the system request
+ * @param peer_id The target players ID to provide in the system request 
+ * @param unknown1 Pointer to some attribute or mask?
  * @return 0; or System Error
  * @note This might request the information from the target player, rather than providing what it knows
  */
-static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 room_id_lower, u32 room_id_upper, u32 roomMemberId)
+static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 conn_id, u32 room_id_lower, u32 room_id_upper, u32 peer_id, u32 unknown1)
 {
 	SceNpMatching2RoomId room_id = (u64)room_id_lower | (u64)room_id_upper >> 32;
-	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, room_id, roomMemberId, currentMIPS->pc);
+	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, room_id, peer_id, currentMIPS->pc);
 
 	// ThreadStart
 	if (!npMatching2Inited)
@@ -1745,7 +1747,7 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 room_id_lower, u
 	if (_context == ctx.end())
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND, "Invalid Context");
 
-	auto member_exists = npServer->cache.Exists(room_id, roomMemberId);
+	auto member_exists = npServer->cache.Exists(room_id, peer_id);
 	if (!member_exists)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
 	auto connId = sigServer->get_conn_id_from_npid(npServer->cache.GetNpId(room_id, peer_id));
@@ -1870,11 +1872,11 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 self, u32 r
 	// 		WARN_LOG(Log::sceNp2, "Invalid Connection ID. Trying Member ID instead.");
 	// }
 	// if (!conn_id) {
-		if (!npServer->cache.Exists(room_id))
-			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
+	if (!npServer->cache.Exists(room_id))
+		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
 
-		if (!npServer->cache.Exists(room_id, peerMemberId))
-			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND, "Member not found");
+	if (!npServer->cache.Exists(room_id, peerMemberId))
+		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND, "Member not found");
 
 	conn_id = sigServer->get_conn_id_from_npid(npServer->cache.GetNpId(room_id, peerMemberId));
 	// }
