@@ -348,6 +348,8 @@ const HLEFunction sceNp[] = {
 	{0x7E0864DF, &WrapI_U<sceNpGetUserProfile>,			"sceNpGetUserProfile",			'i', "x"  },
 	{0xA0BE3C4B, &WrapI_UU<sceNpGetAccountRegion>,		"sceNpGetAccountRegion",		'i', "xx" },
 	{0xCDCC21D3, &WrapI_U<sceNpGetMyLanguages>,			"sceNpGetMyLanguages",			'i', "x"  },
+	{0x4B09907A, nullptr,								"sceNp_0x4B09907A",				'i', "xxx"},
+	{0x9A264EF2, nullptr,								"sceNp_0x9A264EF2",				'i', "xx"},
 };
 
 void Register_sceNp()
@@ -756,7 +758,7 @@ const HLEFunction sceNpService[] = {
 	{0X58251346, nullptr,											"sceNpRosterGetFriendListEntryCount",   'i', "" },
 	{0X788F2B5E, nullptr,											"sceNpRosterAddFriendListEntry",        'i', "" },
 	{0XA01443AA, nullptr,											"sceNpRosterGetBlockListEntryCount",    'i', "" },
-	{0X250488F9, &WrapI_U<sceNpServiceGetMemoryStat>,											"sceNpServiceGetMemoryStat",            'i', "" },
+	{0X250488F9, &WrapI_U<sceNpServiceGetMemoryStat>,				"sceNpServiceGetMemoryStat",            'i', "" },
 	{0X4B4E4E71, nullptr,											"sceNpLookupAbortTransaction ",         'i', "" },
 	// Extracted from PSP2i Debugging - FoxLovesYou
 	{0x1da3e950, &WrapI_U<sceNpManagerSigninUpdateInitStart>,		"sceNpManagerSigninUpdateInitStart",	'i', "x"   },
