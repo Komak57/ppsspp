@@ -345,6 +345,7 @@ public:
 	SOCKET GetHostSocketFromInetSocket(int sock);
 	bool Close(InetSocket *inetSocket);
 	void CloseAll();
+	void ProcessNetStack();
 
 	// For debugger
 	const InetSocket *Sockets() {

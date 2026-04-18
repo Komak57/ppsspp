@@ -1272,12 +1272,44 @@ int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	return ret;
 }
 int DccpSocket::shutdown(int how) { return ::shutdown(sock, how); }
+void DccpSocket::ProcessNetStack() {
 			// Clear the error
 #if PPSSPP_PLATFORM(WINDOWS)
 			SetLastError(0);
 #else
-			errno = 0;
+	socket_errno = 0;
 #endif
+
+	char data[2048];
+	sockaddr_in _from{};
+	socklen_t _fromlen = sizeof(_from);
+	int ret = ::recvfrom(sock, data, sizeof(data), 0, reinterpret_cast<sockaddr*>(&_from), &_fromlen);
+	if (ret <= 0) {
+		// This is normal if no packet is available (non-blocking mode)
+		return;
+	}
+	
+	// Extract VPORT_HEADER (first 3 bytes: vport + flags)
+	if (ret < VPORT_HEADER_SIZE) {
+		INFO_LOG(Log::sceNet, "RouteDCCP: Packet too small (%d bytes) from %s:%u, ignoring", 
+			ret, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port));
+		return; // Packet too small, ignore
+	}
+
+	VPORT_HEADER header;
+	memcpy(&header, data, VPORT_HEADER_SIZE);
+	
+	// Log incoming packet details (convert vport from network to host byte order for display)
+	INFO_LOG(Log::sceNet, "RouteDCCP: Received %d bytes from %s:%u -> VPort %d (flags=0x%02x, subset=%d)", 
+		ret, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port), ntohs(header.vport), header.flags, header.flags & 0xFF);
+	
+	int data_len = ret - VPORT_HEADER_SIZE;
+	const char* payload = (data_len > 0) ? (data + VPORT_HEADER_SIZE) : nullptr;
+
+	g_socketManager.DeliverPacketToVPorts(header, payload, data_len, _from);
+	
+	return;
+}
 
 // ============================================================================
 // Standard P2P Comm Channel (UDP)
