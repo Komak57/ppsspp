@@ -254,17 +254,173 @@ int InetSocket::send(const char* buf, int len, int flags) { errno = EOPNOTSUPP; 
 int InetSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::recv(char* buf, int len, int flags) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) { errno = EOPNOTSUPP; return -1; }
-		return 0;
-	default:
-		return ::recv(sock, buf, len, flags);
-	}
-}
+int InetSocket::setsockopt(int level, int optname, int optval, socklen_t optlen) {
+	const char* host_level_srt = inetSockoptLevel2str(level).c_str();
+	const std::string host_optname_str = inetSockoptName2str(optname, level);
 
-int InetSocket::recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_t* fromlen) {
-	switch (type) {
-	case PSP_NET_INET_SOCK_DCCP:
-		ERROR_LOG(Log::sceNet, "Cannot recvfrom on SOCK_DCCP [%d/%d]", port, vport);
+	// save the flag for lookup
+	uint64_t optkey = ((uint64_t)level << 32) | (uint32_t)optname;
+	auto& so_flags = so_storage[optkey];
+	const uint8_t* optval_ptr = reinterpret_cast<const uint8_t*>(&optval);
+	so_flags.assign(optval_ptr, 
+                 optval_ptr + optlen);
+
+	// Handle PSP-specific socket options
+	if (level == PSP_NET_INET_SOL_SOCKET) {
+		switch (optname) {
+		case PSP_NET_INET_SO_NBIO:// TODO: Ignoring SO_NBIO/SO_NONBLOCK flag if we always use non-bloking mode (ie. simulated blocking mode)
+			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+		case PSP_NET_INET_SO_REUSEADDR:// TODO: Ignoring SO_REUSEADDR flag to prevent disrupting multiple-instance feature
+			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+		case PSP_NET_INET_SO_REUSEPORT:// TODO: Ignoring SO_REUSEPORT flag to prevent disrupting multiple-instance feature (not sure if PSP has SO_REUSEPORT or not tho, defined as 15 on Android)
+			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+		case 0x1022:// TODO: Ignoring SO_NOSIGPIPE flag to prevent crashing PPSSPP (not sure if PSP has NOSIGPIPE or not tho, defined as 0x1022 on Darwin)
+			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+		case PSP_NET_INET_SO_DCCP_BROADCAST:
+			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+		case PSP_NET_INET_SO_DCCP_LINGER:
+			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+		case PSP_NET_INET_SO_RCVTIMEO:
+		case PSP_NET_INET_SO_SNDTIMEO:
+		{
+			timeval tval{};
+			socklen_t tvlen = sizeof(tval);
+
+			int retval = getsockopt(convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&tval, &tvlen);
+			//retval = getsockopt(inetSock->sock, convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&tval, &tvlen);
+			if (retval != SOCKET_ERROR) {
+				u64_le val = (tval.tv_sec * 1000000LL) + tval.tv_usec;
+				memcpy(&optval, &val, std::min(static_cast<socklen_t>(sizeof(val)), std::min(static_cast<socklen_t>(sizeof(optval)), optlen)));
+			}
+			return hleLogWarning(Log::sceNet, 0, "%s emulated", host_optname_str.c_str());
+		}
+		default:
+			break;  // Fall through to host socket options
+		}
+	}
+	int host_level = convertSockoptLevelPSP2Host(level);
+	int host_optname = convertSockoptNamePSP2Host(optname, level);
+
+	int ret = ::setsockopt(sock, host_level, host_optname, reinterpret_cast<char*>(&optval), optlen);
+	if (ret < 0) {
+		DEBUG_LOG(Log::sceNet, "InetSocket::setsockopt: failed for level=%d optname=%d, accepting gracefully", level, optname);
+		return 0;
+	}
+	return ret;
+}
+int InetSocket::setsockopt(int level, int optname, const char* optval, socklen_t optlen) {
+	const char* host_level_srt = inetSockoptLevel2str(level).c_str();
+	const std::string host_optname_str = inetSockoptName2str(optname, level);
+
+	// save the flag for lookup
+	uint64_t optkey = ((uint64_t)level << 32) | (uint32_t)optname;
+	auto& so_flags = so_storage[optkey];
+	const uint8_t* optval_ptr = reinterpret_cast<const uint8_t*>(&optval);
+	so_flags.assign(optval_ptr, 
+                 optval_ptr + optlen);
+
+	// Handle PSP-specific socket options
+	if (level == PSP_NET_INET_SOL_SOCKET) {
+		switch (optname) {
+		case PSP_NET_INET_SO_NBIO:
+			nonblocking = optval;
+			return hleLogWarning(Log::sceNet, 0, "%s emulated", host_optname_str.c_str());
+		case PSP_NET_INET_SO_BROADCAST:
+			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+		case PSP_NET_INET_SO_REUSEADDR:
+			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+		case PSP_NET_INET_SO_REUSEPORT:
+			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+		case PSP_NET_INET_SO_NOSIGPIPE:
+			return hleLogWarning(Log::sceNet, 0, "NOSIGPIPE should never be modified (should always be off)");
+		case PSP_NET_INET_SO_RCVBUF:
+		case PSP_NET_INET_SO_SNDBUF:
+			// TODO: For SOCK_STREAM max buffer size is 8 Mb on BSD, while max SOCK_DGRAM is 65535 minus the IP & UDP Header size
+			if (*(const u32*)optval > (u32)(8 * 1024 * 1024)) {
+				if (type == PSP_NET_INET_SOCK_PACKET) {
+#if PPSSPP_PLATFORM(WINDOWS)
+					SetLastError(ENOBUFS);
+#else
+					socket_errno = ENOBUFS;
+#endif
+				} else {
+#if PPSSPP_PLATFORM(WINDOWS)
+					SetLastError(EINVAL);
+#else
+					socket_errno = EINVAL;
+#endif
+				}
+				return hleLogError(Log::sceNet, -1, "buffer size too large?");
+			}
+			return hleLogWarning(Log::sceNet, 0, "%s emulated", host_optname_str.c_str());
+		case PSP_NET_INET_SO_ONESBCAST:
+			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+		case PSP_NET_INET_SO_RCVTIMEO:
+		case PSP_NET_INET_SO_SNDTIMEO:
+			{
+				timeval tval{};
+				tval.tv_sec = *(const u32*)optval / 1000000; // seconds
+				tval.tv_usec = (*(const u32*)optval % 1000000); // microseconds
+				
+				optval = (char*)&tval;
+				optlen = sizeof(tval);
+				break;
+			}
+		case PSP_NET_INET_SO_DCCP_BROADCAST:
+			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+		case PSP_NET_INET_SO_DCCP_LINGER:
+			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+	default:
+			break;  // Fall through to host socket options
+		}
+	}
+	int host_level = convertSockoptLevelPSP2Host(level);
+	int host_optname = convertSockoptNamePSP2Host(optname, level);
+
+	int ret = ::setsockopt(sock, host_level, host_optname, reinterpret_cast<char*>(&optval), optlen);
+	if (ret < 0) {
+		return hleLogWarning(Log::sceNet, 0, "InetSocket::setsockopt: failed for level=%d optname=%d, accepting gracefully", level, optname);
+	}
+	return ret;
+}
+int InetSocket::getsockopt(int level, int optname, char* optval, socklen_t* optlen) {
+	if (!optval || !optlen) return -1;
+
+    // 1. Check our Internal Shadow Registry first
+    uint64_t optkey = ((uint64_t)level << 32) | (uint32_t)optname;
+    
+    if (so_storage.count(optkey)) {
+        auto& cached_data = so_storage[optkey];
+        
+        // Copy only what fits in the caller's buffer to prevent overflows
+        socklen_t copy_len = std::min(*optlen, (socklen_t)cached_data.size());
+        memcpy(optval, cached_data.data(), copy_len);
+        
+        // Update the caller on how many bytes were actually written
+        *optlen = copy_len;
+        return 0;
+    }
+
+    // 2. Fallback: Ask the Host OS
+    int host_level = convertSockoptLevelPSP2Host(level);
+    int host_optname = convertSockoptNamePSP2Host(optname, level);
+
+    if (host_optname != -1) {
+        int ret = ::getsockopt(sock, host_level, host_optname, reinterpret_cast<char*>(optval), optlen);
+        
+        // If the host call succeeds, cache it for next time
+        if (ret == 0) {
+            auto& so_flags = so_storage[optkey];
+            so_flags.assign(reinterpret_cast<const uint8_t*>(optval), 
+                         reinterpret_cast<const uint8_t*>(optval) + *optlen);
+        }
+        return ret;
+    }
+
+    // 3. Last Resort: Silent Failure
+    DEBUG_LOG(Log::sceNet, "getsockopt: Option level=%d name=%d not found in cache or host", level, optname);
 		return -1;
+}
 int InetSocket::bind(SceNetInetSockaddr* name, int namelen) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::connect(SceNetInetSockaddr* name, int namelen) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::listen(int backlog) { errno = EOPNOTSUPP; return -1; }
