@@ -5,6 +5,7 @@
 #include <Core/MemMapHelpers.h>
 #include <Core/Config.h>
 #include <Core/HLE/sceRtc.h>
+#include <Core/HLE/sceKernelMemory.h>
 
 u32 RegisterIp(const flatbuffers::Vector<u8>* vec) {
 	if (vec->size() == 4)
@@ -232,7 +233,18 @@ namespace np
 		// PS3 version control for compatibility
 		//s32 sdk_ver;
 		//process_get_sdk_version(process_getpid(), sdk_ver);
-
+		if (sceKernelGetCompiledSdkVersion() >= 0x03080000) {
+			//	room_info->publicSlotNum = room->publicSlotNum();
+			//	room_info->privateSlotNum = room->privateSlotNum();
+			//	room_info->openPublicSlotNum = room->openPublicSlotNum();
+			//	room_info->openPrivateSlotNum = room->openPrivateSlotNum();
+		}
+		else {
+			/*room_info->publicSlotNum = 0;
+			room_info->privateSlotNum = 0;
+			room_info->openPublicSlotNum = 0;
+			room_info->openPrivateSlotNum = 0;*/
+		}
 		//// Structure changed in sdk 3.3.0
 		//if (sdk_ver >= 0x330000)
 		//{
