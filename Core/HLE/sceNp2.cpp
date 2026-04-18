@@ -698,7 +698,7 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 		INFO_LOG(Log::sceNp2, "%s - User ID: %d", __FUNCTION__, user_id.load());
 		INFO_LOG(Log::sceNp2, "%s - Login ID: %s", __FUNCTION__, g_Config.sInfraNpId.c_str());
 		INFO_LOG(Log::sceNp2, "%s - Use Online ID: %s", __FUNCTION__, (ctx[ctxId]->include_onlinename ? "YES" : "NO"));
-		INFO_LOG(Log::sceNp2, "%s - Online ID: %s", __FUNCTION__, online_name);
+		INFO_LOG(Log::sceNp2, "%s - Online ID: %s", __FUNCTION__, online_name.data);
 		INFO_LOG(Log::sceNp2, "%s - Use Avatar: %s", __FUNCTION__, (ctx[ctxId]->include_avatarurl ? "YES" : "NO"));
 		INFO_LOG(Log::sceNp2, "%s - Avatar URL: %s", __FUNCTION__, avatar_url.data);
 		std::string datahex;
