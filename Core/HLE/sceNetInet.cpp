@@ -100,6 +100,8 @@ int sceNetInetGetPspError() {
 	const int lastErrno = g_inetLastErrno[threadID];
 
 	uint32_t error = convertInetErrno2PSPError(lastErrno);
+	if (lastErrno == EAGAIN)
+		return hleLogVerbose(Log::sceNet, error, "returning %s converted to %08x at %08x", convertInetErrno2str(lastErrno), error, currentMIPS->pc);
 	return hleLogInfo(Log::sceNet, error, "returning %s converted to %08x at %08x", convertInetErrno2str(lastErrno), error, currentMIPS->pc);
 }
 
