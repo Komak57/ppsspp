@@ -89,9 +89,12 @@ extern SceUID npMatching2ThreadID;
 #define SCE_NP_MATCHING2_ERROR_INVALID_ATTRIBUTE_SIZE			0x80550c3e
 #define SCE_NP_MATCHING2_ERROR_CANNOT_ABORT						0x80550c3f
 #define SCE_NP_MATCHING2_ERROR_SESSION_NOT_FOUND				0x80550c40
+//																0x80550ca0 // Related to an invalid Context
+//																0x80550cba // Set when a Context's callback information is empty
+//																0x80550cbc // related to memcpy sceNetMemcpy after sceNet_0x384efe14
 //																0x80550cb7 // Returned during Np2Init when cert cannot be loaded from flash
 //																0x80550cb8 // Returned during Np2Init when CRYPTO_malloc fails
-#define SCE_NP_MATCHING2_ERROR_SESSION_NOT_FOUND				0x80550cc2
+// #define SCE_NP_MATCHING2_ERROR_SESSION_NOT_FOUND				0x80550cc2
 #define SCE_NP_MATCHING2_ERROR_CONTEXT_ALREADY_STARTED			0x80550ce1 // Triggers when creating a context where offset +0x98 == 1
 
 #define SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST						0x80550d01
@@ -833,7 +836,7 @@ struct SceNpMatching2UserInfo
 
 struct PS3NpMatching2World
 {
-	SceNpMatching2WorldId worldId; // WorldId is at offset +4
+	SceNpMatching2WorldId worldId;
 	u32 numOfLobby;
 	u32 maxNumOfTotalLobbyMember;
 	u32 curNumOfTotalLobbyMember;
@@ -843,7 +846,7 @@ struct PS3NpMatching2World
 	SceNpEntitlementId entitlementId;
 	u8 padding[3];
 };
-// Fat Princess suggests this is size 0x40
+// Fat Princess suggests this is a PSPList size 0x40
 struct SceNpMatching2World
 {
 	SceNpMatching2WorldId worldId; // WorldId is at offset +4 in a PSPList
@@ -1597,7 +1600,7 @@ union SceNpSignalingConnectionInfo
 		np_in_addr addr; // in_addr
 		np_in_port_t port; // in_port_t
 	} address;
-	u32 packet_loss;
+	u32 packet_loss; // percentage
 };
 
 // Network information structure
