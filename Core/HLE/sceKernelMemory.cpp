@@ -971,7 +971,7 @@ static int sceKernelPrintf(const char *formatString) {
 			break;
 
 		case '0':
-			if (i + 3 > n || format[i + 1] != '8' || (format[i + 2] != 'x' && format[i + 2] != 'X'))
+			if (i + 3 > n || (format[i + 1] != '2' && format[i + 1] != '4' && format[i + 1] != '8') || (format[i + 2] != 'x' && format[i + 2] != 'X'))
 				supported = false;
 			else
 			{
@@ -1022,6 +1022,9 @@ static int sceKernelPrintf(const char *formatString) {
 			break;
 		}
 	}
+
+	result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
+	result.erase(std::remove(result.begin(), result.end(), '\r'), result.end());
 
 	// Just in case there were embedded strings that had \n's.
 	if (!result.empty() && result[result.size() - 1] == '\n')
