@@ -210,6 +210,31 @@ public:
 	void clear();
 };
 static_assert(sizeof(ConnDgramSocket) == sizeof(InetSocket), "Socket size mismatch!");
+class PacketSocket : public InetSocket {
+public:
+	PacketSocket() : InetSocket() {
+		this->type = PSP_NET_INET_SOCK_PACKET;
+	}
+	int select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout) override;
+	int send(const char* buf, int len, int flags) override;
+	int recv(char* buf, int len, int flags) override;
+	int connect(SceNetInetSockaddr* name, int namelen) override;
+	int listen(int backlog) override;
+	int accept(sockaddr* addr, socklen_t* addrlen) override;
+	int bind(SceNetInetSockaddr* name, int namelen) override;
+	int shutdown(int how) override;
+
+	void ProcessNetStack() override;
+	void enqueue_packet(VirtualPacket& packet);
+	bool dequeue_packet(VirtualPacket& packet);
+	int dequeue_stream(char* buf, int len, sockaddr_in* out_addr);
+	bool has_pending_data() const;
+	void set_pending_connection(const ConnectionRequest& conn);
+	bool get_pending_connection(ConnectionRequest& conn);
+	bool has_pending_connection() const;
+};
+static_assert(sizeof(PacketSocket) == sizeof(InetSocket), "Socket size mismatch!");
+
 // VPort Bus subscription entry (replaced SwitchEntry)
 struct VPortSubscriber {
 	InetSocket* socket;
