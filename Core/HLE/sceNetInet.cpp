@@ -647,39 +647,7 @@ static int sceNetInetBind(int socket, u32 namePtr, int namelen) {
 	}
 
 	SceNetInetSockaddr* name = (SceNetInetSockaddr*)Memory::GetPointer(namePtr);
-	SockAddrIN4 saddr{};
-	// TODO: Should've created convertSockaddrPSP2Host (and Host2PSP too) function as it's being used pretty often, thus fixing a bug on it will be tedious when scattered all over the places
-	saddr.addr.sa_family = name->sa_family;
-	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
-	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
-	if (isLocalServer) {
-		getLocalIp(&saddr.in);
-	}
-	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
-	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
-	//
-	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
-	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	if (g_Config.bEnableAdhocServer && (saddr.in.sin_addr.s_addr == INADDR_ANY || saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-		// Get Local IP Address
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-		saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
-	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
-	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
-
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-	// Update socket debug metadata
-	inetSock->addr = ip2str(saddr.in.sin_addr);
-	inetSock->port = ntohs(saddr.in.sin_port);
-	// Attempt to pull vport
-	if (inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM)
-		inetSock->vport = ntohs(*(u16*)&name->sa_data[8]);
-
-	changeBlockingMode(inetSock->sock, 0);
-	int retval = inetSock->bind((struct sockaddr*)&saddr, len);
+	int retval = inetSock->bind(name, namelen);
 	//retval = bind(inetSock->sock, (struct sockaddr*)&saddr, len);
 	if (retval < 0) {
 		UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
@@ -688,12 +656,13 @@ static int sceNetInetBind(int socket, u32 namePtr, int namelen) {
 	}
 	changeBlockingMode(inetSock->sock, 1);
 	// Update binded port number if it was 0 (any port)
-	memcpy(name->sa_data, saddr.addr.sa_data, sizeof(name->sa_data));
+	// memcpy(name->sa_data, saddr.addr.sa_data, sizeof(name->sa_data));
 	// Enable Port-forwarding
 
+	// FIXME: Not all ports require port forwarding, especially in Infra P2P
 	// Check the socket type/protocol for SOCK_STREAM/SOCK_DGRAM or IPPROTO_TCP/IPPROTO_UDP instead of forwarding both protocols like in ANR2ME's original change.
-	unsigned short port = ntohs(saddr.in.sin_port);
-	UPnP_Add((inetSock->type == PSP_NET_INET_SOCK_STREAM) ? IP_PROTOCOL_TCP : IP_PROTOCOL_UDP, port, port);
+	// unsigned short port = ntohs(saddr.in.sin_port);
+	UPnP_Add((inetSock->type == PSP_NET_INET_SOCK_STREAM) ? IP_PROTOCOL_TCP : IP_PROTOCOL_UDP, inetSock->port, inetSock->port);
 
 	// Workaround: Send a dummy 0 size message to AdhocServer IP to make sure the socket actually bound to an address when binded with INADDR_ANY before using getsockname, seems to fix sending DGRAM from incorrect port issue on Android
 	/*saddr.in.sin_addr.s_addr = g_adhocServerIP.in.sin_addr.s_addr;
@@ -713,59 +682,26 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen) {
 	// Still using warn log here so it stands out in the log
 
 	SceNetInetSockaddr* dst = (SceNetInetSockaddr*)Memory::GetPointer(sockAddrPtr);
-	SockAddrIN4 saddr{};
-	int dstlen = std::min(sockAddrLen > 0 ? sockAddrLen : 0, static_cast<int>(sizeof(saddr)));
-	saddr.addr.sa_family = dst->sa_family;
-	memcpy(saddr.addr.sa_data, dst->sa_data, sizeof(dst->sa_data));
 
-	sockaddr_in* paddr = reinterpret_cast<sockaddr_in*>(&saddr);
-	// If PSP tried to connect to 0.0.0.0, replace with loopback
-	if (paddr->sin_addr.s_addr == htonl(INADDR_ANY)) {
-		WARN_LOG(Log::sceNet, "Socket attempting to connect to INADDR_ANY! (socket #%d)", socket);
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		//paddr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-		//paddr->sin_addr.s_addr = htonl((ULONG)0xC0A802FE); // hard coded to dev machine
-		paddr->sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
+	int retval = -1;
+	// Get current PSP thread
+	inetSock->threadID = sceKernelGetThreadId();
 
-	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
-	if (!inetSock->nonblocking) {
-		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%d)", socket);
-		changeBlockingMode(inetSock->sock, 0);
-		// Workaround to avoid blocking for indefinitely
-		setSockTimeout(inetSock->sock, SO_SNDTIMEO, 5000000);
-		setSockTimeout(inetSock->sock, SO_RCVTIMEO, 5000000);
-	}
-	INFO_LOG(Log::sceNet, "Connect(%s, %i)", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-	int retval = inetSock->connect((struct sockaddr*)&saddr, dstlen);
-	//retval = connect(inetSock->sock, (struct sockaddr*)&saddr, dstlen);
+	// Run the actual sendRequest on the host asynchronously
+	inetSock->thread = std::thread([retval, inetSock, dst, sockAddrLen]() mutable {
+		retval = inetSock->connect(dst, sockAddrLen);
+
+		// Store the result and resume the PSP thread
+		__KernelResumeThreadFromWait(inetSock->threadID, retval);
+		inetSock->threadID = -1;
+	});
+	// Put the PSP thread into a wait state until sendRequest finishes
+	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpSendRequest");
+
 	int hostErrno = socket_errno;
-	if (!inetSock->nonblocking) {
-		// Change the blocking mode back to nonblocking
-		changeBlockingMode(inetSock->sock, 1);
-	}
-	if (retval < 0) {
-		if (!inetSock->nonblocking) {
-			// Since we're temporarily forcing blocking-mode, we'll need to change errno from ETIMEDOUT to EAGAIN
-			if (hostErrno == ETIMEDOUT)
-				hostErrno = EAGAIN;
-		}
-		int pspErrno = UpdateErrnoFromHost(__KernelGetCurThread(), hostErrno, __FUNCTION__);
-		if (connectInProgress(hostErrno))
-			retval = hleLogDebug(Log::sceNet, retval, "errno = %s Address = %s, Port = %d", convertInetErrno2str(pspErrno), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-		else
-			retval = hleLogError(Log::sceNet, retval, "errno = %s Address = %s, Port = %d", convertInetErrno2str(pspErrno), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-		
-		return retval;
-	}
-
-	if (saddr.in.sin_port == 53) {
-		WARN_LOG(Log::G3D, "Game connected to DNS server %s (port 53), likely for doing its own DNS lookups!", ip2str(saddr.in.sin_addr, false).c_str());
-		// We should sniff these messages...
-	}
-
-	return hleLogInfo(Log::sceNet, retval, "Connect: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	if (retval < 0)
+		return hleLogError(Log::sceNet, retval);
+	return hleLogInfo(Log::sceNet, retval);
 }
 
 static int sceNetInetListen(int socket, int backlog) {
@@ -806,13 +742,13 @@ static int sceNetInetAccept(int socket, u32 addrPtr, u32 addrLenPtr) {
 		}
 	}
 
-	int newSocketId;
-	InetSocket *newInetSocket = g_socketManager.AdoptSocket(&newSocketId, newHostSocket, inetSock);
-	if (!newInetSocket) {
-		// Ran out of space. Shouldn't really happen.
-		UpdateErrnoFromHost(__KernelGetCurThread(), ENOMEM, __FUNCTION__);
-		return hleLogError(Log::sceNet, -1, "Out of socket IDs");;
-	}
+	// int newSocketId;
+	// InetSocket *newInetSocket = g_socketManager.AdoptSocket(&newSocketId, newHostSocket, inetSock);
+	// if (!newInetSocket) {
+	// 	// Ran out of space. Shouldn't really happen.
+	// 	UpdateErrnoFromHost(__KernelGetCurThread(), ENOMEM, __FUNCTION__);
+	// 	return hleLogError(Log::sceNet, -1, "Out of socket IDs");;
+	// }
 
 	if (src) {
 		src->sa_family = saddr.addr.sa_family;
@@ -821,7 +757,7 @@ static int sceNetInetAccept(int socket, u32 addrPtr, u32 addrLenPtr) {
 	}
 	DEBUG_LOG(Log::sceNet, "Accept: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 
-	return hleLogInfo(Log::sceNet, newSocketId);
+	return hleLogInfo(Log::sceNet, newHostSocket);
 }
 
 static int sceNetInetShutdown(int socket, int how) {
@@ -890,12 +826,13 @@ static int sceNetInetSocketAbort(int socket) {
 	return hleLogInfo(Log::sceNet, retVal);
 }
 
-static int sceNetInetClose(int socket) {
+int sceNetInetClose(int socket) {
 	InetSocket *inetSock;
 	if (!g_socketManager.GetInetSocket(socket, &inetSock)) {
 		return hleLogError(Log::sceNet, ERROR_INET_EBADF, "Bad socket #%d", socket);
 	}
-
+	if (inetSock->thread.joinable())
+		inetSock->thread.join();
 	g_socketManager.Close(inetSock);
 	return hleLogInfo(Log::sceNet, 0);
 }
