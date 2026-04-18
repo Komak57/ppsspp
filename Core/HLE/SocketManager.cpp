@@ -697,7 +697,29 @@ void InetSocket::ProcessNetStack() { /* Do nothing */ }
 int InetSocket::closesocket() {
 	return ::closesocket(sock);
 }
+
+// ============================================================================
+// 
+// ============================================================================
+int StreamSocket::send(const char* buf, int len, int flags) { return ::send(sock, buf, len, flags); }
 int StreamSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+// ============================================================================
+// 
+// ============================================================================
+int DgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	flgs = convertMSGFlagsPSP2Host(flgs);
+	SockAddrIN4 saddr{};
+	int dstlen = std::min(tolen > 0 ? tolen : 0, static_cast<int>(sizeof(saddr)));
+	if (to) {
+		saddr.addr.sa_family = to->sa_family;
+		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
+	}
+
+	int retval = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+
+	return hleLogDebug(Log::sceNet, retval, "SendTo: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+}
 int DgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
 	SockAddrIN4 saddr{};
 	if (fromlen)
@@ -715,6 +737,20 @@ int DgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* fro
 	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int RawSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+int RawSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	flgs = convertMSGFlagsPSP2Host(flgs);
+	SockAddrIN4 saddr{};
+	int dstlen = std::min(tolen > 0 ? tolen : 0, static_cast<int>(sizeof(saddr)));
+	if (to) {
+		saddr.addr.sa_family = to->sa_family;
+		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
+	}
+
+	int retval = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+
+	return hleLogDebug(Log::sceNet, retval, "SendTo: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+}
 int RawSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
 	SockAddrIN4 saddr{};
 	if (fromlen)
@@ -731,7 +767,25 @@ int RawSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from,
 	
 	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
+// ============================================================================
+// 
+// ============================================================================
+int RdmSocket::send(const char* buf, int len, int flags) { return ::send(sock, buf, len, flags); }
 int RdmSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+int RdmSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	flgs = convertMSGFlagsPSP2Host(flgs);
+	SockAddrIN4 saddr{};
+	int dstlen = std::min(tolen > 0 ? tolen : 0, static_cast<int>(sizeof(saddr)));
+	if (to) {
+		saddr.addr.sa_family = to->sa_family;
+		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
+	}
+
+	int retval = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+
+	return hleLogDebug(Log::sceNet, retval, "SendTo: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+}
 int RdmSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
 	SockAddrIN4 saddr{};
 	if (fromlen)
@@ -748,7 +802,25 @@ int RdmSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from,
 	
 	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
+// ============================================================================
+// 
+// ============================================================================
+int SeqpacketSocket::send(const char* buf, int len, int flags) { return ::send(sock, buf, len, flags); }
 int SeqpacketSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+int SeqpacketSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	flgs = convertMSGFlagsPSP2Host(flgs);
+	SockAddrIN4 saddr{};
+	int dstlen = std::min(tolen > 0 ? tolen : 0, static_cast<int>(sizeof(saddr)));
+	if (to) {
+		saddr.addr.sa_family = to->sa_family;
+		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
+	}
+
+	int retval = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+
+	return hleLogDebug(Log::sceNet, retval, "SendTo: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+}
 int SeqpacketSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
 	SockAddrIN4 saddr{};
 	if (fromlen)
@@ -765,7 +837,22 @@ int SeqpacketSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr*
 	
 	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
+int DccpSocket::send(const char* buf, int len, int flags) { return ::send(sock, buf, len, flags); }
 int DccpSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+int DccpSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	flgs = convertMSGFlagsPSP2Host(flgs);
+	SockAddrIN4 saddr{};
+	int dstlen = std::min(tolen > 0 ? tolen : 0, static_cast<int>(sizeof(saddr)));
+	if (to) {
+		saddr.addr.sa_family = to->sa_family;
+		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
+	}
+
+	int retval = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+
+	return hleLogDebug(Log::sceNet, retval, "SendTo: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+}
 int DccpSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) { 
 	SockAddrIN4 saddr{};
 	if (fromlen)

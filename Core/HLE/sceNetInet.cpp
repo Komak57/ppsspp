@@ -965,62 +965,24 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 	}
 
 	SceNetInetSockaddr* dst = (SceNetInetSockaddr*)Memory::GetCharPointer(toPtr);
-	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
-	flgs = convertMSGFlagsPSP2Host(flgs);
-	SockAddrIN4 saddr{};
-	int dstlen = std::min(tolen > 0 ? tolen : 0, static_cast<int>(sizeof(saddr)));
-	if (dst) {
-		saddr.addr.sa_family = dst->sa_family;
-		memcpy(saddr.addr.sa_data, dst->sa_data, sizeof(dst->sa_data));
-	}
+
 
 	std::string datahex;
 	DataToHexString(0, 0, Memory::GetPointer(bufferPtr), len, &datahex);
 	VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", len, datahex.c_str());
 
-	int retval;
-	bool isBcast = isBroadcastIP(saddr.in.sin_addr.s_addr);
-	// Broadcast/Multicast, use real broadcast/multicast if there is no one in peerlist
-	if (isBcast && getActivePeerCount() > 0) {
-		// Acquire Peer Lock
-		peerlock.lock();
-		SceNetAdhocctlPeerInfo* peer = friends;
-		for (; peer != NULL; peer = peer->next) {
-			// Does Skipping sending to timed out friends could cause desync when players moving group at the time MP game started?
-			if (peer->last_recv == 0)
-				continue;
+	// Send as-is first. P2P traffic will normally send using our own member_id for the vport
+	int retval = inetSock->sendto((char*)Memory::GetPointer(bufferPtr), len, flags, dst, tolen);
 
-			saddr.in.sin_addr.s_addr = peer->ip_addr;
-			retval = inetSock->sendto((char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, dstlen);
-			//retval = sendto(inetSock->sock, (char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, dstlen);
-			if (retval < 0) {
-				DEBUG_LOG(Log::sceNet, "SendTo(BC): Socket error %d", socket_errno);
-			} else {
-				DEBUG_LOG(Log::sceNet, "SendTo(BC): Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-			}
+	// Now shotgun-send using all peer id's
+	if (sigServer) {
+		std::vector<SceNpMatching2RoomMemberId> peers = sigServer->GetPeerList();
+		for (auto peer : peers) {
+			// Alter the vport to point at the peer
+			uint16_t* vport_ptr = (uint16_t*)&dst->sa_data[6];
+			*vport_ptr = htons(peer);
+			inetSock->sendto((char*)Memory::GetPointer(bufferPtr), len, flags, dst, tolen);
 		}
-		// Free Peer Lock
-		peerlock.unlock();
-		retval = len;
-	}
-	// Unicast or real broadcast/multicast
-	else {
-		// FIXME: On non-Windows(including PSP too?) broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
-		//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
-		/*if (isBcast) {
-			// TODO: Replace Broadcast with Multicast to be more consistent across platform
-			// Replace Limited Broadcast(255.255.255.255) with Direct Broadcast(ie. 192.168.0.255) for accurate targetting when there are multiple interfaces, to avoid receiving it's own broadcasted data through IP 169.254.x.x on Windows (which is not recognized as it's own IP by the game)
-			// Get Local IP Address
-			sockaddr_in sockAddr{};
-			getLocalIp(&sockAddr);
-			// Change the last number to 255 to indicate a common broadcast address (the accurate way should be: ip | (~subnetmask))
-			((u8*)&sockAddr.sin_addr.s_addr)[3] = 255;
-			saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-			DEBUG_LOG(Log::sceNet, "SendTo(BC): Address Replacement = %s", ip2str(saddr.in.sin_addr).c_str());
-		}*/
-
-		retval = inetSock->sendto((char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, dstlen);
-		//retval = sendto(inetSock->sock, (char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, dstlen);
 	}
 	if (retval < 0) {
 		if (UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__) == ERROR_INET_EAGAIN) {
@@ -1030,7 +992,7 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 		}
 	}
 
-	return hleLogDebug(Log::sceNet, retval, "SendTo: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	return retval;
 }
 
 // Similar to POSIX's sendmsg or Winsock2's WSASendMsg? Are their packets compatible one another?
