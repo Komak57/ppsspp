@@ -341,8 +341,8 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMem
 
 	u32 args[8];
 	args[0] = 0;		// ContextID
-	args[1] = room_id & 0xFFFFFFFF;			// room_id.lower
-	args[2] = (room_id >> 32) & 0xFFFFFFFF;	// room_id.upper
+	args[1] = (u32)(room_id & 0xFFFFFFFF);	// room_id.lower
+	args[2] = (u32)(room_id >> 32);			// room_id.upper
 	args[3] = 0;		// param_4? Ingored by PSP2i
 	args[4] = memberId;	// MemberID
 	args[5] = requestEvent;// Event [SCE_NP_MATCHING2_ROOM_MSG_EVENT_ChatMessage / SCE_NP_MATCHING2_ROOM_MSG_EVENT_Message]
@@ -351,8 +351,8 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMem
 
 	// Consume if the event handler has no callback
 	if (handler == nullptr) {
-		NOTICE_LOG(Log::sceNp2, "notifyRoomMessageHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %d, memberId: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_MSG_EVENT).c_str(),
-			args[0], args[1], args[2], args[6], 0);
+		NOTICE_LOG(Log::sceNp2, "notifyRoomMessageHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %llu, param_4: %d, memberId: %d, requestEvent: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_MSG_EVENT).c_str(),
+			args[0], ((u64)args[1] | (u64)args[2] >> 32), args[3], args[4], args[5], args[6], args[7]);
 		return 0;
 	}
 	args[0] = handler->ctx_id;
@@ -360,8 +360,8 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMem
 
 	npMatching2Events.push_back(NpMatching2Args(*handler, 8, args, SCE_NP_MATCHING2_ROOM_MSG_EVENT));
 
-	NOTICE_LOG(Log::sceNp2, "notifyRoomMessageHandler - %s_%08x(ctxId: %d, roomId: %d, memberId: %d, param_4: %d, param_5: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_MSG_EVENT).c_str(), handler->cb.ptr,
-		args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+	NOTICE_LOG(Log::sceNp2, "notifyRoomMessageHandler - %s_%08x(ctxId: %d, roomId: %llu, param_4: %d, memberId: %d, requestEvent: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_MSG_EVENT).c_str(), handler->cb.ptr,
+		args[0], ((u64)args[1] | (u64)args[2] >> 32), args[3], args[4], args[5], args[6], args[7]);
 	return 0;
 }
 
@@ -384,8 +384,8 @@ int notifyRoomEventHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 
 	u32 args[7];
 	args[0] = 0;	// ContextID
-	args[1] = room_id & 0xFFFFFFFF;			// room_id.lower
-	args[2] = (room_id >> 32) & 0xFFFFFFFF;	// room_id.upper
+	args[1] = (u32)(room_id & 0xFFFFFFFF);	// room_id.lower
+	args[2] = (u32)(room_id >> 32);			// room_id.upper
 	args[3] = memberId;	// MemberID?
 	args[4] = event;	// Event
 	args[5] = dataPtr;	// ErrorCode
@@ -393,8 +393,8 @@ int notifyRoomEventHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 
 	// Consume if the event handler has no callback
 	if (handler == nullptr) {
-		NOTICE_LOG(Log::sceNp2, "notifyRoomEventHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %d, memberId: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_EVENT).c_str(),
-			args[0], args[1], args[3], args[4], 0);
+		NOTICE_LOG(Log::sceNp2, "notifyRoomEventHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %llu, memberId: %d, event: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_EVENT).c_str(),
+			args[0], ((u64)args[1] | (u64)args[2] >> 32), args[3], args[4], args[5], 0);
 		return 0;
 	}
 
@@ -403,8 +403,8 @@ int notifyRoomEventHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 
 	npMatching2Events.push_back(NpMatching2Args(*handler, 7, args, SCE_NP_MATCHING2_ROOM_EVENT));
 
-	NOTICE_LOG(Log::sceNp2, "notifyRoomEventHandler - %s_%08x(ctxId: %d, roomId: %d, param_3: %d, memberId: %d, event: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_EVENT).c_str(), handler->cb.ptr,
-		args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+	NOTICE_LOG(Log::sceNp2, "notifyRoomEventHandler - %s_%08x(ctxId: %d, roomId: %llu, memberId: %d, event: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_EVENT).c_str(), handler->cb.ptr,
+		args[0], ((u64)args[1] | (u64)args[2] >> 32), args[3], args[4], args[5], args[6]);
 	return 0;
 }
 
@@ -429,9 +429,9 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 	// FIXME: Need confirmation on arguments for conn_id, room_id
 	u32 args[8];
 	args[0] = 0;		// ContextID
-	args[1] = room_id & 0xFFFFFFFF;			// room_id.lower
-	args[2] = (room_id >> 32) & 0xFFFFFFFF;	// room_id.upper
-	args[3] = conn_state;	// unknown? Ace Combat uses this as arg4 of sceNpMatching2SignalingGetPeerNetInfo
+	args[1] = (u32)(room_id & 0xFFFFFFFF);	// room_id.lower
+	args[2] = (u32)(room_id >> 32);			// room_id.upper
+	args[3] = conn_state;	// unknown? connId? Ace Combat uses this as arg4 of sceNpMatching2SignalingGetPeerNetInfo
 	args[4] = memberId;		// roomMemberId
 	args[5] = event;		// EventCode
 	args[6] = errorCode;	// ErrorCode
@@ -439,18 +439,21 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 
 	// Consume if the event handler has no callback
 	if (handler == nullptr) {
-		NOTICE_LOG(Log::sceNp2, "notifySignalingHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %d, connId: %d, connState: %d, memberId: %d, event: 0x%04x, errorCode: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(),
-			args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+		NOTICE_LOG(Log::sceNp2, "notifySignalingHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %llu, connId?: %d, memberId: %d, event: 0x%04x, errorCode: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(),
+			args[0], ((u64)args[1] | (u64)args[2] >> 32), args[3], args[4], args[5], args[6], args[7]);
 		return 0;
 	}
 
 	args[0] = handler->ctx_id;
 	args[7] = handler->cb_arg.ptr;
 
+	NOTICE_LOG(Log::sceNp2, "notifySignalingHandler - %s_%08x(ctxId: %d, roomId: %llu, connState: %d, memberId: %d, event: 0x%04x, errorCode: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(), handler->cb.ptr,
+		args[0], ((u64)args[1] | (u64)args[2] >> 32), args[3], args[4], args[5], args[6], args[7]);
+
 	npMatching2Events.push_back(NpMatching2Args(*handler, 8, args, SCE_NP_MATCHING2_SIGNALING_EVENT));
 
-	NOTICE_LOG(Log::sceNp2, "notifySignalingHandler - %s_%08x(ctxId: %d, roomId: %d, connId: %d, connState: %d, memberId: %d, event: 0x%04x, errorCode: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(), handler->cb.ptr,
-		args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+	// if (Memory::IsValidAddress(handler->cb.ptr))
+		// hleEnqueueCall(handler->cb.ptr, 8, args);
 
 	return 0;
 }
