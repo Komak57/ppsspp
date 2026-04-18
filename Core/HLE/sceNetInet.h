@@ -7,6 +7,7 @@
 #include "Common/Net/SocketCompat.h"
 
 #include <memory>
+#include "Core/HLE/sceNet.h"
 #include "Core/HLE/NetInetTypes.h"
 
 // Using constants instead of numbers for readability reason, since PSP_THREAD_ATTR_KERNEL/USER is located in sceKernelThread.cpp instead of sceKernelThread.h
@@ -31,8 +32,9 @@ void Register_sceNetInet();
 
 void __NetInetShutdown();
 
+int UpdateErrnoFromHost(int threadID, int hostErrno, const char *func);
 int NetApctl_GetState();
-
-int sceNetApctlConnect(int connIndex);
 int sceNetInetPoll(u32 fdsPtr, u32 nfds, int timeout);
-int sceNetApctlDisconnect();
+int sceNetInetSocket(int domain, int type, int protocol);
+int sceNetInetGetPspError();
+int sceNetInetClose(int socket);

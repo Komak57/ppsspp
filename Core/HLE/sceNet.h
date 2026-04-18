@@ -169,3 +169,7 @@ struct InfraDNSConfig {
 };
 
 const InfraDNSConfig &GetInfraDNSConfig();
+int sceNetFreeThreadinfo(SceUID thid);
+
+int sceNetApctlConnect(int connIndex);
+int sceNetApctlDisconnect();
