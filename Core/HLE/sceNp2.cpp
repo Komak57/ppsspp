@@ -1713,15 +1713,15 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
 
 	// FIXME: Use npServer->local_addr_sig
-	netInfo->localAddr = g_signaling.GetLocalAddr();	// Local  IP
-	netInfo->mappedAddr = g_signaling.GetSigAddr();		// Public IP
+	netInfo->localAddr = sigServer->GetLocalAddr();	// Local  IP
+	netInfo->mappedAddr = sigServer->GetSigAddr();		// Public IP
 	// Pure speculation
 	//si->conn_status
-	netInfo->natStatus = g_signaling.nat_type.load();
+	netInfo->natStatus = sigServer->nat_type.load();
 	// Unverified extra data?
 	netInfo->UPnPStatus = (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
 	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-	netInfo->port = htons(g_signaling.GetSigPort());
+	netInfo->port = htons(sigServer->GetSigPort());
 
 	return SCE_NP_MATCHING2_OKAY;
 }
