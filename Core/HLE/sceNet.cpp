@@ -632,9 +632,9 @@ void SceNetUpnpThread()
 		}
 	}
 	if (delayus > 0) {
-	//ScheduleUpnpState(1, newState, delayus, "Upnp Wait State");
+		//ScheduleUpnpState(1, newState, delayus, "Upnp Wait State");
 		// VERBOSE_LOG(Log::sceNp2, "Upnp Waiting %d ms", (delayus / 1000));
-	//int r = hleDelayResult(0, "Upnp Wait State", delayus);
+		//int r = hleDelayResult(0, "Upnp Wait State", delayus);
 		// hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
 		// sceKernelDelayThread(delayus);
 	}
@@ -1092,7 +1092,7 @@ static int sceNetInit(u32 poolSize, u32 calloutPri, u32 calloutStack, u32 netini
 
 // Free(delete) thread info / data. 
 // Normal usage: sceKernelDeleteThread followed by sceNetFreeThreadInfo with the same threadID as argument
-static int sceNetFreeThreadinfo(SceUID thid) {
+int sceNetFreeThreadinfo(SceUID thid) {
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 

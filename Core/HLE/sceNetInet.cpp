@@ -36,7 +36,7 @@ static std::map<int, int> g_inetLastErrno;
 
 // Functions should only call this on error, NOT on success.
 // Returns a PSP errno (ERROR_INET_*), in case it's needed.
-static int UpdateErrnoFromHost(int threadID, int hostErrno, const char *func) {
+int UpdateErrnoFromHost(int threadID, int hostErrno, const char *func) {
 	int newErrno = convertInetErrnoHost2PSP(hostErrno);
 
 	// This will do the right thing if not already present - insert a zero value.
@@ -95,7 +95,7 @@ static int sceNetInetGetErrno() {
 	}
 }
 
-static int sceNetInetGetPspError() {
+int sceNetInetGetPspError() {
 	int threadID = __KernelGetCurThread();
 	const int lastErrno = g_inetLastErrno[threadID];
 
@@ -465,7 +465,7 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags) {
 	return hleLogInfo(Log::sceNet, retval);
 }
 
-static int sceNetInetSocket(int domain, int type, int protocol) {
+int sceNetInetSocket(int domain, int type, int protocol) {
 	INFO_LOG(Log::sceNet, "sceNetInetSocket(%d, %d, %d) at %08x - Socket: Domain = %s, Type = %s, Protocol = %s",
 		domain, type, protocol, currentMIPS->pc, inetSocketDomain2str(domain).c_str(), inetSocketType2str(type).c_str(), inetSocketProto2str(protocol).c_str());
 
