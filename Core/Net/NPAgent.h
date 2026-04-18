@@ -11,6 +11,7 @@
 #include "Common/Net/Resolve.h"
 #include "Common/Net/SocketCompat.h"
 
+#include <Core/Config.h>
 #include "Core/HLE/NpTypes.h"
 #include "Core/HLE/Np2Types.h"
 #include "Core/np2_structs_generated.h"
@@ -473,7 +474,7 @@ namespace net {
 		0
 	};
 
-	enum class NPAgentType { NONE, PSN, RPCN };
+	enum class NPAgentType : int { RPCN = 0, FAKE_PSN = 1, PSN = 2 };
 
 	struct NPServerInfo {
 		NPAgentType nptype;
@@ -551,7 +552,7 @@ namespace net {
 	public:
 		// Holds all servers provided by GetServers
 		// <index, NPServerInfo>
-		std::vector<NPServerInfo> servers;
+		std::vector<NPServerInfo> servers; // Perhaps use a PSPPointer<PSPList<SceNpMatching2ServerInfo>>
 		// Pointer to the selected server
 		NPServerInfo* selected = nullptr;
 
@@ -679,7 +680,7 @@ namespace net {
 		virtual std::unique_ptr<NPAgent> CreateAgent();
 		virtual bool Connect(int maxTries = 1, double timeout = 20.0f, bool* cancelConnect = nullptr);
 		virtual void Disconnect();
-		virtual NPAgentType GetAuthType() const { return NPAgentType::NONE; }
+		virtual NPAgentType GetAuthType() const { return (NPAgentType)g_Config.proInfraServerType; }
 
 		bool Send(Packet* packet, double timeout, bool* cancelled);
 		int Recv(Packet* packet, bool* cancelled);

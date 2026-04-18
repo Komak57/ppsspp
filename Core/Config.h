@@ -503,6 +503,10 @@ public:
 	bool bAllowSpeedControlWhileConnected;  // Useful in some games but not recommended.
 
 	// PSN revival servers (actual code in development by FoxLovesYou from Discord)
+	int proInfraServerType;
+	std::string proInfraServer;
+	std::vector<std::string> proInfraServerList;
+
 	std::string sInfraNpId;
 	std::string sInfraPassword;
 	std::string sInfraToken;  // This will be set by a login mechanism

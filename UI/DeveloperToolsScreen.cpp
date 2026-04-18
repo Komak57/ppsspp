@@ -457,7 +457,31 @@ void DeveloperToolsScreen::CreateNetworkTab(UI::LinearLayout *list) {
 
 	// Note: Intensionally didn't use translation here, until we move these to the
 	// regular settings after the code is merged.
-	list->Add(new ItemHeader("RPCN Login"));
+	bool canUsePSN = false;
+
+	list->Add(new ItemHeader(di->T("Infra Server")));
+	static const char *serverTypes[] = { "RPCN", "Fake PSN", "PSN" };
+	PopupMultiChoice *server_type = list->Add(new PopupMultiChoice(&g_Config.proInfraServerType, di->T("Server Type"), serverTypes, 0, ARRAY_SIZE(serverTypes), I18NCat::SYSTEM, screenManager()));
+	if (!canUsePSN) {
+		server_type->HideChoice(2);
+	}
+
+	ChoiceWithValueDisplay *server_addr = list->Add(new ChoiceWithValueDisplay(&g_Config.proInfraServer, di->T("Change proInfraServer Address", "Change proInfraServer Address (localhost = multiple instance)"), I18NCat::NONE));
+	server_addr->OnClick.Add([=](UI::EventParams &) {
+		screenManager()->push(new HostnameSelectScreen(&g_Config.proInfraServer, &g_Config.proInfraServerList, di->T("proInfraServer Address:")));
+	});
+
+	if (g_Config.proInfraServerType != 0)
+		server_addr->SetEnabled(false);
+
+	server_type->OnChoice.Add([=](UI::EventParams &e) {
+		if (g_Config.proInfraServerType == 0)
+			server_addr->SetEnabled(true);
+		else
+			server_addr->SetEnabled(false);
+	});
+
+	list->Add(new ItemHeader("Login Credentials"));
 	PopupTextInputChoice *usernameChoice = list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sInfraNpId, di->T("Username"), "", 64, screenManager()));
 	usernameChoice->SetRestriction(StringRestriction::AlphaNumUnderscore, 3);
 	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sInfraPassword, di->T("Password"), "", 64, screenManager()))->SetPasswordDisplay();
