@@ -193,6 +193,89 @@ struct InetSocket {
 
 	virtual void ProcessNetStack();
 };
+class StreamSocket : public InetSocket {
+public:
+	StreamSocket() : InetSocket() {
+		this->tcp_state = TCPState::Disconnected;
+		this->type = PSP_NET_INET_SOCK_STREAM;
+	}
+	int send(const char* buf, int len, int flags) override;
+	int recv(char* buf, int len, int flags) override;
+	int connect(SceNetInetSockaddr* name, int namelen) override;
+	int listen(int backlog) override;
+	int accept(sockaddr* addr, socklen_t* addrlen) override;
+	int bind(SceNetInetSockaddr* name, int namelen) override;
+	int shutdown(int how) override;
+};
+static_assert(sizeof(StreamSocket) == sizeof(InetSocket), "Socket size mismatch!");
+class DgramSocket : public InetSocket {
+public:
+	DgramSocket() : InetSocket() {
+		this->type = PSP_NET_INET_SOCK_DGRAM;
+	}
+	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
+	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
+	int bind(SceNetInetSockaddr* name, int namelen) override;
+	int shutdown(int how) override;
+};
+static_assert(sizeof(DgramSocket) == sizeof(InetSocket), "Socket size mismatch!");
+class RawSocket : public InetSocket {
+public:
+	RawSocket() : InetSocket() {
+		this->type = PSP_NET_INET_SOCK_RAW;
+	}
+	int send(const char* buf, int len, int flags) override;
+	int recv(char* buf, int len, int flags) override;
+	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
+	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
+	int bind(SceNetInetSockaddr* name, int namelen) override;
+};
+static_assert(sizeof(RawSocket) == sizeof(InetSocket), "Socket size mismatch!");
+class RdmSocket : public InetSocket {
+public:
+	RdmSocket() : InetSocket() {
+		this->type = PSP_NET_INET_SOCK_RDM;
+	}
+	int send(const char* buf, int len, int flags) override;
+	int recv(char* buf, int len, int flags) override;
+	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
+	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
+	int bind(SceNetInetSockaddr* name, int namelen) override;
+};
+static_assert(sizeof(RdmSocket) == sizeof(InetSocket), "Socket size mismatch!");
+class SeqpacketSocket : public InetSocket {
+public:
+	SeqpacketSocket() : InetSocket() {
+		this->type = PSP_NET_INET_SOCK_SEQPACKET;
+	}
+	int send(const char* buf, int len, int flags) override;
+	int recv(char* buf, int len, int flags) override;
+	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
+	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
+	int connect(SceNetInetSockaddr* name, int namelen) override;
+	int listen(int backlog) override;
+	int accept(sockaddr* addr, socklen_t* addrlen) override;
+	int bind(SceNetInetSockaddr* name, int namelen) override;
+	int shutdown(int how) override;
+};
+static_assert(sizeof(SeqpacketSocket) == sizeof(InetSocket), "Socket size mismatch!");
+class DccpSocket : public InetSocket {
+public:
+	DccpSocket() : InetSocket() {
+		this->type = PSP_NET_INET_SOCK_DCCP;
+	}
+	int send(const char* buf, int len, int flags) override;
+	int recv(char* buf, int len, int flags) override;
+	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
+	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
+	int connect(SceNetInetSockaddr* name, int namelen) override;
+	int listen(int backlog) override;
+	int accept(sockaddr* addr, socklen_t* addrlen) override;
+	int bind(SceNetInetSockaddr* name, int namelen) override;
+	int shutdown(int how) override;
+	void ProcessNetStack() override;
+};
+static_assert(sizeof(DccpSocket) == sizeof(InetSocket), "Socket size mismatch!");
 class ConnDgramSocket : public InetSocket {
 public:
 	ConnDgramSocket() : InetSocket() {

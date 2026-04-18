@@ -925,27 +925,18 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 
 	SceNetInetSockaddr* src = (SceNetInetSockaddr*)Memory::GetCharPointer(fromPtr);
 	socklen_t* srclen = (socklen_t*)Memory::GetCharPointer(fromlenPtr);
-	SockAddrIN4 saddr{};
-	if (srclen)
-		*srclen = std::min((*srclen) > 0 ? *srclen : 0, static_cast<socklen_t>(sizeof(saddr)));
-	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
-	flgs = convertMSGFlagsPSP2Host(flgs);
-	int retval = inetSock->recvfrom((char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, srclen);
+
+
+	int retval = inetSock->recvfrom((char*)Memory::GetPointer(bufferPtr), len, flags, src, srclen);
 	//retval = recvfrom(inetSock->sock, (char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, srclen);
 	if (retval < 0) {
 		if (UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__) == ERROR_INET_EAGAIN) {
 			retval = hleLogDebug(Log::sceNet, retval, "EAGAIN");
 		} else {
-			retval = hleLogError(Log::sceNet, retval);
+			retval = hleLogError(Log::sceNet, retval, "Error: %d", socket_errno);
 		}
 		// Using hleDelayResult as a workaround for games that need blocking-socket to be implemented (ie. Coded Arms Contagion)
 		return hleDelayResult(retval, "workaround until blocking-socket", 500);
-	}
-
-	if (src) {
-		src->sa_family = saddr.addr.sa_family;
-		memcpy(src->sa_data, saddr.addr.sa_data, sizeof(src->sa_data));
-		src->sa_len = srclen ? *srclen : 0;
 	}
 
 	// Discard if it came from APIPA address (ie. self-received broadcasts from 169.254.x.x when broadcasting to INADDR_BROADCAST on Windows) on Untold Legends The Warrior's Code / Twisted Metal Head On
@@ -962,8 +953,9 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 	VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", retval, datahex.c_str());
 
 	// Using hleDelayResult as a workaround for games that need blocking-socket to be implemented (ie. Coded Arms Contagion)
-	return hleDelayResult(hleLogDebug(Log::sceNet, retval,
-		"RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port)), "workaround until blocking-socket", 500);
+	// return hleDelayResult(hleLogDebug(Log::sceNet, retval,
+	// 	"RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port)), "workaround until blocking-socket", 500);
+	return retval;
 }
 
 static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 toPtr, int tolen) {

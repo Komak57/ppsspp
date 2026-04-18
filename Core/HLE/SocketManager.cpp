@@ -154,6 +154,24 @@ InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketS
 		inetSock->~InetSocket();
 		
 		switch (type) {
+		case PSP_NET_INET_SOCK_STREAM:
+			inetSock = new (inetSock) StreamSocket();
+			break;
+		case PSP_NET_INET_SOCK_DGRAM:
+			inetSock = new (inetSock) DgramSocket();
+			break;
+		case PSP_NET_INET_SOCK_RAW:
+			inetSock = new (inetSock) RawSocket();
+			break;
+		case PSP_NET_INET_SOCK_RDM:
+			inetSock = new (inetSock) RdmSocket();
+			break;
+		case PSP_NET_INET_SOCK_SEQPACKET:
+			inetSock = new (inetSock) SeqpacketSocket();
+			break;
+		case PSP_NET_INET_SOCK_DCCP:
+			inetSock = new (inetSock) DccpSocket();
+			break;
 		case PSP_NET_INET_SOCK_CONN_DGRAM:
 			inetSock = new (inetSock) ConnDgramSocket();
 			break;
@@ -213,6 +231,25 @@ InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const Inet
 			// Determine the type from derive and reconstruct with the correct derived class
 			// This ensures the vtable matches the socket type
 			inetSock->~InetSocket();
+			switch (derive->type) {
+			case PSP_NET_INET_SOCK_STREAM:
+				inetSock = new (inetSock) StreamSocket();
+				break;
+			case PSP_NET_INET_SOCK_DGRAM:
+				inetSock = new (inetSock) DgramSocket();
+				break;
+			case PSP_NET_INET_SOCK_RAW:
+				inetSock = new (inetSock) RawSocket();
+				break;
+			case PSP_NET_INET_SOCK_RDM:
+				inetSock = new (inetSock) RdmSocket();
+				break;
+			case PSP_NET_INET_SOCK_SEQPACKET:
+				inetSock = new (inetSock) SeqpacketSocket();
+				break;
+			case PSP_NET_INET_SOCK_DCCP:
+				inetSock = new (inetSock) DccpSocket();
+				break;
 			case PSP_NET_INET_SOCK_CONN_DGRAM:
 				inetSock = new (inetSock) ConnDgramSocket();
 				break;
@@ -659,6 +696,91 @@ void InetSocket::ProcessNetStack() { /* Do nothing */ }
 // Close a virtual socket
 int InetSocket::closesocket() {
 	return ::closesocket(sock);
+}
+int StreamSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+int DgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	SockAddrIN4 saddr{};
+	if (fromlen)
+		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	flgs = convertMSGFlagsPSP2Host(flgs);
+	int ret = ::recvfrom(sock, buf, len, flags, (struct sockaddr*)&saddr.addr, fromlen);
+
+	if (from) {
+		from->sa_family = saddr.addr.sa_family;
+		memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
+		from->sa_len = fromlen ? *fromlen : 0;
+	}
+	
+	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+}
+int RawSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+int RawSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	SockAddrIN4 saddr{};
+	if (fromlen)
+		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	flgs = convertMSGFlagsPSP2Host(flgs);
+	int ret = ::recvfrom(sock, buf, len, flags, (struct sockaddr*)&saddr.addr, fromlen);
+
+	if (from) {
+		from->sa_family = saddr.addr.sa_family;
+		memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
+		from->sa_len = fromlen ? *fromlen : 0;
+	}
+	
+	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+}
+int RdmSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+int RdmSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	SockAddrIN4 saddr{};
+	if (fromlen)
+		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	flgs = convertMSGFlagsPSP2Host(flgs);
+	int ret = ::recvfrom(sock, buf, len, flags, (struct sockaddr*)&saddr.addr, fromlen);
+
+	if (from) {
+		from->sa_family = saddr.addr.sa_family;
+		memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
+		from->sa_len = fromlen ? *fromlen : 0;
+	}
+	
+	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+}
+int SeqpacketSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+int SeqpacketSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	SockAddrIN4 saddr{};
+	if (fromlen)
+		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	flgs = convertMSGFlagsPSP2Host(flgs);
+	int ret = ::recvfrom(sock, buf, len, flags, (struct sockaddr*)&saddr.addr, fromlen);
+
+	if (from) {
+		from->sa_family = saddr.addr.sa_family;
+		memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
+		from->sa_len = fromlen ? *fromlen : 0;
+	}
+	
+	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+}
+int DccpSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+int DccpSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) { 
+	SockAddrIN4 saddr{};
+	if (fromlen)
+		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	flgs = convertMSGFlagsPSP2Host(flgs);
+	int ret = ::recvfrom(sock, buf, len, flags, (struct sockaddr*)&saddr.addr, fromlen);
+
+	if (from) {
+		from->sa_family = saddr.addr.sa_family;
+		memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
+		from->sa_len = fromlen ? *fromlen : 0;
+	}
+	
+	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 			// Clear the error
 #if PPSSPP_PLATFORM(WINDOWS)
