@@ -1826,7 +1826,7 @@ static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqI
 }
 
 /* Provides known Connection Status, IP, and Port
- * @param connId Optionally replaces RoomId / MemberId
+ * @param self Optionally replaces MemberId; Completely ignored by this function in the current firmware
  * @param roomId Keyed Room where the member is a part of
  * @param memberId Source member to check connection; PSP reports World_ID here
  * @param peerMemberId Target member to retrieve information about
@@ -1862,14 +1862,14 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 self, u32 r
 	Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connInfoPtr);
 
 	std::optional<u32> conn_id = std::nullopt;
-	if (connId != 0) {
+	// if (connId != 0) {
 	// 	auto si = sigServer->get_sig_infos(connId);
-		if (si != std::nullopt)
-			conn_id = connId;
-		else
-			WARN_LOG(Log::sceNp2, "Invalid Connection ID. Trying Member ID instead.");
-	}
-	if (!conn_id) {
+	// 	if (si != std::nullopt)
+	// 		conn_id = connId;
+	// 	else
+	// 		WARN_LOG(Log::sceNp2, "Invalid Connection ID. Trying Member ID instead.");
+	// }
+	// if (!conn_id) {
 		if (!npServer->cache.Exists(room_id))
 			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_NOT_FOUND, "Room not found");
 
@@ -1877,6 +1877,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 self, u32 r
 			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND, "Member not found");
 
 	conn_id = sigServer->get_conn_id_from_npid(npServer->cache.GetNpId(room_id, peerMemberId));
+	// }
 	if (!conn_id) {
 		return hleLogError(Log::sceNp2, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Connection not found");
 	}
