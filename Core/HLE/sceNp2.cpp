@@ -64,15 +64,16 @@ std::atomic<u16> match2_event_cnt = 1;
 std::unique_ptr<net::NPAgent> npServer = nullptr;
 
 // P2P Signaling
-int np2P2PState = NP_SIGNIN_STATUS_NONE;
-static int np2P2PStateEvent = -1;
-static int actionAfterP2PMipsCall;
+
+u32 npMatching2ThreadHackAddr = 0;
+u32_le npMatching2ThreadCode[3];
+SceUID npMatching2ThreadID = 0;
 
 /*
 * This function is added as a placeholder for FakePSN Savestates to
 *   handle P2P communications, fake or otherwise
 */
-static void __P2PState(u64 userdata, int cyclesLate) {
+static void __npMatching2ThreadState(u64 userdata, int cyclesLate) {
 	SceUID threadID = userdata >> 32;
 	int uid = (int)(userdata & 0xFFFFFFFF);
 	int event = uid - 1;
@@ -88,18 +89,18 @@ static void __P2PState(u64 userdata, int cyclesLate) {
 
 	u32 waitVal = __KernelGetWaitValue(threadID, error);
 	if (error == 0) {
-		np2P2PState = waitVal;
+		npMatching2ThreadState = waitVal;
 	}
 
 	__KernelResumeThreadFromWait(threadID, result);
-	WARN_LOG(Log::sceNp2, "Returning (WaitID: %d, error: %08x) Result (%08x) of sceNp2 - Event: %d, State: %d", waitID, error, (int)result, event, np2P2PState);
+	WARN_LOG(Log::sceNp2, "Returning (WaitID: %d, error: %08x) Result (%08x) of sceNp2 - Event: %d, State: %d", waitID, error, (int)result, event, npMatching2ThreadState);
 }
 
 int ScheduleP2PState(int event, int newState, int usec, const char* reason) {
 	int uid = event + 1;
 
 	u64 param = ((u64)__KernelGetCurThread()) << 32 | uid;
-	CoreTiming::ScheduleEvent(usToCycles(usec), np2P2PStateEvent, param);
+	CoreTiming::ScheduleEvent(usToCycles(usec), npMatching2ThreadStateEvent, param);
 	__KernelWaitCurThread(WAITTYPE_NET, uid, newState, 0, false, reason);
 
 	return 0;
@@ -112,10 +113,10 @@ int ScheduleP2PState(int event, int newState, int usec, const char* reason) {
 void __Np2Init() {
 	npMatching2Inited = false;
 
-	np2P2PState = NP_SIGNIN_STATUS_NONE;
-	np2P2PStateEvent = CoreTiming::RegisterEvent("__P2PState", __P2PState);
+	npMatching2ThreadState = NP_SIGNIN_STATUS_NONE;
+	npMatching2ThreadStateEvent = CoreTiming::RegisterEvent("__npMatching2ThreadState", __npMatching2ThreadState);
 
-	np2P2PThreadHackAddr = __CreateHLELoop(np2P2PThreadCode, "sceNpMatching2", "__Np2SignalingGetP2PResponses", "np2P2PThreadHack");
+	npMatching2ThreadHackAddr = __CreateHLELoop(npMatching2ThreadCode, "sceNpMatching2", "SceNpMatching2", "npMatching2ThreadHack");
 	//np2SignalingThreadHackAddr = __CreateHLELoop(np2SignalingThreadCode, "sceNpMatching2", "__NpMatching2GetResponses", "np2SignalingThreadHack");
 
 	//actionAfterMatching2MipsCall = __KernelRegisterActionType(AfterMatching2MipsCall::Create);
@@ -129,30 +130,26 @@ void __Np2Shutdown() {
 	}
 
 	// Stop fake PSP Thread
-	if (np2P2PThreadID != 0) {
-		__KernelStopThread(np2P2PThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread stopped");
+	if (npMatching2ThreadID > 0) {
+		__KernelStopThread(npMatching2ThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread stopped");
 	}
 }
 
 
-/*
-*   Signaling is made of 3 parts. This is Part 2, which handles the Internal P2P connections.
-*   Part 3 is System P2P communications, and is officially on SCE_SIGN_PORT 3658.
-*   TODO: Intercept communications on port 3658, handle as RPCN or InternalP2P, and
-*       pass all unmatched packets to System.
-*   Reason: We're forced to man-handle the port numbers. This can require the use of
-*       Port Forwarding to function as intended, but so far has not.
+/* Process Matching server Responses
+ * @return void
+ * @note Currently processing the P2P responses designated for Signaling
 */
-void __Np2SignalingGetP2PResponses()
+void SceNpMatching2Thread()
 {
 	hleSkipDeadbeef();
 
 	int newState = SCE_NP_MATCHING2_STATE_NONE;
-	int delayus = 1000000;
-	if (npMatching2Inited) {
+	int delayus = 1000000; // RE says this is a 100ms poll while connected, a 1s poll otherwise
+	// FIXME: This needs to process Matching responses, not Signaling packets
+	if (npMatching2Inited && npServer && npServer->IsConnected()) {
 		newState = SCE_NP_MATCHING2_STATE_INIT;
-		//g_signaling.get_wait_time_ns();
-		delayus = g_signaling.HandleP2PResponses().count();
+		delayus = 100000;
 	}
 
 	//ScheduleP2PState(3, newState, delayus, "P2P Wait State");
@@ -2350,7 +2347,7 @@ const HLEFunction sceNpMatching2[] = {
 	{0xFBF494C0, &WrapI_IUUU<sceNpMatching2GetRoomMemberDataExternalList>,	"sceNpMatching2GetRoomMemberDataExternalList",	'i', "ixxx"   },
 	{0x97529ECC, &WrapI_IUUU<sceNpMatching2KickoutRoomMember>,				"sceNpMatching2KickoutRoomMember",				'i', "ixxx"   },
 	// Fake function for PPSSPP's use.
-	{0X756E6F28, &WrapV_V<__Np2SignalingGetP2PResponses>,					"__Np2SignalingGetP2PResponses",					'v', ""		  },
+	{0X756E6F28, &WrapV_V<SceNpMatching2Thread>,							"SceNpMatching2",					'v', ""		  },
 };
 
 void Register_sceNpMatching2()

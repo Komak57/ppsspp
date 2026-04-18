@@ -21,6 +21,9 @@
 #include <Common/Serialize/SerializeFuncs.h>
 #include <variant>
 
+extern u32 npMatching2ThreadHackAddr;
+extern u32_le npMatching2ThreadCode[3];
+extern SceUID npMatching2ThreadID;
 
 #pragma pack(push,1)
 #define SCE_NP_MATCHING2_STATE_NONE			0

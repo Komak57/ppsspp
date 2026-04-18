@@ -22,10 +22,6 @@ const u16 SCE_SIGN_PORT = 3658;
 // Port used to communicate with P2P Signaling; aka vport
 const u16 SCE_INTERNAL_PORT = 0;
 
-extern u32 np2P2PThreadHackAddr;
-extern u32_le np2P2PThreadCode[3];
-extern SceUID np2P2PThreadID;
-
 
 // Based on https://playstationdev.wiki/psvitadevwiki/index.php?title=Error_Codes
 #define	SCE_NP_ERROR_ALREADY_INITIALIZED				0x80550001

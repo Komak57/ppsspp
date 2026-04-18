@@ -611,27 +611,19 @@ void Register_sceNpAuth()
 static int sceNpServiceTerm()
 {
 	DEBUG_LOG(Log::sceNet, "%s(%08x) at %08x", __FUNCTION__, currentMIPS->pc);
-	if (np2P2PThreadID != 0) {
-		__KernelStopThread(np2P2PThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread stopped");
-		__KernelDeleteThread(np2P2PThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread deleted");
-		np2P2PThreadID = 0;
-	}
+
 	if (npAuthServer && npAuthServer->IsConnected())
 		npAuthServer->Disconnect();
 	// No parameters
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 
-u32 np2P2PThreadHackAddr = 0;
-u32_le np2P2PThreadCode[3];
-SceUID np2P2PThreadID = 0;
-
 void np2ValidateLoopMemory() {
 	// Allocate Memory if it wasn't valid/allocated after loaded from old SaveState
-	if (!np2P2PThreadHackAddr || (np2P2PThreadHackAddr && strcmp("np2P2PThreadHack", kernelMemory.GetBlockTag(np2P2PThreadHackAddr)) != 0)) {
-		u32 blockSize = sizeof(np2P2PThreadCode);
-		np2P2PThreadHackAddr = kernelMemory.Alloc(blockSize, false, "np2P2PThreadHack");
-		if (np2P2PThreadHackAddr) Memory::Memcpy(np2P2PThreadHackAddr, np2P2PThreadCode, sizeof(np2P2PThreadCode));
+	if (!npMatching2ThreadHackAddr || (npMatching2ThreadHackAddr && strcmp("SceNpMatching2", kernelMemory.GetBlockTag(npMatching2ThreadHackAddr)) != 0)) {
+		u32 blockSize = sizeof(npMatching2ThreadCode);
+		npMatching2ThreadHackAddr = kernelMemory.Alloc(blockSize, false, "SceNpMatching2");
+		if (npMatching2ThreadHackAddr) Memory::Memcpy(npMatching2ThreadHackAddr, npMatching2ThreadCode, sizeof(npMatching2ThreadCode));
 	}
 }
 
@@ -643,8 +635,7 @@ static int sceNpServiceInit(u32 poolSize, u32 stackSize, u32 threadPrio)
 	// Create APctl fake-Thread
 	np2ValidateLoopMemory();
 
-	//np2RPCNThreadID = __KernelCreateThread("np2RPCNThreadHack", __KernelGetCurThreadModuleId(), np2RPCNThreadHackAddr, threadPrio, stackSize, PSP_THREAD_ATTR_USER, 0, true);
-	np2P2PThreadID = __KernelCreateThread("np2P2PThreadHack", __KernelGetCurThreadModuleId(), np2P2PThreadHackAddr, threadPrio, stackSize, PSP_THREAD_ATTR_USER, 0, true);
+	//SceNetUpnpThreadID = __KernelCreateThread("SceNetUpnpThread", __KernelGetCurThreadModuleId(), SceNetUpnpThreadHackAddr, threadPrio, stackSize, PSP_THREAD_ATTR_USER, 0, true);
 
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
