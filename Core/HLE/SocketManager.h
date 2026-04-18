@@ -90,6 +90,7 @@ struct ConnectionRequest {
 	u16 peer_port;                 // Remote virtual port
 };
 
+#pragma pack(push, 8)
 // Internal socket state tracking
 struct InetSocket {
 	SOCKET sock;  // native socket
@@ -193,6 +194,12 @@ struct InetSocket {
 
 	virtual void ProcessNetStack();
 };
+#pragma pack(pop)
+
+// Derived socket type implementations - each supports only the operations for its type
+// NOTE: These classes must NOT add member variables to maintain placement new compatibility
+
+#pragma pack(push, 8)
 class StreamSocket : public InetSocket {
 public:
 	StreamSocket() : InetSocket() {
@@ -207,7 +214,9 @@ public:
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
 };
+#pragma pack(pop)
 static_assert(sizeof(StreamSocket) == sizeof(InetSocket), "Socket size mismatch!");
+#pragma pack(push, 8)
 class DgramSocket : public InetSocket {
 public:
 	DgramSocket() : InetSocket() {
@@ -218,7 +227,9 @@ public:
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
 };
+#pragma pack(pop)
 static_assert(sizeof(DgramSocket) == sizeof(InetSocket), "Socket size mismatch!");
+#pragma pack(push, 8)
 class RawSocket : public InetSocket {
 public:
 	RawSocket() : InetSocket() {
@@ -230,7 +241,9 @@ public:
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 };
+#pragma pack(pop)
 static_assert(sizeof(RawSocket) == sizeof(InetSocket), "Socket size mismatch!");
+#pragma pack(push, 8)
 class RdmSocket : public InetSocket {
 public:
 	RdmSocket() : InetSocket() {
@@ -242,7 +255,9 @@ public:
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 };
+#pragma pack(pop)
 static_assert(sizeof(RdmSocket) == sizeof(InetSocket), "Socket size mismatch!");
+#pragma pack(push, 8)
 class SeqpacketSocket : public InetSocket {
 public:
 	SeqpacketSocket() : InetSocket() {
@@ -258,7 +273,9 @@ public:
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
 };
+#pragma pack(pop)
 static_assert(sizeof(SeqpacketSocket) == sizeof(InetSocket), "Socket size mismatch!");
+#pragma pack(push, 8)
 class DccpSocket : public InetSocket {
 public:
 	DccpSocket() : InetSocket() {
@@ -275,7 +292,9 @@ public:
 	int shutdown(int how) override;
 	void ProcessNetStack() override;
 };
+#pragma pack(pop)
 static_assert(sizeof(DccpSocket) == sizeof(InetSocket), "Socket size mismatch!");
+#pragma pack(push, 8)
 class ConnDgramSocket : public InetSocket {
 public:
 	ConnDgramSocket() : InetSocket() {
@@ -292,7 +311,9 @@ public:
 	bool has_pending_data() const;
 	void clear();
 };
+#pragma pack(pop)
 static_assert(sizeof(ConnDgramSocket) == sizeof(InetSocket), "Socket size mismatch!");
+#pragma pack(push, 8)
 class PacketSocket : public InetSocket {
 public:
 	PacketSocket() : InetSocket() {
@@ -316,6 +337,7 @@ public:
 	bool get_pending_connection(ConnectionRequest& conn);
 	bool has_pending_connection() const;
 };
+#pragma pack(pop)
 static_assert(sizeof(PacketSocket) == sizeof(InetSocket), "Socket size mismatch!");
 
 // VPort Bus subscription entry (replaced SwitchEntry)
@@ -352,9 +374,9 @@ public:
 		return inetSockets_;
 	}
 	InetSocket* GetDCCP() { return dccp_sock; }
-
 private:
 	int NextUnusedSocket();
+	
 	// We use this array from MIN_VALID_INET_SOCKET and forward. It's probably not a good idea to return 0 as a socket.
 	InetSocket inetSockets_[VALID_INET_SOCKET_COUNT];
 	// SOCK_DCCP should only have 1 instance, ever. Each CONN_DGRAM should point to this for it's sock
