@@ -57,7 +57,9 @@
 #include "Core/HLE/NetAdhocCommon.h"
 
 #include "Core/MIPS/MIPSCodeUtils.h" // for macros to implement __CreateHLELoop
-#include <Core/Net/SignalingHandler.h>
+#include "Core/Net/SIGAgent.h"
+#include "Core/HLE/sceNpSignaling.h"
+// #include <Core/Net/SignalingHandler.h>
 
 // These are all public. Should probably add accessors around these.
 bool g_netInited;
@@ -89,7 +91,6 @@ static std::recursive_mutex apctlEvtMtx;
 static std::deque<ApctlArgs> apctlEvents;
 
 // UPnP / P2P Signaling
-signaling_handler g_signaling;
 bool uPnPInitialized = false;
 
 u32 SceNetUpnpThreadHackAddr = 0;
@@ -615,22 +616,29 @@ int ScheduleUpnpState(int event, int newState, int usec, const char* reason) {
 */
 void SceNetUpnpThread()
 {
+	// WARN_LOG(Log::Signaling, "UNTESTED %s()", __FUNCTION__);
 	hleSkipDeadbeef();
 	int newState = SCE_NP_MATCHING2_STATE_NONE;
-	int delayus = 10000000;
+	int delayus = 1000000;
 	if (uPnPInitialized) {
 		newState = SCE_NP_MATCHING2_STATE_INIT;
-		delayus = 5000000;
+		delayus = 500000;
+		g_socketManager.ProcessNetStack();
 		if (STUN_addr) {
 			newState = SCE_NP_MATCHING2_STATE_CONNECTED;
-			delayus = g_signaling.HandleUPnPResponses().count();
+			delayus = 0;
+			// FIXME: Needs to maintain the NAT port with sigServer Ping/Pong
+			sigServer->UpnpThreadTick();
 		}
 	}
+	if (delayus > 0) {
 	//ScheduleUpnpState(1, newState, delayus, "Upnp Wait State");
-	VERBOSE_LOG(Log::sceNp2, "Upnp Waiting %d ms", (delayus / 1000));
+		// VERBOSE_LOG(Log::sceNp2, "Upnp Waiting %d ms", (delayus / 1000));
 	//int r = hleDelayResult(0, "Upnp Wait State", delayus);
-	//hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
-	sceKernelDelayThread(delayus);
+		// hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
+		// sceKernelDelayThread(delayus);
+	}
+	hleCall(ThreadManForUser, int, sceKernelDelayThread, 25000);
 	hleNoLogVoid();
 }
 
@@ -1815,41 +1823,58 @@ static int sceNetApctl_lib2_C20A144C(int connIndex, u32 ps3MacAddressPtr) {
 // Fat Princess		sceNetUpnpInit(0x2000, 0x64)
 // Patapon3			sceNetUpnpInit(0x3800, 0x32)
 static int sceNetUpnpInit(int size,int offset) {
-	ERROR_LOG(Log::sceNet, "UNIMPL %s(0x%04x, 0x%02x)", __FUNCTION__, size, offset);
-	uPnPInitialized = true;
+	WARN_LOG(Log::sceNet, "UNIMPL %s(0x%04x, 0x%02x)", __FUNCTION__, size, offset);
 	// Create the Master Socket for transmissions
 	// NOTE: Fat Princess creates a SOCK_CONN_DGRAM after sceNetUpnpStart. If this socket isn't prepared before then, it has some issues.
 	// NOTE: Patapon3 doesn't call sceNetUpnpStart, so I guess this goes in Init instead?
-	WARN_LOG(Log::sceNet, "Creating new socket for port %d", SCE_SIGN_PORT);
-	g_signaling.create_socket(SCE_SIGN_PORT, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_DCCP, PSP_NET_INET_IPPROTO_UNSPEC);
+	int ret = SCE_NP_SIGNALING_ERROR_ALREADY_INITIALIZED;
+	if (uPnPInitialized)
+		return hleLogError(Log::sceNet, ret, "Already Initialized");
 
-	return hleLogError(Log::sceNet, 0, "UNIMPL");
+	WARN_LOG(Log::sceNet, "Creating DCCP Socket");
+	// NOTE: This socket does not register as a virtual socket, but carries all virtual traffic
+	CreateSignalingSocket(SCE_SIGN_PORT, 0, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_DCCP, PSP_NET_INET_IPPROTO_UNSPEC);
+
+	if (g_Config.bEnableUPnP)
+		bool ok = g_PortManager.Add("UDP", SCE_SIGN_PORT, SCE_SIGN_PORT);
+
+	sigServer = InitSigAgent((net::NPAgentType)g_Config.proInfraServerType);
+	if (!sigServer || !sigServer->IsIntialized())
+		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND, "UPnP Signaling agent could not be started");
+
+	uPnPInitialized = true;
+	return hleLogWarning(Log::sceNet, 0, "Untested");
 }
 
 static int sceNetUpnpStart() {
-	if (SceNetUpnpThreadID)
-		__KernelStartThread(SceNetUpnpThreadID, 0, 0);
+	WARN_LOG(Log::sceNet, "UNIMPL %s()", __FUNCTION__);
+	int ret = SCE_NP_SIGNALING_ERROR_NOT_INITIALIZED;
+
+	if (!SceNetUpnpThreadID)
+		return hleLogError(Log::sceNet, ret, "Upnp thread not initialized");
+	
+	if ((ret = sceKernelStartThread(SceNetUpnpThreadID, 0, 0)) < 0)
+		return hleLogError(Log::sceNet, ret, "Unable to start Upnp thread");
 
 	// FIXME: This thread runs even when you trigger break
 	// RPCS3 has only 1 connection perpetually active
 	//  As such, it has additional functions in sceNp that
 	//  trigger signaling to start, and P2P connect requests
-	if (!g_signaling.create_connection())
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Signaling Loop could not be started");
 
-	/*if (g_signaling.create_connection())
-		g_signaling.set_self_sig_info(*NpGetNpId());
+	/*if (sigServer->create_connection())
+		sigServer->set_self_sig_info(*NpGetNpId());
 	else
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Signaling Loop could not be started");*/
 
-	return hleLogError(Log::sceNet, 0, "UNIMPL");
+	return hleLogWarning(Log::sceNet, ret, "Untested");
 }
 // return usually ignored
 static int sceNetUpnpStop() {
 	if (SceNetUpnpThreadID)
 		__KernelStopThread(SceNetUpnpThreadID, 0, 0);
 
-	g_signaling.stop("Upnp Terminating");
+	// sigServer->stop("Upnp Terminating");
+	sceNpSignalingStop();
 
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
@@ -1869,11 +1894,11 @@ static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
 	auto uPnPInfo = PSPPointer<SceNpUpnpInfo>::Create(unknownPtr);
 
 	// Load immediate value. If we wait for a valid value, it locks up the thread
-	uPnPInfo->public_address = g_signaling.addr_sig.load();
+	uPnPInfo->public_address = sigServer->addr_sig.load();
 	// This value seems to reference sceNetUpnpStart, not g_PortManager
 	uPnPInfo->upnp_status = (STUN_addr ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
 	uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
-	uPnPInfo->nat_status = g_signaling.nat_type.load();
+	uPnPInfo->nat_status = sigServer->nat_type.load();
 
 
 	if (uPnPInfo->public_address != 0) {

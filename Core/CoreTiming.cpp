@@ -33,7 +33,8 @@
 #include "Core/HLE/sceKernelThread.h"
 #include "Core/MIPS/MIPS.h"
 #include "Net/NPAgent.h"
-#include "Net/SignalingHandler.h"
+#include "Core/Net/SIGAgent.h"
+// #include "Net/SignalingHandler.h"
 
 static const int initialHz = 222000000;
 int CPU_HZ = 222000000;
@@ -121,7 +122,7 @@ u64 GetNetworkTimeUs() {
 		if (npAuthServer && npAuthServer->IsConnected())
 			currentNetworkTimeUs = npAuthServer->GetNetworkTime(); // - Latency is not available until npServer starts
 		else if (npServer && npServer->IsConnected())
-			currentNetworkTimeUs = npServer->GetNetworkTime() + g_signaling.GetLatencyUs();
+			currentNetworkTimeUs = npServer->GetNetworkTime() + sigServer->GetLatencyUs();
 
 		if (currentNetworkTimeUs != 0) {
 			lastNetworkUpdate = currentTicks; // Reset Update Counter
@@ -144,7 +145,7 @@ void InitializeNetworkTime() {
 	if (npAuthServer && npAuthServer->IsConnected())
 		currentNetworkTimeUs = npAuthServer->GetNetworkTime(); // - Latency is not available until npServer starts
 	else if (npServer && npServer->IsConnected())
-		currentNetworkTimeUs = npServer->GetNetworkTime() + g_signaling.GetLatencyUs();
+		currentNetworkTimeUs = npServer->GetNetworkTime() + sigServer->GetLatencyUs();
 
 	if (currentNetworkTimeUs != 0) {
 		lastNetworkTimeUs = currentNetworkTimeUs;

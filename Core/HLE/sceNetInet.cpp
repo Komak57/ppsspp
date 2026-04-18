@@ -23,6 +23,8 @@
 #include "Core/MemMapHelpers.h"
 #include "Core/Util/PortManager.h"
 #include "Core/Instance.h"
+#include "Core/HLE/Np2Types.h"
+#include "Core/Net/SIGAgent.h"
 #ifdef __MINGW32__
 #include <mswsock.h>
 #endif

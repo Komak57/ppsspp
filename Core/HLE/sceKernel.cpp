@@ -71,6 +71,7 @@
 #include "sceNet.h"
 #include "sceNp.h"
 #include "sceNp2.h"
+#include "sceNpSignaling.h"
 #include "sceNetAdhoc.h"
 #include "sceNetAdhocMatching.h"
 #include "scePower.h"
@@ -166,6 +167,7 @@ void __KernelInit()
 	__HttpInit();
 	__NpInit();
 	__Np2Init();
+	__NpSignalingInit();
 	__RegInit();
 	
 	SaveState::Init();  // Must be after IO, as it may create a directory
@@ -227,6 +229,7 @@ void __KernelShutdown()
 	__KernelModuleShutdown();
 	__NpShutdown();
 	__Np2Shutdown();
+	__NpSignalingShutdown();
 
 	CoreTiming::ClearPendingEvents();
 	CoreTiming::UnregisterAllEvents();
@@ -1651,5 +1654,18 @@ u32_le __CreateHLELoop(u32_le* loopAddr, const char* sceFuncName, const char* hl
 	u32 blockSize = sizeof(u32_le) * 3;
 	u32_le threadHackAddress = kernelMemory.Alloc(blockSize, false, tagName); // blockSize will be rounded to 256 granularity
 	Memory::Memcpy(threadHackAddress, loopAddr, sizeof(u32_le) * 3); // This area will be cleared again after loading an old savestate :(
+	return threadHackAddress;
+}
+
+u32_le __CreateHLEHook(u32_le* hookAddr, const char* sceFuncName, const char* hleFuncName, const char* tagName) {
+	if (hookAddr == NULL || sceFuncName == NULL || hleFuncName == NULL)
+		return 0;
+
+	hookAddr[0] = MIPS_MAKE_SYSCALL(sceFuncName, hleFuncName);
+	hookAddr[1] = MIPS_MAKE_SYSCALL("ThreadManForUser", "sceKernelExitThread"); // Force Exit
+	hookAddr[2] = MIPS_MAKE_NOP();
+	u32 blockSize = sizeof(u32_le) * 3;
+	u32_le threadHackAddress = kernelMemory.Alloc(blockSize, false, tagName); // blockSize will be rounded to 256 granularity
+	Memory::Memcpy(threadHackAddress, hookAddr, sizeof(u32_le) * 3); // This area will be cleared again after loading an old savestate :(
 	return threadHackAddress;
 }

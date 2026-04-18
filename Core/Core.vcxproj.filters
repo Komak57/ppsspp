@@ -1438,6 +1438,9 @@
     <ClCompile Include="Debugger\Np2Printer.cpp">
       <Filter>Debugger</Filter>
     </ClCompile>
+    <ClCompile Include="HLE\sceNpSignaling.cpp">
+      <Filter>HLE\Libraries</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ELF\ElfReader.h">
@@ -2332,6 +2335,9 @@
     <ClInclude Include="HLE\NetInetTypes.h" />
     <ClInclude Include="Debugger\Np2Printer.h">
       <Filter>Debugger</Filter>
+    </ClInclude>
+    <ClInclude Include="HLE\sceNpSignaling.h">
+      <Filter>HLE\Libraries</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

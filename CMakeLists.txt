@@ -2384,6 +2384,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/sceNp.h
 	Core/HLE/sceNp2.cpp
 	Core/HLE/sceNp2.h
+	Core/HLE/sceNpSignaling.h
+	Core/HLE/sceNpSignaling.cpp
 	Core/HLE/scePauth.cpp
 	Core/HLE/scePauth.h
 	Core/HW/SimpleAudioDec.cpp
@@ -2495,12 +2497,16 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/Util/RecentFiles.h
 	Core/Net/NPAgent.h
 	Core/Net/NPAgent.cpp
+	Core/Net/SIGAgent.h
+	Core/Net/SIGAgent.cpp
 	Core/Net/NPAgents/RPCNAgent.cpp
 	Core/Net/NPAgents/RPCNAuthAgent.cpp
 	Core/Net/NPAgents/PSNAgent.cpp
 	Core/Net/NPAgents/PSNAuthAgent.cpp
-	Core/Net/SignalingHandler.h
-	Core/Net/SignalingHandler.cpp
+	Core/Net/SIGAgents/PSNSigAgent.cpp
+	Core/Net/SIGAgents/RPCNSigAgent.cpp
+	Core/Net/Buffer.h
+	Core/Net/Buffer.cpp
 	Core/Net/HTTPS.h
 	Core/Net/HTTPS.cpp
 	Core/Net/HTTPConnection.h

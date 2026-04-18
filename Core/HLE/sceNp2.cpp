@@ -34,12 +34,14 @@
 #include "Core/HLE/sceNp2.h"
 #include "Core/HLE/sceNetResolver.h"
 #include <Core/Net/NPAgent.h>
-#include "Core/Net/SignalingHandler.h"
+// #include "Core/Net/SignalingHandler.h"
 #include "Core/HLE/sceKernelMemory.h"
 #include "Core/Net/fb_helpers.h"
 #include "Core/HLE/proAdhoc.h" // For Local IP
 #include <Core/Util/PortManager.h>
 #include <Core/Debugger/Np2Printer.h>
+#include <Core/HLE/sceNpSignaling.h>
+#include <Core/Net/SIGAgent.h>
 //#include "NpMatchingContext.h"
 //#include "Np2SignalingHandler.h"
 
@@ -64,6 +66,9 @@ std::atomic<u16> match2_event_cnt = 1;
 std::unique_ptr<net::NPAgent> npServer = nullptr;
 
 // P2P Signaling
+int npMatching2ThreadState = NP_SIGNIN_STATUS_NONE;
+static int npMatching2ThreadStateEvent = -1;
+static int actionAfternpMatching2ThreadMipsCall;
 
 u32 npMatching2ThreadHackAddr = 0;
 u32_le npMatching2ThreadCode[3];
@@ -125,7 +130,7 @@ void __Np2Init() {
 
 void __Np2Shutdown() {
 	if (npServer && npServer->IsConnected()) {
-		g_signaling.stop("NpMatching2 Shutdown");
+		sceNpSignalingStop();
 		npServer->Disconnect();
 	}
 
@@ -587,19 +592,38 @@ static int sceNpMatching2Init(int poolSize, int threadPriority, int cpuAffinityM
 	if (ret != SCE_NP_MATCHING2_OKAY)
 		return hleLogError(Log::sceNp2, ret);
 
-	if (np2P2PThreadID)
-		__KernelStartThread(np2P2PThreadID, 0, 0);
+static int sceNpMatching2Init(int poolSize, int matchingPriority, int threadStackSize, int signalingPriority)
+{
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %d, %d, %d) at %08x", __FUNCTION__, poolSize, matchingPriority, threadStackSize, signalingPriority, currentMIPS->pc);
 
-	g_signaling.initialized = true;
-	// FIXME: This thread runs even when you trigger break
+	int ret = 0x80550ccb; // default return
+	int threadStack = -1;
+
+	if (0x37ff < threadStackSize) {
+		threadStack = sceKernelCheckThreadStack();
+		ret = SCE_NP_ERROR_INVALID_THREAD;
+		if (0xfdf < threadStack)
+			WARN_LOG(Log::sceNp2, "%d is an Invalid Thread Stack?", ret); // return hleLogError(Log::sceNp2, ret, "Invalid Thread Stack?");
+
+		ret = SCE_NP_MATCHING2_ERROR_ALREADY_INITIALIZED;
+		if (npMatching2Inited)
+			return hleLogError(Log::sceNp2, ret, "Already initialized");
+		
 	// RPCS3 has only 1 connection perpetually active
 	//  As such, it has additional functions in sceNp that
 	//  trigger signaling to start, and P2P connect requests
-	/*if (g_signaling.create_connection())
-		g_signaling.set_self_sig_info(*NpGetNpId());
-	else
-		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ABORTED, "Signaling Loop could not be started");*/
+		
+		if ((ret = NP2Init(poolSize, threadStackSize, matchingPriority)) < 0)
+			return hleLogError(Log::sceNp2, ret, "Unable to Initialize Matching2");
+
+		if (!sigServer || (ret = sceNpSignalingInit(0x2000, signalingPriority)) < 0)
+			return hleLogError(Log::sceNet, ret, "Could not initialize UPnP Signaling system");
+
+		npMatching2Inited = true; ret = 0;
 	return SCE_NP_MATCHING2_OKAY;
+	}
+	//EndContext_08807d3c()
+	return hleLogError(Log::sceNp2, ret, "Invalid Affinity?");
 }
 
 /* Initialization
@@ -610,15 +634,20 @@ static int sceNpMatching2Term()
 	WARN_LOG(Log::sceNp2, "UNTESTED %s() at %08x", __FUNCTION__, currentMIPS->pc);
 
 	if (npServer && npServer->IsConnected()) {
-		g_signaling.stop("NpMatching2 Terminating");
+		// sigServer->stop("NpMatching2 Terminating");
+		sceNpSignalingStop();
 		npServer->Disconnect();
 
-		g_signaling.initialized = false;
+		// sigServer->initialized = false;
 	}
 
-	if (np2P2PThreadID != 0)
-		__KernelStopThread(np2P2PThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread stopped");
-
+	// if (npMatching2ThreadID != 0)
+		// __KernelStopThread(npMatching2ThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread stopped");
+	if (npMatching2ThreadID > 0) {
+		__KernelStopThread(npMatching2ThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread stopped");
+		__KernelDeleteThread(npMatching2ThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "P2P Thread deleted");
+		npMatching2ThreadID = 0;
+	}
 	npMatching2Inited = false;
 	npMatching2Handlers.clear();
 	npMatching2Events.clear();
@@ -1689,10 +1718,10 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 room_id_lower, u
 	auto member_exists = npServer->cache.Exists(room_id, roomMemberId);
 	if (!member_exists)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
-	auto connId = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(room_id, roomMemberId));
+	auto connId = sigServer->get_conn_id_from_npid(npServer->cache.GetNpId(room_id, peer_id));
 	if (!connId)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_CONNID_NOT_AVAILABLE, "ConnId Not Found"); ;
-	auto si = g_signaling.get_sig_infos(*connId);
+	auto si = sigServer->get_sig_infos(*connId);
 	if (!si)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_NETINFO_NOT_AVAILABLE, "SigInfo Not Available"); ;
 
@@ -1727,10 +1756,10 @@ static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingR
 	//auto member_exists = npServer->cache.Exists(room_id, roomMemberId);
 	//if (!member_exists)
 	//	return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
-	//auto connId = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(room_id, roomMemberId));
+	//auto connId = sigServer->get_conn_id_from_npid(npServer->cache.GetNpId(room_id, roomMemberId));
 	//if (!connId)
 	//	return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_CONNID_NOT_AVAILABLE, "ConnId Not Found"); ;
-	//auto si = g_signaling.get_sig_infos(*connId);
+	//auto si = sigServer->get_sig_infos(*connId);
 	//if (!si)
 	//	return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_NETINFO_NOT_AVAILABLE, "SigInfo Not Available"); ;
 
@@ -1782,7 +1811,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 	SceNpMatching2RoomId room_id = (u64)room_id_lower | (u64)room_id_upper >> 32;
 	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %d, %d, %d, 0x%08X, 0x%08X, 0x%08X) at %08x", __FUNCTION__, ctxId, connId, room_id, peerMemberId, connInfoPtr, ipAddrPtr, portPtr, currentMIPS->pc);
 
-	if (!g_signaling.initialized)
+	if (!sigServer)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_NOT_INITIALIZED);
 
 	auto _context = ctx.find(ctxId);
@@ -1804,7 +1833,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 
 	std::optional<u32> conn_id = std::nullopt;
 	if (connId != 0) {
-		auto si = g_signaling.get_sig_infos(connId);
+	// 	auto si = sigServer->get_sig_infos(connId);
 		if (si != std::nullopt)
 			conn_id = connId;
 		else
@@ -1817,14 +1846,12 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 connId, u32
 		if (!npServer->cache.Exists(room_id, peerMemberId))
 			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND, "Member not found");
 
-		conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(room_id, peerMemberId));
-	}
-	// FIXME: This can technically call for p2p info between other members, but should call sceNpMatching2SignalingGetPeerNetInfo instead?
+	conn_id = sigServer->get_conn_id_from_npid(npServer->cache.GetNpId(room_id, peerMemberId));
 	if (!conn_id) {
 		return hleLogError(Log::sceNp2, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Connection not found");
 	}
 
-	auto si = g_signaling.get_sig_infos(conn_id.value());
+	auto si = sigServer->get_sig_infos(conn_id.value());
 	if (!si) {
 		return hleLogError(Log::sceNp2, SCE_NP_SIGNALING_ERROR_CONN_NOT_FOUND, "Sig Info Not Found");
 	}
@@ -1886,11 +1913,13 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 		return hleLogError(Log::sceNp2, SCE_NP_SIGNALING_ERROR_OWN_NP_ID, "Member is Self");
 	}
 
-	auto conn_id = g_signaling.get_conn_id_from_npid(npServer->cache.GetNpId(room_id, peerMemberId));
-	if (!conn_id)
+	// u32 conn_id;
+	// int ret = sceNpSignalingGetConnectionFromNpId(ctxId, npServer->cache.GetNpId(room_id, peerMemberId), conn_id);
+	auto conn_id = sigServer->get_conn_id_from_npid(npServer->cache.GetNpId(room_id, peerMemberId));
+	if (conn_id < 0)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_CONN_NOT_FOUND, "Not Connected");
 
-	auto si = g_signaling.get_sig_infos(conn_id.value());
+	auto si = sigServer->get_sig_infos(conn_id.value());
 	if (!si) {
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_CONN_NOT_FOUND, "Sig Info Not Found");
 	}

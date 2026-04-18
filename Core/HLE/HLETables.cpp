@@ -86,6 +86,7 @@
 #include "sceNetInet.h"
 #include "sceNetResolver.h"
 #include "sceNp2.h"
+#include "sceNpSignaling.h"
 #include "sceNet_lib.h"
 
 #define N(s) s
@@ -327,6 +328,7 @@ void RegisterAllModules() {
 	Register_sceReg();
 	// Not ready to enable this due to apparent softlocks in Patapon 3.
 	Register_sceNpMatching2();
+	Register_sceNpSignaling();
 
 	// add new modules here.
 }

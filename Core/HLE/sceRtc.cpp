@@ -39,7 +39,7 @@
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceRtc.h"
 #include <Core/Net/NPAgent.h>
-#include <Core/Net/SignalingHandler.h>
+// #include <Core/Net/SignalingHandler.h>
 
 
 u64 __RtcGetCurrentTick()

@@ -5,6 +5,8 @@
 #include <mutex>
 #include "sceKernelThread.h"
 #include "proAdhoc.h"
+#include <Core/Net/SIGAgent.h>
+#include "Common/TimeUtil.h"
 
 SocketManager g_socketManager;
 static std::mutex g_socketMutex;  // TODO: Remove once the adhoc thread is gone

@@ -34,7 +34,8 @@
 #include "Core/HLE/sceKernelThread.h"
 #include "sceKernelMemory.h"
 #include "ErrorCodes.h"
-#include <Core/Net/SignalingHandler.h>
+#include "Core/Net/SIGAgent.h"
+// #include <Core/Net/SignalingHandler.h>
 
 
 std::unique_ptr<net::NPAuthAgent> npAuthServer;
@@ -229,7 +230,7 @@ void NpSetNpId(std::string newNpId) {
 	memset(&npId, 0, sizeof(npId));
 	memcpy(&npId.handle.data, newNpId.c_str(),
 		std::min<size_t>(16, newNpId.length()));
-	g_signaling.set_self_sig_info(npId);
+	sigServer->set_self_sig_info(npId);
 }
 
 SceNpId* NpGetNpId() {
