@@ -222,7 +222,7 @@ int convertSocketTypePSP2Host(int type) {
 	case PSP_NET_INET_SOCK_DCCP:		// Parent socket for CONN_DGRAM sockets
 		return SOCK_DGRAM;				// SOCK_RAW compatible
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
-		return SOCK_CONN_DGRAM;			// Virtual Socket
+		return SOCK_DGRAM;				// SOCK_CONN_DGRAM is incompatible for this use case; Virtual Socket
 	case PSP_NET_INET_SOCK_PACKET:
 		return SOCK_STREAM;				// SOCK_RAW?
 	}
@@ -266,13 +266,13 @@ std::string inetSocketType2str(int type) {
 		return "SOCK_RAW";
 	case PSP_NET_INET_SOCK_RDM:
 		return "SOCK_RDM";
-	case PSP_NET_INET_SOCK_SEQPACKET:
+	case PSP_NET_INET_SOCK_SEQPACKET: // Type 5 sockets report as Type 10 sockets during system call
 		return "SOCK_SEQPACKET";
 	case PSP_NET_INET_SOCK_DCCP:
 		return "SOCK_DCCP?";
 	case PSP_NET_INET_SOCK_CONN_DGRAM:
 		return "SOCK_CONN_DGRAM?";
-	case PSP_NET_INET_SOCK_PACKET:
+	case PSP_NET_INET_SOCK_PACKET: // TODO: PSP_NET_INET_SOCK_PACKET is a TCP-like socket over the P2P socket with socket.port == p2p.vport && socket.vport == p2p.port - see RPCS3 for examples
 		return "SOCK_PACKET?";
 	}
 	return StringFromFormat("SOCK_%08x", type);
