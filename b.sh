@@ -1,10 +1,14 @@
 #!/bin/bash
 CMAKE=1
+CLEAN=0
 
 # Check arguments
 while test $# -gt 0
 do
 	case "$1" in
+		--clean) echo "Cleaning"
+			CLEAN=1
+			;;
 		--qt) echo "Qt enabled"
 			QT=1
 			CMAKE_ARGS="-DUSING_QT_UI=ON ${CMAKE_ARGS}"
@@ -107,6 +111,11 @@ if [ ! -z "$TARGET_OS" ]; then
 else
 	echo "Building for native host."
 	BUILD_DIR="build"
+fi
+
+if [ "$CLEAN" -eq 1 ]; then
+    echo "Cleaning $BUILD_DIR..."
+    rm -rf "$BUILD_DIR"
 fi
 
 CORES_COUNT=4
