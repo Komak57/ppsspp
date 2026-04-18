@@ -1,6 +1,7 @@
 #include "Common/Net/SocketCompat.h"
 #include "Core/HLE/NetInetConstants.h"
 #include "Core/HLE/SocketManager.h"
+#include "Core/HLE/sceNetInet.h"
 #include <cstring> // Required by linux
 #include <mutex>
 #include "sceKernelThread.h"
@@ -10,7 +11,16 @@
 
 SocketManager g_socketManager;
 static std::mutex g_socketMutex;  // TODO: Remove once the adhoc thread is gone
+// Unique Signature for Tagged Packets
+static constexpr u32 TAG_SIGNATURE = (static_cast<u32>('P') << 24 | static_cast<u32>('S') << 16 | static_cast<u32>('P') << 8 | static_cast<u32>('T'));
+std::condition_variable trigger;
 
+/* DOCUMENTATION:
+
+ - PSP_NET_INET_SOCK_DCCP is being used as the "MASTER" P2P socket for all inbound and outbound traffic
+ - PSP_NET_INET_SOCK_CONN_DGRAM is a virtual UDP port for various P2P channels
+ - PSP_NET_INET_SOCK_PACKET is a TCP port for local, or virtual P2P traffic
+*/
 int SocketManager::NextUnusedSocket() {
 	for (int i = MIN_VALID_INET_SOCKET; i < ARRAY_SIZE(inetSockets_); i++) {
 		if (inetSockets_[i].state == SocketState::Unused) {
@@ -18,6 +28,36 @@ int SocketManager::NextUnusedSocket() {
 		}
 	}
 	return -1;
+}
+// InetSocket now has mutex and condition variable, it can't be reset by {}
+void InetSocket::clear() {
+	// Basic types
+    sock = INVALID_SOCKET;
+    state = SocketState::Unused;
+    domain = 0;
+    protocol = 0;
+    nonblocking = false;
+    addr.clear();
+    port = 0;
+    memset(&dbg, 0, sizeof(dbg));
+
+    // Virtual fields
+    tcp_state = TCPState::Disconnected;
+    type = 0;
+    vport = 0;
+    dst_addr = 0;
+    dst_port = 0;
+    threadID = 0;
+
+    // Clear the queue safely
+    {
+        std::lock_guard<std::mutex> lock(queue_lock);
+        std::deque<VirtualPacket> empty;
+        std::swap(rx_queue, empty);
+    }
+    
+    // Reset pointers
+    pending_connection.reset();
 }
 
 InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketState state, int domain, int type, int protocol) {
@@ -38,48 +78,50 @@ InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketS
 
 		*index = i;
 		inetSock = inetSockets_ + i;
-		*inetSock = {};  // Reset to default.
+
+		// Destroy the old object and construct the appropriate derived type using placement new
+		inetSock->~InetSocket();
+		
+		switch (type) {
+		default:
+			inetSock = new (inetSock) InetSocket();  // Fallback to base class
+			break;
+		}
+		inetSock->clear();  // Reset to default.
 		inetSock->domain = domain;
 		inetSock->type = type;
 		inetSock->protocol = protocol;
 		inetSock->nonblocking = false;
 	}
 
-	SOCKET hostSock;
 	switch (type) {
-	case PSP_NET_INET_SOCK_DCCP: // Parent to all Virtual Sockets
-		inetSock->sock = ::socket(hostDomain, SOCK_DGRAM, hostProtocol);
-		
-		if (inetSock->sock < 0) {
-			*returned_errno = socket_errno;
-			return nullptr;
-		}
-
-		inetSock->state = state;
-		dccp_sock = inetSock;
-		return inetSock;
+	case PSP_NET_INET_SOCK_PACKET: // Type 10
+		inetSock->tcp_state = TCPState::Disconnected;
+		break;
 	case PSP_NET_INET_SOCK_CONN_DGRAM: // Virtual Socket
-		inetSock->sock = 0; // This helps find unhandled uses
-		inetSock->state = state;
-		return inetSock;
+		// TODO: Enable SO_REUSEPORT / SO_REUSEADDR with SO_BROADCAST to recycle ports
+		inetSock->vport = 0;
+		break;
+	case PSP_NET_INET_SOCK_DCCP: // Parent to all Virtual Sockets
+		dccp_sock = inetSock;
 	default: // Normal Socket
-		inetSock->sock = ::socket(hostDomain, hostType, hostProtocol);
-
-		if (inetSock->sock < 0) {
-			*returned_errno = socket_errno;
-			return nullptr;
-		}
-		inetSock->state = state;
-		return inetSock;
+		break;
 	}
 
-	_dbg_assert_(false);
+		inetSock->sock = ::socket(hostDomain, hostType, hostProtocol);
 
-	ERROR_LOG(Log::sceNet, "Ran out of socket handles! This is BAD.");
-	closesocket(hostSock);
-	*index = 0;
-	*returned_errno = ENOMEM; // or something..
-	return nullptr;
+	// Most Wanted creates a socket 2,3,1 for ICMP (Internet Control Message Protocol)
+	// but SOCK_RAW may require elevated permissions
+		if (inetSock->sock < 0) {
+		ERROR_LOG(Log::sceNet, "Ran out of socket handles! This is BAD.");
+		_dbg_assert_(false);
+		closesocket(inetSock->sock);
+		*index = 0;
+		*returned_errno = ENOMEM; // or something..
+			return nullptr;
+		}
+		inetSock->state = state;
+		return inetSock;
 }
 
 InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const InetSocket *derive) {
@@ -90,6 +132,15 @@ InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const Inet
 			*index = i;
 
 			InetSocket *inetSock = inetSockets_ + i;
+			
+			// Determine the type from derive and reconstruct with the correct derived class
+			// This ensures the vtable matches the socket type
+			inetSock->~InetSocket();
+			default:
+				inetSock = new (inetSock) InetSocket();
+				break;
+			}
+			
 			inetSock->sock = hostSocket;
 			inetSock->state = derive->state;
 			inetSock->domain = derive->domain;
@@ -172,6 +223,8 @@ InetSocket* SocketManager::FindSocketByPort(int target_port) {
 void SocketManager::CloseAll() {
 	for (auto &sock : inetSockets_) {
 		if (sock.state != SocketState::Unused) {
+			if (sock.thread.joinable())
+        		sock.thread.join();
 			if (sock.type == PSP_NET_INET_SOCK_CONN_DGRAM)
 				sock.closesocket();
 			else
@@ -192,10 +245,15 @@ const char *SocketStateToString(SocketState state) {
 	}
 }
 
-int InetSocket::recv(char* buf, int len, int flags) {
-	switch (type) {
-	case PSP_NET_INET_SOCK_CONN_DGRAM:
-		_dbg_assert_msg_(false, "recv not implemented for this socket type");
+// ============================================================================
+// Base Socket Class
+// Default fallback functions for things not yet implemented by other sockets
+// ============================================================================
+int InetSocket::select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout) { errno = EOPNOTSUPP; return -1; }
+int InetSocket::send(const char* buf, int len, int flags) { errno = EOPNOTSUPP; return -1; }
+int InetSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) { errno = EOPNOTSUPP; return -1; }
+int InetSocket::recv(char* buf, int len, int flags) { errno = EOPNOTSUPP; return -1; }
+int InetSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) { errno = EOPNOTSUPP; return -1; }
 		return 0;
 	default:
 		return ::recv(sock, buf, len, flags);
@@ -207,8 +265,17 @@ int InetSocket::recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_
 	case PSP_NET_INET_SOCK_DCCP:
 		ERROR_LOG(Log::sceNet, "Cannot recvfrom on SOCK_DCCP [%d/%d]", port, vport);
 		return -1;
-	case PSP_NET_INET_SOCK_CONN_DGRAM:
-		{
+int InetSocket::bind(SceNetInetSockaddr* name, int namelen) { errno = EOPNOTSUPP; return -1; }
+int InetSocket::connect(SceNetInetSockaddr* name, int namelen) { errno = EOPNOTSUPP; return -1; }
+int InetSocket::listen(int backlog) { errno = EOPNOTSUPP; return -1; }
+int InetSocket::accept(sockaddr* addr, socklen_t* addrlen) { errno = EOPNOTSUPP; return -1; }
+int InetSocket::shutdown(int how) { errno = EOPNOTSUPP; return -1; }
+void InetSocket::ProcessNetStack() { /* Do nothing */ }
+
+// Close a virtual socket
+int InetSocket::closesocket() {
+	return ::closesocket(sock);
+}
 			// Clear the error
 #if PPSSPP_PLATFORM(WINDOWS)
 			SetLastError(0);

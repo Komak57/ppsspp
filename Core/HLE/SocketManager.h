@@ -1,7 +1,19 @@
 #pragma once
 
+#include <mutex>
+#include <atomic>
+#include <queue>
+#include <condition_variable>
+#include <memory>
+#include <unordered_map>
+#include <vector>
 #include "Common/Net/SocketCompat.h"
 #include "Common/Log.h"
+#include "Common/Swap.h"
+#include "Core/HLE/NetInetTypes.h"
+#include "Core/HLE/NetInetConstants.h"
+#include <thread>
+#include <cstring>
 
 // These should be safe between Windows and Linux?
 #ifndef SOCK_DCCP
@@ -18,7 +30,65 @@ enum class SocketState {
 	UsedProAdhoc,
 };
 
+enum class TCPState {
+	Disconnected = 0,
+	SynSent = 1,      // connect() called, SYN sent, waiting for SYN-ACK
+	SynReceived = 2,  // received SYN, queued as pending connection
+	Listening = 3,    // listen() called, waiting for incoming SYN
+	Established = 4,  // connection established (handshake complete)
+	FinWait = 5,      // shutdown() called, FIN sent
+	CloseWait = 6,	  // connected socket sent FIN
+};
 const char *SocketStateToString(SocketState state);
+
+// RPCS3 implemented RDP stack for TCP flags
+enum p2ps_tcp_flags : u8
+{
+	FIN = (1 << 0),
+	SYN = (1 << 1),
+	RST = (1 << 2),
+	PSH = (1 << 3),
+	ACK = (1 << 4),
+	URG = (1 << 5),
+	ECE = (1 << 6),
+	CWR = (1 << 7),
+};
+
+struct VPORT_HEADER {
+	u16 vport;
+	// UDP uses SUBSET, TCP uses FLAGS
+	u8 flags;
+};
+const int VPORT_HEADER_SIZE = 3;
+
+// Must be exactly 3 bytes: (u8 flags) + (u16 data_len in network order)
+// struct DGRAM_HEADER {
+// 	u8 flags;
+// 	u16 data_len;
+// };
+// const int DGRAM_HEADER_SIZE = 3;
+
+struct SOCK_DBG {
+	s64 send; // send/sendto packets
+	s64 sent; // delivered packets
+	s64 recv; // recv/recvfrom packets
+	s64 read; // received packets
+};
+
+// Packet structure for virtual socket queuing
+struct VirtualPacket {
+	std::unique_ptr<char[]> data;  // Payload (heap allocated)
+	size_t len;                     // Payload length
+	sockaddr_in src_addr;           // Source address (for recvfrom)
+	u8 header_flags;                // TCP flags from DGRAM_HEADER for control packets
+	u64 enqueue_time_us;            // Microseconds since epoch (for TTL checking)
+};
+
+// Connection request for SOCK_PACKET listen queue
+struct ConnectionRequest {
+	sockaddr_in peer_addr;          // Remote address info
+	u16 peer_port;                 // Remote virtual port
+};
 
 // Internal socket state tracking
 struct InetSocket {
@@ -26,32 +96,103 @@ struct InetSocket {
 	SocketState state;
 	// NOTE: These are the PSP types. Can be converted to the host types if needed.
 	int domain;
-	int type; // WARNING: vsocks rely on this, will break if changed
 	int protocol;
 	bool nonblocking;
+
 	// Metadata for debug use only.
 	std::string addr;
 	int port;
-	int vport; // WARNING: vsocks rely on this, will break if changed
+	SOCK_DBG dbg;
 
-	int recvfrom(char* buf, int len, int flags, sockaddr* from, socklen_t* fromlen);
-	int select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout);
-	int sendto(const char* buf, int len, int flags, const sockaddr* to, int tolen);
-	int setsockopt(int level, int optname, const char* optval, socklen_t optlen);
-	int getsockopt(int level, int optname, char* optval, socklen_t* optlen);
+	// Virtual Socket fields
+	TCPState tcp_state; // Used by SOCK_PACKET
+	int type; // WARNING: vsocks rely on this, will break if changed
+	int vport; // Host Order; WARNING: vsocks rely on this, will break if changed
+	u32 dst_addr;
+	u16 dst_port;
+	int threadID = 0;
+	std::thread thread;
 
-	int bind(sockaddr* name, int namelen);
-	int closesocket();
-	int shutdown(int how);
+	// Subscription and Broadcasting flags
+	std::unordered_map<uint64_t, std::vector<uint8_t>> so_storage;
+	u32 broadcast_mask = 0;              // Bitfield tracking which "rooms/sessions" this socket participates in
 
-	// These aren't normally used by this socket type
-	int send(const char* buf, int len, int flags);
-	int recv(char* buf, int len, int flags);
-	int connect(sockaddr* name, int namelen);
-	int listen(int backlog);
-	int accept(sockaddr* addr, socklen_t* addrlen);
+	// Packet queue for virtual sockets (SOCK_PACKET and SOCK_CONN_DGRAM)
+	std::deque<VirtualPacket> rx_queue;
+	mutable std::mutex queue_lock;
+	std::condition_variable packet_ready;
 
-	int wait_thread = 0;
+	// Pending connection for SOCK_PACKET (simplified: one slot only)
+	std::unique_ptr<ConnectionRequest> pending_connection;
+	mutable std::mutex conn_lock;
+
+	fd_set* readfds;
+	fd_set* writefds;
+	fd_set* exceptfds;
+	// Virtual destructor for proper cleanup of derived types
+	virtual ~InetSocket() = default;
+	void clear();
+	InetSocket() {
+		// Basic types
+		sock = INVALID_SOCKET;
+		state = SocketState::Unused;
+		domain = 0;
+		protocol = 0;
+		nonblocking = false;
+
+		addr.clear();
+		port = 0;
+		memset(&dbg, 0, sizeof(dbg));
+
+		// Virtual fields
+		tcp_state = TCPState::Disconnected;
+		type = 0;
+		vport = 0;
+		dst_addr = 0;
+		dst_port = 0;
+		threadID = 0;
+		
+		so_storage.clear();
+		broadcast_mask = 0;
+
+		// Clear the queue safely
+		{
+			std::lock_guard<std::mutex> lock(queue_lock);
+			std::deque<VirtualPacket> empty;
+			std::swap(rx_queue, empty);
+		}
+		
+		// Reset pointers
+		{
+			std::lock_guard<std::mutex> lock(conn_lock);
+			pending_connection.reset();
+		}
+		readfds = nullptr;
+		writefds = nullptr;
+		exceptfds = nullptr;
+	};
+	// Virtual methods - override in derived classes for type-specific behavior
+	// Base implementations return EOPNOTSUPP for unsupported operations
+	virtual int select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout);
+	virtual int setsockopt(int level, int optname, int optval, socklen_t optlen);
+	virtual int setsockopt(int level, int optname, const char* optval, socklen_t optlen);
+	virtual int getsockopt(int level, int optname, char* optval, socklen_t* optlen);
+	virtual bool is_broadcast_enabled() const;
+
+	virtual int bind(SceNetInetSockaddr* name, int namelen);
+	virtual int closesocket();
+	virtual int shutdown(int how);
+
+	virtual int send(const char* buf, int len, int flags);
+	virtual int recv(char* buf, int len, int flags);
+	virtual int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen);
+	virtual int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen);
+	virtual int connect(SceNetInetSockaddr* name, int namelen);
+	virtual int listen(int backlog);
+	virtual int accept(sockaddr* addr, socklen_t* addrlen);
+
+	virtual void ProcessNetStack();
+};
 };
 
 // Only use this for sockets whose ID are exposed to the game.
