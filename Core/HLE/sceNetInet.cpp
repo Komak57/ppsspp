@@ -501,68 +501,8 @@ static int sceNetInetSetsockopt(int socket, int level, int optname, u32 optvalPt
 		inetSockoptLevel2str(level).c_str(), inetSockoptName2str(optname, level).c_str(), optval);
 
 	timeval tval{};
-	// TODO: Ignoring SO_NBIO/SO_NONBLOCK flag if we always use non-blocking mode (ie. simulated blocking mode)
-	if (level == PSP_NET_INET_SOL_SOCKET) {
-		switch (optname) {
-		case PSP_NET_INET_SO_NBIO:
-			inetSock->nonblocking = optval;
-			return hleLogDebug(Log::sceNet, 0);
-			// FIXME: Should we ignore SO_BROADCAST flag since we are using fake broadcast (ie. only broadcast to friends),
-			//        But Infrastructure/Online play might need to use broadcast for SSDP and to support LAN MP with real PSP
-		case PSP_NET_INET_SO_BROADCAST:
-			//memcpy(&sock->so_broadcast, (int*)optval, std::min(sizeof(sock->so_broadcast), optlen));
-			return hleLogWarning(Log::sceNet, 0, "PSP_NET_INET_SO_BROADCAST unsupported, ignoring");
-		// TODO: Ignoring SO_REUSEADDR flag to prevent disrupting multiple-instance feature
-		case PSP_NET_INET_SO_REUSEADDR:
-			//memcpy(&sock->reuseaddr, (int*)optval, std::min(sizeof(sock->reuseaddr), optlen));
-			return hleLogDebug(Log::sceNet, 0);
 
-		// TODO: Ignoring SO_REUSEPORT flag to prevent disrupting multiple-instance feature (not sure if PSP has SO_REUSEPORT or not tho, defined as 15 on Android)
-		case PSP_NET_INET_SO_REUSEPORT: // 15
-			//memcpy(&sock->reuseport, (int*)optval, std::min(sizeof(sock->reuseport), optlen));
-			return hleLogDebug(Log::sceNet, 0);
-
-		// TODO: Ignoring SO_NOSIGPIPE flag to prevent crashing PPSSPP (not sure if PSP has NOSIGPIPE or not tho, defined as 0x1022 on Darwin)
-		case PSP_NET_INET_SO_NOSIGPIPE: // WARNING: Not sure about this one. But we definitely don't want signals, so we ignore it.
-			//memcpy(&sock->nosigpipe, (int*)optval, std::min(sizeof(sock->nosigpipe), optlen));
-			return hleLogWarning(Log::sceNet, 0, "NOSIGPIPE should never be modified (should always be off)");
-
-		// It seems UNO game will try to set socket buffer size with a very large size and ended getting error (-1), so we should also limit the buffer size to replicate PSP behavior
-		case PSP_NET_INET_SO_RCVBUF:
-		case PSP_NET_INET_SO_SNDBUF: // PSP_NET_INET_SO_NOSIGPIPE ?
-			// TODO: For SOCK_STREAM max buffer size is 8 Mb on BSD, while max SOCK_DGRAM is 65535 minus the IP & UDP Header size
-			if (optval > 8 * 1024 * 1024) {
-				UpdateErrnoFromHost(__KernelGetCurThread(), ENOBUFS, __FUNCTION__); // FIXME: return ENOBUFS for SOCK_STREAM, and EINVAL for SOCK_DGRAM
-				return hleLogError(Log::sceNet, -1, "buffer size too large?");
-			}
-			break;
-
-		case PSP_NET_INET_SO_ONESBCAST:
-			// Seen in Outrun 2006 (account registration), assuming that the flag mapping is correct, we can't support this. So we warn-log and pretend success.
-			return hleLogWarning(Log::sceNet, 0, "PSP_NET_INET_SO_ONESBCAST unsupported, ignoring");
-		case PSP_NET_INET_SO_DCCP_BROADCAST:
-			return hleLogWarning(Log::sceNet, 0, "PSP_NET_INET_SO_DCCP_BROADCAST unsupported, ignoring");
-		case PSP_NET_INET_SO_DCCP_LINGER:
-			return hleLogWarning(Log::sceNet, 0, "PSP_NET_INET_SO_DCCP_LINGER unsupported, ignoring");
-		// TODO: Identify and fix. This acts much like a broadcast when in a lobby to update player position
-		default:
-			break;
-		}
-	}
-
-	int retval = 0;
-	// PSP timeout are a single 32bit value (micro seconds)
-	if (level == PSP_NET_INET_SOL_SOCKET && optval && (optname == PSP_NET_INET_SO_RCVTIMEO || optname == PSP_NET_INET_SO_SNDTIMEO)) {
-		tval.tv_sec = optval / 1000000; // seconds
-		tval.tv_usec = (optval % 1000000); // microseconds
-		
-		retval = inetSock->setsockopt(convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&tval, sizeof(tval));
-		//retval = setsockopt(inetSock->sock, convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&tval, sizeof(tval));
-	}
-	else {
-		retval = inetSock->setsockopt(convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&optval, optlen);
-		//retval = setsockopt(inetSock->sock, convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&optval, optlen);
-	}
+	int retval = inetSock->setsockopt(level, optname, (char*)&optval, optlen);
 	if (retval < 0) {
 		UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
 		return hleLogError(Log::sceNet, retval);
@@ -582,54 +522,8 @@ static int sceNetInetGetsockopt(int socket, int level, int optname, u32 optvalPt
 	socklen_t* optlen = (socklen_t*)Memory::GetPointer(optlenPtr);
 	DEBUG_LOG(Log::sceNet, "SockOpt: Level = %s, OptName = %s", inetSockoptLevel2str(level).c_str(), inetSockoptName2str(optname, level).c_str());
 	timeval tval{};
-	// TODO: Ignoring SO_NBIO/SO_NONBLOCK flag if we always use non-bloking mode (ie. simulated blocking mode)
-	if (level == PSP_NET_INET_SOL_SOCKET && optname == PSP_NET_INET_SO_NBIO) {
-		//*optlen = std::min(sizeof(sock->nonblocking), *optlen);
-		//memcpy((int*)optval, &sock->nonblocking, *optlen);
-		//if (sock->nonblocking && *optlen>0) *optval = 0x80; // on true, returning 0x80 when retrieved using getsockopt?
-		return hleLogDebug(Log::sceNet, 0);
-	}
-	// FIXME: Should we ignore SO_BROADCAST flag since we are using fake broadcast (ie. only broadcast to friends),
-	//        But Infrastructure/Online play might need to use broadcast for SSDP and to support LAN MP with real PSP
-	/*else if (level == PSP_NET_INET_SOL_SOCKET && optname == PSP_NET_INET_SO_BROADCAST) {
-		// *optlen = std::min(sizeof(sock->so_broadcast), *optlen);
-		//memcpy((int*)optval, &sock->so_broadcast, *optlen);
-		//if (sock->so_broadcast && *optlen>0) *optval = 0x80; // on true, returning 0x80 when retrieved using getsockopt?
-		return hleLogSuccessI(Log::sceNet, 0);
-	}*/
-	// TODO: Ignoring SO_REUSEADDR flag to prevent disrupting multiple-instance feature
-	else if (level == PSP_NET_INET_SOL_SOCKET && optname == PSP_NET_INET_SO_REUSEADDR) {
-		//*optlen = std::min(sizeof(sock->reuseaddr), *optlen);
-		//memcpy((int*)optval, &sock->reuseaddr, *optlen);
-		return hleLogDebug(Log::sceNet, 0);
-	}
-	// TODO: Ignoring SO_REUSEPORT flag to prevent disrupting multiple-instance feature (not sure if PSP has SO_REUSEPORT or not tho, defined as 15 on Android)
-	else if (level == PSP_NET_INET_SOL_SOCKET && optname == PSP_NET_INET_SO_REUSEPORT) { // 15
-		//*optlen = std::min(sizeof(sock->reuseport), *optlen);
-		//memcpy((int*)optval, &sock->reuseport, *optlen);
-		return hleLogDebug(Log::sceNet, 0);
-	}
-	// TODO: Ignoring SO_NOSIGPIPE flag to prevent crashing PPSSPP (not sure if PSP has NOSIGPIPE or not tho, defined as 0x1022 on Darwin)
-	else if (level == PSP_NET_INET_SOL_SOCKET && optname == 0x1022) { // PSP_NET_INET_SO_NOSIGPIPE ?
-		//*optlen = std::min(sizeof(sock->nosigpipe), *optlen);
-		//memcpy((int*)optval, &sock->nosigpipe, *optlen);
-		return hleLogDebug(Log::sceNet, 0);
-	}
-	int retval = 0;
-	// PSP timeout are a single 32bit value (micro seconds)
-	if (level == PSP_NET_INET_SOL_SOCKET && optval && (optname == PSP_NET_INET_SO_RCVTIMEO || optname == PSP_NET_INET_SO_SNDTIMEO)) {
-		socklen_t tvlen = sizeof(tval);
-
-		retval = inetSock->getsockopt(convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&tval, &tvlen);
-		//retval = getsockopt(inetSock->sock, convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)&tval, &tvlen);
-		if (retval != SOCKET_ERROR) {
-			u64_le val = (tval.tv_sec * 1000000LL) + tval.tv_usec;
-			memcpy(optval, &val, std::min(static_cast<socklen_t>(sizeof(val)), std::min(static_cast<socklen_t>(sizeof(*optval)), *optlen)));
-		}
-	} else {
-		retval = inetSock->getsockopt(convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)optval, optlen);
-		//retval = getsockopt(inetSock->sock, convertSockoptLevelPSP2Host(level), convertSockoptNamePSP2Host(optname, level), (char*)optval, optlen);
-	}
+	
+	int retval = inetSock->getsockopt(level, optname, (char*)optval, optlen);
 	if (retval < 0) {
 		UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
 		return hleLogError(Log::sceNet, retval);
