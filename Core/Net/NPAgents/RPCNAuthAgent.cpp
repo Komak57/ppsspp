@@ -5,7 +5,8 @@
 #include <chrono>
 #include <Core/CoreTiming.h>
 #include <Core/HLE/sceNp2.h>
-#include <Core/Net/SignalingHandler.h>
+// #include <Core/Net/SignalingHandler.h>
+#include <Core/Net/SIGAgent.h>
 #include <Core/HLE/sceNp.h>
 #include <Core/Config.h>
 namespace net {
@@ -341,7 +342,7 @@ namespace net {
 				{
 					ERROR_LOG(Log::sceNet, "Failed to get the client address from the socket!");
 				}
-				g_signaling.local_addr_sig.store(client_addr.sin_addr.s_addr);
+				sigServer->local_addr_sig.store(client_addr.sin_addr.s_addr);
 				// Start reading data
 				start_read_thread();
 
@@ -613,19 +614,23 @@ namespace net {
 
 	int RPCNAuthAgent::GetWorldInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
 		if (resp.error != (u8)ErrorType::NoError)
-			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::Matching, SCE_NP_MATCHING2_SERVER_ERROR_BAD_REQUEST), 0);
 		resp.stream = new vec_stream(resp.data, 1);
 
 		// Currently under the assumption that the first byte is some error code
 		size_t offset = 1;
 		u32 num_worlds = resp.stream->get<u32>();
+		//num_worlds = 8;
 
 		// First attempts for new games won't contain a world.
 		if (num_worlds == 0) {
-			ERROR_LOG(Log::sceNet, "No Worlds Returned");
-			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNet, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD), 0);
+			ERROR_LOG(Log::Matching, "No Worlds Returned");
+			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::Matching, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD), 0);
 		}
 
+		u32 alloc = sizeof(SceNpMatching2GetWorldInfoListResponse);
+		auto response = PSPPointer<SceNpMatching2GetWorldInfoListResponse>::Create(np_memory.Alloc(alloc));
+		response->worldNum = num_worlds;
 		// Allocate space for all worlds
 		u32 worldsSize = sizeof(PSPList<SceNpMatching2World>) * num_worlds;
 		// We have a maximum size
@@ -633,25 +638,30 @@ namespace net {
 			worldsSize = SCE_NP_MATCHING2_EVENT_DATA_MAX_SIZE_GetWorldInfoList;
 		response->world_list = PSPPointer<PSPList<SceNpMatching2World>>::Create(np_memory.Alloc(worldsSize));
 		// Transfer WorldID
-		NOTICE_LOG(Log::sceNet, "Received %d worlds", num_worlds);
+		NOTICE_LOG(Log::Matching, "Received %d worlds", num_worlds);
 
+		// Phantasy Star MUST start with World Index 1
+		// Patapon3 tries to interract with Index 0, which just means an error state
+		// Ace Combat similarly does this, and requires 1 server, 8 worlds
+		// Both the World Index and World ID are used in CreateJoinRoom requests
+		// RPCN requests only use the WorldID, so they must be converted prior to sending requests
+		//auto world_id = resp.stream->get<SceNpMatching2WorldId>();
 		for (u32 i = 0; i < num_worlds; ++i) {
+			response->world_list[i].next = 0;
 			if (i + 1 < num_worlds)
-				worlds[i].next = worlds.ptr + (sizeof(SceNpMatching2World) * (i + 1));
-			worlds[i].worldId = resp.stream->get<SceNpMatching2WorldId>();
-			NOTICE_LOG(Log::sceNet, " - World %d => WorldId: %d | Index: %d", i, worlds[i].worldId, worlds[i].worldId);
-			//npServer->cache.AddWorld(worlds[i]);
+				response->world_list[i].next = response->world_list + (i + 1);
+			response->world_list[i]->worldId = resp.stream->get<SceNpMatching2WorldId>();
+			response->world_list[i]->curNumOfRoom = 0;
+			response->world_list[i]->curNumOfTotalRoomMember = 0;
+			NOTICE_LOG(Log::Matching, " - World %d => WorldId: %d", i, response->world_list[i]->worldId);
+			npServer->cache.AddWorld(response->world_list[i].data);
 		}
 
 		if (resp.stream->is_error()) {
-			ERROR_LOG(Log::sceNet, "World Info Malformed");
+			ERROR_LOG(Log::Matching, "World Info Malformed");
 			return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_SERVER_ERROR_NO_SUCH_WORLD, 0);
 		}
 
-		u32 alloc = sizeof(SceNpMatching2GetWorldInfoListResponse);
-		auto response = PSPPointer<SceNpMatching2GetWorldInfoListResponse>::Create(np_memory.Alloc(alloc));
-		response->worldNum = num_worlds;
-		response->world = worlds;
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_OKAY, response.ptr);
 	}

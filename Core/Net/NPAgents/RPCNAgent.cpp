@@ -4,7 +4,7 @@
 #include <Core/HLE/HLE.h>
 #include <Common/File/FileDescriptor.h>
 #include "Core/MemMapHelpers.h"
-#include <Core/Net/SignalingHandler.h>
+// #include <Core/Net/SignalingHandler.h>
 #include <Core/HLE/proAdhoc.h>
 #include <System/OSD.h>
 #include <Core/HLE/sceNp.h>
@@ -16,6 +16,7 @@
 #include <Core/Config.h>
 #include <Core/Util/PortManager.h>
 #include <Core/Debugger/Np2Printer.h>
+#include <Core/Net/SIGAgent.h>
 
 using namespace std::literals::chrono_literals;
 
@@ -194,20 +195,20 @@ namespace net {
 				break;
 				case PacketType::Notification:
 				switch ((NotificationType)header.command) {
-				case NotificationType::UserJoinedRoom: g_signaling.UserJoinedRoom(buf); break;
-				case NotificationType::RoomMessageReceived: g_signaling.RoomMessageReceived(buf); break;
-				case NotificationType::UserLeftRoom: g_signaling.UserLeftRoom(buf); break;
-				case NotificationType::RoomDestroyed: g_signaling.RoomDestroyed(buf); break;
-				case NotificationType::UpdatedRoomDataInternal: g_signaling.UpdatedRoomDataInternal(buf); break;
-				case NotificationType::UpdatedRoomMemberDataInternal: g_signaling.UpdatedRoomMemberDataInternal(buf); break;
-				case NotificationType::SignalingHelper: g_signaling.SignalingHelper(buf); break;
+				case NotificationType::UserJoinedRoom: sigServer->UserJoinedRoom(buf); break;
+				case NotificationType::RoomMessageReceived: sigServer->RoomMessageReceived(buf); break;
+				case NotificationType::UserLeftRoom: sigServer->UserLeftRoom(buf); break;
+				case NotificationType::RoomDestroyed: sigServer->RoomDestroyed(buf); break;
+				case NotificationType::UpdatedRoomDataInternal: sigServer->UpdatedRoomDataInternal(buf); break;
+				case NotificationType::UpdatedRoomMemberDataInternal: sigServer->UpdatedRoomMemberDataInternal(buf); break;
+				case NotificationType::SignalingHelper: sigServer->SignalingHelper(buf); break;
 					// GUI
-				case NotificationType::MemberJoinedRoomGUI: g_signaling.MemberJoinedRoomGUI(buf); break;
-				case NotificationType::MemberLeftRoomGUI: g_signaling.MemberLeftRoomGUI(buf); break;
-				case NotificationType::RoomDisappearedGUI: g_signaling.RoomDisappearedGUI(buf); break;
-				case NotificationType::RoomOwnerChangedGUI: g_signaling.RoomOwnerChangedGUI(buf); break;
-				case NotificationType::UserKickedGUI: g_signaling.UserKickedGUI(buf); break;
-				case NotificationType::QuickMatchCompleteGUI: g_signaling.QuickMatchCompleteGUI(buf); break;
+				case NotificationType::MemberJoinedRoomGUI: sigServer->MemberJoinedRoomGUI(buf); break;
+				case NotificationType::MemberLeftRoomGUI: sigServer->MemberLeftRoomGUI(buf); break;
+				case NotificationType::RoomDisappearedGUI: sigServer->RoomDisappearedGUI(buf); break;
+				case NotificationType::RoomOwnerChangedGUI: sigServer->RoomOwnerChangedGUI(buf); break;
+				case NotificationType::UserKickedGUI: sigServer->UserKickedGUI(buf); break;
+				case NotificationType::QuickMatchCompleteGUI: sigServer->QuickMatchCompleteGUI(buf); break;
 					ERROR_LOG(Log::sceNet, "Unhandled GUI Notification: %s", NotificationTypeNames[header.command]);
 					break;
 				default:
@@ -381,7 +382,7 @@ namespace net {
 				{
 					ERROR_LOG(Log::sceNet, "Failed to get the client address from the socket!");
 				}
-				g_signaling.local_addr_sig.store(client_addr.sin_addr.s_addr);
+				sigServer->local_addr_sig.store(client_addr.sin_addr.s_addr);
 				// Start reading data
 				start_read_thread();
 				return true;
@@ -714,13 +715,13 @@ namespace net {
 
 		u32 addr = RegisterIp(sigAddr->ip());
 		if (addr == 0)
-			addr = g_signaling.local_addr_sig.load();
+			addr = sigServer->local_addr_sig.load();
 
 		u16 port = sigAddr->port();
 		/*if (port == SCE_SIGN_PORT)
 			port = SCE_INTERNAL_PORT;*/
 
-		g_signaling.connect(conn_id, addr, port);
+		sigServer->connect(conn_id, addr, port);
 		return SCE_NP_MATCHING2_OKAY;
 	}
 	int RPCNAgent::SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {
@@ -1066,9 +1067,9 @@ namespace net {
 		npServer->cache.SavePassword(respData->roomDataInternal->roomId);
 
 		// RPCS3 triggers this in sceNpSignalingActivateConnection
-		//g_signaling.init_sig(*npId, respData->roomDataInternal->roomId, respData->roomDataInternal->memberList.me->memberId);
-		//g_signaling.init_sig(*npId);
-		//g_signaling.set_self_sig_info(*npId);
+		//sigServer->init_sig(*npId, respData->roomDataInternal->roomId, respData->roomDataInternal->memberList.me->memberId);
+		//sigServer->init_sig(*npId);
+		//sigServer->set_self_sig_info(*npId);
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respData.ptr);
 	}
@@ -1163,9 +1164,9 @@ namespace net {
 		npServer->cache.AddRoom(*room_resp->roomDataInternal);
 
 		// RPCS3 triggers this in sceNpSignalingActivateConnection
-		//g_signaling.init_sig(*npId, room_resp->roomDataInternal->roomId, room_resp->roomDataInternal->memberList.me->memberId);
-		//g_signaling.init_sig(*npId);
-		//g_signaling.set_self_sig_info(*npId);
+		//sigServer->init_sig(*npId, room_resp->roomDataInternal->roomId, room_resp->roomDataInternal->memberList.me->memberId);
+		//sigServer->init_sig(*npId);
+		//sigServer->set_self_sig_info(*npId);
 
 		// We initiate signaling if necessary
 		if (const auto* signaling_data = joinRoomResp->signaling_data())
@@ -1191,8 +1192,8 @@ namespace net {
 				NOTICE_LOG(Log::Matching, "JoinRoomResult told to connect to member(%d=%s) of room(%d): %s:%d", member_id, reinterpret_cast<const char*>(p2p_npid.handle.data), room_id, ip2str(addr_p2p).c_str(), port_p2p);
 
 				// Attempt Signaling
-				const u32 conn_id = g_signaling.init_sig(p2p_npid, room_id, member_id);
-				g_signaling.connect(conn_id, addr_p2p, port_p2p);
+				const u32 conn_id = sigServer->init_sig(p2p_npid, room_id, member_id);
+				sigServer->connect(conn_id, addr_p2p, port_p2p);
 			}
 		}
 
@@ -1213,11 +1214,11 @@ namespace net {
 		INFO_LOG(Log::Matching, "Leaving Room #%d", req->roomId);
 
 		// Send Finished, RPSC3 triggers this in sceNpSignalingTerminateConnection
-		//auto connId = g_signaling.get_always_conn_id(*NpGetNpId());
-		//g_signaling.stop_sig_nl(connId, false);
+		//auto connId = sigServer->get_always_conn_id(*NpGetNpId());
+		//sigServer->stop_sig_nl(connId, false);
 
 		// Execute signaling callback to update users
-		g_signaling.DisconnectUsers(req->roomId);
+		sigServer->DisconnectUsers(req->roomId);
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
@@ -1253,8 +1254,8 @@ namespace net {
 		// Remove room from cache
 		//npServer->cache.RemoveRoom(roomId);
 
-		//if (np2P2PThreadID)
-			//__KernelStopThread(np2P2PThreadID, 0, "User Left Room");
+		//if (npMatching2ThreadID)
+			//__KernelStopThread(npMatching2ThreadID, 0, "User Left Room");
 
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, SCE_NP_MATCHING2_OKAY, 0);

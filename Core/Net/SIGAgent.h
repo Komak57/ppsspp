@@ -137,6 +137,194 @@ namespace net {
 		bool initialized = false;
 	};
 
+	class PSNSigAgent : public SIGAgent {
+	public:
+		~PSNSigAgent();
+		PSNSigAgent();
+
+        int UpnpThreadTick() override;
+		int MainThreadTick(BlockAllocator* signaling_memory) override;
+		int EchoThreadTick(BlockAllocator* signaling_memory) override;
+        int HandleP2PPacket() override;
+		std::chrono::microseconds ProcessUPnPMessages() override;
+		void ProcessP2PMessages(PSPPointer<PipePacket> packet);
+		// Signaling Helpers
+
+		u32 init_sig(const SceNpId& npid) override;
+		u32 init_sig(const SceNpId& npid, SceNpMatching2RoomId room_id, SceNpMatching2RoomMemberId member_id) override;
+		u32 get_always_conn_id(const SceNpId& npid) override;
+		std::optional<u32> get_conn_id_from_npid(const SceNpId& npid) override;
+		std::optional<SceSignalingPeer> get_sig_infos(u32 conn_id) override;
+		void set_self_sig_info(SceNpId& npid) override;
+		std::shared_ptr<SceSignalingPeer> get_signaling_ptr(const SignalingPacket* sp) override;
+		void update_si_addr(std::shared_ptr<SceSignalingPeer>& si, u32 new_addr, u16 new_port) override;
+		void update_si_mapped_addr(std::shared_ptr<SceSignalingPeer>& si, u32 new_addr, u16 new_port) override;
+		void update_si_status(std::shared_ptr<SceSignalingPeer>& si, s32 new_status, s32 error_code) override;
+		void update_ext_si_status(std::shared_ptr<SceSignalingPeer>& si, bool op_activated) override;
+
+		// Connection Helpers
+
+		void connect(u32 conn_id, u32 addr, u16 port) override;
+		bool create_connection() override;
+		bool destroy_connection() override;
+		void stop(const char* reason) override;
+		void DisconnectUsers(SceNpMatching2RoomId room_id) override;
+
+		// Notification Functions
+
+		int UserJoinedRoom(net::RPCNResponse resp) override;
+		int UserLeftRoom(net::RPCNResponse resp) override;
+		int RoomDestroyed(net::RPCNResponse resp) override;
+		int UpdatedRoomDataInternal(net::RPCNResponse resp) override;
+		int UpdatedRoomMemberDataInternal(net::RPCNResponse resp) override;
+		int RoomMessageReceived(net::RPCNResponse resp) override;
+		void SignalingHelper(net::RPCNResponse resp) override;
+		void MemberJoinedRoomGUI(net::RPCNResponse resp) override;
+		void MemberLeftRoomGUI(net::RPCNResponse resp) override;
+		void RoomDisappearedGUI(net::RPCNResponse resp) override;
+		void RoomOwnerChangedGUI(net::RPCNResponse resp) override;
+		void UserKickedGUI(net::RPCNResponse resp) override;
+		void QuickMatchCompleteGUI(net::RPCNResponse resp) override;
+    private:
+        
+	};
+
+    struct SignalingMessage
+    {
+        u32 src_addr = 0;
+        u16 src_port = 0;
+
+        std::vector<u8> data;
+    };
+
+	struct queued_packet
+	{
+		SignalingPacket packet{};
+		std::shared_ptr<SceSignalingPeer> sig_info;
+	};
+	
+	class RPCNSigAgent : public SIGAgent {
+	public:
+		static const u32 PROTOCOL_VERSION = 27;
+		~RPCNSigAgent();
+		RPCNSigAgent();
+
+        int UpnpThreadTick() override;
+		int MainThreadTick(BlockAllocator* signaling_memory) override;
+		int EchoThreadTick(BlockAllocator* signaling_memory) override;
+        int HandleP2PPacket() override;
+		std::chrono::microseconds ProcessUPnPMessages() override;
+		void ProcessP2PMessages(SignalingMessage msg);
+
+		std::vector<std::vector<u8>> get_rpcn_msgs() {
+			std::vector<std::vector<u8>> msgs;
+			{
+				std::lock_guard lock(rpcn_mtx_);
+				msgs = std::move(rpcn_msgs);
+				rpcn_msgs.clear();
+			}
+			return msgs;
+		}
+		std::vector<SignalingMessage> get_sign_msgs() {
+			std::vector<SignalingMessage> msgs;
+			std::lock_guard lock(sign_mtx_);
+			msgs = std::move(sign_msgs);
+			sign_msgs.clear();
+
+			return msgs;
+		}
+		void handle_ping(const SignalingPacket* sp, SignalingPacket& sent_packet, u32 op_addr, u16 op_port);
+		void handle_pong(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si);
+		void handle_info(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si, u32 op_addr, u16 op_port);
+		void handle_connect(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si, SignalingPacket& sent_packet, u32 op_addr, u16 op_port);
+		void handle_connect_ack(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si, SignalingPacket& sent_packet, u32 op_addr, u16 op_port);
+		void handle_confirm(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si, SignalingPacket& sent_packet, u32 op_addr, u16 op_port);
+		void handle_finished(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si, SignalingPacket& sent_packet, u32 op_addr, u16 op_port);
+		void handle_finished_ack(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si);
+
+		// Signaling Helpers
+
+		u32 init_sig(const SceNpId& npid) override;
+		u32 init_sig(const SceNpId& npid, SceNpMatching2RoomId room_id, SceNpMatching2RoomMemberId member_id) override;
+		u32 get_always_conn_id(const SceNpId& npid) override;
+		std::optional<u32> get_conn_id_from_npid(const SceNpId& npid) override;
+		std::optional<SceSignalingPeer> get_sig_infos(u32 conn_id) override;
+		void set_self_sig_info(SceNpId& npid) override;
+		std::shared_ptr<SceSignalingPeer> get_signaling_ptr(const SignalingPacket* sp) override;
+		void update_si_addr(std::shared_ptr<SceSignalingPeer>& si, u32 new_addr, u16 new_port) override;
+		void update_si_mapped_addr(std::shared_ptr<SceSignalingPeer>& si, u32 new_addr, u16 new_port) override;
+		void update_si_status(std::shared_ptr<SceSignalingPeer>& si, s32 new_status, s32 error_code) override;
+		void update_ext_si_status(std::shared_ptr<SceSignalingPeer>& si, bool op_activated) override;
+
+		// Connection Helpers
+
+		void connect(u32 conn_id, u32 addr, u16 port) override;
+		bool create_connection() override;
+		bool destroy_connection() override;
+		void stop(const char* reason) override;
+		// bool send_packet_ipv4(const std::vector<u8>& data, sockaddr_in dest);
+		void DisconnectUsers(SceNpMatching2RoomId room_id) override;
+		void stop_sig_nl(u32 conn_id, bool forceful);
+		void stop_sig(u32 conn_id, bool forceful);
+
+		// Packet Helpers
+
+		static u64 get_micro_timestamp(const std::chrono::steady_clock::time_point& time_point);
+		bool send_upnp_packet(const std::vector<u8>& data, sockaddr_in* dest);
+		void send_signaling_packet(SignalingPacket& sp, u32 addr, u16 port);
+		void send_information_packets(u32 addr, u16 port, const SceNpId& npid);
+		void reschedule_packet(std::shared_ptr<SceSignalingPeer>& si, SceNpSignalingCommand cmd, std::chrono::steady_clock::time_point new_timepoint);
+		void retire_packet(std::shared_ptr<SceSignalingPeer>& si, SceNpSignalingCommand cmd);
+		void retire_all_packets(std::shared_ptr<SceSignalingPeer>& si);
+		void queue_signaling_packet(SignalingPacket& sp, std::shared_ptr<SceSignalingPeer> si, std::chrono::steady_clock::time_point wakeup_time);
+
+		// Notification Functions
+
+		int UserJoinedRoom(net::RPCNResponse resp) override;
+		int UserLeftRoom(net::RPCNResponse resp) override;
+		int RoomDestroyed(net::RPCNResponse resp) override;
+		int UpdatedRoomDataInternal(net::RPCNResponse resp) override;
+		int UpdatedRoomMemberDataInternal(net::RPCNResponse resp) override;
+		int RoomMessageReceived(net::RPCNResponse resp) override;
+		void SignalingHelper(net::RPCNResponse resp) override;
+		void MemberJoinedRoomGUI(net::RPCNResponse resp) override;
+		void MemberLeftRoomGUI(net::RPCNResponse resp) override;
+		void RoomDisappearedGUI(net::RPCNResponse resp) override;
+		void RoomOwnerChangedGUI(net::RPCNResponse resp) override;
+		void UserKickedGUI(net::RPCNResponse resp) override;
+		void QuickMatchCompleteGUI(net::RPCNResponse resp) override;
+	private:
+		std::mutex buffer_mutex;
+		std::condition_variable buffer_cv;
+
+		// This mutex handles general Signaling variables
+		mutable std::mutex mtx_;
+
+		// This mutex controls RPCN Message Packets
+		mutable std::mutex rpcn_mtx_;
+		std::condition_variable rpcn_msg_cv;
+		std::vector<std::vector<u8>> rpcn_msgs{};
+
+		mutable std::mutex sign_mtx_;
+		std::condition_variable sign_msg_cv;
+		std::vector<SignalingMessage> sign_msgs{};
+
+		std::map<std::chrono::steady_clock::time_point, queued_packet> qpackets;
+		
+		std::mutex sig_mutex;
+		std::chrono::steady_clock::time_point last_ping_time_ipv4{}, last_pong_time_ipv4{};
+		std::chrono::steady_clock::time_point last_ping_time_ipv6{}, last_pong_time_ipv6{};
+		bool sendto(const std::vector<u8>& data, sockaddr_in dest);
+	};
+
+	inline std::unique_ptr<SIGAgent> InitSigAgent(NPAgentType type) {
+		switch (type) {
+		case NPAgentType::RPCN: return std::make_unique<RPCNSigAgent>();
+		case NPAgentType::FAKE_PSN: return std::make_unique<PSNSigAgent>();
+		case NPAgentType::PSN: return std::make_unique<PSNSigAgent>();
+		}
+		return nullptr;
+	}
 
 }
 
