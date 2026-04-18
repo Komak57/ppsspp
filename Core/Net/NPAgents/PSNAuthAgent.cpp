@@ -4,7 +4,7 @@
 #include "Common/Net/HTTPClient.h"
 #include <Common/File/FileDescriptor.h>
 #include <TimeUtil.h>
-#include <Core/Net/Buffer.cpp>
+#include <Core/Net/Buffer.h>
 #include <Core/HLE/sceNet.h>
 #include <Core/HLE/sceRtc.h>
 namespace net {
