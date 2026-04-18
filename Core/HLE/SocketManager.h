@@ -193,6 +193,28 @@ struct InetSocket {
 
 	virtual void ProcessNetStack();
 };
+class ConnDgramSocket : public InetSocket {
+public:
+	ConnDgramSocket() : InetSocket() {
+		this->type = PSP_NET_INET_SOCK_CONN_DGRAM;
+	}
+	int select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout) override;
+	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
+	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
+	int bind(SceNetInetSockaddr* name, int namelen) override;
+
+	// Helper methods for virtual socket packet handling
+	void enqueue_packet(VirtualPacket& packet);
+	bool dequeue_packet(VirtualPacket& packet);
+	bool has_pending_data() const;
+	void clear();
+};
+static_assert(sizeof(ConnDgramSocket) == sizeof(InetSocket), "Socket size mismatch!");
+// VPort Bus subscription entry (replaced SwitchEntry)
+struct VPortSubscriber {
+	InetSocket* socket;
+	std::string subscriber_id;  // For debugging: helps identify which game/module subscribes
+	u8 vport_subset = 0xFF;     // For VPort 0: subset filter (0=RPCN, 1=Signaling, 0xFF=all). Ignored for other VPorts.
 };
 
 // Only use this for sockets whose ID are exposed to the game.
@@ -207,10 +229,12 @@ public:
 	InetSocket *CreateSocket(int *index, int *returned_errno, SocketState state, int domain, int type, int protocol);
 	// for accept()
 	InetSocket *AdoptSocket(int *index, SOCKET hostSocket, const InetSocket *derive);
+	int DeliverPacketToVPorts(const VPORT_HEADER& header, const char* packet_data, int data_len, const sockaddr_in& _from);
 
 	bool GetInetSocket(int sock, InetSocket **inetSocket);
+	u16 generateEphemeralPort();
+	u16 generateVPort();
 	SOCKET GetHostSocketFromInetSocket(int sock);
-	InetSocket* FindSocketByPort(int target_port);
 	bool Close(InetSocket *inetSocket);
 	void CloseAll();
 
