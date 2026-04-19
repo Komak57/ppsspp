@@ -752,6 +752,10 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/HLE/sceGameUpdate.cpp \
   $(SRC)/Core/HLE/sceNp.cpp \
   $(SRC)/Core/HLE/sceNp2.cpp \
+  $(SRC)/Core/HLE/sceNpSignaling.cpp \
+  $(SRC)/Core/Net/SIGAgent.cpp \
+  $(SRC)/Core/Net/SIGAgents/PSNSigAgent.cpp \
+  $(SRC)/Core/Net/SIGAgents/RPCNSigAgent.cpp \
   $(SRC)/Core/HLE/scePauth.cpp \
   $(SRC)/Core/FileSystems/BlobFileSystem.cpp \
   $(SRC)/Core/FileSystems/BlockDevices.cpp \
@@ -782,9 +786,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/Net/NPAgent.cpp \
   $(SRC)/Core/Net/HTTPConnection.cpp \
   $(SRC)/Core/Net/fb_helpers.cpp \
-  $(SRC)/Core/Net/SignalingHandler.cpp \
   $(SRC)/Core/Net/HTTPS.cpp \
-  $(SRC)/Core/Net/Np2SignalingHandler.cpp \
   $(SRC)/git-version.cpp
 
 LOCAL_MODULE := ppsspp_core
