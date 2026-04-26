@@ -1573,7 +1573,7 @@ namespace net {
         //if (port_p2p == SCE_SIGN_PORT)
             //port_p2p = SCE_INTERNAL_PORT;
 
-        NOTICE_LOG(Log::Signaling, " - IP at %s", ip2str(addr_p2p));
+        NOTICE_LOG(Log::Signaling, " - IP at %s", ip2str(addr_p2p).c_str());
         send_information_packets(addr_p2p, port_p2p, npid_p2p);
     }
 

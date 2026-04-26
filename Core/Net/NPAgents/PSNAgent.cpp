@@ -232,7 +232,7 @@ namespace net {
 			size_t readBytes = readbuf.size();
 			readbuf.Take(readBytes, &entity);
 
-			INFO_LOG(Log::Matching, "Entity Data: %d", entity);
+			INFO_LOG(Log::Matching, "Entity Data: %s", entity.c_str());
 
 			// TODO: Use XML Parser to get the Tag and it's attributes instead of searching for keywords on the string
 			std::string text;
