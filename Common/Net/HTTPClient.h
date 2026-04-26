@@ -7,7 +7,6 @@
 #include <string>
 
 #include "Common/File/Path.h"
-#include "Common/Net/NetBuffer.h"
 #include "Common/Net/Resolve.h"
 #include "Common/Net/HTTPRequest.h"
 
