@@ -193,6 +193,15 @@ struct InetSocket {
 	virtual int accept(sockaddr* addr, socklen_t* addrlen);
 
 	virtual void ProcessNetStack();
+
+	// Helper methods for virtual socket packet handling
+	void enqueue_packet(VirtualPacket& packet);
+	bool dequeue_packet(VirtualPacket& packet);
+	int dequeue_stream(char* buf, int len, sockaddr_in* out_addr);
+	bool has_pending_data() const;
+	void set_pending_connection(const ConnectionRequest& conn);
+	bool get_pending_connection(ConnectionRequest& conn);
+	bool has_pending_connection() const;
 };
 #pragma pack(pop)
 
@@ -305,10 +314,6 @@ public:
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 
-	// Helper methods for virtual socket packet handling
-	void enqueue_packet(VirtualPacket& packet);
-	bool dequeue_packet(VirtualPacket& packet);
-	bool has_pending_data() const;
 	void clear();
 };
 #pragma pack(pop)
@@ -329,13 +334,6 @@ public:
 	int shutdown(int how) override;
 
 	void ProcessNetStack() override;
-	void enqueue_packet(VirtualPacket& packet);
-	bool dequeue_packet(VirtualPacket& packet);
-	int dequeue_stream(char* buf, int len, sockaddr_in* out_addr);
-	bool has_pending_data() const;
-	void set_pending_connection(const ConnectionRequest& conn);
-	bool get_pending_connection(ConnectionRequest& conn);
-	bool has_pending_connection() const;
 };
 #pragma pack(pop)
 static_assert(sizeof(PacketSocket) == sizeof(InetSocket), "Socket size mismatch!");

@@ -704,6 +704,135 @@ int InetSocket::listen(int backlog) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::accept(sockaddr* addr, socklen_t* addrlen) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::shutdown(int how) { errno = EOPNOTSUPP; return -1; }
 void InetSocket::ProcessNetStack() { /* Do nothing */ }
+void InetSocket::enqueue_packet(VirtualPacket& packet) {
+	std::lock_guard<std::mutex> lock(queue_lock);
+	// Add timestamp for TTL tracking
+	packet.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
+	rx_queue.push_back(std::move(packet));
+	packet_ready.notify_all();
+	DEBUG_LOG(Log::sceNet, "Enqueued packet for vport %d (queue size: %zu)", vport, rx_queue.size());
+}
+bool InetSocket::dequeue_packet(VirtualPacket& packet) {
+	std::lock_guard<std::mutex> lock(queue_lock);
+	const u64 MAX_PACKET_AGE_US = 30000000;  // 30 seconds
+	
+	while (!rx_queue.empty()) {
+		packet = std::move(rx_queue.front());
+		rx_queue.pop_front();
+		
+		// Check packet TTL
+		u64 current_time_us = (u64)(time_now_d() * 1000000.0);
+		u64 packet_age_us = current_time_us - packet.enqueue_time_us;
+		
+		if (packet_age_us > MAX_PACKET_AGE_US) {
+			DEBUG_LOG(Log::sceNet, "dequeue_packet: Discarding stale packet on vport %d (age: %.2f seconds)",
+				vport, (float)packet_age_us / 1000000.0f);
+			continue;  // Skip this packet and try the next one
+		}
+		
+		DEBUG_LOG(Log::sceNet, "Dequeued packet from vport %d (queue size: %zu)", vport, rx_queue.size());
+		return true;
+	}
+	
+	return false;  // Queue is empty
+}
+int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
+    std::lock_guard<std::mutex> lock(queue_lock);
+    const u64 MAX_PACKET_AGE_US = 30000000;  // 30 seconds
+    u64 current_time_us = (u64)(time_now_d() * 1000000.0);
+    
+    int total_copied = 0;
+    bool target_locked = false;
+    sockaddr_in target_addr{};
+    
+    while (total_copied < len && !rx_queue.empty()) {
+        // Peek at the front packet (do NOT pop yet)
+        VirtualPacket& peek_pkt = rx_queue.front();
+        
+        // Check packet TTL
+        u64 packet_age_us = current_time_us - peek_pkt.enqueue_time_us;
+        if (packet_age_us > MAX_PACKET_AGE_US) {
+            DEBUG_LOG(Log::sceNet, "dequeue_stream: Discarding stale packet on vport %d", vport);
+            rx_queue.pop_front(); // Safe to discard
+            continue;
+        }
+
+        // Lock onto the first valid packet's source address
+        if (!target_locked) {
+            target_addr = peek_pkt.src_addr;
+            target_locked = true;
+            if (out_addr) {
+                *out_addr = target_addr;
+            }
+        } else {
+            // If we are continuing to fill the buffer, ensure this next packet is from the SAME source
+            if (peek_pkt.src_addr.sin_addr.s_addr != target_addr.sin_addr.s_addr ||
+                peek_pkt.src_addr.sin_port != target_addr.sin_port) {
+                
+                DEBUG_LOG(Log::sceNet, "dequeue_stream: Source mismatch detected. Halting coalescing. (Expected %s:%u, got %s:%u)",
+                    inet_ntoa(target_addr.sin_addr), ntohs(target_addr.sin_port),
+                    inet_ntoa(peek_pkt.src_addr.sin_addr), ntohs(peek_pkt.src_addr.sin_port));
+                break; // Stop coalescing and leave this packet in the queue
+            }
+        }
+        
+        // Now we know we are consuming this packet (at least partially), so pop it
+        VirtualPacket packet = std::move(rx_queue.front());
+        rx_queue.pop_front();
+        
+        int available_in_pkt = packet.len;
+        int room_in_buf = len - total_copied;
+        int bytes_to_copy = std::min(available_in_pkt, room_in_buf);
+        
+        // Copy data to the caller's buffer
+        if (bytes_to_copy > 0 && packet.data != nullptr) {
+            memcpy(buf + total_copied, packet.data.get(), bytes_to_copy);
+            total_copied += bytes_to_copy;
+        }
+        
+        // If we didn't consume the whole packet, push the remainder back to the FRONT
+        if (bytes_to_copy < available_in_pkt) {
+            VirtualPacket remainder;
+            int remaining_len = available_in_pkt - bytes_to_copy;
+            
+            remainder.data = std::make_unique<char[]>(remaining_len);
+            memcpy(remainder.data.get(), packet.data.get() + bytes_to_copy, remaining_len);
+            
+            remainder.len = remaining_len;
+            remainder.header_flags = packet.header_flags;
+            remainder.src_addr = packet.src_addr;
+            remainder.enqueue_time_us = packet.enqueue_time_us; // Preserve TTL
+            
+            rx_queue.push_front(std::move(remainder));
+            break; // Buffer is full
+        }
+    }
+    
+    return total_copied;
+}
+bool InetSocket::has_pending_data() const {
+	std::lock_guard<std::mutex> lock(queue_lock);
+	return !rx_queue.empty();
+}
+void InetSocket::set_pending_connection(const ConnectionRequest& conn) {
+	std::lock_guard<std::mutex> lock(conn_lock);
+	pending_connection = std::make_unique<ConnectionRequest>(conn);
+	DEBUG_LOG(Log::sceNet, "Set pending connection on vport %d from %s:%u",
+		vport, inet_ntoa(conn.peer_addr.sin_addr), ntohs(conn.peer_addr.sin_port));
+}
+bool InetSocket::get_pending_connection(ConnectionRequest& conn) {
+	std::lock_guard<std::mutex> lock(conn_lock);
+	if (!pending_connection) {
+		return false;
+	}
+	conn = *pending_connection;
+	pending_connection.reset();
+	return true;
+}
+bool InetSocket::has_pending_connection() const {
+	std::lock_guard<std::mutex> lock(conn_lock);
+	return pending_connection != nullptr;
+}
 
 // Close a virtual socket
 int InetSocket::closesocket() {
@@ -1549,43 +1678,6 @@ int ConnDgramSocket::select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds
 	// Wait Logic?
 }
 
-void ConnDgramSocket::enqueue_packet(VirtualPacket& packet) {
-	std::lock_guard<std::mutex> lock(queue_lock);
-	// Add timestamp for TTL tracking
-	packet.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
-	rx_queue.push_back(std::move(packet));
-	packet_ready.notify_all();
-	DEBUG_LOG(Log::sceNet, "Enqueued packet for vport %d (queue size: %zu)", vport, rx_queue.size());
-}
-bool ConnDgramSocket::dequeue_packet(VirtualPacket& packet) {
-	std::lock_guard<std::mutex> lock(queue_lock);
-	const u64 MAX_PACKET_AGE_US = 30000000;  // 30 seconds
-	
-	while (!rx_queue.empty()) {
-		packet = std::move(rx_queue.front());
-		rx_queue.pop_front();
-		
-		// Check packet TTL
-		u64 current_time_us = (u64)(time_now_d() * 1000000.0);
-		u64 packet_age_us = current_time_us - packet.enqueue_time_us;
-		
-		if (packet_age_us > MAX_PACKET_AGE_US) {
-			DEBUG_LOG(Log::sceNet, "dequeue_packet: Discarding stale packet on vport %d (age: %.2f seconds)",
-				vport, (float)packet_age_us / 1000000.0f);
-			continue;  // Skip this packet and try the next one
-		}
-		
-		DEBUG_LOG(Log::sceNet, "Dequeued packet from vport %d (queue size: %zu)", vport, rx_queue.size());
-		return true;
-	}
-	
-	return false;  // Queue is empty
-}
-bool ConnDgramSocket::has_pending_data() const {
-	std::lock_guard<std::mutex> lock(queue_lock);
-	return !rx_queue.empty();
-}
-
 // ============================================================================
 // TCP Virtual Socket with UPnP transmission capabilities
 // ============================================================================
@@ -2147,133 +2239,4 @@ void PacketSocket::ProcessNetStack() {
             it++;
         }
     }
-}
-void PacketSocket::enqueue_packet(VirtualPacket& packet) {
-	std::lock_guard<std::mutex> lock(queue_lock);
-	// Add timestamp for TTL tracking
-	packet.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
-	rx_queue.push_back(std::move(packet));
-	packet_ready.notify_all();
-	DEBUG_LOG(Log::sceNet, "Enqueued packet for vport %d (queue size: %zu)", vport, rx_queue.size());
-}
-bool PacketSocket::dequeue_packet(VirtualPacket& packet) {
-	std::lock_guard<std::mutex> lock(queue_lock);
-	const u64 MAX_PACKET_AGE_US = 30000000;  // 30 seconds
-	
-	while (!rx_queue.empty()) {
-		packet = std::move(rx_queue.front());
-		rx_queue.pop_front();
-		
-		// Check packet TTL
-		u64 current_time_us = (u64)(time_now_d() * 1000000.0);
-		u64 packet_age_us = current_time_us - packet.enqueue_time_us;
-		
-		if (packet_age_us > MAX_PACKET_AGE_US) {
-			DEBUG_LOG(Log::sceNet, "dequeue_packet: Discarding stale packet on vport %d (age: %.2f seconds)",
-				vport, (float)packet_age_us / 1000000.0f);
-			continue;  // Skip this packet and try the next one
-		}
-		
-		DEBUG_LOG(Log::sceNet, "Dequeued packet from vport %d (queue size: %zu)", vport, rx_queue.size());
-		return true;
-	}
-	
-	return false;  // Queue is empty
-}
-int PacketSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
-    std::lock_guard<std::mutex> lock(queue_lock);
-    const u64 MAX_PACKET_AGE_US = 30000000;  // 30 seconds
-    u64 current_time_us = (u64)(time_now_d() * 1000000.0);
-    
-    int total_copied = 0;
-    bool target_locked = false;
-    sockaddr_in target_addr{};
-    
-    while (total_copied < len && !rx_queue.empty()) {
-        // Peek at the front packet (do NOT pop yet)
-        VirtualPacket& peek_pkt = rx_queue.front();
-        
-        // Check packet TTL
-        u64 packet_age_us = current_time_us - peek_pkt.enqueue_time_us;
-        if (packet_age_us > MAX_PACKET_AGE_US) {
-            DEBUG_LOG(Log::sceNet, "dequeue_stream: Discarding stale packet on vport %d", vport);
-            rx_queue.pop_front(); // Safe to discard
-            continue;
-        }
-
-        // Lock onto the first valid packet's source address
-        if (!target_locked) {
-            target_addr = peek_pkt.src_addr;
-            target_locked = true;
-            if (out_addr) {
-                *out_addr = target_addr;
-            }
-        } else {
-            // If we are continuing to fill the buffer, ensure this next packet is from the SAME source
-            if (peek_pkt.src_addr.sin_addr.s_addr != target_addr.sin_addr.s_addr ||
-                peek_pkt.src_addr.sin_port != target_addr.sin_port) {
-                
-                DEBUG_LOG(Log::sceNet, "dequeue_stream: Source mismatch detected. Halting coalescing. (Expected %s:%u, got %s:%u)",
-                    inet_ntoa(target_addr.sin_addr), ntohs(target_addr.sin_port),
-                    inet_ntoa(peek_pkt.src_addr.sin_addr), ntohs(peek_pkt.src_addr.sin_port));
-                break; // Stop coalescing and leave this packet in the queue
-            }
-        }
-        
-        // Now we know we are consuming this packet (at least partially), so pop it
-        VirtualPacket packet = std::move(rx_queue.front());
-        rx_queue.pop_front();
-        
-        int available_in_pkt = packet.len;
-        int room_in_buf = len - total_copied;
-        int bytes_to_copy = std::min(available_in_pkt, room_in_buf);
-        
-        // Copy data to the caller's buffer
-        if (bytes_to_copy > 0 && packet.data != nullptr) {
-            memcpy(buf + total_copied, packet.data.get(), bytes_to_copy);
-            total_copied += bytes_to_copy;
-        }
-        
-        // If we didn't consume the whole packet, push the remainder back to the FRONT
-        if (bytes_to_copy < available_in_pkt) {
-            VirtualPacket remainder;
-            int remaining_len = available_in_pkt - bytes_to_copy;
-            
-            remainder.data = std::make_unique<char[]>(remaining_len);
-            memcpy(remainder.data.get(), packet.data.get() + bytes_to_copy, remaining_len);
-            
-            remainder.len = remaining_len;
-            remainder.header_flags = packet.header_flags;
-            remainder.src_addr = packet.src_addr;
-            remainder.enqueue_time_us = packet.enqueue_time_us; // Preserve TTL
-            
-            rx_queue.push_front(std::move(remainder));
-            break; // Buffer is full
-        }
-    }
-    
-    return total_copied;
-}
-bool PacketSocket::has_pending_data() const {
-	std::lock_guard<std::mutex> lock(queue_lock);
-	return !rx_queue.empty();
-}
-void PacketSocket::set_pending_connection(const ConnectionRequest& conn) {
-	std::lock_guard<std::mutex> lock(conn_lock);
-	pending_connection = std::make_unique<ConnectionRequest>(conn);
-	DEBUG_LOG(Log::sceNet, "Set pending connection on vport %d from %s:%u",
-		vport, inet_ntoa(conn.peer_addr.sin_addr), ntohs(conn.peer_addr.sin_port));
-}
-bool PacketSocket::get_pending_connection(ConnectionRequest& conn) {
-	std::lock_guard<std::mutex> lock(conn_lock);
-	if (!pending_connection) {
-		return false;
-	}
-	conn = *pending_connection;
-	pending_connection.reset();
-	return true;
-}
-bool PacketSocket::has_pending_connection() const {
-	std::lock_guard<std::mutex> lock(conn_lock);
-	return pending_connection != nullptr;
 }
