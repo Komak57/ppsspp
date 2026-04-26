@@ -268,6 +268,107 @@ SOURCES_C += \
 COREFLAGS += -DSTACK_LINE_READER_BUFFER_SIZE=1024
 COREFLAGS += -DHTTPS_NOT_AVAILABLE
 
+INCFLAGS += -I$(EXTDIR)/mbedtls/include
+
+SOURCES_C += \
+	$(EXTDIR)/mbedtls/library/aes.c \
+	$(EXTDIR)/mbedtls/library/aesni.c \
+	$(EXTDIR)/mbedtls/library/arc4.c \
+	$(EXTDIR)/mbedtls/library/aria.c \
+	$(EXTDIR)/mbedtls/library/asn1parse.c \
+	$(EXTDIR)/mbedtls/library/asn1write.c \
+	$(EXTDIR)/mbedtls/library/base64.c \
+	$(EXTDIR)/mbedtls/library/bignum.c \
+	$(EXTDIR)/mbedtls/library/blowfish.c \
+	$(EXTDIR)/mbedtls/library/camellia.c \
+	$(EXTDIR)/mbedtls/library/ccm.c \
+	$(EXTDIR)/mbedtls/library/certs.c \
+	$(EXTDIR)/mbedtls/library/chacha20.c \
+	$(EXTDIR)/mbedtls/library/chachapoly.c \
+	$(EXTDIR)/mbedtls/library/cipher.c \
+	$(EXTDIR)/mbedtls/library/cipher_wrap.c \
+	$(EXTDIR)/mbedtls/library/cmac.c \
+	$(EXTDIR)/mbedtls/library/constant_time.c \
+	$(EXTDIR)/mbedtls/library/ctr_drbg.c \
+	$(EXTDIR)/mbedtls/library/debug.c \
+	$(EXTDIR)/mbedtls/library/des.c \
+	$(EXTDIR)/mbedtls/library/dhm.c \
+	$(EXTDIR)/mbedtls/library/ecdh.c \
+	$(EXTDIR)/mbedtls/library/ecdsa.c \
+	$(EXTDIR)/mbedtls/library/ecjpake.c \
+	$(EXTDIR)/mbedtls/library/ecp.c \
+	$(EXTDIR)/mbedtls/library/ecp_curves.c \
+	$(EXTDIR)/mbedtls/library/entropy.c \
+	$(EXTDIR)/mbedtls/library/entropy_poll.c \
+	$(EXTDIR)/mbedtls/library/error.c \
+	$(EXTDIR)/mbedtls/library/gcm.c \
+	$(EXTDIR)/mbedtls/library/havege.c \
+	$(EXTDIR)/mbedtls/library/hkdf.c \
+	$(EXTDIR)/mbedtls/library/hmac_drbg.c \
+	$(EXTDIR)/mbedtls/library/md2.c \
+	$(EXTDIR)/mbedtls/library/md4.c \
+	$(EXTDIR)/mbedtls/library/md5.c \
+	$(EXTDIR)/mbedtls/library/md.c \
+	$(EXTDIR)/mbedtls/library/memory_buffer_alloc.c \
+	$(EXTDIR)/mbedtls/library/mps_reader.c \
+	$(EXTDIR)/mbedtls/library/mps_trace.c \
+	$(EXTDIR)/mbedtls/library/net_sockets.c \
+	$(EXTDIR)/mbedtls/library/nist_kw.c \
+	$(EXTDIR)/mbedtls/library/oid.c \
+	$(EXTDIR)/mbedtls/library/padlock.c \
+	$(EXTDIR)/mbedtls/library/pem.c \
+	$(EXTDIR)/mbedtls/library/pk.c \
+	$(EXTDIR)/mbedtls/library/pkcs11.c \
+	$(EXTDIR)/mbedtls/library/pkcs12.c \
+	$(EXTDIR)/mbedtls/library/pkcs5.c \
+	$(EXTDIR)/mbedtls/library/pkparse.c \
+	$(EXTDIR)/mbedtls/library/pk_wrap.c \
+	$(EXTDIR)/mbedtls/library/pkwrite.c \
+	$(EXTDIR)/mbedtls/library/platform.c \
+	$(EXTDIR)/mbedtls/library/platform_util.c \
+	$(EXTDIR)/mbedtls/library/poly1305.c \
+	$(EXTDIR)/mbedtls/library/psa_crypto_aead.c \
+	$(EXTDIR)/mbedtls/library/psa_crypto.c \
+	$(EXTDIR)/mbedtls/library/psa_crypto_cipher.c \
+	$(EXTDIR)/mbedtls/library/psa_crypto_client.c \
+	$(EXTDIR)/mbedtls/library/psa_crypto_driver_wrappers.c \
+	$(EXTDIR)/mbedtls/library/psa_crypto_ecp.c \
+	$(EXTDIR)/mbedtls/library/psa_crypto_hash.c \
+	$(EXTDIR)/mbedtls/library/psa_crypto_mac.c \
+	$(EXTDIR)/mbedtls/library/psa_crypto_rsa.c \
+	$(EXTDIR)/mbedtls/library/psa_crypto_se.c \
+	$(EXTDIR)/mbedtls/library/psa_crypto_slot_management.c \
+	$(EXTDIR)/mbedtls/library/psa_crypto_storage.c \
+	$(EXTDIR)/mbedtls/library/psa_its_file.c \
+	$(EXTDIR)/mbedtls/library/ripemd160.c \
+	$(EXTDIR)/mbedtls/library/rsa.c \
+	$(EXTDIR)/mbedtls/library/rsa_internal.c \
+	$(EXTDIR)/mbedtls/library/sha1.c \
+	$(EXTDIR)/mbedtls/library/sha256.c \
+	$(EXTDIR)/mbedtls/library/sha512.c \
+	$(EXTDIR)/mbedtls/library/ssl_cache.c \
+	$(EXTDIR)/mbedtls/library/ssl_ciphersuites.c \
+	$(EXTDIR)/mbedtls/library/ssl_cli.c \
+	$(EXTDIR)/mbedtls/library/ssl_cookie.c \
+	$(EXTDIR)/mbedtls/library/ssl_msg.c \
+	$(EXTDIR)/mbedtls/library/ssl_srv.c \
+	$(EXTDIR)/mbedtls/library/ssl_ticket.c \
+	$(EXTDIR)/mbedtls/library/ssl_tls13_keys.c \
+	$(EXTDIR)/mbedtls/library/ssl_tls.c \
+	$(EXTDIR)/mbedtls/library/threading.c \
+	$(EXTDIR)/mbedtls/library/timing.c \
+	$(EXTDIR)/mbedtls/library/version.c \
+	$(EXTDIR)/mbedtls/library/version_features.c \
+	$(EXTDIR)/mbedtls/library/x509.c \
+	$(EXTDIR)/mbedtls/library/x509_create.c \
+	$(EXTDIR)/mbedtls/library/x509_crl.c \
+	$(EXTDIR)/mbedtls/library/x509_crt.c \
+	$(EXTDIR)/mbedtls/library/x509_csr.c \
+	$(EXTDIR)/mbedtls/library/x509write_crt.c \
+	$(EXTDIR)/mbedtls/library/x509write_csr.c \
+	$(EXTDIR)/mbedtls/library/xtea.c
+
+
 COREFLAGS += -DZ7_ST
 INCFLAGS += -I$(EXTDIR)/libchdr/deps/lzma-24.05/include
 
@@ -363,6 +464,8 @@ SOURCES_CXX += \
 	$(EXTDIR)/armips/Parser/ExpressionParser.cpp \
 	$(EXTDIR)/armips/Parser/Parser.cpp \
 	$(EXTDIR)/armips/Parser/Tokenizer.cpp
+
+INCFLAGS += -I$(EXTDIR)/flatbuffers/include
 
 ifeq ($(PLATFORM_EXT), android)
 COREFLAGS += -DHAVE_DLFCN_H
@@ -719,6 +822,7 @@ SOURCES_CXX += \
 	       $(COREDIR)/Debugger/Breakpoints.cpp \
 	       $(COREDIR)/Debugger/SymbolMap.cpp \
 	       $(COREDIR)/Debugger/MemBlockInfo.cpp \
+		   $(COREDIR)/Debugger/Np2Printer.cpp \
 	       $(COREDIR)/Dialog/PSPDialog.cpp \
 	       $(COREDIR)/Dialog/PSPGamedataInstallDialog.cpp \
 	       $(COREDIR)/Dialog/PSPMsgDialog.cpp \
@@ -826,6 +930,7 @@ SOURCES_CXX += \
 	       $(COREDIR)/HLE/scePspNpDrm_user.cpp \
 	       $(COREDIR)/HLE/sceNp.cpp \
 	       $(COREDIR)/HLE/sceNp2.cpp \
+	       $(COREDIR)/HLE/sceNpSignaling.cpp \
 	       $(COREDIR)/HLE/scePauth.cpp \
 	       $(COREDIR)/HLE/sceUsbGps.cpp \
 	       $(COREDIR)/HW/BufferQueue.cpp \
@@ -888,6 +993,19 @@ SOURCES_CXX += \
 	       $(COREDIR)/Util/RecentFiles.cpp \
 	       $(COREDIR)/Util/AudioFormat.cpp \
 	       $(COREDIR)/Util/PortManager.cpp \
+		   $(COREDIR)/Net/NpMatching2Cache.cpp \
+		   $(COREDIR)/Net/Buffer.cpp \
+		   $(COREDIR)/Net/NPAgent.cpp \
+		   $(COREDIR)/Net/NPAgents/PSNAuthAgent.cpp \
+		   $(COREDIR)/Net/NPAgents/PSNAgent.cpp \
+		   $(COREDIR)/Net/NPAgents/RPCNAgent.cpp \
+		   $(COREDIR)/Net/NPAgents/RPCNAuthAgent.cpp \
+		   $(COREDIR)/Net/HTTPConnection.cpp \
+		   $(COREDIR)/Net/fb_helpers.cpp \
+		   $(COREDIR)/Net/HTTPS.cpp \
+		   $(COREDIR)/Net/SIGAgent.cpp \
+		   $(COREDIR)/Net/SIGAgents/PSNSigAgent.cpp \
+		   $(COREDIR)/Net/SIGAgents/RPCNSigAgent.cpp \
 	       $(CORE_DIR)/UI/GameInfoCache.cpp
 
 SOURCES_CXX += $(COREDIR)/HLE/__sceAudio.cpp

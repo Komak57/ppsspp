@@ -146,6 +146,58 @@ SPIRV_CROSS_FILES := \
 NAETT_FILES := \
   ${SRC}/ext/naett/naett.c
 
+MBEDTLS_FILES := \
+  $(SRC)/ext/mbedtls/library/aes.c \
+	$(SRC)/ext/mbedtls/library/aes.c \
+	$(SRC)/ext/mbedtls/library/asn1parse.c \
+	$(SRC)/ext/mbedtls/library/asn1write.c \
+	$(SRC)/ext/mbedtls/library/base64.c \
+	$(SRC)/ext/mbedtls/library/bignum.c \
+	$(SRC)/ext/mbedtls/library/cipher.c \
+	$(SRC)/ext/mbedtls/library/cipher_wrap.c \
+	$(SRC)/ext/mbedtls/library/constant_time.c \
+	$(SRC)/ext/mbedtls/library/ctr_drbg.c \
+	$(SRC)/ext/mbedtls/library/debug.c \
+	$(SRC)/ext/mbedtls/library/ecdh.c \
+	$(SRC)/ext/mbedtls/library/ecdsa.c \
+	$(SRC)/ext/mbedtls/library/ecp.c \
+	$(SRC)/ext/mbedtls/library/ecp_curves.c \
+	$(SRC)/ext/mbedtls/library/entropy.c \
+	$(SRC)/ext/mbedtls/library/entropy_poll.c \
+	$(SRC)/ext/mbedtls/library/error.c \
+	$(SRC)/ext/mbedtls/library/hmac_drbg.c \
+	$(SRC)/ext/mbedtls/library/md.c \
+	$(SRC)/ext/mbedtls/library/md5.c \
+	$(SRC)/ext/mbedtls/library/mps_reader.c \
+	$(SRC)/ext/mbedtls/library/mps_trace.c \
+	$(SRC)/ext/mbedtls/library/net_sockets.c \
+	$(SRC)/ext/mbedtls/library/oid.c \
+	$(SRC)/ext/mbedtls/library/pem.c \
+	$(SRC)/ext/mbedtls/library/pk.c \
+	$(SRC)/ext/mbedtls/library/pk_wrap.c \
+	$(SRC)/ext/mbedtls/library/pkparse.c \
+	$(SRC)/ext/mbedtls/library/platform.c \
+	$(SRC)/ext/mbedtls/library/platform_util.c \
+	$(SRC)/ext/mbedtls/library/rsa.c \
+	$(SRC)/ext/mbedtls/library/rsa_internal.c \
+	$(SRC)/ext/mbedtls/library/sha1.c \
+	$(SRC)/ext/mbedtls/library/sha256.c \
+	$(SRC)/ext/mbedtls/library/sha512.c \
+	$(SRC)/ext/mbedtls/library/ssl_cache.c \
+	$(SRC)/ext/mbedtls/library/ssl_ciphersuites.c \
+	$(SRC)/ext/mbedtls/library/ssl_cli.c \
+	$(SRC)/ext/mbedtls/library/ssl_cookie.c \
+	$(SRC)/ext/mbedtls/library/ssl_msg.c \
+	$(SRC)/ext/mbedtls/library/ssl_srv.c \
+	$(SRC)/ext/mbedtls/library/ssl_tls.c \
+	$(SRC)/ext/mbedtls/library/ssl_tls13_keys.c \
+	$(SRC)/ext/mbedtls/library/threading.c \
+	$(SRC)/ext/mbedtls/library/timing.c \
+	$(SRC)/ext/mbedtls/library/version.c \
+	$(SRC)/ext/mbedtls/library/x509.c \
+	$(SRC)/ext/mbedtls/library/x509_crt.c \
+	$(SRC)/ext/mbedtls/library/x509_crl.c
+
 MINIMP3_FILES := \
     ${SRC}/ext/minimp3/minimp3.cpp
 
@@ -280,6 +332,7 @@ EXEC_AND_LIB_FILES := \
   $(AT3_STANDALONE_FILES) \
   $(EXT_FILES) \
   $(NATIVE_FILES) \
+  $(MBEDTLS_FILES) \
   $(SRC)/Common/Buffer.cpp \
   $(SRC)/Common/Crypto/md5.cpp \
   $(SRC)/Common/Crypto/sha1.cpp \
@@ -654,6 +707,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/Debugger/WebSocket/SteppingBroadcaster.cpp \
   $(SRC)/Core/Debugger/WebSocket/SteppingSubscriber.cpp \
   $(SRC)/Core/Debugger/WebSocket/WebSocketUtils.cpp \
+  $(SRC)/Core/Debugger/Np2Printer.cpp \
   $(SRC)/Core/Dialog/PSPDialog.cpp \
   $(SRC)/Core/Dialog/PSPGamedataInstallDialog.cpp \
   $(SRC)/Core/Dialog/PSPMsgDialog.cpp \
@@ -753,9 +807,6 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/HLE/sceNp.cpp \
   $(SRC)/Core/HLE/sceNp2.cpp \
   $(SRC)/Core/HLE/sceNpSignaling.cpp \
-  $(SRC)/Core/Net/SIGAgent.cpp \
-  $(SRC)/Core/Net/SIGAgents/PSNSigAgent.cpp \
-  $(SRC)/Core/Net/SIGAgents/RPCNSigAgent.cpp \
   $(SRC)/Core/HLE/scePauth.cpp \
   $(SRC)/Core/FileSystems/BlobFileSystem.cpp \
   $(SRC)/Core/FileSystems/BlockDevices.cpp \
@@ -779,14 +830,17 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/Util/RecentFiles.cpp \
   $(SRC)/Core/Net/NpMatching2Cache.cpp \
   $(SRC)/Core/Net/Buffer.cpp \
+  $(SRC)/Core/Net/NPAgent.cpp \
   $(SRC)/Core/Net/NPAgents/PSNAuthAgent.cpp \
   $(SRC)/Core/Net/NPAgents/PSNAgent.cpp \
   $(SRC)/Core/Net/NPAgents/RPCNAgent.cpp \
   $(SRC)/Core/Net/NPAgents/RPCNAuthAgent.cpp \
-  $(SRC)/Core/Net/NPAgent.cpp \
   $(SRC)/Core/Net/HTTPConnection.cpp \
   $(SRC)/Core/Net/fb_helpers.cpp \
   $(SRC)/Core/Net/HTTPS.cpp \
+  $(SRC)/Core/Net/SIGAgent.cpp \
+  $(SRC)/Core/Net/SIGAgents/PSNSigAgent.cpp \
+  $(SRC)/Core/Net/SIGAgents/RPCNSigAgent.cpp \
   $(SRC)/git-version.cpp
 
 LOCAL_MODULE := ppsspp_core
@@ -902,42 +956,10 @@ LOCAL_MODULE := libzstd
 LOCAL_SRC_FILES := $(LIBZSTD_FILES)
 include $(BUILD_STATIC_LIBRARY)
 
-# MDEDTLS
+# MBEDTLS
 include $(CLEAR_VARS)
 include $(LOCAL_PATH)/Locals.mk
-LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/$(SRC)/ext/mbedtls/include
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/$(SRC)/ext/mbedtls/include $(LOCAL_C_INCLUDES)
-
-MBEDTLS_FILES := \
-  $(SRC)/ext/mbedtls/library/aes.c \
-  $(SRC)/ext/mbedtls/library/asn1parse.c \
-  $(SRC)/ext/mbedtls/library/asn1write.c \
-  $(SRC)/ext/mbedtls/library/base64.c \
-  $(SRC)/ext/mbedtls/library/bignum.c \
-  $(SRC)/ext/mbedtls/library/bignum_core.c \
-  $(SRC)/ext/mbedtls/library/bignum_mod.c \
-  $(SRC)/ext/mbedtls/library/cipher.c \
-  $(SRC)/ext/mbedtls/library/cipher_wrap.c \
-  $(SRC)/ext/mbedtls/library/constant_time.c \
-  $(SRC)/ext/mbedtls/library/ctr_drbg.c \
-  $(SRC)/ext/mbedtls/library/debug.c \
-  $(SRC)/ext/mbedtls/library/entropy.c \
-  $(SRC)/ext/mbedtls/library/md.c \
-  $(SRC)/ext/mbedtls/library/oid.c \
-  $(SRC)/ext/mbedtls/library/pem.c \
-  $(SRC)/ext/mbedtls/library/pk.c \
-  $(SRC)/ext/mbedtls/library/pk_wrap.c \
-  $(SRC)/ext/mbedtls/library/pkparse.c \
-  $(SRC)/ext/mbedtls/library/rsa.c \
-  $(SRC)/ext/mbedtls/library/rsa_alt_helpers.c \
-  $(SRC)/ext/mbedtls/library/sha256.c \
-  $(SRC)/ext/mbedtls/library/sha512.c \
-  $(SRC)/ext/mbedtls/library/ssl_ciphersuites.c \
-  $(SRC)/ext/mbedtls/library/ssl_cli.c \
-  $(SRC)/ext/mbedtls/library/ssl_msg.c \
-  $(SRC)/ext/mbedtls/library/ssl_tls.c \
-  $(SRC)/ext/mbedtls/library/x509.c \
-  $(SRC)/ext/mbedtls/library/x509_crt.c
+LOCAL_C_INCLUDES := $(SRC)/ext/mbedtls/include $(LOCAL_C_INCLUDES)
 
 LOCAL_MODULE := mbedtls
 LOCAL_SRC_FILES := $(MBEDTLS_FILES)
@@ -946,8 +968,7 @@ include $(BUILD_STATIC_LIBRARY)
 # Google Flatbuffers
 include $(CLEAR_VARS)
 include $(LOCAL_PATH)/Locals.mk
-LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/$(SRC)/ext/flatbuffers/include
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/$(SRC)/ext/flatbuffers/include $(LOCAL_C_INCLUDES)
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../ext/flatbuffers/include $(LOCAL_C_INCLUDES)
 
 FLATBUFFERS_FILES := \
   $(SRC)/ext/flatbuffers/src/idl_parser.cpp \
