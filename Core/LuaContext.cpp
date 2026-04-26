@@ -102,7 +102,9 @@ void LuaContext::ExecuteConsoleCommand(std::string_view cmd) {
 	// print "hello"
 	// to
 	// print("hello") ?
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
 	try {
+#endif
 		std::string command;
 		if (IsProbablyExpression(cmd)) {
 			command = "return ";
@@ -134,8 +136,11 @@ void LuaContext::ExecuteConsoleCommand(std::string_view cmd) {
 			sol::error err = result;
 			lines_.push_back(LuaLogLine{ LogLineType::Error, std::string(err.what()) });
 		}
+
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
 	} catch (const sol::error& e) {
 		ERROR_LOG(Log::System, "Lua exception: %s", e.what());
 		lines_.push_back(LuaLogLine{ LogLineType::Error, std::string(e.what()) });
 	}
+#endif
 }

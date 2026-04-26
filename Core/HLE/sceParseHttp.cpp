@@ -128,7 +128,9 @@ static int sceParseHttpStatusLine(u32 headerAddr, u32 headerLength, u32 httpVers
 	if (!std::regex_search(line, matches, rgx))
 		return hleLogError(Log::sceNet, -1, "invalid arg"); // SCE_HTTP_ERROR_PARSE_HTTP_NOT_FOUND
 
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
 	try {
+#endif
 		// Convert and Store the value
 		if (Memory::IsValidRange(httpVersionMajorAddr, 4)) {
 			Memory::WriteUnchecked_U32(stoi(matches[1].str()), httpVersionMajorAddr);
@@ -155,6 +157,7 @@ static int sceParseHttpStatusLine(u32 headerAddr, u32 headerLength, u32 httpVers
 			Memory::WriteUnchecked_U32((u32)sc.size(), httpStatusCommentLengthAddr);
 			NotifyMemInfo(MemBlockFlags::WRITE, httpStatusCommentLengthAddr, 4, "ParseHttpStatusLine");
 		}
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
 	}
 	catch (const std::runtime_error& ex) {
 		return hleLogError(Log::sceNet, -1, "Runtime error: %s", ex.what());
@@ -165,7 +168,7 @@ static int sceParseHttpStatusLine(u32 headerAddr, u32 headerLength, u32 httpVers
 	catch (...) {
 		return hleLogError(Log::sceNet, -1, "Unknown error");
 	}
-
+#endif
 	return hleLogDebug(Log::sceNet, 0);
 }
 
