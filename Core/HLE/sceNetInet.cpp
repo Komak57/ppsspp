@@ -671,7 +671,7 @@ static int sceNetInetAccept(int socket, u32 addrPtr, u32 addrLenPtr) {
 		memcpy(src->sa_data, saddr.addr.sa_data, sizeof(src->sa_data));
 		src->sa_len = srclen ? *srclen : 0;
 	}
-	DEBUG_LOG(Log::sceNet, "Accept: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	INFO_LOG(Log::sceNet, "Accept: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 
 	return hleLogInfo(Log::sceNet, newHostSocket);
 }
