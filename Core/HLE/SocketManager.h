@@ -332,6 +332,7 @@ public:
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 
+	bool ProcessNetStack() override;
 	void clear();
 };
 #pragma pack(pop)
