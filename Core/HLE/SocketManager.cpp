@@ -368,7 +368,8 @@ int SocketManager::DeliverPacketToVPorts(const VPORT_HEADER& header, const char*
         if (target_sock->type == PSP_NET_INET_SOCK_PACKET && htons(target_sock->port) != header.vport) {
             continue;  // Not subscribed to this vport
         }
-        if (target_sock->type == PSP_NET_INET_SOCK_CONN_DGRAM && htons(target_sock->vport) != header.vport) {
+        // if (target_sock->type == PSP_NET_INET_SOCK_CONN_DGRAM && htons(target_sock->vport) != header.vport) {
+        if (target_sock->type == PSP_NET_INET_SOCK_CONN_DGRAM && htons(target_sock->port) != header.vport) {
             continue;  // Not subscribed to this vport
         }
         
@@ -1483,10 +1484,15 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	int packet_size = VPORT_HEADER_SIZE + len;
 	std::unique_ptr<char[]> packet = std::make_unique<char[]>(packet_size);
 
+	u16 dest_vport = (saddr.in.sin_zero[1] << 8) | saddr.in.sin_zero[0];
 	// Pack DGRAM_HEADER (3 bytes): [flags][data_len]
 	VPORT_HEADER header;
 	header.flags = p2ps_tcp_flags::PSH;
-	header.vport = (saddr.in.sin_zero[1] << 8) | saddr.in.sin_zero[0];
+	header.vport = htons(port);
+	// header.vport = (saddr.in.sin_zero[1] << 8) | saddr.in.sin_zero[0];
+	// // Do not send on vport 0
+	// if (header.vport == 0)
+	// 	header.vport = htons(1);
 	// memcpy(&header.vport, &saddr.in.sin_zero[0], 2);
 	memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
 
@@ -1495,15 +1501,28 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 		memcpy(packet.get() + VPORT_HEADER_SIZE, buf, len);
 	}
 
-	std::string msg = "sendto::SIGN " + ip2str(_dest->sin_addr) + ":" + std::to_string(port) + 
-		"{" + std::to_string(vport) + ", " + std::to_string(header.flags) + "} (" + std::to_string(dbg.send) + ", " + 
-		std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
+	std::string msg = "sendto::SIGN " + std::to_string(vport) + " -> " +
+		ip2str(_dest->sin_addr) + ":" + std::to_string(ntohs(_dest->sin_port)) + 
+		"{" + std::to_string(ntohs(dest_vport)) + "|" +std::to_string(header.flags) + "}";
 	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, len, 386);
 
 	// Send through DCCP
 	int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, flags, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (ret > 0)
 		dbg.sent++;
+	
+	DEBUG_LOG(Log::sceNet, "VPORT %d s(%d/%d) r(%d,%d)", vport, dbg.sent, dbg.send, dbg.recv, dbg.read);
+
+	// Now shotgun-send using all peer id's
+	// if (sigServer) {
+	// 	std::vector<SceNpMatching2RoomMemberId> peers = sigServer->GetPeerList();
+	// 	for (auto peer : peers) {
+	// 		// Alter the vport to point at the peer
+	// 		header.vport = htons(peer);
+	// 		memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
+	// 		::sendto(dccp_sock->sock, packet.get(), packet_size, flags, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	// 	}
+	// }
 	
 	return ret;
  }
@@ -1572,6 +1591,7 @@ int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr*
 			vport, copy_len, pkt.len, pkt.len - copy_len);
 	}
 
+	DEBUG_LOG(Log::sceNet, "VPORT %d s(%d/%d) r(%d,%d)", vport, dbg.sent, dbg.send, dbg.recv, dbg.read);
 		// Return actual bytes copied (NOT padded to requested size)
 	return hleLogDebug(Log::sceNet, (int)copy_len, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
@@ -1609,6 +1629,8 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	// This is later "agreed" upon in the P2P handshake?
 	// Alternatively, these don't have unique identifiers, and are expected to BROADCAST to all?
 	vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
+	if (vport == 0)
+		vport = user_id.load();
 
 	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, NewPort = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), port, vport);
 
@@ -1823,6 +1845,10 @@ int PacketSocket::recv(char* buf, int len, int flags) {
 }
 int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) { 
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
+
+	auto _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
+	INFO_LOG(Log::sceNet, "PACKET: Connecting to %s:%u on vport %u",
+		inet_ntoa(_dest->sin_addr), ntohs(_dest->sin_port), _vport);
 
 	if (this->addr == "0.0.0.0") {
 		sockaddr_in sockAddr{};

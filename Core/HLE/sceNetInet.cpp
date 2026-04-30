@@ -822,16 +822,6 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 	// Send as-is first. P2P traffic will normally send using our own member_id for the vport
 	int retval = inetSock->sendto((char*)Memory::GetPointer(bufferPtr), len, flags, dst, tolen);
 
-	// Now shotgun-send using all peer id's
-	if (sigServer) {
-		std::vector<SceNpMatching2RoomMemberId> peers = sigServer->GetPeerList();
-		for (auto peer : peers) {
-			// Alter the vport to point at the peer
-			uint16_t* vport_ptr = (uint16_t*)&dst->sa_data[6];
-			*vport_ptr = htons(peer);
-			inetSock->sendto((char*)Memory::GetPointer(bufferPtr), len, flags, dst, tolen);
-		}
-	}
 	if (retval < 0) {
 		if (UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__) == ERROR_INET_EAGAIN) {
 			return hleLogDebug(Log::sceNet, retval, "EAGAIN");
