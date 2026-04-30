@@ -1698,7 +1698,35 @@ int ConnDgramSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds,
 	return 0;
 	// Wait Logic?
 }
+bool ConnDgramSocket::ProcessNetStack() {
+    std::lock_guard<std::mutex> lock(queue_lock);
+    const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
+    u64 current_time_us = (u64)(time_now_d() * 1000000.0);
 
+    auto it = rx_queue.begin();
+    while (it != rx_queue.end()) {
+        VirtualPacket& pkt = *it;
+		// FIXME: Should technically support non-broadcast sends
+		// if (!target_sock->is_broadcast_enabled())
+			// continue;
+
+        // 1. Cleanup Stale Packets (Protocol Housekeeping)
+        u64 packet_age_us = current_time_us - pkt.enqueue_time_us;
+        if (packet_age_us > MAX_PACKET_AGE_US) {
+            WARN_LOG(Log::sceNet, "ProcessNetStack: Discarding stale packet (age: %.2f s)", 
+                (float)packet_age_us / 1000000.0f);
+            it = rx_queue.erase(it);
+            continue;
+        }
+		
+		// DEBUG_LOG(Log::sceNet, "%d=recvfrom(%s:%u) -> vport %d{%02X} (type=%d); [%lld/%lld, %lld/%lld]", 
+		// 	pkt.len, inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), 
+		// 	vport, pkt.header_flags, type,
+		// 	dbg.send, dbg.sent, dbg.recv, dbg.read);
+		it++; // next packet
+	}
+	return (rx_queue.size() > 0);
+}
 // ============================================================================
 // TCP Virtual Socket with UPnP transmission capabilities
 // ============================================================================
