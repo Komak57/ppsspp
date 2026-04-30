@@ -231,6 +231,7 @@ public:
 	DgramSocket() : InetSocket() {
 		this->type = PSP_NET_INET_SOCK_DGRAM;
 	}
+	int select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) override;
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
@@ -309,7 +310,7 @@ public:
 	ConnDgramSocket() : InetSocket() {
 		this->type = PSP_NET_INET_SOCK_CONN_DGRAM;
 	}
-	int select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout) override;
+	int select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) override;
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
@@ -324,7 +325,7 @@ public:
 	PacketSocket() : InetSocket() {
 		this->type = PSP_NET_INET_SOCK_PACKET;
 	}
-	int select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout) override;
+	int select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) override;
 	int send(const char* buf, int len, int flags) override;
 	int recv(char* buf, int len, int flags) override;
 	int connect(SceNetInetSockaddr* name, int namelen) override;

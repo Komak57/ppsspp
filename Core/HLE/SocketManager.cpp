@@ -546,7 +546,7 @@ std::tuple<int, std::unique_ptr<char[]>> Pack(u16 vport, u8 flags, const char* d
 // Base Socket Class
 // Default fallback functions for things not yet implemented by other sockets
 // ============================================================================
-int InetSocket::select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout) { errno = EOPNOTSUPP; return -1; }
+int InetSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::send(const char* buf, int len, int flags) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::recv(char* buf, int len, int flags) { errno = EOPNOTSUPP; return -1; }
@@ -959,6 +959,34 @@ int StreamSocket::shutdown(int how) { return ::shutdown(sock, how); }
 // ============================================================================
 // 
 // ============================================================================
+int DgramSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) {
+
+	// First, translate the specified fd_sets to host sockets.
+	fd_set rdfds, wrfds, exfds;
+	FD_ZERO(&rdfds);
+	FD_ZERO(&wrfds);
+	FD_ZERO(&exfds);
+
+	timeval tmout = { 5, 543210 }; // Workaround timeout value when timeout = NULL
+	if (timeout) {
+		tmout.tv_sec = timeout->tv_sec;
+		tmout.tv_usec = timeout->tv_usec;
+	}
+	// TODO: Simulate blocking behaviour when timeout = NULL to prevent PPSSPP from freezing
+	// Note: select can overwrite tmout.
+	int retval = ::select(sock, readfds ? &rdfds : nullptr, writefds ? &wrfds : nullptr, exceptfds ? &exfds : nullptr, &tmout);
+
+
+	// Convert the results back to PSP fd_sets.
+	if (readfds)
+		NetInetFD_ZERO(readfds);
+	if (writefds)
+		NetInetFD_ZERO(writefds);
+	if (exceptfds)
+		NetInetFD_ZERO(exceptfds);
+
+	return retval;
+}
 int DgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
@@ -1659,7 +1687,13 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 		return hleLogError(Log::sceNet, ret);
 	return ret;
 }
-int ConnDgramSocket::select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout) {
+int ConnDgramSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) {
+	// First, translate the specified fd_sets to host sockets.
+	fd_set rdfds, wrfds, exfds;
+	FD_ZERO(&rdfds);
+	FD_ZERO(&wrfds);
+	FD_ZERO(&exfds);
+
 	// Log select() calls on virtual sockets for debugging
 	INFO_LOG(Log::sceNet, "select: vport %d called (type=%d, readfds=%p, timeout=%p)", 
 		vport, type, readfds, timeout);
@@ -1699,18 +1733,26 @@ int ConnDgramSocket::select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds
 	fd_set* p_write = nullptr;
 	fd_set* p_exc = nullptr;
 	
-	if (readfds)   { read_copy = *readfds;   p_read = &read_copy;   }
-	if (writefds)  { write_copy = *writefds; p_write = &write_copy; }
-	if (exceptfds) { exc_copy = *exceptfds;  p_exc = &exc_copy;     }
+	if (readfds)   { read_copy = rdfds;   p_read = &read_copy;   }
+	if (writefds)  { write_copy = wrfds; p_write = &write_copy; }
+	if (exceptfds) { exc_copy = exfds;  p_exc = &exc_copy;     }
 	
 	// Using 'sock' mirrors your default fallback behavior
 	int phys_ready = ::select(sock, p_read, p_write, p_exc, &tv_zero);
 	if (phys_ready > 0) {
 		DEBUG_LOG(Log::sceNet, "select: vport %d has physical data/events", vport);
 		// Copy back the mutated sets so the caller knows exactly what triggered
-		if (readfds)   *readfds = read_copy;
-		if (writefds)  *writefds = write_copy;
-		if (exceptfds) *exceptfds = exc_copy;
+		// if (readfds)   *readfds = read_copy;
+		// if (writefds)  *writefds = write_copy;
+		// if (exceptfds) *exceptfds = exc_copy;
+
+		// Convert the results back to PSP fd_sets.
+		if (readfds)
+			NetInetFD_ZERO(readfds);
+		if (writefds)
+			NetInetFD_ZERO(writefds);
+		if (exceptfds)
+			NetInetFD_ZERO(exceptfds);
 		return phys_ready;
 	}
 	
@@ -2163,7 +2205,18 @@ int PacketSocket::shutdown(int how) {
 	INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Sent FIN from port %d to %d", port, dst_port);
 		return 0;
 }
-int PacketSocket::select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout) {
+int PacketSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) {
+	// First, translate the specified fd_sets to host sockets.
+	fd_set rdfds, wrfds, exfds;
+	FD_ZERO(&rdfds);
+	FD_ZERO(&wrfds);
+	FD_ZERO(&exfds);
+
+	timeval tmout = { 5, 543210 }; // Workaround timeout value when timeout = NULL
+	if (timeout) {
+		tmout.tv_sec = timeout->tv_sec;
+		tmout.tv_usec = timeout->tv_usec;
+	}
 		// Log select() calls on virtual sockets for debugging
 	INFO_LOG(Log::sceNet, "select: vport %d called (type=%d, readfds=%p, timeout=%p)", 
 		vport, type, readfds, timeout);
@@ -2211,18 +2264,27 @@ int PacketSocket::select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, t
 	fd_set* p_write = nullptr;
 	fd_set* p_exc = nullptr;
 	
-	if (readfds)   { read_copy = *readfds;   p_read = &read_copy;   }
-	if (writefds)  { write_copy = *writefds; p_write = &write_copy; }
-	if (exceptfds) { exc_copy = *exceptfds;  p_exc = &exc_copy;     }
+	if (readfds)   { read_copy = rdfds;   p_read = &read_copy;   }
+	if (writefds)  { write_copy = wrfds; p_write = &write_copy; }
+	if (exceptfds) { exc_copy = exfds;  p_exc = &exc_copy;     }
 
 	// Using 'sock' mirrors your default fallback behavior
 	int phys_ready = ::select(sock, p_read, p_write, p_exc, &tv_zero);
 	if (phys_ready > 0) {
 		DEBUG_LOG(Log::sceNet, "select: vport %d has physical data/events", vport);
 		// Copy back the mutated sets so the caller knows exactly what triggered
-		if (readfds)   *readfds = read_copy;
-		if (writefds)  *writefds = write_copy;
-		if (exceptfds) *exceptfds = exc_copy;
+		// if (readfds)   *readfds = read_copy;
+		// if (writefds)  *writefds = write_copy;
+		// if (exceptfds) *exceptfds = exc_copy;
+
+		// Convert the results back to PSP fd_sets.
+		if (readfds)
+			NetInetFD_ZERO(readfds);
+		if (writefds)
+			NetInetFD_ZERO(writefds);
+		if (exceptfds)
+			NetInetFD_ZERO(exceptfds);
+
 		return phys_ready;
 	}
 	
