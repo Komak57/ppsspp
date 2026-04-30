@@ -310,7 +310,7 @@ namespace net {
         for (const auto& msg : msgs)
         {
             if (msg.data.size() != sizeof(SignalingPacket)) {
-                ERROR_LOG(Log::Signaling, "SIGSERV: Malformed Packet");
+                VERBOSE_LOG(Log::Signaling, "SIGSERV: Malformed Packet");
                 continue;
             }
 
@@ -448,7 +448,7 @@ namespace net {
             }
             else
             {
-                ERROR_HEXLOG(Log::Signaling, "Received faulty RPCN UDP message!", msg.data(), msg.size(), 256);
+                VERBOSE_HEXLOG(Log::Signaling, "Received faulty RPCN UDP message!", msg.data(), msg.size(), 256);
             }
         }
 
