@@ -2055,43 +2055,6 @@ int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 	
 	DEBUG_LOG(Log::sceNet, "SOCK_PACKET accept: Created new socket %d with vport %d, peer vport %d", new_socket_idx, vport, pending_conn.peer_port);
 
-
-	// Build packet: VPORT_HEADER + payload
-	int packet_size = VPORT_HEADER_SIZE;
-	std::unique_ptr<char[]> packet = std::make_unique<char[]>(packet_size);
-
-	// Pack DGRAM_HEADER (3 bytes): [flags][data_len]
-	VPORT_HEADER header;
-	header.flags = p2ps_tcp_flags::ACK;
-	header.vport = htons(pending_conn.peer_port);
-	memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
-
-	if (isLocalTarget(&pending_conn.peer_addr)) {
-		sockaddr_in src_addr{};
-		src_addr.sin_family = AF_INET;
-		src_addr.sin_port = htons(this->port);
-		if (inet_pton(AF_INET, this->addr.c_str(), &src_addr.sin_addr) <= 0) {
-			// Fallback if the string is empty or invalid (e.g., binds to INADDR_ANY / 0.0.0.0)
-			sockaddr_in sockAddr{};
-			getLocalIp(&sockAddr);
-			src_addr.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-		}
-		// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-		g_socketManager.DeliverPacketToVPorts(header, packet.get(), packet_size, src_addr);
-	} else {
-		sockaddr_in dst_addr{};
-		dst_addr.sin_family = AF_INET;
-		dst_addr.sin_addr = pending_conn.peer_addr.sin_addr;
-		dst_addr.sin_port = htons(SCE_SIGN_PORT);
-
-		int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, 0, (const sockaddr*)&dst_addr, sizeof(sockaddr_in));
-		if (ret < 0) {
-			ERROR_LOG(Log::sceNet, "SOCK_PACKET accept: Failed to send ACK to peer");
-			return -1;
-		}
-	}
-	DEBUG_LOG(Log::sceNet, "SOCK_PACKET accept: Delivered ACK to client vport %d", pending_conn.peer_port);
-
 	INFO_LOG(Log::sceNet, "SOCK_PACKET accept: Accepted connection on listening socket vport %d from %s:%u (peer vport %u), created socket %d",
 		vport, inet_ntoa(pending_conn.peer_addr.sin_addr), ntohs(pending_conn.peer_addr.sin_port),
 		pending_conn.peer_port, new_socket_idx);
