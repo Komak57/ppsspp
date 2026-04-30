@@ -566,7 +566,8 @@ int InetSocket::setsockopt(int level, int optname, int optval, socklen_t optlen)
 	if (level == PSP_NET_INET_SOL_SOCKET) {
 		switch (optname) {
 		case PSP_NET_INET_SO_NBIO:// TODO: Ignoring SO_NBIO/SO_NONBLOCK flag if we always use non-bloking mode (ie. simulated blocking mode)
-			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+			nonblocking = optval == 1;
+			return hleLogWarning(Log::sceNet, 0, "%s emulated", host_optname_str.c_str());
 		case PSP_NET_INET_SO_REUSEADDR:// TODO: Ignoring SO_REUSEADDR flag to prevent disrupting multiple-instance feature
 			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
 		case PSP_NET_INET_SO_REUSEPORT:// TODO: Ignoring SO_REUSEPORT flag to prevent disrupting multiple-instance feature (not sure if PSP has SO_REUSEPORT or not tho, defined as 15 on Android)
@@ -620,7 +621,12 @@ int InetSocket::setsockopt(int level, int optname, const char* optval, socklen_t
 	if (level == PSP_NET_INET_SOL_SOCKET) {
 		switch (optname) {
 		case PSP_NET_INET_SO_NBIO:
-			nonblocking = optval;
+			if (so_flags.size() >= sizeof(int)) {
+			int flag = *reinterpret_cast<const int*>(so_flags.data());
+			nonblocking = (flag != 0);
+			} else if (!so_flags.empty()) {
+				nonblocking = (so_flags[0] != 0);
+			}
 			return hleLogWarning(Log::sceNet, 0, "%s emulated", host_optname_str.c_str());
 		case PSP_NET_INET_SO_BROADCAST:
 			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
