@@ -1702,6 +1702,10 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 {
 	ERROR_LOG(Log::sceNp2, "UNTESTED %s(%08x) at %08x", __FUNCTION__, netInfoPtr, currentMIPS->pc);
 
+	int v = sceKernelCheckThreadStack();
+	if (0xfef >= v)
+		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
+
 	// ThreadStart
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED, "Not Initialized");
@@ -1709,19 +1713,28 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	if (!Memory::IsValidAddress(netInfoPtr))
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "Invalid Argument");
 
-	
 	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
 
-	// FIXME: Use npServer->local_addr_sig
-	netInfo->localAddr = sigServer->GetLocalAddr();	// Local  IP
-	netInfo->mappedAddr = sigServer->GetSigAddr();		// Public IP
-	// Pure speculation
-	//si->conn_status
+	if (netInfo->size != 0x18) {
+		if (netInfo->size != 0x1c)
+			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_OPT_SIZE, "Invalid Size");
+		netInfo->port = htons(sigServer->GetSigPort());
+	}
+	if (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE) {
 	netInfo->natStatus = sigServer->nat_type.load();
-	// Unverified extra data?
+		netInfo->mappedAddr = sigServer->GetSigAddr();		// Public IP
+	} else {
+		netInfo->natStatus = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
+		netInfo->mappedAddr = 0xffffffff;		// Public IP
+	}
 	netInfo->UPnPStatus = (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
+	if (sigServer && sigServer->IsIntialized())
 	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-	netInfo->port = htons(sigServer->GetSigPort());
+	else
+		netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
+
+	// Not actually set in the official firmware
+	// netInfo->localAddr = sigServer->GetLocalAddr();	// Local  IP
 
 	return SCE_NP_MATCHING2_OKAY;
 }
