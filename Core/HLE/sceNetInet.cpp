@@ -280,7 +280,7 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 			VERBOSE_LOG(Log::sceNet, "Input Read FD #%i (host: %d)", i, sock);
 			if (rdcnt < FD_SETSIZE) {
 				FD_SET(sock, &rdfds); // This might pointed to a non-existing socket or sockets belonged to other programs on Windows, because most of the time Windows socket have an id above 1k instead of 0-255
-				rdcnt++;
+			rdcnt++;
 			} else {
 				ERROR_LOG(Log::sceNet, "Hit set size (rd)");
 			}
@@ -294,7 +294,7 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 			VERBOSE_LOG(Log::sceNet, "Input Write FD #%i (host: %d)", i, sock);
 			if (wrcnt < FD_SETSIZE) {
 				FD_SET(sock, &wrfds);
-				wrcnt++;
+			wrcnt++;
 			} else {
 				ERROR_LOG(Log::sceNet, "Hit set size (wr)");
 			}
@@ -308,11 +308,11 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 			VERBOSE_LOG(Log::sceNet, "Input Except FD #%i (host: %d)", i, sock);
 			if (excnt < FD_SETSIZE) {
 				FD_SET(sock, &exfds);
-				excnt++;
+			excnt++;
 			} else {
 				ERROR_LOG(Log::sceNet, "Hit set size (exc)");
-			}
 		}
+	}
 	}
 
 	// Unlikely to hit these.
@@ -340,10 +340,10 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 
 	// Don't need to loop through and set any bits if the sum total returned is 0.
 	// But we do need to check any virtual buffers
-		for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < nfds; i++) {
-			if (hostSockets[i] == 0) {
-				continue;
-			}
+	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < nfds; i++) {
+		if (hostSockets[i] == 0) {
+			continue;
+		}
     	g_socketManager.GetInetSocket(i, &inetSock);
 		bool hasVData = false;
 		{
@@ -351,15 +351,15 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 			hasVData = !inetSock->rx_queue.empty();
 		}
 		if (readfds && (FD_ISSET(hostSockets[i], &rdfds) || hasVData || inetSock->has_pending_connection() || inetSock->tcp_state == TCPState::Disconnected)) {
-				NetInetFD_SET(i, readfds);
-			}
-		if (writefds && (FD_ISSET(hostSockets[i], &wrfds) || inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM || inetSock->tcp_state == TCPState::Established)) {
-				NetInetFD_SET(i, writefds);
-			}
-			if (exceptfds && FD_ISSET(hostSockets[i], &exfds)) {
-				NetInetFD_SET(i, exceptfds);
-			}
+			NetInetFD_SET(i, readfds);
 		}
+		if (writefds && (FD_ISSET(hostSockets[i], &wrfds) || inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM || inetSock->tcp_state == TCPState::Established)) {
+			NetInetFD_SET(i, writefds);
+		}
+		if (exceptfds && FD_ISSET(hostSockets[i], &exfds)) {
+			NetInetFD_SET(i, exceptfds);
+		}
+	}
 
 	if (retval < 0)
 		UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
@@ -599,9 +599,9 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen) {
 			INFO_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i)", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
 		// Emulate blocking behavior
 		if (inetSock->nonblocking) {
-		// Store the result and resume the PSP thread
-		__KernelResumeThreadFromWait(inetSock->threadID, retval);
-		inetSock->threadID = -1;
+			// Store the result and resume the PSP thread
+			__KernelResumeThreadFromWait(inetSock->threadID, retval);
+			inetSock->threadID = -1;
 		}
 	});
 	// Put the PSP thread into a wait state until sendRequest finishes

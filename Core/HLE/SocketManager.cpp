@@ -208,20 +208,20 @@ InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketS
 		break;
 	}
 
-		inetSock->sock = ::socket(hostDomain, hostType, hostProtocol);
+	inetSock->sock = ::socket(hostDomain, hostType, hostProtocol);
 
 	// Most Wanted creates a socket 2,3,1 for ICMP (Internet Control Message Protocol)
 	// but SOCK_RAW may require elevated permissions
-		if (inetSock->sock < 0) {
+	if (inetSock->sock < 0) {
 		ERROR_LOG(Log::sceNet, "Ran out of socket handles! This is BAD.");
 		_dbg_assert_(false);
 		closesocket(inetSock->sock);
 		*index = 0;
 		*returned_errno = ENOMEM; // or something..
-			return nullptr;
-		}
-		inetSock->state = state;
-		return inetSock;
+		return nullptr;
+	}
+	inetSock->state = state;
+	return inetSock;
 }
 
 InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const InetSocket *derive) {
@@ -269,7 +269,7 @@ InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const Inet
 				break;
 			}
 #pragma pop_macro("new")
-			
+
 			inetSock->sock = hostSocket;
 			inetSock->state = derive->state;
 			inetSock->domain = derive->domain;
@@ -439,7 +439,7 @@ int SocketManager::DeliverPacketToVPorts(const VPORT_HEADER& header, const char*
 				if (target_sock->rx_queue.empty())
 	                const_cast<InetSocket*>(target_sock)->tcp_state = TCPState::Disconnected;
 				else
-                const_cast<InetSocket*>(target_sock)->tcp_state = TCPState::CloseWait;
+	                const_cast<InetSocket*>(target_sock)->tcp_state = TCPState::CloseWait;
                 INFO_LOG(Log::sceNet, "PACKET: Received FIN from %s:%u to port %u",
                     inet_ntoa(_from.sin_addr), ntohs(_from.sin_port), target_sock->port);
 
@@ -682,7 +682,7 @@ int InetSocket::setsockopt(int level, int optname, const char* optval, socklen_t
 			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
 		case PSP_NET_INET_SO_DCCP_LINGER:
 			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
-	default:
+		default:
 			break;  // Fall through to host socket options
 		}
 	}
@@ -731,7 +731,7 @@ int InetSocket::getsockopt(int level, int optname, char* optval, socklen_t* optl
 
     // 3. Last Resort: Silent Failure
     DEBUG_LOG(Log::sceNet, "getsockopt: Option level=%d name=%d not found in cache or host", level, optname);
-		return -1;
+    return -1;
 }
 int InetSocket::bind(SceNetInetSockaddr* name, int namelen) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::connect(SceNetInetSockaddr* name, int namelen) { errno = EOPNOTSUPP; return -1; }
@@ -1477,9 +1477,9 @@ int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
 }
 int DccpSocket::shutdown(int how) { return ::shutdown(sock, how); }
 bool DccpSocket::ProcessNetStack() {
-			// Clear the error
+	// Clear the error
 #if PPSSPP_PLATFORM(WINDOWS)
-			SetLastError(0);
+	SetLastError(0);
 #else
 	socket_errno = 0;
 #endif
@@ -1520,7 +1520,7 @@ bool DccpSocket::ProcessNetStack() {
 // ============================================================================
 int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) { 
 	dbg.send++;
-		int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
 	SockAddrIN4 saddr{};
 	int dstlen = std::min(tolen > 0 ? tolen : 0, static_cast<int>(sizeof(saddr)));
@@ -1533,15 +1533,15 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	// Send the packet over P2P
 
 	// DCCP must exist for P2P traffic
-			auto dccp_sock = g_socketManager.GetDCCP();
-			if (!dccp_sock) {
+	auto dccp_sock = g_socketManager.GetDCCP();
+	if (!dccp_sock) {
 #if PPSSPP_PLATFORM(WINDOWS)
 		SetLastError(EINVAL);
 #else
 		socket_errno = EINVAL;
 #endif
 		return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: DCCP_SOCK Not Present");
-			}
+	}
 	
 	// Build packet: VPORT_HEADER + payload
 	int packet_size = VPORT_HEADER_SIZE + len;
@@ -1586,7 +1586,7 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	// 		::sendto(dccp_sock->sock, packet.get(), packet_size, flags, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	// 	}
 	// }
-	
+
 	return ret;
  }
 int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) { 
@@ -1723,7 +1723,7 @@ int ConnDgramSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds,
 	// If we get here with readfds set, there's no data
 	if (readfds) {
 		INFO_LOG(Log::sceNet, "select: vport %d NO PENDING DATA", vport);
-		}
+	}
 	
 	if (writefds) {
 		bool writable = false;
@@ -1808,8 +1808,8 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 #else
 		socket_errno = ENOTCONN;
 #endif
-			return -1;
-		}
+		return -1;
+	}
 
 	// Build packet: VPORT_HEADER + payload
 	int packet_size = VPORT_HEADER_SIZE + len;
@@ -1854,7 +1854,7 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 		int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, flags, (const sockaddr*)&dst_addr, sizeof(sockaddr_in));
 		if (ret < 0)
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET accept: Failed to send ACK to peer");
-		dbg.sent++;
+			dbg.sent++;
 		return ret;
 	}
 	
@@ -1945,15 +1945,15 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 		this->vport = SCE_SIGN_PORT;
 	}
 	// DCCP must exist for P2P traffic
-			auto dccp_sock = g_socketManager.GetDCCP();
-			if (!dccp_sock) {
+	auto dccp_sock = g_socketManager.GetDCCP();
+	if (!dccp_sock) {
 #if PPSSPP_PLATFORM(WINDOWS)
 		SetLastError(EINVAL);
 #else
 		socket_errno = EINVAL;
 #endif
 		return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: DCCP_SOCK Not Present");
-			}
+	}
 
 	// Validate socket is not already connected/connecting
 	if (tcp_state != TCPState::Disconnected) {
@@ -1999,9 +1999,9 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 		int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
 		if (ret < 0) {
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Failed to send SYN");
+		}
 	}
-}
-
+	
 	// Set state to SynSent (waiting for ACK)
 	tcp_state = TCPState::SynSent;
 
@@ -2040,7 +2040,7 @@ int PacketSocket::listen(int backlog) {
 	INFO_LOG(Log::sceNet, "SOCK_PACKET listen: vport %d now accepting connections", vport);
 
 	// return ::listen(sock, backlog);
-		return 0;
+	return 0;
 }
 int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) { 
 	// DCCP must exist for P2P traffic
@@ -2141,9 +2141,9 @@ int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 		int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, 0, (const sockaddr*)&dst_addr, sizeof(sockaddr_in));
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "SOCK_PACKET accept: Failed to send ACK to peer");
-					return -1;
-				}
-			}
+			return -1;
+		}
+	}
 	DEBUG_LOG(Log::sceNet, "SOCK_PACKET accept: Delivered ACK to client vport %d", pending_conn.peer_port);
 
 	INFO_LOG(Log::sceNet, "SOCK_PACKET accept: Accepted connection on listening socket vport %d from %s:%u (peer vport %u), created socket %d",
@@ -2241,7 +2241,7 @@ int PacketSocket::shutdown(int how) {
 	// Transition to disconnected
 	tcp_state = TCPState::Disconnected;
 	
-		return 0;
+	return 0;
 }
 int PacketSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) {
 	// First, translate the specified fd_sets to host sockets.
@@ -2305,7 +2305,7 @@ int PacketSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, Sc
 	if (readfds)   { read_copy = rdfds;   p_read = &read_copy;   }
 	if (writefds)  { write_copy = wrfds; p_write = &write_copy; }
 	if (exceptfds) { exc_copy = exfds;  p_exc = &exc_copy;     }
-
+	
 	// Using 'sock' mirrors your default fallback behavior
 	int phys_ready = ::select(sock, p_read, p_write, p_exc, &tv_zero);
 	if (phys_ready > 0) {
@@ -2327,7 +2327,7 @@ int PacketSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, Sc
 	}
 	
 	// Nothing ready yet
-		return 0;
+	return 0;
 	// Wait Logic?
 }
 
