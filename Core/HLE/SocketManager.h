@@ -103,6 +103,7 @@ struct VirtualPacket {
 struct ConnectionRequest {
 	sockaddr_in peer_addr;          // Remote address info
 	u16 peer_port;                 // Remote virtual port
+	TCPState tcp_state;
 };
 
 #pragma pack(push, 8)
@@ -139,7 +140,7 @@ struct InetSocket {
 	std::condition_variable packet_ready;
 
 	// Pending connection for SOCK_PACKET (simplified: one slot only)
-	std::unique_ptr<ConnectionRequest> pending_connection;
+	std::vector<ConnectionRequest> pending_connections;
 	mutable std::mutex conn_lock;
 
 	fd_set* readfds;
@@ -181,7 +182,7 @@ struct InetSocket {
 		// Reset pointers
 		{
 			std::lock_guard<std::mutex> lock(conn_lock);
-			pending_connection.reset();
+			pending_connections.clear();
 		}
 		readfds = nullptr;
 		writefds = nullptr;
@@ -215,6 +216,7 @@ struct InetSocket {
 	int dequeue_stream(char* buf, int len, sockaddr_in* out_addr);
 	bool has_pending_data() const;
 	void set_pending_connection(const ConnectionRequest& conn);
+	bool update_pending_connection(const sockaddr_in& peer_addr);
 	bool get_pending_connection(ConnectionRequest& conn);
 	bool has_pending_connection() const;
 };

@@ -129,7 +129,7 @@ void InetSocket::clear() {
     }
     
     // Reset pointers
-    pending_connection.reset();
+    pending_connections.clear();
 }
 
 InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketState state, int domain, int type, int protocol) {
@@ -851,22 +851,46 @@ bool InetSocket::has_pending_data() const {
 }
 void InetSocket::set_pending_connection(const ConnectionRequest& conn) {
 	std::lock_guard<std::mutex> lock(conn_lock);
-	pending_connection = std::make_unique<ConnectionRequest>(conn);
+	pending_connections.push_back(conn);
 	DEBUG_LOG(Log::sceNet, "Set pending connection on vport %d from %s:%u",
 		vport, inet_ntoa(conn.peer_addr.sin_addr), ntohs(conn.peer_addr.sin_port));
 }
+bool InetSocket::update_pending_connection(const sockaddr_in& peer_addr) {
+	std::lock_guard<std::mutex> lock(conn_lock);
+	for (auto& conn : pending_connections) {
+        if (conn.peer_addr.sin_addr.s_addr == peer_addr.sin_addr.s_addr && 
+            conn.peer_port == ntohs(peer_addr.sin_port)) {
+            
+            if (conn.tcp_state == TCPState::SynReceived) {
+                conn.tcp_state = TCPState::Established;
+                DEBUG_LOG(Log::sceNet, "Promoted connection to Established for %s:%u",
+                    inet_ntoa(conn.peer_addr.sin_addr), conn.peer_port);
+                return true;
+            }
+        }
+    }
+	return false;
+}
 bool InetSocket::get_pending_connection(ConnectionRequest& conn) {
 	std::lock_guard<std::mutex> lock(conn_lock);
-	if (!pending_connection) {
-		return false;
-	}
-	conn = *pending_connection;
-	pending_connection.reset();
-	return true;
+	// Find the first connection that has finished the 3-way handshake
+    for (auto it = pending_connections.begin(); it != pending_connections.end(); ++it) {
+        if (it->tcp_state == TCPState::Established) {
+            conn = *it;
+            pending_connections.erase(it); // Remove it from the backlog
+            return true;
+        }
+    }
+	return false;
 }
 bool InetSocket::has_pending_connection() const {
 	std::lock_guard<std::mutex> lock(conn_lock);
-	return pending_connection != nullptr;
+	for (const auto& conn : pending_connections) {
+        if (conn.tcp_state == TCPState::Established) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Close a virtual socket
