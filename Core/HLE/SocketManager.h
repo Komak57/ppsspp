@@ -174,7 +174,7 @@ struct InetSocket {
 	};
 	// Virtual methods - override in derived classes for type-specific behavior
 	// Base implementations return EOPNOTSUPP for unsupported operations
-	virtual int select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout);
+	virtual int select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout);
 	virtual int setsockopt(int level, int optname, int optval, socklen_t optlen);
 	virtual int setsockopt(int level, int optname, const char* optval, socklen_t optlen);
 	virtual int getsockopt(int level, int optname, char* optval, socklen_t* optlen);
@@ -192,7 +192,7 @@ struct InetSocket {
 	virtual int listen(int backlog);
 	virtual int accept(sockaddr* addr, socklen_t* addrlen);
 
-	virtual void ProcessNetStack();
+	virtual bool ProcessNetStack();
 
 	// Helper methods for virtual socket packet handling
 	void enqueue_packet(VirtualPacket& packet);
@@ -300,7 +300,7 @@ public:
 	int accept(sockaddr* addr, socklen_t* addrlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
-	void ProcessNetStack() override;
+	bool ProcessNetStack() override;
 };
 #pragma pack(pop)
 static_assert(sizeof(DccpSocket) == sizeof(InetSocket), "Socket size mismatch!");
@@ -334,7 +334,7 @@ public:
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
 
-	void ProcessNetStack() override;
+	bool ProcessNetStack() override;
 };
 #pragma pack(pop)
 static_assert(sizeof(PacketSocket) == sizeof(InetSocket), "Socket size mismatch!");
@@ -366,7 +366,7 @@ public:
 	SOCKET GetHostSocketFromInetSocket(int sock);
 	bool Close(InetSocket *inetSocket);
 	void CloseAll();
-	void ProcessNetStack();
+	void ProcessNetStack(int* timeout);
 
 	// For debugger
 	const InetSocket *Sockets() {

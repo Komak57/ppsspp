@@ -723,7 +723,7 @@ int InetSocket::connect(SceNetInetSockaddr* name, int namelen) { errno = EOPNOTS
 int InetSocket::listen(int backlog) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::accept(sockaddr* addr, socklen_t* addrlen) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::shutdown(int how) { errno = EOPNOTSUPP; return -1; }
-void InetSocket::ProcessNetStack() { /* Do nothing */ }
+bool InetSocket::ProcessNetStack() { return false; }
 void InetSocket::enqueue_packet(VirtualPacket& packet) {
 	std::lock_guard<std::mutex> lock(queue_lock);
 	// Add timestamp for TTL tracking
@@ -1461,7 +1461,7 @@ int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	return ret;
 }
 int DccpSocket::shutdown(int how) { return ::shutdown(sock, how); }
-void DccpSocket::ProcessNetStack() {
+bool DccpSocket::ProcessNetStack() {
 			// Clear the error
 #if PPSSPP_PLATFORM(WINDOWS)
 			SetLastError(0);
@@ -1475,14 +1475,14 @@ void DccpSocket::ProcessNetStack() {
 	int ret = ::recvfrom(sock, data, sizeof(data), 0, reinterpret_cast<sockaddr*>(&_from), &_fromlen);
 	if (ret <= 0) {
 		// This is normal if no packet is available (non-blocking mode)
-		return;
+		return false;
 	}
 	
 	// Extract VPORT_HEADER (first 3 bytes: vport + flags)
 	if (ret < VPORT_HEADER_SIZE) {
 		INFO_LOG(Log::sceNet, "RouteDCCP: Packet too small (%d bytes) from %s:%u, ignoring", 
 			ret, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port));
-		return; // Packet too small, ignore
+		return false; // Packet too small, ignore
 	}
 
 	VPORT_HEADER header;
@@ -1497,7 +1497,7 @@ void DccpSocket::ProcessNetStack() {
 
 	g_socketManager.DeliverPacketToVPorts(header, payload, data_len, _from);
 	
-	return;
+	return true;
 }
 
 // ============================================================================
@@ -2293,11 +2293,12 @@ int PacketSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, Sc
 	// Wait Logic?
 }
 
-void PacketSocket::ProcessNetStack() {
+bool PacketSocket::ProcessNetStack() {
     std::lock_guard<std::mutex> lock(queue_lock);
     const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
     u64 current_time_us = (u64)(time_now_d() * 1000000.0);
 
+	bool hadData = (rx_queue.size() > 0);
     auto it = rx_queue.begin();
     while (it != rx_queue.end()) {
         VirtualPacket& pkt = *it;
@@ -2346,4 +2347,5 @@ void PacketSocket::ProcessNetStack() {
             it++;
         }
     }
+	return hadData;
 }
