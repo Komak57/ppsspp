@@ -154,6 +154,8 @@ InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketS
 		// Destroy the old object and construct the appropriate derived type using placement new
 		inetSock->~InetSocket();
 		
+#pragma push_macro("new")
+#undef new
 		switch (type) {
 		case PSP_NET_INET_SOCK_STREAM:
 			inetSock = new (inetSock) StreamSocket();
@@ -183,6 +185,8 @@ InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketS
 			inetSock = new (inetSock) InetSocket();  // Fallback to base class
 			break;
 		}
+#pragma pop_macro("new")
+		
 		inetSock->clear();  // Reset to default.
 		inetSock->domain = domain;
 		inetSock->type = type;
@@ -232,6 +236,9 @@ InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const Inet
 			// Determine the type from derive and reconstruct with the correct derived class
 			// This ensures the vtable matches the socket type
 			inetSock->~InetSocket();
+			
+#pragma push_macro("new")
+#undef new
 			switch (derive->type) {
 			case PSP_NET_INET_SOCK_STREAM:
 				inetSock = new (inetSock) StreamSocket();
@@ -261,6 +268,7 @@ InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const Inet
 				inetSock = new (inetSock) InetSocket();
 				break;
 			}
+#pragma pop_macro("new")
 			
 			inetSock->sock = hostSocket;
 			inetSock->state = derive->state;
