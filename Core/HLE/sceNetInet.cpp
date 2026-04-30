@@ -510,7 +510,7 @@ static int sceNetInetSetsockopt(int socket, int level, int optname, u32 optvalPt
 
 	timeval tval{};
 
-	int retval = inetSock->setsockopt(level, optname, (char*)&optval, optlen);
+	int retval = inetSock->setsockopt(level, optname, optval, optlen);
 	if (retval < 0) {
 		UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
 		return hleLogError(Log::sceNet, retval);
