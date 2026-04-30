@@ -1732,6 +1732,7 @@ bool ConnDgramSocket::ProcessNetStack() {
 // ============================================================================
 
 int PacketSocket::send(const char* buf, int len, int flags) { 
+	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::send(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 	// Delegate to sendto with peer address
 	sockaddr_in peer;
 	peer.sin_family = AF_INET;
@@ -1815,13 +1816,14 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 	return 0;
 }
 int PacketSocket::recv(char* buf, int len, int flags) { 
+	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::recv(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 	if (tcp_state == TCPState::SynSent || tcp_state == TCPState::SynReceived) {
 #if PPSSPP_PLATFORM(WINDOWS)
         SetLastError(WSAEWOULDBLOCK);
 #else
         socket_errno = EWOULDBLOCK;
 #endif
-		return hleLogError(Log::sceNet, -1, "Socket not in Listening state (state=%d)", (int)tcp_state);
+		return hleLogDebug(Log::sceNet, -1, "Socket waiting for Established state (state=%d)", (int)tcp_state);
     }
 	if (tcp_state != TCPState::Established && tcp_state != TCPState::CloseWait) {
 #if PPSSPP_PLATFORM(WINDOWS)
@@ -1889,6 +1891,8 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	header.vport = _dest->sin_port;
 	memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
 
+	// Set state to SynSent (waiting for ACK)
+	tcp_state = TCPState::SynSent;
 
 	if (isLocalTarget(_dest)) {
 		sockaddr_in src_addr{};
@@ -1937,6 +1941,7 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	return -1;  // Non-blocking: game will check connection status later
 }
 int PacketSocket::listen(int backlog) { 
+	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::listen(%d): state=%d", backlog, (int)tcp_state);
 	// Validate socket is in correct state
 	if (tcp_state != TCPState::Disconnected) {
 		ERROR_LOG(Log::sceNet, "SOCK_PACKET listen: Socket not in Disconnected state (state=%d)", (int)tcp_state);
@@ -1957,16 +1962,8 @@ int PacketSocket::listen(int backlog) {
 	return 0;
 }
 int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) { 
-	// DCCP must exist for P2P traffic
-	auto dccp_sock = g_socketManager.GetDCCP();
-	if (!dccp_sock) {
-#if PPSSPP_PLATFORM(WINDOWS)
-        SetLastError(WSAENETDOWN);
-#else
-        socket_errno = ENETDOWN;
-#endif
-		return hleLogError(Log::sceNet, -1, "DCCP_SOCK Not Present");
-	}
+	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(addr);
+	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::accept(%s:%u, %d): pending=%d state=%d", this->addr.c_str(), this->port, addrlen, pending_connections.size(), (int)tcp_state);
 
 	// Validate socket is listening
 	if (tcp_state != TCPState::Listening) {
@@ -2068,11 +2065,14 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	return ret;
 }
 int PacketSocket::shutdown(int how) { 
+	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::shutdown(how=%d): state=%d", how, (int)tcp_state);
 	// Only allow shutdown if connected
 	if (tcp_state != TCPState::Established && tcp_state != TCPState::SynReceived) {
 		INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Socket not connected (state=%d)", (int)tcp_state);
 		return 0;  // Silently ignore if not connected
 	}
+	// Transition to disconnected
+	tcp_state = TCPState::Disconnected;
 	
 	// Get DCCP socket for sending FIN
 	auto dccp_sock = g_socketManager.GetDCCP();
@@ -2118,8 +2118,6 @@ int PacketSocket::shutdown(int how) {
 			}
 		}
 	}
-	// Transition to disconnected
-	tcp_state = TCPState::Disconnected;
 	
 	return 0;
 }
