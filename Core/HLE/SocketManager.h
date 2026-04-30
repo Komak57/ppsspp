@@ -82,6 +82,21 @@ struct VirtualPacket {
 	sockaddr_in src_addr;           // Source address (for recvfrom)
 	u8 header_flags;                // TCP flags from DGRAM_HEADER for control packets
 	u64 enqueue_time_us;            // Microseconds since epoch (for TTL checking)
+
+    VirtualPacket clone() const {
+        VirtualPacket new_pkt;
+        new_pkt.len = len;
+        new_pkt.src_addr = src_addr;
+        new_pkt.header_flags = header_flags;
+        new_pkt.enqueue_time_us = enqueue_time_us;
+
+        if (len > 0 && data) {
+            new_pkt.data = std::make_unique<char[]>(len);
+            std::memcpy(new_pkt.data.get(), data.get(), len);
+        }
+
+        return new_pkt;
+    }
 };
 
 // Connection request for SOCK_PACKET listen queue
