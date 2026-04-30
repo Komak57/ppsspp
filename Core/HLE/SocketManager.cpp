@@ -1835,7 +1835,12 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 		return len;
 	} else {
 		// Send through DCCP
-		int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, flags, (const sockaddr*)&peer, sizeof(sockaddr_in));
+		sockaddr_in dst_addr{};
+		dst_addr.sin_family = AF_INET;
+		dst_addr.sin_addr = peer.sin_addr;
+		dst_addr.sin_port = htons(SCE_SIGN_PORT);
+
+		int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, flags, (const sockaddr*)&dst_addr, sizeof(sockaddr_in));
 		if (ret < 0)
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET accept: Failed to send ACK to peer");
 		dbg.sent++;
@@ -1973,7 +1978,12 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 		// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
 		g_socketManager.DeliverPacketToVPorts(header, packet.get(), packet_size, src_addr);
 	} else {
-		int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, 0, (struct sockaddr*)_dest, sizeof(_dest));
+		sockaddr_in dst_addr{};
+		dst_addr.sin_family = AF_INET;
+		dst_addr.sin_addr = _dest->sin_addr;
+		dst_addr.sin_port = htons(SCE_SIGN_PORT);
+
+		int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
 		if (ret < 0) {
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Failed to send SYN");
 	}
@@ -2105,8 +2115,12 @@ int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 		// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
 		g_socketManager.DeliverPacketToVPorts(header, packet.get(), packet_size, src_addr);
 	} else {
-		int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, 0,
-			(const sockaddr*)&pending_conn.peer_addr, sizeof(sockaddr_in));
+		sockaddr_in dst_addr{};
+		dst_addr.sin_family = AF_INET;
+		dst_addr.sin_addr = pending_conn.peer_addr.sin_addr;
+		dst_addr.sin_port = htons(SCE_SIGN_PORT);
+
+		int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, 0, (const sockaddr*)&dst_addr, sizeof(sockaddr_in));
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "SOCK_PACKET accept: Failed to send ACK to peer");
 					return -1;
