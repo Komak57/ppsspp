@@ -265,7 +265,9 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 
 	InetSocket* inetSock = nullptr;
 	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < nfds; i++) {
-    	g_socketManager.GetInetSocket(i, &inetSock);
+		// Ignore invalid sockets
+    	if (!g_socketManager.GetInetSocket(i, &inetSock))
+			continue;
 		bool hasVData = false;
 		{
 			std::lock_guard<std::mutex> lock(inetSock->queue_lock);
