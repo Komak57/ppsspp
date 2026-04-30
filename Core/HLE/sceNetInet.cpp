@@ -603,7 +603,7 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen) {
 		} else
 			INFO_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i)", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
 		// Emulate blocking behavior
-		if (inetSock->nonblocking) {
+		if (inetSock->nonblocking && inetSock->threadID > 0) {
 			// Store the result and resume the PSP thread
 			__KernelResumeThreadFromWait(inetSock->threadID, retval);
 			inetSock->threadID = -1;
