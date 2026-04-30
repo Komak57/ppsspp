@@ -1834,15 +1834,7 @@ int PacketSocket::recv(char* buf, int len, int flags) {
 
 	sockaddr_in source_addr{};
 	size_t copy_len = dequeue_stream(buf, len, &source_addr);
-	if (copy_len == 0) {
-		if (tcp_state == TCPState::CloseWait) {
-#if PPSSPP_PLATFORM(WINDOWS)
-			SetLastError(WSAENOTCONN);
-#else
-			socket_errno = ENOTCONN;
-#endif
-			return -1;
-		}
+	if (copy_len == 0 && tcp_state != TCPState::CloseWait) {
 #if PPSSPP_PLATFORM(WINDOWS)
         SetLastError(WSAEWOULDBLOCK);
 #else
@@ -1851,28 +1843,10 @@ int PacketSocket::recv(char* buf, int len, int flags) {
         return -1;
     }
 
-	if (tcp_state == TCPState::CloseWait && !has_pending_data())
-		tcp_state = TCPState::Disconnected;
-	// // Dequeue from local packet queue for virtual sockets
-	// VirtualPacket pkt;
-	// if (!dequeue_packet(pkt)) {
-	// 	// Empty Queue, try actual socket
-	// 	int ret = ::recv(sock, buf, len, flags);
-	// 	if (ret > 0)
-	// 		dbg.recv++;
-	// 	return ret;
-	// }
-	
 	INFO_LOG(Log::sceNet, "%d=recv(%s:%u) -> vport %d (type=%d); [%lld/%lld, %lld/%lld]", 
 		copy_len, inet_ntoa(source_addr.sin_addr), ntohs(source_addr.sin_port), 
 		vport, type,
 		dbg.send, dbg.sent, dbg.recv, dbg.read);
-	
-	// Copy packet data to caller's buffer
-	// size_t copy_len = std::min((size_t)len, pkt.len);
-	// if (copy_len > 0) {
-	// memcpy(buf, buf, copy_len);
-	// }
 	
 	dbg.recv++;
 	return copy_len;
