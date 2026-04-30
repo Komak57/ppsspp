@@ -1721,7 +1721,7 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 		netInfo->port = htons(sigServer->GetSigPort());
 	}
 	if (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE) {
-	netInfo->natStatus = sigServer->nat_type.load();
+		netInfo->natStatus = sigServer->nat_type.load();
 		netInfo->mappedAddr = sigServer->GetSigAddr();		// Public IP
 	} else {
 		netInfo->natStatus = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
@@ -1729,7 +1729,7 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	}
 	netInfo->UPnPStatus = (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
 	if (sigServer && sigServer->IsIntialized())
-	netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
+		netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
 	else
 		netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
 
@@ -1935,12 +1935,16 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 self, u32 r
  * @note Most games appear to adhere to this rule of thumb, and rely on roomId/memberId for assigning connection details
  * @note This returns a UNION, not a struct, meaning only specific parts of the struct will be returned
  */
-static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 room_id_lower, u32 room_id_upper, u32 peerMemberId, u32 code, u32 connInfoPtr)
-{
+static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 room_id_lower, u32 room_id_upper, u32 peerMemberId, u32 code, u32 connInfoPtr) {
 	SceNpMatching2RoomId room_id = (u64)room_id_lower | (u64)room_id_upper >> 32;
 	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %d, %d, %d, %d, %08x) at %08x", __FUNCTION__, ctxId, connId, room_id, peerMemberId, code, connInfoPtr, currentMIPS->pc);
-	if (!npMatching2Inited)
-		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
+
+	int v = sceKernelCheckThreadStack();
+	if (0xfef >= v)
+		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
+
+	if (npMatching2Inited)
+		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ALREADY_INITIALIZED);
 
 	auto _context = ctx.find(ctxId);
 	if (_context == ctx.end())
