@@ -1510,6 +1510,7 @@ bool DccpSocket::ProcessNetStack() {
 // Standard P2P Comm Channel (UDP)
 // ============================================================================
 int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) { 
+	dbg.send++;
 		int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
 	SockAddrIN4 saddr{};
@@ -1580,6 +1581,7 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	return ret;
  }
 int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) { 
+	dbg.read++;
 	SockAddrIN4 saddr{};
 	if (fromlen)
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
@@ -1881,7 +1883,7 @@ int PacketSocket::recv(char* buf, int len, int flags) {
 #else
 			socket_errno = ENOTCONN;
 #endif
-		return 0;
+			return -1;
 		}
 #if PPSSPP_PLATFORM(WINDOWS)
         SetLastError(WSAEWOULDBLOCK);
@@ -2002,7 +2004,12 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Sent SYN from vport %d to %s:%u",
 		vport, inet_ntoa(_dest->sin_addr), ntohs(_dest->sin_port));
 	
-	return 0;  // Non-blocking: game will check connection status later
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(EINPROGRESS);
+#else
+		socket_errno = EINPROGRESS;
+#endif
+	return -1;  // Non-blocking: game will check connection status later
 }
 int PacketSocket::listen(int backlog) { 
 	// Validate socket is in correct state
@@ -2198,6 +2205,7 @@ int PacketSocket::shutdown(int how) {
 		dst.sin_addr.s_addr = dst_addr;
 		dst.sin_port = htons(dst_port);
 		
+		INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Sending FIN from port %d to %d", port, dst_port);
 		if (isLocalTarget(&dst)) {
 			sockaddr_in src_addr{};
 			src_addr.sin_family = AF_INET;
@@ -2222,7 +2230,6 @@ int PacketSocket::shutdown(int how) {
 	// Transition to disconnected
 	tcp_state = TCPState::Disconnected;
 	
-	INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Sent FIN from port %d to %d", port, dst_port);
 		return 0;
 }
 int PacketSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) {
