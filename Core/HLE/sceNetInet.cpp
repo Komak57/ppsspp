@@ -263,11 +263,16 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 	// Save the mapping during setup.
 	SOCKET hostSockets[256]{};
 
+	InetSocket* inetSock = nullptr;
 	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < nfds; i++) {
-		if (readfds && (NetInetFD_ISSET(i, readfds))) {
-			SOCKET sock = g_socketManager.GetHostSocketFromInetSocket(i);
-			if (sock == 0)
-				sock = (!g_socketManager.GetDCCP()? 0 : g_socketManager.GetDCCP()->sock);
+    	g_socketManager.GetInetSocket(i, &inetSock);
+		bool hasVData = false;
+		{
+			std::lock_guard<std::mutex> lock(inetSock->queue_lock);
+			hasVData = !inetSock->rx_queue.empty();
+		}
+		if (readfds && (NetInetFD_ISSET(i, readfds) || hasVData || inetSock->has_pending_connection() || inetSock->tcp_state == TCPState::Disconnected)) {
+			SOCKET sock = inetSock->sock;
 			_dbg_assert_(sock != 0); // False-Positive on VSocks
 			hostSockets[i] = sock;
 			if (sock > maxHostSocket)
@@ -280,10 +285,8 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 				ERROR_LOG(Log::sceNet, "Hit set size (rd)");
 			}
 		}
-		if (writefds && (NetInetFD_ISSET(i, writefds))) {
-			SOCKET sock = g_socketManager.GetHostSocketFromInetSocket(i);
-			if (sock == 0)
-				sock = (!g_socketManager.GetDCCP() ? 0 : g_socketManager.GetDCCP()->sock);
+		if (writefds && (NetInetFD_ISSET(i, writefds) || inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM || inetSock->tcp_state == TCPState::Established)) {
+			SOCKET sock = inetSock->sock;
 			_dbg_assert_(sock != 0);
 			hostSockets[i] = sock;
 			if (sock > maxHostSocket)
@@ -297,9 +300,7 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 			}
 		}
 		if (exceptfds && (NetInetFD_ISSET(i, exceptfds))) {
-			SOCKET sock = g_socketManager.GetHostSocketFromInetSocket(i);
-			if (sock == 0)
-				sock = (!g_socketManager.GetDCCP() ? 0 : g_socketManager.GetDCCP()->sock);
+			SOCKET sock = inetSock->sock;
 			_dbg_assert_(sock != 0);
 			hostSockets[i] = sock;
 			if (sock > maxHostSocket)
@@ -338,28 +339,33 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		NetInetFD_ZERO(exceptfds);
 
 	// Don't need to loop through and set any bits if the sum total returned is 0.
-	if (retval > 0) {
+	// But we do need to check any virtual buffers
 		for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < nfds; i++) {
 			if (hostSockets[i] == 0) {
 				continue;
 			}
-			if (readfds && FD_ISSET(hostSockets[i], &rdfds)) {
+    	g_socketManager.GetInetSocket(i, &inetSock);
+		bool hasVData = false;
+		{
+			std::lock_guard<std::mutex> lock(inetSock->queue_lock);
+			hasVData = !inetSock->rx_queue.empty();
+		}
+		if (readfds && (FD_ISSET(hostSockets[i], &rdfds) || hasVData || inetSock->has_pending_connection() || inetSock->tcp_state == TCPState::Disconnected)) {
 				NetInetFD_SET(i, readfds);
 			}
-			if (writefds && FD_ISSET(hostSockets[i], &wrfds)) {
+		if (writefds && (FD_ISSET(hostSockets[i], &wrfds) || inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM || inetSock->tcp_state == TCPState::Established)) {
 				NetInetFD_SET(i, writefds);
 			}
 			if (exceptfds && FD_ISSET(hostSockets[i], &exfds)) {
 				NetInetFD_SET(i, exceptfds);
 			}
 		}
-	}
 
-	if (retval < 0) {
+	if (retval < 0)
 		UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
-		return hleDelayResult(hleLogDebug(Log::sceNet, retval), "workaround until blocking-socket", 500); // Using hleDelayResult as a workaround for games that need blocking-socket to be implemented (ie. Coded Arms Contagion)
-	}
-	return hleDelayResult(hleLogDebug(Log::sceNet, retval), "workaround until blocking-socket", 500); // Using hleDelayResult as a workaround for games that need blocking-socket to be implemented (ie. Coded Arms Contagion)
+	// if (retval == 0)
+		// return hleDelayResult(hleLogDebug(Log::sceNet, retval), "workaround until blocking-socket", 500); // Using hleDelayResult as a workaround for games that need blocking-socket to be implemented (ie. Coded Arms Contagion)
+	return hleLogDebug(Log::sceNet, retval);
 }
 
 int sceNetInetPoll(u32 fdsPtr, u32 nfds, int timeout) { // timeout in miliseconds just like posix poll? or in microseconds as other PSP timeout?
