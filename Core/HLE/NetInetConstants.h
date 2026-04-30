@@ -109,6 +109,8 @@ enum {
 #define PSP_NET_INET_SO_NOSIGPIPE   0x1022      // WARNING: SPECULATION
 #define PSP_NET_INET_SO_DCCP_BROADCAST	0x1000		// Used with SOCK_DCCP, associated with Broadcast or Group Mode. Made obsolete by SOCK_DGRAM
 #define PSP_NET_INET_SO_DCCP_LINGER		0x2000		// Will block on close() until all pending data is sent OR timeout expires (return RST instead of FIN)
+#define SCE_NET_INET_SO_USECRYPTO_RX	0x1000	// PSP2i reports both of these as a pair for "SO_USECRYPTO"
+#define SCE_NET_INET_SO_USECRYPTO_TX	0x2000  // PSP2i reports both of these as a pair for "SO_USECRYPTO"
 
 // User-settable options (used with setsockopt)
 #define	PSP_NET_INET_TCP_NODELAY	0x01		// don't delay send to coalesce packets 
