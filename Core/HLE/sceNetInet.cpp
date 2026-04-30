@@ -595,9 +595,12 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen) {
 	inetSock->thread = std::thread([retval, socket, inetSock, dst, sockAddrLen]() mutable {
 		const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(dst);
 		retval = inetSock->connect(dst, sockAddrLen);
-		if (retval < 0)
-			ERROR_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i)", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
-		else
+		if (retval < 0) {
+			if (socket_errno == EINPROGRESS)
+				INFO_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i): EINPROGRESS", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
+			else
+				ERROR_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i)", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
+		} else
 			INFO_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i)", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
 		// Emulate blocking behavior
 		if (inetSock->nonblocking) {
