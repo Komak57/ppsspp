@@ -392,125 +392,22 @@ int SocketManager::DeliverPacketToVPorts(const VPORT_HEADER& header, const char*
         DEBUG_LOG(Log::sceNet, "RouteDCCP: Processing socket vport %d (type=%d)", 
             target_sock->vport, target_sock->type);
 
-        // Handle TCP control packets (SYN/ACK/FIN) for SOCK_PACKET
-        if (target_sock->type == PSP_NET_INET_SOCK_PACKET) {
-            PacketSocket* pkt_sock = const_cast<PacketSocket*>(static_cast<const PacketSocket*>(target_sock));
-            
-			// Only handle SYN for listening sockets
-            if (header.flags & p2ps_tcp_flags::SYN) {
-                if (target_sock->tcp_state == TCPState::Listening) {
-                    ConnectionRequest conn;
-                    conn.peer_addr = _from;
-                    conn.peer_port = ntohs(_from.sin_port);
-                    pkt_sock->set_pending_connection(conn);
-                    
-                    INFO_LOG(Log::sceNet, "PACKET: Received SYN at listening socket from %s:%u to port %u",
-                        inet_ntoa(_from.sin_addr), ntohs(_from.sin_port), target_sock->port);
+		VirtualPacket vpkt;
+		if (data_len > 0 && packet_data != nullptr) {
+			vpkt.data = std::make_unique<char[]>(data_len);
+			memcpy(vpkt.data.get(), packet_data, data_len);
+		}
+		vpkt.len = data_len;
+		vpkt.header_flags = header.flags;
+		vpkt.src_addr = _from;
 
-					target_sock->ProcessNetStack();
-                    continue; // SYN handled, don't enqueue as data
-                }
-            }
-            
-			// Incoming ACK - only handle for SynSent state
-            if (header.flags & p2ps_tcp_flags::ACK) {
-                if (target_sock->tcp_state == TCPState::SynSent) {
-                    InetSocket* mutable_sock = const_cast<InetSocket*>(target_sock);
-                    mutable_sock->tcp_state = TCPState::Established;
-                    mutable_sock->dst_addr = _from.sin_addr.s_addr;
-                    mutable_sock->dst_port = ntohs(_from.sin_port);
-                    
-                    INFO_LOG(Log::sceNet, "PACKET: Received ACK at connecting socket from %s:%u to port %u",
-                        inet_ntoa(_from.sin_addr), ntohs(_from.sin_port), target_sock->port);
-					// if (target_sock->threadID > 0) {
-					// 	__KernelResumeThreadFromWait(target_sock->threadID, 0);
-					// 	target_sock->threadID = -1;
-					// }
-					target_sock->ProcessNetStack();
-                    continue; // ACK handled, don't enqueue as data
-                }
-            }
-            
-			// Incoming FIN (close)
-            if (header.flags & p2ps_tcp_flags::FIN) {
-				// Accepted sockets copy the listening socket's information. Only shut down non-listening sockets
-				if (target_sock->tcp_state == TCPState::Listening)
-					continue;
-				if (target_sock->rx_queue.empty())
-	                const_cast<InetSocket*>(target_sock)->tcp_state = TCPState::Disconnected;
-				else
-	                const_cast<InetSocket*>(target_sock)->tcp_state = TCPState::CloseWait;
-                INFO_LOG(Log::sceNet, "PACKET: Received FIN from %s:%u to port %u",
-                    inet_ntoa(_from.sin_addr), ntohs(_from.sin_port), target_sock->port);
-
-				target_sock->ProcessNetStack();
-                continue; // FIN handled, don't enqueue as data
-            }
-
-			// Check if this socket should receive data packets
-            if (header.flags & p2ps_tcp_flags::PSH) {
-                if (target_sock->tcp_state == TCPState::Established) {
-					if (target_sock->dst_addr != _from.sin_addr.s_addr || target_sock->dst_port != ntohs(_from.sin_port))
-						continue;
-                    
-					VirtualPacket vpkt;
-					if (data_len > 0 && packet_data != nullptr) {
-						vpkt.data = std::make_unique<char[]>(data_len);
-						memcpy(vpkt.data.get(), packet_data, data_len);
-					}
-					vpkt.len = data_len;
-					vpkt.header_flags = header.flags;
-					vpkt.src_addr = _from;
-					
-					DEBUG_LOG(Log::sceNet, "RouteDCCP: DELIVERING to port %d (type=%d, %d bytes from %s:%u)", 
-						target_sock->port, target_sock->type, data_len, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port));
-					
-					// Enqueue to target socket (atomic delivery) based on type
-					if (target_sock->type == PSP_NET_INET_SOCK_PACKET) {
-						static_cast<PacketSocket*>(target_sock)->enqueue_packet(vpkt);
-					} else if (target_sock->type == PSP_NET_INET_SOCK_CONN_DGRAM) {
-						static_cast<ConnDgramSocket*>(target_sock)->enqueue_packet(vpkt);
-					}
-
-                    INFO_LOG(Log::sceNet, "PACKET: Received PSH at established socket from %s:%u to port %u",
-                        inet_ntoa(_from.sin_addr), ntohs(_from.sin_port), target_sock->port);
-					delivered_count++;
-
-					target_sock->ProcessNetStack();
-                    continue; // Next socket
-                }
-            }
-        } else {
-			// FIXME: Should technically support non-broadcast sends
-			// if (!target_sock->is_broadcast_enabled())
-				// continue;
-            VirtualPacket vpkt;
-            if (data_len > 0 && packet_data != nullptr) {
-                vpkt.data = std::make_unique<char[]>(data_len);
-                memcpy(vpkt.data.get(), packet_data, data_len);
-            }
-            vpkt.len = data_len;
-            vpkt.header_flags = header.flags;
-            vpkt.src_addr = _from;
-            
-            INFO_LOG(Log::sceNet, "RouteDCCP: DELIVERING to vport %d (type=%d, %d bytes from %s:%u)", 
-                target_sock->vport, target_sock->type, data_len, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port));
-            
-            DEBUG_LOG(Log::sceNet, "%d=recvfrom(%s:%u) -> vport %d{%02X} (type=%d); [%lld/%lld, %lld/%lld]", 
-                data_len, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port), 
-                target_sock->vport, header.flags, target_sock->type,
-                target_sock->dbg.send, target_sock->dbg.sent, target_sock->dbg.recv, target_sock->dbg.read);
-            
-            // Enqueue to target socket (atomic delivery) based on type
-            if (target_sock->type == PSP_NET_INET_SOCK_PACKET) {
-				static_cast<PacketSocket*>(target_sock)->enqueue_packet(vpkt);
-            } else if (target_sock->type == PSP_NET_INET_SOCK_CONN_DGRAM) {
-                static_cast<ConnDgramSocket*>(target_sock)->enqueue_packet(vpkt);
-            }
-            delivered_count++;
-
-			target_sock->ProcessNetStack();
-			continue; // Next Socket
+		INFO_LOG(Log::sceNet, "RouteDCCP: DELIVERING to port %s:%d, vport %d (type=%d, %d bytes from %s:%u)", 
+			target_sock->addr.c_str(), target_sock->port, target_sock->vport, target_sock->type, data_len, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port));
+		
+		target_sock->enqueue_packet(vpkt);
+		if (target_sock->ProcessNetStack()) {
+			delivered_count++;
+			continue;
 		}
 
 		DEBUG_LOG(Log::sceNet, "RouteDCCP: NOT delivering to vport %d (deliver_data=false)", target_sock->vport);
@@ -2368,45 +2265,164 @@ bool PacketSocket::ProcessNetStack() {
         // 1. Cleanup Stale Packets (Protocol Housekeeping)
         u64 packet_age_us = current_time_us - pkt.enqueue_time_us;
         if (packet_age_us > MAX_PACKET_AGE_US) {
-            DEBUG_LOG(Log::sceNet, "RunProtocolStack: Discarding stale packet (age: %.2f s)", 
+            WARN_LOG(Log::sceNet, "ProcessNetStack: Discarding stale packet (age: %.2f s)", 
                 (float)packet_age_us / 1000000.0f);
             it = rx_queue.erase(it);
             continue;
         }
+		// Only allow packets matching the addr + port
+		if (tcp_state != TCPState::Listening) {
+			if ((dst_addr != pkt.src_addr.sin_addr.s_addr && dst_addr != 0 && pkt.src_addr.sin_addr.s_addr != 0) || htons(dst_port) != pkt.src_addr.sin_port) {
+				it = rx_queue.erase(it);
+				continue;
+			}
+		}
+        if (pkt.header_flags == p2ps_tcp_flags::PSH) {
+			if (tcp_state != TCPState::Listening) {
+				// This is application data. Stop processing control flags 
+				// and leave this (and everything after it) for the game to Recv().
+				INFO_LOG(Log::sceNet, "PACKET: Received PSH at listening socket from %s:%u to port %u",
+					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
+				break; 
+			}
+			it = rx_queue.erase(it);
+			continue;
+        } 
+		it = rx_queue.erase(it);
 
         // 2. Process Control Plane (The "Kernel" Logic)
-        if (pkt.header_flags & p2ps_tcp_flags::SYN) {
-            // Handled by acceptor, but we clear it from the queue here
-            it = rx_queue.erase(it);
+        if (pkt.header_flags == p2ps_tcp_flags::SYN) {
+			if (tcp_state == TCPState::Listening) {
+				ConnectionRequest conn;
+				conn.peer_addr = pkt.src_addr;
+				conn.peer_port = ntohs(pkt.src_addr.sin_port);
+				conn.tcp_state = TCPState::SynReceived;
+				set_pending_connection(conn);
+				
+				INFO_LOG(Log::sceNet, "PACKET: Received SYN at listening socket from %s:%u to port %u",
+					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
+
+				int packet_size = VPORT_HEADER_SIZE;
+				std::unique_ptr<char[]> packet = std::make_unique<char[]>(packet_size);
+
+				VPORT_HEADER header;
+				header.flags = (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK);
+				header.vport = pkt.src_addr.sin_port;
+				memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
+				
+				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Sending SYN-ACK from vport %d to %s:%u",
+					vport, inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port));
+					
+				if (isLocalTarget(&pkt.src_addr)) {
+					sockaddr_in src_addr{};
+					src_addr.sin_family = AF_INET;
+					src_addr.sin_port = htons(this->port);
+					if (inet_pton(AF_INET, this->addr.c_str(), &src_addr.sin_addr) <= 0) {
+                        src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
+                    }
+					lock.unlock();
+					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
+					g_socketManager.DeliverPacketToVPorts(header, packet.get(), packet_size, src_addr);
+					lock.lock();
+				} else {
+					sockaddr_in dst_addr{};
+					dst_addr.sin_family = AF_INET;
+					dst_addr.sin_addr = pkt.src_addr.sin_addr;
+					dst_addr.sin_port = htons(SCE_SIGN_PORT);
+
+					header.vport = htons(port);
+					memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
+					
+					auto dccp_sock = g_socketManager.GetDCCP();
+					int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
+					if (ret < 0) {
+						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
+						return ret;
+					}
+
+				}
+			}
         } 
-        else if (pkt.header_flags & p2ps_tcp_flags::ACK) {
-            if (tcp_state == TCPState::SynSent) {
-                tcp_state = TCPState::Established;
+        else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK)) {
+			if (tcp_state == TCPState::SynSent) {
+				INFO_LOG(Log::sceNet, "PACKET: Received SYN-ACK at listening socket from %s:%u to port %u",
+					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
+				tcp_state = TCPState::Established;
+				dst_addr = pkt.src_addr.sin_addr.s_addr;
+                dst_port = ntohs(pkt.src_addr.sin_port);
+				
+                // Resume the thread that is currently blocked in sceNetInetConnect
+                if (threadID > 0) {
+                    DEBUG_LOG(Log::sceNet, "ProcessNetStack: SYN-ACK received, resuming thread %d", threadID);
+                    __KernelResumeThreadFromWait(threadID, 0);
+                    threadID = -1;
+                }
+
+				int packet_size = VPORT_HEADER_SIZE;
+				std::unique_ptr<char[]> packet = std::make_unique<char[]>(packet_size);
+
+				VPORT_HEADER header;
+				header.flags = p2ps_tcp_flags::ACK;
+				header.vport = pkt.src_addr.sin_port;
+				memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
+				
+				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Sending ACK from vport %d to %s:%u",
+					vport, inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port));
+				
+				if (isLocalTarget(&pkt.src_addr)) {
+					sockaddr_in src_addr{};
+					src_addr.sin_family = AF_INET;
+					src_addr.sin_port = htons(this->port);
+					if (inet_pton(AF_INET, this->addr.c_str(), &src_addr.sin_addr) <= 0) {
+                        src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
+                    }
+					lock.unlock();
+					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
+					g_socketManager.DeliverPacketToVPorts(header, packet.get(), packet_size, src_addr);
+					lock.lock();
+				} else {
+					sockaddr_in dst_addr{};
+					dst_addr.sin_family = AF_INET;
+					dst_addr.sin_addr = pkt.src_addr.sin_addr;
+					dst_addr.sin_port = htons(SCE_SIGN_PORT);
+
+					header.vport = htons(port);
+					memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
+					
+					auto dccp_sock = g_socketManager.GetDCCP();
+					int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
+					if (ret < 0) {
+						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
+						return ret;
+					}
+
+				}
+			}
+		}
+        else if (pkt.header_flags == p2ps_tcp_flags::ACK) {
+            if (tcp_state == TCPState::Listening) {
+				INFO_LOG(Log::sceNet, "PACKET: Received ACK at listening socket from %s:%u to port %u",
+					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
+
+				// tcp_state = TCPState::Established;
                 dst_addr = pkt.src_addr.sin_addr.s_addr;
                 dst_port = ntohs(pkt.src_addr.sin_port);
+				update_pending_connection(pkt.src_addr);
 
                 // Resume the thread that is currently blocked in sceNetInetConnect
-                if (threadID != -1) {
-                    DEBUG_LOG(Log::sceNet, "RunProtocolStack: ACK received, resuming thread %d", threadID);
+                if (threadID > 0) {
+                    DEBUG_LOG(Log::sceNet, "ProcessNetStack: ACK received, resuming thread %d", threadID);
                     __KernelResumeThreadFromWait(threadID, 0);
                     threadID = -1;
                 }
             }
-            it = rx_queue.erase(it);
         } 
-        else if (pkt.header_flags & p2ps_tcp_flags::FIN) {
+        else if (pkt.header_flags == p2ps_tcp_flags::FIN) {
             if (tcp_state != TCPState::Listening) {
-                tcp_state = TCPState::Disconnected;
+				INFO_LOG(Log::sceNet, "PACKET: Received FIN at listening socket from %s:%u to port %u",
+					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
+                tcp_state = TCPState::CloseWait;
             }
-            it = rx_queue.erase(it);
-        } 
-        else if (pkt.header_flags & p2ps_tcp_flags::PSH) {
-            // This is application data. Stop processing control flags 
-            // and leave this (and everything after it) for the game to Recv().
-            break; 
-        } 
-        else {
-            it++;
         }
     }
 	return hadData;
