@@ -278,18 +278,25 @@ InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const Inet
 	return nullptr;
 }
 
-void SocketManager::ProcessNetStack() {
+void SocketManager::ProcessNetStack(int* timeout) {
 	// Process Remote to Local first
-	dccp_sock->ProcessNetStack();
-	// Process Each Local Once
-	for (int i = MIN_VALID_INET_SOCKET; i < VALID_INET_SOCKET_COUNT; i++) {
-		InetSocket* s = &inetSockets_[i];
-		if (s->state != SocketState::Unused && s->type != PSP_NET_INET_SOCK_DCCP) {
-			// Run the emulated protocol stack for this socket
-			s->ProcessNetStack();
-		}
+	while (dccp_sock->ProcessNetStack()) {
+		// auto start = std::chrono::steady_clock::now();
+		// bool hadPacket = ;
+		// auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+		// *timeout = (*timeout > elapsed) ? (*timeout - elapsed) : 0;
+		// if (!hadPacket) return;
 	}
+	// Process Each Local Once
+	// for (int i = MIN_VALID_INET_SOCKET; i < VALID_INET_SOCKET_COUNT; i++) {
+	// 	InetSocket* s = &inetSockets_[i];
+	// 	if (s->state != SocketState::Unused && s->type != PSP_NET_INET_SOCK_DCCP) {
+	// 		// Run the emulated protocol stack for this socket
+	// 		s->ProcessNetStack();
+	// 	}
+	// }
 }
+
 bool SocketManager::Close(InetSocket *inetSocket) {
 	_dbg_assert_(inetSocket->state != SocketState::Unused);
 
