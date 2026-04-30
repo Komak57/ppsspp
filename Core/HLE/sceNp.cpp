@@ -79,6 +79,7 @@ void __NpInit() {
 
 	memcpy(&online_name.data, "DummyOnlineId", 14);
 	memcpy(&avatar_url.data, "http://DummyAvatarUrl", 22);
+	user_id.store(1); // cannot be zero - will be provided by the NPServer login
 }
 void __NpShutdown() {
 	if (npAuthServer && npAuthServer->IsConnected())
