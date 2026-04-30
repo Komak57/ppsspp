@@ -590,19 +590,28 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen) {
 	inetSock->threadID = sceKernelGetThreadId();
 
 	// Run the actual sendRequest on the host asynchronously
-	inetSock->thread = std::thread([retval, inetSock, dst, sockAddrLen]() mutable {
+	inetSock->thread = std::thread([retval, socket, inetSock, dst, sockAddrLen]() mutable {
+		const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(dst);
 		retval = inetSock->connect(dst, sockAddrLen);
-
+		if (retval < 0)
+			ERROR_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i)", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
+		else
+			INFO_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i)", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
+		// Emulate blocking behavior
+		if (inetSock->nonblocking) {
 		// Store the result and resume the PSP thread
 		__KernelResumeThreadFromWait(inetSock->threadID, retval);
 		inetSock->threadID = -1;
+		}
 	});
 	// Put the PSP thread into a wait state until sendRequest finishes
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpSendRequest");
 
 	int hostErrno = socket_errno;
+	
+	
 	if (retval < 0)
-		return hleLogError(Log::sceNet, retval);
+		return hleLogError(Log::sceNet, UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__));
 	return hleLogInfo(Log::sceNet, retval);
 }
 
