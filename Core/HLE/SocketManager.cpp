@@ -1800,6 +1800,9 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 		dst_addr.sin_addr = peer.sin_addr;
 		dst_addr.sin_port = htons(SCE_SIGN_PORT);
 
+		header.vport = htons(port);
+		memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
+		
 		int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, flags, (const sockaddr*)&dst_addr, sizeof(sockaddr_in));
 		if (ret < 0)
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET accept: Failed to send ACK to peer");
@@ -1879,30 +1882,7 @@ int PacketSocket::recv(char* buf, int len, int flags) {
 }
 int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) { 
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
-
-	auto _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
-	INFO_LOG(Log::sceNet, "PACKET: Connecting to %s:%u on vport %u",
-		inet_ntoa(_dest->sin_addr), ntohs(_dest->sin_port), _vport);
-
-	if (this->addr == "0.0.0.0") {
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		this->addr = inet_ntoa(sockAddr.sin_addr);
-	}
-	if (this->port == 0) {
-		this->port = g_socketManager.generateEphemeralPort();
-		this->vport = SCE_SIGN_PORT;
-	}
-	// DCCP must exist for P2P traffic
-	auto dccp_sock = g_socketManager.GetDCCP();
-	if (!dccp_sock) {
-#if PPSSPP_PLATFORM(WINDOWS)
-		SetLastError(EINVAL);
-#else
-		socket_errno = EINVAL;
-#endif
-		return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: DCCP_SOCK Not Present");
-	}
+	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::connect(%s:%u, %d): state=%d", ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), namelen, (int)tcp_state);
 
 	// Validate socket is not already connected/connecting
 	if (tcp_state != TCPState::Disconnected) {
@@ -1915,6 +1895,18 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 		return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Socket not in Disconnected state (state=%d)", (int)tcp_state);
 	}
 	
+	// Store connected socket
+	dst_addr = _dest->sin_addr.s_addr;
+	dst_port = ntohs(_dest->sin_port);
+
+	auto _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
+	INFO_LOG(Log::sceNet, "PACKET: Connecting to %s:%u on vport %u",
+		inet_ntoa(_dest->sin_addr), ntohs(_dest->sin_port), _vport);
+
+	this->addr = ip2str(INADDR_ANY);
+	this->port = g_socketManager.generateEphemeralPort();
+	// this->port = ntohs(_dest->sin_port);
+	this->vport = _vport;
 
 	// Build packet: VPORT_HEADER + payload
 	int packet_size = VPORT_HEADER_SIZE;
@@ -1940,6 +1932,21 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 		// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
 		g_socketManager.DeliverPacketToVPorts(header, packet.get(), packet_size, src_addr);
 	} else {
+		// DCCP must exist for P2P traffic
+		auto dccp_sock = g_socketManager.GetDCCP();
+		if (!dccp_sock) {
+#if PPSSPP_PLATFORM(WINDOWS)
+			SetLastError(EINVAL);
+#else
+			socket_errno = EINVAL;
+#endif
+			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: DCCP_SOCK Not Present");
+		}
+
+		// Match the destination port for remote connections
+		this->port = ntohs(_dest->sin_port);
+		dst_port = _vport;
+
 		sockaddr_in dst_addr{};
 		dst_addr.sin_family = AF_INET;
 		dst_addr.sin_addr = _dest->sin_addr;
@@ -1951,17 +1958,7 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 		}
 	}
 	
-	// Set state to SynSent (waiting for ACK)
-	tcp_state = TCPState::SynSent;
-
-	// Store connected socket
-	dst_addr = _dest->sin_addr.s_addr;
-	dst_port = ntohs(_dest->sin_port);
-	
-	// Store target address for when ACK arrives
-	// Note: actual peer info will be set when we receive ACK
-	
-	INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Sent SYN from vport %d to %s:%u",
+	INFO_LOG(Log::sceNet, "SOCK_PACKET: Connected vport %d to %s:%u",
 		vport, inet_ntoa(_dest->sin_addr), ntohs(_dest->sin_port));
 	
 #if PPSSPP_PLATFORM(WINDOWS)
@@ -2179,8 +2176,15 @@ int PacketSocket::shutdown(int how) {
 			// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
 			g_socketManager.DeliverPacketToVPorts(header, packet.get(), packet_size, src_addr);
 		} else {
-			int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, 0, 
-				(struct sockaddr*)&dst, sizeof(dst));
+			sockaddr_in dst_addr{};
+			dst_addr.sin_family = AF_INET;
+			dst_addr.sin_addr = dst_addr.sin_addr;
+			dst_addr.sin_port = htons(dst_port);
+
+			header.vport = htons(port);
+			memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
+			
+			int ret = ::sendto(dccp_sock->sock, packet.get(), packet_size, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
 			if (ret < 0) {
 				ERROR_LOG(Log::sceNet, "SOCK_PACKET shutdown: Failed to send FIN");
 				// return -1; // Let it shut down the socket anyways
