@@ -2253,7 +2253,7 @@ int PacketSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, Sc
 }
 
 bool PacketSocket::ProcessNetStack() {
-    std::lock_guard<std::mutex> lock(queue_lock);
+    std::unique_lock<std::mutex> lock(queue_lock);
     const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
     u64 current_time_us = (u64)(time_now_d() * 1000000.0);
 
