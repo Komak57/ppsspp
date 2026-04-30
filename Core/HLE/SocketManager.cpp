@@ -1784,10 +1784,7 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 		src_addr.sin_family = AF_INET;
 		src_addr.sin_port = htons(this->port);
 		if (inet_pton(AF_INET, this->addr.c_str(), &src_addr.sin_addr) <= 0) {
-			// Fallback if the string is empty or invalid (e.g., binds to INADDR_ANY / 0.0.0.0)
-			sockaddr_in sockAddr{};
-			getLocalIp(&sockAddr);
-			src_addr.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+			src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
 		}
 		// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
 		g_socketManager.DeliverPacketToVPorts(header, buf, len, src_addr);
@@ -1924,10 +1921,7 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 		src_addr.sin_family = AF_INET;
 		src_addr.sin_port = htons(this->port);
 		if (inet_pton(AF_INET, this->addr.c_str(), &src_addr.sin_addr) <= 0) {
-			// Fallback if the string is empty or invalid (e.g., binds to LocalIp)
-			sockaddr_in sockAddr{};
-			getLocalIp(&sockAddr);
-			src_addr.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+			src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
 		}
 		// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
 		g_socketManager.DeliverPacketToVPorts(header, packet.get(), packet_size, src_addr);
@@ -2067,9 +2061,8 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	saddr.addr.sa_family = name->sa_family;
 	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
-	if (isLocalServer) {
-		getLocalIp(&saddr.in);
-	}
+
+	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::bind(%s:%u, %d): state=%d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), namelen, (int)tcp_state);
 	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
 	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
 	//
@@ -2131,10 +2124,7 @@ int PacketSocket::shutdown(int how) {
 			src_addr.sin_family = AF_INET;
 			src_addr.sin_port = htons(this->port);
 			if (inet_pton(AF_INET, this->addr.c_str(), &src_addr.sin_addr) <= 0) {
-				// Fallback if the string is empty or invalid (e.g., binds to INADDR_ANY / 0.0.0.0)
-				sockaddr_in sockAddr{};
-				getLocalIp(&sockAddr);
-				src_addr.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+				src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
 			}
 			// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
 			g_socketManager.DeliverPacketToVPorts(header, packet.get(), packet_size, src_addr);
