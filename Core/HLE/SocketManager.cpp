@@ -1902,6 +1902,8 @@ int PacketSocket::recv(char* buf, int len, int flags) {
         return -1;
     }
 
+	if (tcp_state == TCPState::CloseWait && !has_pending_data())
+		tcp_state = TCPState::Disconnected;
 	// // Dequeue from local packet queue for virtual sockets
 	// VirtualPacket pkt;
 	// if (!dequeue_packet(pkt)) {
