@@ -397,6 +397,8 @@ int SocketManager::DeliverPacketToVPorts(const VPORT_HEADER& header, const char*
                     
                     INFO_LOG(Log::sceNet, "PACKET: Received SYN at listening socket from %s:%u to port %u",
                         inet_ntoa(_from.sin_addr), ntohs(_from.sin_port), target_sock->port);
+
+					target_sock->ProcessNetStack();
                     continue; // SYN handled, don't enqueue as data
                 }
             }
@@ -415,6 +417,7 @@ int SocketManager::DeliverPacketToVPorts(const VPORT_HEADER& header, const char*
 					// 	__KernelResumeThreadFromWait(target_sock->threadID, 0);
 					// 	target_sock->threadID = -1;
 					// }
+					target_sock->ProcessNetStack();
                     continue; // ACK handled, don't enqueue as data
                 }
             }
@@ -424,9 +427,14 @@ int SocketManager::DeliverPacketToVPorts(const VPORT_HEADER& header, const char*
 				// Accepted sockets copy the listening socket's information. Only shut down non-listening sockets
 				if (target_sock->tcp_state == TCPState::Listening)
 					continue;
+				if (target_sock->rx_queue.empty())
+	                const_cast<InetSocket*>(target_sock)->tcp_state = TCPState::Disconnected;
+				else
                 const_cast<InetSocket*>(target_sock)->tcp_state = TCPState::CloseWait;
                 INFO_LOG(Log::sceNet, "PACKET: Received FIN from %s:%u to port %u",
                     inet_ntoa(_from.sin_addr), ntohs(_from.sin_port), target_sock->port);
+
+				target_sock->ProcessNetStack();
                 continue; // FIN handled, don't enqueue as data
             }
 
@@ -458,6 +466,8 @@ int SocketManager::DeliverPacketToVPorts(const VPORT_HEADER& header, const char*
                     INFO_LOG(Log::sceNet, "PACKET: Received PSH at established socket from %s:%u to port %u",
                         inet_ntoa(_from.sin_addr), ntohs(_from.sin_port), target_sock->port);
 					delivered_count++;
+
+					target_sock->ProcessNetStack();
                     continue; // Next socket
                 }
             }
@@ -489,6 +499,8 @@ int SocketManager::DeliverPacketToVPorts(const VPORT_HEADER& header, const char*
                 static_cast<ConnDgramSocket*>(target_sock)->enqueue_packet(vpkt);
             }
             delivered_count++;
+
+			target_sock->ProcessNetStack();
 			continue; // Next Socket
 		}
 
