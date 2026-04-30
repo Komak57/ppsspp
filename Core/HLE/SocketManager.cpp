@@ -309,12 +309,7 @@ void SocketManager::ProcessNetStack(int* timeout) {
 bool SocketManager::Close(InetSocket *inetSocket) {
 	_dbg_assert_(inetSocket->state != SocketState::Unused);
 
-	int ret = 0;
-	if (inetSocket->type == PSP_NET_INET_SOCK_CONN_DGRAM)
-		ret = inetSocket->closesocket();
-	else
-		ret = closesocket(inetSocket->sock);
-
+	int ret = inetSocket->closesocket();
 	if (ret != 0) {
 		ERROR_LOG(Log::sceNet, "closesocket(%d) failed", inetSocket->sock);
 		return false;
