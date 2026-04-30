@@ -808,14 +808,14 @@ int StreamSocket::connect(SceNetInetSockaddr* name, int namelen) {
 
 	sockaddr_in* paddr = reinterpret_cast<sockaddr_in*>(&saddr);
 	// If PSP tried to connect to 0.0.0.0, replace with loopback
-	if (paddr->sin_addr.s_addr == htonl(INADDR_ANY)) {
-		WARN_LOG(Log::sceNet, "Socket attempting to connect to INADDR_ANY! (socket #%d)", socket);
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		//paddr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-		//paddr->sin_addr.s_addr = htonl((ULONG)0xC0A802FE); // hard coded to dev machine
-		paddr->sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
+	// if (paddr->sin_addr.s_addr == htonl(INADDR_ANY)) {
+	// 	WARN_LOG(Log::sceNet, "Socket attempting to connect to INADDR_ANY! (socket #%d)", socket);
+	// 	sockaddr_in sockAddr{};
+	// 	getLocalIp(&sockAddr);
+	// 	//paddr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	// 	//paddr->sin_addr.s_addr = htonl((ULONG)0xC0A802FE); // hard coded to dev machine
+	// 	paddr->sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	// }
 
 	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
 	if (!nonblocking) {
@@ -865,13 +865,13 @@ int StreamSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//
 	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
 	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-		// Get Local IP Address
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-		saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
+	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
+	// 	// Get Local IP Address
+	// 	sockaddr_in sockAddr{};
+	// 	getLocalIp(&sockAddr);
+	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
+	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	// }
 	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
@@ -967,13 +967,13 @@ int DgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//
 	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
 	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-		// Get Local IP Address
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-		saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
+	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
+	// 	// Get Local IP Address
+	// 	sockaddr_in sockAddr{};
+	// 	getLocalIp(&sockAddr);
+	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
+	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	// }
 	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
@@ -1043,13 +1043,13 @@ int RawSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//
 	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
 	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-		// Get Local IP Address
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-		saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
+	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
+	// 	// Get Local IP Address
+	// 	sockaddr_in sockAddr{};
+	// 	getLocalIp(&sockAddr);
+	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
+	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	// }
 	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
@@ -1118,13 +1118,13 @@ int RdmSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//
 	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
 	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-		// Get Local IP Address
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-		saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
+	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
+	// 	// Get Local IP Address
+	// 	sockaddr_in sockAddr{};
+	// 	getLocalIp(&sockAddr);
+	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
+	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	// }
 	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
@@ -1187,14 +1187,14 @@ int SeqpacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 
 	sockaddr_in* paddr = reinterpret_cast<sockaddr_in*>(&saddr);
 	// If PSP tried to connect to 0.0.0.0, replace with loopback
-	if (paddr->sin_addr.s_addr == htonl(INADDR_ANY)) {
-		WARN_LOG(Log::sceNet, "Socket attempting to connect to INADDR_ANY! (socket #%d)", socket);
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		//paddr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-		//paddr->sin_addr.s_addr = htonl((ULONG)0xC0A802FE); // hard coded to dev machine
-		paddr->sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
+	// if (paddr->sin_addr.s_addr == htonl(INADDR_ANY)) {
+	// 	WARN_LOG(Log::sceNet, "Socket attempting to connect to INADDR_ANY! (socket #%d)", socket);
+	// 	sockaddr_in sockAddr{};
+	// 	getLocalIp(&sockAddr);
+	// 	//paddr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	// 	//paddr->sin_addr.s_addr = htonl((ULONG)0xC0A802FE); // hard coded to dev machine
+	// 	paddr->sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	// }
 
 	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
 	if (!nonblocking) {
@@ -1244,13 +1244,13 @@ int SeqpacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//
 	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
 	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-		// Get Local IP Address
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-		saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
+	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
+	// 	// Get Local IP Address
+	// 	sockaddr_in sockAddr{};
+	// 	getLocalIp(&sockAddr);
+	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
+	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	// }
 	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
@@ -1314,14 +1314,14 @@ int DccpSocket::connect(SceNetInetSockaddr* name, int namelen) {
 
 	sockaddr_in* paddr = reinterpret_cast<sockaddr_in*>(&saddr);
 	// If PSP tried to connect to 0.0.0.0, replace with loopback
-	if (paddr->sin_addr.s_addr == htonl(INADDR_ANY)) {
-		WARN_LOG(Log::sceNet, "Socket attempting to connect to INADDR_ANY! (socket #%d)", socket);
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		//paddr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-		//paddr->sin_addr.s_addr = htonl((ULONG)0xC0A802FE); // hard coded to dev machine
-		paddr->sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
+	// if (paddr->sin_addr.s_addr == htonl(INADDR_ANY)) {
+	// 	WARN_LOG(Log::sceNet, "Socket attempting to connect to INADDR_ANY! (socket #%d)", socket);
+	// 	sockaddr_in sockAddr{};
+	// 	getLocalIp(&sockAddr);
+	// 	//paddr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	// 	//paddr->sin_addr.s_addr = htonl((ULONG)0xC0A802FE); // hard coded to dev machine
+	// 	paddr->sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	// }
 
 	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
 	if (!nonblocking) {
@@ -1371,13 +1371,13 @@ int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//
 	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
 	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-		// Get Local IP Address
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-		saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
+	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
+	// 	// Get Local IP Address
+	// 	sockaddr_in sockAddr{};
+	// 	getLocalIp(&sockAddr);
+	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
+	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	// }
 	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
@@ -1594,13 +1594,13 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//
 	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
 	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-		// Get Local IP Address
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-		saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
+	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
+	// 	// Get Local IP Address
+	// 	sockaddr_in sockAddr{};
+	// 	getLocalIp(&sockAddr);
+	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
+	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	// }
 	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
@@ -2087,13 +2087,13 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//
 	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
 	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-		// Get Local IP Address
-		sockaddr_in sockAddr{};
-		getLocalIp(&sockAddr);
-		INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-		saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	}
+	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
+	// 	// Get Local IP Address
+	// 	sockaddr_in sockAddr{};
+	// 	getLocalIp(&sockAddr);
+	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
+	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	// }
 	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
