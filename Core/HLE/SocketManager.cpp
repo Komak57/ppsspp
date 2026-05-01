@@ -815,7 +815,7 @@ int StreamSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
 	if (!nonblocking) {
 		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%d)", socket);
-		changeBlockingMode(sock, 0);
+		// changeBlockingMode(sock, 0);
 		// Workaround to avoid blocking for indefinitely
 		setSockTimeout(sock, SO_SNDTIMEO, 5000000);
 		setSockTimeout(sock, SO_RCVTIMEO, 5000000);
@@ -825,7 +825,7 @@ int StreamSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	int hostErrno = socket_errno;
 
 	if (!nonblocking) {
-		changeBlockingMode(sock, 1);
+		// changeBlockingMode(sock, 1);
 		// Since we're temporarily forcing blocking-mode, we'll need to change errno from ETIMEDOUT to EAGAIN
 		if (hostErrno == ETIMEDOUT)
 			hostErrno = EAGAIN;
@@ -879,7 +879,7 @@ int StreamSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
 
-	changeBlockingMode(sock, 0);
+	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
 	if (ret < 0)
 		return hleLogError(Log::sceNet, ret);
@@ -981,7 +981,7 @@ int DgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
 
-	changeBlockingMode(sock, 0);
+	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
 	if (ret < 0)
 		return hleLogError(Log::sceNet, ret);
@@ -1057,7 +1057,7 @@ int RawSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
 
-	changeBlockingMode(sock, 0);
+	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
 	if (ret < 0)
 		return hleLogError(Log::sceNet, ret);
@@ -1132,7 +1132,7 @@ int RdmSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
 
-	changeBlockingMode(sock, 0);
+	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
 	if (ret < 0)
 		return hleLogError(Log::sceNet, ret);
@@ -1194,7 +1194,7 @@ int SeqpacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
 	if (!nonblocking) {
 		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%d)", socket);
-		changeBlockingMode(sock, 0);
+		// changeBlockingMode(sock, 0);
 		// Workaround to avoid blocking for indefinitely
 		setSockTimeout(sock, SO_SNDTIMEO, 5000000);
 		setSockTimeout(sock, SO_RCVTIMEO, 5000000);
@@ -1204,7 +1204,7 @@ int SeqpacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	int hostErrno = socket_errno;
 
 	if (!nonblocking) {
-		changeBlockingMode(sock, 1);
+		// changeBlockingMode(sock, 1);
 		// Since we're temporarily forcing blocking-mode, we'll need to change errno from ETIMEDOUT to EAGAIN
 		if (hostErrno == ETIMEDOUT)
 			hostErrno = EAGAIN;
@@ -1258,7 +1258,7 @@ int SeqpacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
 
-	changeBlockingMode(sock, 0);
+	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
 	if (ret < 0)
 		return hleLogError(Log::sceNet, ret);
@@ -1321,7 +1321,7 @@ int DccpSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
 	if (!nonblocking) {
 		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%d)", socket);
-		changeBlockingMode(sock, 0);
+		// changeBlockingMode(sock, 0);
 		// Workaround to avoid blocking for indefinitely
 		setSockTimeout(sock, SO_SNDTIMEO, 5000000);
 		setSockTimeout(sock, SO_RCVTIMEO, 5000000);
@@ -1331,7 +1331,7 @@ int DccpSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	int hostErrno = socket_errno;
 
 	if (!nonblocking) {
-		changeBlockingMode(sock, 1);
+		// changeBlockingMode(sock, 1);
 		// Since we're temporarily forcing blocking-mode, we'll need to change errno from ETIMEDOUT to EAGAIN
 		if (hostErrno == ETIMEDOUT)
 			hostErrno = EAGAIN;
@@ -1385,7 +1385,7 @@ int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
 
-	changeBlockingMode(sock, 0);
+	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
 	if (ret < 0)
 		return hleLogError(Log::sceNet, ret);
@@ -1614,7 +1614,7 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, NewPort = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), port, vport);
 
-	changeBlockingMode(sock, 0);
+	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
 	if (ret < 0)
 		return hleLogError(Log::sceNet, ret);
@@ -2053,7 +2053,7 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
 
-	changeBlockingMode(sock, 0);
+	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
 	if (ret < 0)
 		return hleLogError(Log::sceNet, ret);
