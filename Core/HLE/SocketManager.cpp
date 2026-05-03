@@ -102,12 +102,12 @@ bool InetSocket::is_broadcast_enabled() const {
     return false;
 }
 
-bool isLocalTarget(const sockaddr_in* _dest) {
+bool isLocalTarget(const in_addr_t s_addr) {
 	sockaddr_in local_addr{};
 	getLocalIp(&local_addr);
-	return (_dest->sin_addr.s_addr == htonl(INADDR_LOOPBACK) || 
-				_dest->sin_addr.s_addr == htonl(INADDR_ANY) ||
-				(_dest->sin_addr.s_addr == local_addr.sin_addr.s_addr));
+	return (s_addr == htonl(INADDR_LOOPBACK) || 
+				s_addr == htonl(INADDR_ANY) ||
+				(s_addr == local_addr.sin_addr.s_addr));
 }
 
 // InetSocket now has mutex and condition variable, it can't be reset by {}
