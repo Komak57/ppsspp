@@ -235,6 +235,13 @@ static int sceNetInetGetsockname(int socket, u32 namePtr, u32 namelenPtr) {
 	return hleLogInfo(Log::sceNet, 0);
 }
 
+class SelectTarget {
+public:
+	SOCKET sock = 0;
+	bool wantsRead = false;
+	bool wantsWrite = false;
+	bool wantsExcept = false;
+};
 // FIXME: select is being used here without an inetSocket pointer
 // FIXME: nfds is number of fd(s) as in posix poll, or was it maximum fd value as in posix select? Star Wars Battlefront Renegade seems to set the nfds to 64, while Coded Arms Contagion is using 256
 int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr, u32 timeoutPtr) {
@@ -243,6 +250,11 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 	SceNetInetFdSet	*exceptfds = exceptfdsPtr ? (SceNetInetFdSet*)Memory::GetPointerWrite(exceptfdsPtr) : nullptr;
 	SceNetInetTimeval *timeout = timeoutPtr ? (SceNetInetTimeval*)Memory::GetPointerWrite(timeoutPtr) : nullptr;
 
+	timeval tmout = { 5, 543210 }; // Workaround timeout value when timeout = NULL
+	if (timeout) {
+		tmout.tv_sec = timeout->tv_sec;
+		tmout.tv_usec = timeout->tv_usec;
+	}
 	// First, translate the specified fd_sets to host sockets.
 
 	fd_set rdfds, wrfds, exfds;
@@ -261,60 +273,65 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 	int maxHostSocket = 0;
 
 	// Save the mapping during setup.
-	SOCKET hostSockets[256]{};
+	SelectTarget hostSockets[256]{};
 
 	InetSocket* inetSock = nullptr;
 	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < nfds; i++) {
 		// Ignore invalid sockets
     	if (!g_socketManager.GetInetSocket(i, &inetSock))
 			continue;
-		bool hasVData = false;
-		{
-			std::lock_guard<std::mutex> lock(inetSock->queue_lock);
-			hasVData = !inetSock->rx_queue.empty();
-		}
-		if (readfds && (NetInetFD_ISSET(i, readfds) || hasVData || inetSock->has_pending_connection() || inetSock->tcp_state == TCPState::Disconnected)) {
-			SOCKET sock = inetSock->sock;
-			_dbg_assert_(sock != 0); // False-Positive on VSocks
-			hostSockets[i] = sock;
-			if (sock > maxHostSocket)
-				maxHostSocket = sock;
-			VERBOSE_LOG(Log::sceNet, "Input Read FD #%i (host: %d)", i, sock);
+		// Dead socket
+		if (inetSock->sock == 0)
+			continue;
+		hostSockets[i].sock = inetSock->sock;
+		if (inetSock->sock > maxHostSocket)
+			maxHostSocket = inetSock->sock;
+		if (readfds && (NetInetFD_ISSET(i, readfds))) {
+			hostSockets[i].wantsRead = true;
+			VERBOSE_LOG(Log::sceNet, "Input Read FD #%i (host: %d)", i, inetSock->sock);
 			if (rdcnt < FD_SETSIZE) {
-				FD_SET(sock, &rdfds); // This might pointed to a non-existing socket or sockets belonged to other programs on Windows, because most of the time Windows socket have an id above 1k instead of 0-255
-			rdcnt++;
+				// Skip host checks on virtual sockets
+				if (inetSock->type != PSP_NET_INET_SOCK_PACKET && inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM)
+					FD_SET(inetSock->sock, &rdfds); // This might pointed to a non-existing socket or sockets belonged to other programs on Windows, because most of the time Windows socket have an id above 1k instead of 0-255
+				else if (inetSock->has_pending_data() || inetSock->has_pending_connection() || inetSock->tcp_state == TCPState::CloseWait) {
+					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
+					tmout.tv_sec = 0;
+					tmout.tv_usec = 0;
+				}
+				rdcnt++;
 			} else {
 				ERROR_LOG(Log::sceNet, "Hit set size (rd)");
 			}
 		}
-		if (writefds && (NetInetFD_ISSET(i, writefds) || inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM || inetSock->tcp_state == TCPState::Established)) {
-			SOCKET sock = inetSock->sock;
-			_dbg_assert_(sock != 0);
-			hostSockets[i] = sock;
-			if (sock > maxHostSocket)
-				maxHostSocket = sock;
-			VERBOSE_LOG(Log::sceNet, "Input Write FD #%i (host: %d)", i, sock);
+		if (writefds && (NetInetFD_ISSET(i, writefds))) {
+			hostSockets[i].wantsWrite = true;
+			VERBOSE_LOG(Log::sceNet, "Input Write FD #%i (host: %d)", i, inetSock->sock);
 			if (wrcnt < FD_SETSIZE) {
-				FD_SET(sock, &wrfds);
-			wrcnt++;
+				// Skip host checks on virtual sockets
+				if (inetSock->type != PSP_NET_INET_SOCK_PACKET && inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM)
+					FD_SET(inetSock->sock, &wrfds);
+				else if (inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM || inetSock->tcp_state == TCPState::Established) {
+					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
+					tmout.tv_sec = 0;
+					tmout.tv_usec = 0;
+				}
+				wrcnt++;
 			} else {
 				ERROR_LOG(Log::sceNet, "Hit set size (wr)");
 			}
 		}
 		if (exceptfds && (NetInetFD_ISSET(i, exceptfds))) {
-			SOCKET sock = inetSock->sock;
-			_dbg_assert_(sock != 0);
-			hostSockets[i] = sock;
-			if (sock > maxHostSocket)
-				maxHostSocket = sock;
-			VERBOSE_LOG(Log::sceNet, "Input Except FD #%i (host: %d)", i, sock);
+			hostSockets[i].wantsExcept = true;
+			VERBOSE_LOG(Log::sceNet, "Input Except FD #%i (host: %d)", i, inetSock->sock);
 			if (excnt < FD_SETSIZE) {
-				FD_SET(sock, &exfds);
-			excnt++;
+				// Skip host checks on virtual sockets
+				if (inetSock->type != PSP_NET_INET_SOCK_PACKET && inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM)
+					FD_SET(inetSock->sock, &exfds);
+				excnt++;
 			} else {
 				ERROR_LOG(Log::sceNet, "Hit set size (exc)");
+			}
 		}
-	}
 	}
 
 	// Unlikely to hit these.
@@ -322,16 +339,11 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 	_dbg_assert_(wrcnt < FD_SETSIZE);
 	_dbg_assert_(excnt < FD_SETSIZE);
 
-	timeval tmout = { 5, 543210 }; // Workaround timeout value when timeout = NULL
-	if (timeout) {
-		tmout.tv_sec = timeout->tv_sec;
-		tmout.tv_usec = timeout->tv_usec;
-	}
-	DEBUG_LOG(Log::sceNet, "Select(host: %d): Read count: %d, Write count: %d, Except count: %d, TimeVal: %u.%u", maxHostSocket + 1, rdcnt, wrcnt, excnt, (int)tmout.tv_sec, (int)tmout.tv_usec);
+	VERBOSE_LOG(Log::sceNet, "Select(host: %d): Read count: %d, Write count: %d, Except count: %d, TimeVal: %u.%u", maxHostSocket + 1, rdcnt, wrcnt, excnt, (int)tmout.tv_sec, (int)tmout.tv_usec);
 	// TODO: Simulate blocking behaviour when timeout = NULL to prevent PPSSPP from freezing
 	// Note: select can overwrite tmout.
 	int retval = select(maxHostSocket + 1, readfds ? &rdfds : nullptr, writefds ? &wrfds : nullptr, exceptfds ? &exfds : nullptr, /*(timeout == NULL) ? NULL :*/ &tmout);
-
+	int ready_count = 0; // Number of waiting FD's
 	// Convert the results back to PSP fd_sets.
 	if (readfds)
 		NetInetFD_ZERO(readfds);
@@ -342,32 +354,49 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 
 	// Don't need to loop through and set any bits if the sum total returned is 0.
 	// But we do need to check any virtual buffers
-	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < nfds; i++) {
-		if (hostSockets[i] == 0) {
-			continue;
-		}
-    	g_socketManager.GetInetSocket(i, &inetSock);
-		bool hasVData = false;
-		{
-			std::lock_guard<std::mutex> lock(inetSock->queue_lock);
-			hasVData = !inetSock->rx_queue.empty();
-		}
-		if (readfds && (FD_ISSET(hostSockets[i], &rdfds) || hasVData || inetSock->has_pending_connection() || inetSock->tcp_state == TCPState::Disconnected)) {
-			NetInetFD_SET(i, readfds);
-		}
-		if (writefds && (FD_ISSET(hostSockets[i], &wrfds) || inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM || inetSock->tcp_state == TCPState::Established)) {
-			NetInetFD_SET(i, writefds);
-		}
-		if (exceptfds && FD_ISSET(hostSockets[i], &exfds)) {
-			NetInetFD_SET(i, exceptfds);
-		}
-	}
 
-	if (retval < 0)
+	std::string _log = "";
+	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < nfds; i++) {
+		// Skip sockets that weren't requested
+		if (!hostSockets[i].wantsRead && !hostSockets[i].wantsWrite && !hostSockets[i].wantsExcept)
+			continue;
+    	if (!g_socketManager.GetInetSocket(i, &inetSock)) {
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(EBADF);
+#else
+		socket_errno = EBADF;
+#endif
+			retval = -1;
+			continue; // Should we break here? Or populate all known data first?
+		}
+		_log += std::to_string(i) + "[";
+		// Linger supports recv on CloseWait
+		if (readfds && hostSockets[i].wantsRead && (FD_ISSET(hostSockets[i].sock, &rdfds) || inetSock->has_pending_data() || inetSock->has_pending_connection() || inetSock->tcp_state == TCPState::CloseWait)) {
+			NetInetFD_SET(i, readfds);
+			ready_count++;
+			_log += "R";
+		}
+		if (writefds && hostSockets[i].wantsWrite && (FD_ISSET(hostSockets[i].sock, &wrfds) || inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM || inetSock->tcp_state == TCPState::Established)) {
+			NetInetFD_SET(i, writefds);
+			ready_count++;
+			_log += "W";
+		}
+		if (exceptfds && hostSockets[i].wantsExcept && FD_ISSET(hostSockets[i].sock, &exfds)) {
+			NetInetFD_SET(i, exceptfds);
+			ready_count++;
+			_log += "E";
+		}
+		_log += "] ";
+	}
+	VERBOSE_LOG(Log::sceNet, "Select(host: %d): %s", maxHostSocket + 1, _log.c_str());
+
+	if (retval < 0) {
 		UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
+		return hleLogDebug(Log::sceNet, retval);
+	}
 	// if (retval == 0)
 		// return hleDelayResult(hleLogDebug(Log::sceNet, retval), "workaround until blocking-socket", 500); // Using hleDelayResult as a workaround for games that need blocking-socket to be implemented (ie. Coded Arms Contagion)
-	return hleLogDebug(Log::sceNet, retval);
+	return hleLogDebug(Log::sceNet, ready_count);
 }
 
 int sceNetInetPoll(u32 fdsPtr, u32 nfds, int timeout) { // timeout in miliseconds just like posix poll? or in microseconds as other PSP timeout?
