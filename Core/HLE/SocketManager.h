@@ -369,10 +369,11 @@ struct VPortSubscriber {
 class SocketManager {
 public:
 	enum {
-		VALID_INET_SOCKET_COUNT = 256,
-		MIN_VALID_INET_SOCKET = 1,
+		VALID_INET_SOCKET_COUNT = 256,	// Maximum networking sockets
+		MIN_VALID_INET_SOCKET = 3,		// Reserved system sockets
 	};
 
+	InetSocket *CreateSystemSocket(int *index, int *returned_errno, SocketState state, int domain, int type, int protocol);
 	InetSocket *CreateSocket(int *index, int *returned_errno, SocketState state, int domain, int type, int protocol);
 	// for accept()
 	InetSocket *AdoptSocket(int *index, SOCKET hostSocket, const InetSocket *derive);
@@ -392,6 +393,7 @@ public:
 	}
 	InetSocket* GetDCCP() { return dccp_sock; }
 private:
+	int NextUnusedSystemSocket();
 	int NextUnusedSocket();
 	
 	// We use this array from MIN_VALID_INET_SOCKET and forward. It's probably not a good idea to return 0 as a socket.

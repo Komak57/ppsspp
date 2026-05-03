@@ -22,6 +22,15 @@ std::condition_variable trigger;
  - PSP_NET_INET_SOCK_CONN_DGRAM is a virtual UDP port for various P2P channels
  - PSP_NET_INET_SOCK_PACKET is a TCP port for local, or virtual P2P traffic
 */
+int SocketManager::NextUnusedSystemSocket() {
+	for (int i = 0; i < MIN_VALID_INET_SOCKET; i++) {
+		if (inetSockets_[i].state == SocketState::Unused) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 int SocketManager::NextUnusedSocket() {
 	for (int i = MIN_VALID_INET_SOCKET; i < ARRAY_SIZE(inetSockets_); i++) {
 		if (inetSockets_[i].state == SocketState::Unused) {
@@ -130,6 +139,98 @@ void InetSocket::clear() {
     
     // Reset pointers
     pending_connections.clear();
+}
+
+InetSocket *SocketManager::CreateSystemSocket(int *index, int *returned_errno, SocketState state, int domain, int type, int protocol) {
+	_dbg_assert_(state != SocketState::Unused);
+
+	int hostDomain = convertSocketDomainPSP2Host(domain);
+	int hostType = convertSocketTypePSP2Host(type);
+	int hostProtocol = convertSocketProtoPSP2Host(protocol);
+
+	std::lock_guard<std::mutex> guard(g_socketMutex);
+	InetSocket* inetSock = nullptr;
+	{
+		int i = NextUnusedSystemSocket();
+		if (i < 0 || i > MIN_VALID_INET_SOCKET) {
+			*returned_errno = ENOMEM; // or something..
+			return nullptr;
+		}
+
+		*index = i;
+		inetSock = inetSockets_ + i;
+
+		// Destroy the old object and construct the appropriate derived type using placement new
+		inetSock->~InetSocket();
+		
+#pragma push_macro("new")
+#undef new
+		switch (type) {
+		case PSP_NET_INET_SOCK_STREAM:
+			inetSock = new (inetSock) StreamSocket();
+			break;
+		case PSP_NET_INET_SOCK_DGRAM:
+			inetSock = new (inetSock) DgramSocket();
+			break;
+		case PSP_NET_INET_SOCK_RAW:
+			inetSock = new (inetSock) RawSocket();
+			break;
+		case PSP_NET_INET_SOCK_RDM:
+			inetSock = new (inetSock) RdmSocket();
+			break;
+		case PSP_NET_INET_SOCK_SEQPACKET:
+			inetSock = new (inetSock) SeqpacketSocket();
+			break;
+		case PSP_NET_INET_SOCK_DCCP:
+			inetSock = new (inetSock) DccpSocket();
+			break;
+		case PSP_NET_INET_SOCK_CONN_DGRAM:
+			inetSock = new (inetSock) ConnDgramSocket();
+			break;
+		case PSP_NET_INET_SOCK_PACKET:
+			inetSock = new (inetSock) PacketSocket();
+			break;
+		default:
+			inetSock = new (inetSock) InetSocket();  // Fallback to base class
+			break;
+		}
+#pragma pop_macro("new")
+		
+		inetSock->clear();  // Reset to default.
+		inetSock->domain = domain;
+		inetSock->type = type;
+		inetSock->protocol = protocol;
+		inetSock->nonblocking = false;
+	}
+
+	switch (type) {
+	case PSP_NET_INET_SOCK_PACKET: // Type 10
+		inetSock->tcp_state = TCPState::Disconnected;
+		break;
+	case PSP_NET_INET_SOCK_CONN_DGRAM: // Virtual Socket
+		// TODO: Enable SO_REUSEPORT / SO_REUSEADDR with SO_BROADCAST to recycle ports
+		inetSock->vport = 0;
+		break;
+	case PSP_NET_INET_SOCK_DCCP: // Parent to all Virtual Sockets
+		dccp_sock = inetSock;
+	default: // Normal Socket
+		break;
+	}
+
+	inetSock->sock = ::socket(hostDomain, hostType, hostProtocol);
+
+	// Most Wanted creates a socket 2,3,1 for ICMP (Internet Control Message Protocol)
+	// but SOCK_RAW may require elevated permissions
+	if (inetSock->sock < 0) {
+		ERROR_LOG(Log::sceNet, "Ran out of socket handles! This is BAD.");
+		_dbg_assert_(false);
+		closesocket(inetSock->sock);
+		*index = 0;
+		*returned_errno = ENOMEM; // or something..
+		return nullptr;
+	}
+	inetSock->state = state;
+	return inetSock;
 }
 
 InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketState state, int domain, int type, int protocol) {

@@ -222,7 +222,7 @@ InetSocket* CreateSignalingSocket(u16 port, u16 vport, int domain, int type, int
 	int hostErrno = 0;
 
 	// Create the master socket
-	InetSocket* inetSocket = g_socketManager.CreateSocket(&index, &hostErrno, SocketState::UsedNetInet, domain, type, protocol);
+	InetSocket* inetSocket = g_socketManager.CreateSystemSocket(&index, &hostErrno, SocketState::UsedNetInet, domain, type, protocol);
 	if (!inetSocket) {
 		ERROR_LOG(Log::Signaling, "Unable to create new socket: %08X", hostErrno);
 		return nullptr;
@@ -248,13 +248,13 @@ InetSocket* CreateSignalingSocket(u16 port, u16 vport, int domain, int type, int
 	inetSocket->state = SocketState::UsedNetInet;
 
 	// Ignore SIGPIPE when supported (ie. BSD/MacOS)
-	setSockNoSIGPIPE(inetSocket->sock, 1);
+	// setSockNoSIGPIPE(inetSocket->sock, 1);
 	// TODO: We should always use non-blocking mode and simulate blocking mode
 	changeBlockingMode(inetSocket->sock, 1);
 	// Enable Port Re-use, required for multiple-instance
-	setSockReuseAddrPort(inetSocket->sock);
+	// setSockReuseAddrPort(inetSocket->sock);
 	// Disable Connection Reset error on UDP to avoid strange behavior
-	setUDPConnReset(inetSocket->sock, false);
+	// setUDPConnReset(inetSocket->sock, false);
 
 	if (type == PSP_NET_INET_SOCK_DCCP) {
 		if (g_Config.bEnableUPnP)
