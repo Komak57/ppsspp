@@ -837,7 +837,7 @@ namespace net {
         INFO_LOG(Log::Signaling, "send_signaling_packet(command: %d, ip: %s, port: %d)", sp.command, ip2str(addr).c_str(), port);
         std::vector<u8> packet(sizeof(SignalingPacket) + VPORT_HEADER_SIZE);
         VPORT_HEADER header{};
-        header.vport = 0;
+        header.dest = 0;
         header.flags = SUBSET_SIGNALING;
         std::memcpy(packet.data(), &header, VPORT_HEADER_SIZE);
         // reinterpret_cast<u16_le&>(packet[0]) = 0; // VPort 0 (LE)

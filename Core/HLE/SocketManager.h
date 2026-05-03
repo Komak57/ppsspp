@@ -3,6 +3,7 @@
 #include <mutex>
 #include <atomic>
 #include <queue>
+#include <map>
 #include <condition_variable>
 #include <memory>
 #include <unordered_map>
@@ -55,7 +56,7 @@ enum p2ps_tcp_flags : u8
 };
 
 struct VPORT_HEADER {
-	u16 vport;
+	u16 dest;
 	// UDP uses SUBSET, TCP uses FLAGS
 	u8 flags;
 };
@@ -81,6 +82,7 @@ struct VirtualPacket {
 	size_t len;                     // Payload length
 	sockaddr_in src_addr;           // Source address (for recvfrom)
 	u8 header_flags;                // TCP flags from DGRAM_HEADER for control packets
+	uint32_t seq_id;				// key for packet order
 	u64 enqueue_time_us;            // Microseconds since epoch (for TTL checking)
 
     VirtualPacket clone() const {
@@ -88,6 +90,7 @@ struct VirtualPacket {
         new_pkt.len = len;
         new_pkt.src_addr = src_addr;
         new_pkt.header_flags = header_flags;
+		new_pkt.seq_id = seq_id;
         new_pkt.enqueue_time_us = enqueue_time_us;
 
         if (len > 0 && data) {
@@ -97,6 +100,30 @@ struct VirtualPacket {
 
         return new_pkt;
     }
+	VPORT_HEADER GetHeader(u16 dest) {
+		// Pack DGRAM_HEADER (3 bytes): [flags][data_len]
+		VPORT_HEADER header;
+		header.flags = header_flags;
+		header.dest = htons(dest);
+		return header;
+	}
+	std::tuple<int, std::unique_ptr<char[]>> Pack(u16 dest) {
+		// Build packet: VPORT_HEADER + payload
+		int packet_size = VPORT_HEADER_SIZE + len + sizeof(seq_id);
+		std::unique_ptr<char[]> packet = std::make_unique<char[]>(packet_size);
+
+		// Pack DGRAM_HEADER (3 bytes): [flags][data_len]
+		VPORT_HEADER header = GetHeader(dest);
+		memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
+		auto net_seq_id = htonl(seq_id);
+		memcpy(packet.get() + VPORT_HEADER_SIZE, &net_seq_id, sizeof(net_seq_id));
+
+		// Pack the message body
+		if (len > 0) {
+			memcpy(packet.get() + VPORT_HEADER_SIZE + sizeof(seq_id), data.get(), len);
+		}
+		return {packet_size, std::move(packet)};
+	}
 };
 
 // Connection request for SOCK_PACKET listen queue
@@ -135,7 +162,12 @@ struct InetSocket {
 	u32 broadcast_mask = 0;              // Bitfield tracking which "rooms/sessions" this socket participates in
 
 	// Packet queue for virtual sockets (SOCK_PACKET and SOCK_CONN_DGRAM)
-	std::deque<VirtualPacket> rx_queue;
+	uint32_t rx_seq;        // Next sequential packet
+	uint32_t tx_seq;        // Next sequential packet
+	uint32_t rx_seq_fin;    // Last acknowledge packet
+	std::deque<VirtualPacket> rx_queue; 		// for received packets
+	std::map<uint32_t, VirtualPacket> rx_buffer; // for sent packets
+	std::map<uint32_t, VirtualPacket> tx_buffer; // for sent packets
 	mutable std::mutex queue_lock;
 	std::condition_variable packet_ready;
 
@@ -177,6 +209,12 @@ struct InetSocket {
 			std::lock_guard<std::mutex> lock(queue_lock);
 			std::deque<VirtualPacket> empty;
 			std::swap(rx_queue, empty);
+			std::map<uint32_t, VirtualPacket> _empty;
+			std::swap(tx_buffer, _empty);
+			std::swap(tx_buffer, _empty);
+			rx_seq = 0;
+			tx_seq = 0;
+			rx_seq_fin = 0;
 		}
 		
 		// Reset pointers
@@ -211,7 +249,7 @@ struct InetSocket {
 	virtual bool ProcessNetStack();
 
 	// Helper methods for virtual socket packet handling
-	void enqueue_packet(VirtualPacket& packet);
+	void enqueue_packet(VirtualPacket packet);
 	bool dequeue_packet(VirtualPacket& packet);
 	int dequeue_stream(char* buf, int len, sockaddr_in* out_addr);
 	bool has_pending_data() const;
@@ -377,7 +415,7 @@ public:
 	InetSocket *CreateSocket(int *index, int *returned_errno, SocketState state, int domain, int type, int protocol);
 	// for accept()
 	InetSocket *AdoptSocket(int *index, SOCKET hostSocket, const InetSocket *derive);
-	int DeliverPacketToVPorts(const VPORT_HEADER& header, const char* packet_data, int data_len, const sockaddr_in& _from);
+	int vBroadcast(VirtualPacket&& vpkt, u16 port);
 
 	bool GetInetSocket(int sock, InetSocket **inetSocket);
 	u16 generateEphemeralPort();
