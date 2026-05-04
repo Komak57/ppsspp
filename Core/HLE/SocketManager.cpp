@@ -2092,13 +2092,13 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 		this->port = ntohs(_dest->sin_port);
 		dst_port = _vport;
 
-		sockaddr_in dst_addr{};
-		dst_addr.sin_family = AF_INET;
-		dst_addr.sin_addr = _dest->sin_addr;
-		dst_addr.sin_port = htons(_vport);
+		sockaddr_in peer{};
+		peer.sin_family = AF_INET;
+		peer.sin_addr = _dest->sin_addr;
+		peer.sin_port = htons(_vport);
 
 		auto [_len, _data] = vpkt.Pack(port);
-		int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
+		int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 		if (ret < 0) {
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Failed to send SYN");
 		}
@@ -2423,15 +2423,15 @@ bool PacketSocket::ProcessNetStack() {
 
 				} else {
 					// This was the last packet sent, respond PSH|FIN to mark sync
-					sockaddr_in dst_addr{};
-					dst_addr.sin_family = AF_INET;
-					dst_addr.sin_addr = pkt.src_addr.sin_addr;
-					dst_addr.sin_port = htons(vport);
+					sockaddr_in peer{};
+					peer.sin_family = AF_INET;
+					peer.sin_addr = pkt.src_addr.sin_addr;
+					peer.sin_port = htons(vport);
 
 					auto [_len, _data] = pkt.Pack(dst_port);
 
 					auto dccp_sock = g_socketManager.GetDCCP();
-					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
+					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 					if (ret < 0) {
 						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 					}
@@ -2512,15 +2512,15 @@ bool PacketSocket::ProcessNetStack() {
 					lock.lock();
 					return true;
 				} else {
-					sockaddr_in dst_addr{};
-					dst_addr.sin_family = AF_INET;
-					dst_addr.sin_addr = conn.peer_addr.sin_addr;
-					dst_addr.sin_port = htons(vport);
+					sockaddr_in peer{};
+					peer.sin_family = AF_INET;
+					peer.sin_addr = conn.peer_addr.sin_addr;
+					peer.sin_port = htons(conn.peer_port);
 
-					auto [_len, _data] = pkt.Pack(conn.peer_port);
+					auto [_len, _data] = pkt.Pack(port);
 
 					auto dccp_sock = g_socketManager.GetDCCP();
-					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
+					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 					if (ret < 0) {
 						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 					}
@@ -2559,14 +2559,14 @@ bool PacketSocket::ProcessNetStack() {
 					lock.lock();
 					return true;
 				} else {
-					sockaddr_in dst_addr{};
-					dst_addr.sin_family = AF_INET;
-					dst_addr.sin_addr = pkt.src_addr.sin_addr;
-					dst_addr.sin_port = htons(vport);
+					sockaddr_in peer{};
+					peer.sin_family = AF_INET;
+					peer.sin_addr.s_addr = dst_addr;
+					peer.sin_port = htons(dst_port);
 
-					auto [_len, _data] = pkt.Pack(dst_port);
+					auto [_len, _data] = pkt.Pack(port);
 					auto dccp_sock = g_socketManager.GetDCCP();
-					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
+					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 					if (ret < 0) {
 						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 					}
@@ -2611,10 +2611,10 @@ bool PacketSocket::ProcessNetStack() {
 		auto it = rx_buffer.find(last_seq);
 		VirtualPacket& pkt = it->second;
  		if (!isLocalTarget(dst_addr)) {
-			sockaddr_in dst_addr{};
-			dst_addr.sin_family = AF_INET;
-			dst_addr.sin_addr = pkt.src_addr.sin_addr;
-			dst_addr.sin_port = htons(vport);
+			sockaddr_in peer{};
+			peer.sin_family = AF_INET;
+			peer.sin_addr.s_addr = dst_addr;
+			peer.sin_port = htons(dst_port);
 
 			pkt.header_flags = (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK);
 
@@ -2622,10 +2622,10 @@ bool PacketSocket::ProcessNetStack() {
 			// if (pkt.len > 0)
 			// 	memcpy(packet.get() + VPORT_HEADER_SIZE, pkt.data.get(), pkt.len);
 
-			auto [_len, _data] = pkt.Pack(dst_port);
+			auto [_len, _data] = pkt.Pack(port);
 			auto dccp_sock = g_socketManager.GetDCCP();
 			// Skip local send
-			int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
+			int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 			if (ret < 0) {
 				ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 			}
