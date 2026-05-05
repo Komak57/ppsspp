@@ -2263,7 +2263,7 @@ int PacketSocket::listen(int backlog) {
 }
 int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) { 
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(addr);
-	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::accept(%s:%u, %d): pending=%d state=%d", this->addr.c_str(), this->port, addrlen, pending_connections.size(), (int)tcp_state);
+	INFO_LOG(Log::sceNet, "SOCK_PACKET::accept(%s:%u, %d): pending=%d state=%d", this->addr.c_str(), this->port, static_cast<int>(*addrlen), (int)pending_connections.size(), (int)tcp_state);
 
 	// Validate socket is listening
 	if (tcp_state != TCPState::Listening) {
@@ -2277,8 +2277,8 @@ int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 	}
 
 	// Check for pending connection (any SYN that arrived)
-	ConnectionRequest pending_conn;
-	if (!get_pending_connection(pending_conn)) {
+	InetSocket* pending_conn = get_pending_connection();
+	if (!pending_conn) {
 		// No virtual connections
 #if PPSSPP_PLATFORM(WINDOWS)
 		SetLastError(WSAEWOULDBLOCK);
@@ -2290,7 +2290,11 @@ int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 	
 	// Return the peer address to caller
 	if (addr && addrlen) {
-		memcpy(addr, &pending_conn.peer_addr, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
+		sockaddr_in peer{};
+		peer.sin_family = AF_INET;
+		peer.sin_addr.s_addr = pending_conn->dst_addr;
+		peer.sin_port = htons(pending_conn->dst_port);
+		memcpy(addr, &peer, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
 		*addrlen = sizeof(sockaddr_in);
 	}
 	
@@ -2310,19 +2314,35 @@ int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 		return hleLogError(Log::sceNet, -1, "Failed to create new socket (errno=%d)", err);
 	}
 	
+	// Top level copy
+	new_sock->domain = this->domain;
+	new_sock->type = this->type;
+	new_sock->protocol = this->protocol;
+	new_sock->nonblocking = this->nonblocking;  // should we inherit blocking state?
 	// Copy metadata from listening socket to new socket
 	new_sock->vport = this->vport;         // Same vport
 	new_sock->port = this->port;           // Same port
 	new_sock->addr = this->addr;           // Same address
-	new_sock->tcp_state = TCPState::Established;
-	new_sock->dst_addr = pending_conn.peer_addr.sin_addr.s_addr;
-	new_sock->dst_port = pending_conn.peer_port;  // Store peer's vport
+
+	new_sock->tcp_state = pending_conn->tcp_state;
+	// Store connected peer
+	new_sock->dst_addr = pending_conn->dst_addr;
+	new_sock->dst_port = pending_conn->dst_port;
+	// Store buffer states
+	std::swap(new_sock->rx_queue, pending_conn->rx_queue);
+	std::swap(new_sock->rx_buffer, pending_conn->rx_buffer);
+	new_sock->rx_seq = pending_conn->rx_seq;
+	std::swap(new_sock->tx_buffer, pending_conn->tx_buffer);
+	new_sock->tx_seq = pending_conn->tx_seq; // sync with ACK
+
+	new_sock->state = SocketState::UsedNetInet;	
 	
 	INFO_LOG(Log::sceNet, "SOCK_PACKET accept: Accepted connection on listening socket from %s:%u on %s:%u (vport=%u), created socket %d",
-		inet_ntoa(pending_conn.peer_addr.sin_addr), ntohs(pending_conn.peer_addr.sin_port),
+		ip2str(pending_conn->dst_addr).c_str(), pending_conn->dst_port,
 		new_sock->addr.c_str(), new_sock->port, new_sock->vport,
 		new_socket_idx);
-	
+	// clean-up
+	remove_pending_connection(pending_conn);
 	return new_socket_idx;
 }
 int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) { 
