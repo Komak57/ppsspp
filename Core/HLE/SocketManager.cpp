@@ -2145,7 +2145,7 @@ int PacketSocket::recv(char* buf, int len, int flags) {
 int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) { 
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
 	auto _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
-	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::connect(%s:%u, %d): state=%d", ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), namelen, (int)tcp_state);
+	INFO_LOG(Log::sceNet, "SOCK_PACKET::connect(%s:%u, %d): state=%d", ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), namelen, (int)tcp_state);
 
 	// Validate socket is not already connected/connecting
 	if (tcp_state != TCPState::Disconnected) {
@@ -2159,6 +2159,8 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	}
 	// Set state to SynSent (waiting for ACK)
 	tcp_state = TCPState::SynSent;
+	rx_seq = 0;
+	tx_seq = 0;
 	
 	// Store connected socket
 	dst_addr = _dest->sin_addr.s_addr;
@@ -2179,18 +2181,25 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 		vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
 	}
 	vpkt.src_addr.sin_port = htons(port);
-	vpkt.seq_id = 0;
+	vpkt.seq_id = tx_seq+1;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
-
 	
+	auto send_pkt = vpkt.clone();
+	{
+		// Add to transmit buffer
+		std::lock_guard<std::mutex> lock(buffer_lock);
+		// Place at end
+		tx_buffer[tx_seq+1] = std::move(vpkt);
+	}
+
 	INFO_LOG(Log::sceNet, "PACKET: Connecting to %s:%u on vport %u",
 		inet_ntoa(_dest->sin_addr), ntohs(_dest->sin_port), _vport);
 
-
 	if (isLocalTarget(dst_addr)) {
 		// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-		g_socketManager.vBroadcast(std::move(vpkt), _dest->sin_port);
+		g_socketManager.vBroadcast(std::move(send_pkt), _dest->sin_port);
+		tx_seq++;
 	} else {
 		// DCCP must exist for P2P traffic
 		auto dccp_sock = g_socketManager.GetDCCP();
@@ -2212,15 +2221,16 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 		peer.sin_addr = _dest->sin_addr;
 		peer.sin_port = htons(_vport);
 
-		auto [_len, _data] = vpkt.Pack(port);
+		auto [_len, _data] = send_pkt.Pack(port);
 		int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 		if (ret < 0) {
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Failed to send SYN");
 		}
+		tx_seq++;
 	}
 	
-	INFO_LOG(Log::sceNet, "SOCK_PACKET: Connected vport %d to %s:%u",
-		vport, inet_ntoa(_dest->sin_addr), ntohs(_dest->sin_port));
+	// INFO_LOG(Log::sceNet, "SOCK_PACKET: Connected vport %d to %s:%u",
+	// 	vport, inet_ntoa(_dest->sin_addr), ntohs(_dest->sin_port));
 	
 #if PPSSPP_PLATFORM(WINDOWS)
 		SetLastError(EINPROGRESS);
@@ -2244,8 +2254,9 @@ int PacketSocket::listen(int backlog) {
 		
 	// Set state to Listening
 	tcp_state = TCPState::Listening;
+	this->backlog = backlog;
 		
-	INFO_LOG(Log::sceNet, "SOCK_PACKET listen: vport %d now accepting connections", vport);
+	INFO_LOG(Log::sceNet, "SOCK_PACKET listen: vport %d now accepting %d connections", vport, this->backlog);
 
 	// return ::listen(sock, backlog);
 	return 0;
