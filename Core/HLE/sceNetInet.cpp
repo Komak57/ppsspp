@@ -463,9 +463,9 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags) {
 		return hleLogError(Log::sceNet, ERROR_INET_EBADF, "Bad socket #%d", socket);
 	}
 
-	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
-	flgs = convertMSGFlagsPSP2Host(flgs);
-	int retval = inetSock->recv((char*)Memory::GetPointer(bufPtr), bufLen, flgs | MSG_NOSIGNAL);
+	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	// flgs = convertMSGFlagsPSP2Host(flgs);
+	int retval = inetSock->recv((char*)Memory::GetPointer(bufPtr), bufLen, 0); // flgs | MSG_NOSIGNAL
 	//int retval = recv(inetSock->sock, (char*)Memory::GetPointer(bufPtr), bufLen, flgs | MSG_NOSIGNAL);
 	if (retval < 0) {
 		if (UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__) == ERROR_INET_EAGAIN) {
@@ -473,14 +473,14 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags) {
 		} else {
 			retval = hleLogError(Log::sceNet, retval);
 		}
-		return hleDelayResult(retval, "workaround until blocking-socket", 500);
+		return hleDelayResult(retval, "workaround until blocking-socket", 500); // Using hleDelayResult as a workaround for games that need blocking-socket to be implemented
 	}
 
 	std::string datahex;
 	DataToHexString(10, 0, Memory::GetPointer(bufPtr), retval, &datahex);
 	VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", retval, datahex.c_str());
 
-	return hleDelayResult(hleLogInfo(Log::sceNet, retval), "workaround until blocking-socket", 500); // Using hleDelayResult as a workaround for games that need blocking-socket to be implemented
+	return hleLogInfo(Log::sceNet, retval);
 }
 
 static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags) {
@@ -493,9 +493,9 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags) {
 	DataToHexString(10, 0, Memory::GetPointer(bufPtr), bufLen, &datahex);
 	VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", bufLen, datahex.c_str());
 
-	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
-	flgs = convertMSGFlagsPSP2Host(flgs);
-	int retval = inetSock->send((char*)Memory::GetPointer(bufPtr), bufLen, flgs | MSG_NOSIGNAL);
+	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	// flgs = convertMSGFlagsPSP2Host(flgs);
+	int retval = inetSock->send((char*)Memory::GetPointer(bufPtr), bufLen, 0); // flgs | MSG_NOSIGNAL
 	//int retval = send(inetSock->sock, (char*)Memory::GetPointer(bufPtr), bufLen, flgs | MSG_NOSIGNAL);
 	if (retval < 0) {
 		UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
@@ -517,13 +517,13 @@ int sceNetInetSocket(int domain, int type, int protocol) {
 	}
 	if (inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM) {
 		// Ignore SIGPIPE when supported (ie. BSD/MacOS)
-		setSockNoSIGPIPE(inetSock->sock, 1);
+		// setSockNoSIGPIPE(inetSock->sock, 1);
 		// TODO: We should always use non-blocking mode and simulate blocking mode
-		changeBlockingMode(inetSock->sock, 1);
+		// changeBlockingMode(inetSock->sock, 1);
 		// Enable Port Re-use, required for multiple-instance
-		setSockReuseAddrPort(inetSock->sock);
+		// setSockReuseAddrPort(inetSock->sock);
 		// Disable Connection Reset error on UDP to avoid strange behavior
-		setUDPConnReset(inetSock->sock, false);
+		// setUDPConnReset(inetSock->sock, false);
 	}
 	return hleLogDebug(Log::sceNet, socket);
 }
@@ -584,10 +584,10 @@ static int sceNetInetBind(int socket, u32 namePtr, int namelen) {
 	//retval = bind(inetSock->sock, (struct sockaddr*)&saddr, len);
 	if (retval < 0) {
 		UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
-		changeBlockingMode(inetSock->sock, 1);
+		// changeBlockingMode(inetSock->sock, 1);
 		return hleLogError(Log::sceNet, retval);
 	}
-	changeBlockingMode(inetSock->sock, 1);
+	// changeBlockingMode(inetSock->sock, 1);
 	// Update binded port number if it was 0 (any port)
 	// memcpy(name->sa_data, saddr.addr.sa_data, sizeof(name->sa_data));
 	// Enable Port-forwarding
@@ -643,10 +643,10 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen) {
 
 	int hostErrno = socket_errno;
 	
-	
+	// hleLog will throw a stack mismatch here
 	if (retval < 0)
-		return hleLogError(Log::sceNet, UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__));
-	return hleLogInfo(Log::sceNet, retval);
+		return UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
+	return retval;
 }
 
 static int sceNetInetListen(int socket, int backlog) {
