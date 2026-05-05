@@ -2640,11 +2640,12 @@ bool PacketSocket::ProcessNetStack() {
         } 
         else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK)) {
 			if (tcp_state == TCPState::SynSent) {
-				INFO_LOG(Log::sceNet, "PACKET: Received SYN-ACK at listening socket from %s:%u on port %u",
-					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
+				INFO_LOG(Log::sceNet, "PACKET: Received SYN-ACK at listening socket from %s:%u to %s:%u",
+					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), addr.c_str(), port);
 				tcp_state = TCPState::Established;
 				dst_addr = pkt.src_addr.sin_addr.s_addr;
                 dst_port = ntohs(pkt.src_addr.sin_port);
+				rx_seq++;
 				
                 // Resume the thread that is currently blocked in sceNetInetConnect
                 if (threadID > 0) {
@@ -2653,34 +2654,44 @@ bool PacketSocket::ProcessNetStack() {
                     threadID = -1;
                 }
 
-				// repurpose the received packet
-				pkt.src_addr.sin_port = htons(this->port);
-				if (inet_pton(AF_INET, this->addr.c_str(), &pkt.src_addr.sin_addr) <= 0) {
-					pkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
-				}
-				pkt.header_flags = p2ps_tcp_flags::ACK;
+				// TODO: Mark the tx_buffer SYN packet as acquired
+				// pkt.seq_ack = true;
 
-				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning ACK from %s:%u",
-					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port));
+				VirtualPacket vpkt{};
+				vpkt.len = 0;
+				vpkt.header_flags = (p2ps_tcp_flags::ACK);
+				vpkt.src_addr.sin_family = AF_INET;
+				// vpkt.src_addr.sin_addr.s_addr = this->addr;
+				if (inet_pton(AF_INET, this->addr.c_str(), &vpkt.src_addr.sin_addr) <= 0) {
+					vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
+				}
+				vpkt.src_addr.sin_port = htons(port);
+				vpkt.seq_id = tx_seq+1;
+				// Add timestamp for TTL tracking
+				vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
+
+				// Do not resend. Let the peer re-send SYN|ACK if it hasn't connected yet
+
+				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning ACK from %s:%u to %s:%u",
+					addr.c_str(), port, inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port));
 				
 				if (isLocalTarget(dst_addr)) {
-					lock.unlock();
 					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-					g_socketManager.vBroadcast(std::move(pkt), htons(dst_port));
-					lock.lock();
-					return true;
+					g_socketManager.vBroadcast(std::move(vpkt), htons(dst_port));
+					tx_seq++;
 				} else {
 					sockaddr_in peer{};
 					peer.sin_family = AF_INET;
 					peer.sin_addr.s_addr = dst_addr;
 					peer.sin_port = htons(dst_port);
 
-					auto [_len, _data] = pkt.Pack(port);
+					auto [_len, _data] = vpkt.Pack(port);
 					auto dccp_sock = g_socketManager.GetDCCP();
 					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 					if (ret < 0) {
 						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 					}
+					tx_seq++;
 				}
 			}
 		}
