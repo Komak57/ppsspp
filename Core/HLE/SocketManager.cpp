@@ -1957,7 +1957,8 @@ bool ConnDgramSocket::ProcessNetStack() {
 	bool ret = false;
     auto it = rx_queue.begin();
     while (it != rx_queue.end()) {
-        VirtualPacket& pkt = *it;
+        VirtualPacket pkt = (*it).clone();
+		it = rx_queue.erase(it);
 		// FIXME: Should technically support non-broadcast sends
 		// if (!target_sock->is_broadcast_enabled())
 			// continue;
@@ -1967,7 +1968,6 @@ bool ConnDgramSocket::ProcessNetStack() {
         if (packet_age_us > MAX_PACKET_AGE_US) {
             WARN_LOG(Log::sceNet, "ProcessNetStack: Discarding stale packet (age: %.2f s)", 
                 (float)packet_age_us / 1000000.0f);
-            it = rx_queue.erase(it);
             continue;
         }
 		ret = true;
@@ -1982,7 +1982,6 @@ bool ConnDgramSocket::ProcessNetStack() {
 		// 	pkt.len, inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), 
 		// 	vport, pkt.header_flags, type,
 		// 	dbg.send, dbg.sent, dbg.recv, dbg.read);
-		it = rx_queue.erase(it); // next packet
 	}
 	return ret;
 }
@@ -2500,10 +2499,16 @@ bool PacketSocket::ProcessNetStack() {
     const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
     u64 current_time_us = (u64)(time_now_d() * 1000000.0);
 
-    auto it = rx_queue.begin();
-    while (it != rx_queue.end()) {
+	std::deque<VirtualPacket> local_queue;
+	{
+		std::lock_guard<std::mutex> queue(queue_lock);
+		std::swap(local_queue, rx_queue);
+	}
+
+    auto it = local_queue.begin();
+    while (it != local_queue.end()) {
         VirtualPacket pkt = (*it).clone();
-		it = rx_queue.erase(it);
+		it = local_queue.erase(it);
 
         // 1. Cleanup Stale Packets (Protocol Housekeeping)
         u64 packet_age_us = current_time_us - pkt.enqueue_time_us;
