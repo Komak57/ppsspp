@@ -10,6 +10,8 @@
 #include "Common/TimeUtil.h"
 #include "sceNp.h"
 
+#define BASE_RTO_US 500000.0 // Wait 500ms before first retry
+#define MAX_RETRIES 5
 SocketManager g_socketManager;
 static std::mutex g_socketMutex;  // TODO: Remove once the adhoc thread is gone
 // Unique Signature for Tagged Packets

@@ -4,6 +4,7 @@
 #include <atomic>
 #include <queue>
 #include <map>
+#include <list>
 #include <condition_variable>
 #include <memory>
 #include <unordered_map>
@@ -83,7 +84,10 @@ struct VirtualPacket {
 	sockaddr_in src_addr;           // Source address (for recvfrom)
 	u8 header_flags;                // TCP flags from DGRAM_HEADER for control packets
 	uint32_t seq_id;				// key for packet order
-	u64 enqueue_time_us;            // Microseconds since epoch (for TTL checking)
+	bool seq_ack;					// key for packet order
+	u64 enqueue_time_us;			// Microseconds since received (for TTL checking)
+	u64 last_sent_us;				// Microseconds since re-sent
+	int sent_count;					// Number of attempts to re-send
 
     VirtualPacket clone() const {
         VirtualPacket new_pkt;
@@ -92,6 +96,8 @@ struct VirtualPacket {
         new_pkt.header_flags = header_flags;
 		new_pkt.seq_id = seq_id;
         new_pkt.enqueue_time_us = enqueue_time_us;
+		new_pkt.last_sent_us = last_sent_us;
+		new_pkt.sent_count = sent_count;
 
         if (len > 0 && data) {
             new_pkt.data = std::make_unique<char[]>(len);
