@@ -411,14 +411,77 @@ void SocketManager::ProcessNetStack(int* timeout) {
 		// *timeout = (*timeout > elapsed) ? (*timeout - elapsed) : 0;
 		// if (!hadPacket) return;
 	}
+	std::vector<std::pair<VirtualPacket, uint16_t>> outbuf; // <packet, dst_port>
 	// Process Each Local Once
 	for (int i = MIN_VALID_INET_SOCKET; i < VALID_INET_SOCKET_COUNT; i++) {
 		InetSocket* s = &inetSockets_[i];
-		if (s->state != SocketState::Unused && s->type != PSP_NET_INET_SOCK_DCCP) {
+		if (s->state != SocketState::Unused && s->type == PSP_NET_INET_SOCK_PACKET) {
 			// Run the emulated protocol stack for this socket
-			s->ProcessNetStack();
-		}
-	}
+			// s->ProcessNetStack();
+
+			uint8_t expected_flag = 0;
+			switch (s->tcp_state) {
+				case TCPState::SynSent:			expected_flag = p2ps_tcp_flags::SYN; break;
+				case TCPState::SynReceived:		expected_flag = (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK); break;
+				case TCPState::Disconnected:	expected_flag = p2ps_tcp_flags::FIN; break;
+				default: break; // Established/Closed/etc. don't need control retransmit
+			}
+
+			// Find all sent packets
+    		std::lock_guard<std::mutex> buffer(s->buffer_lock);
+			for (auto& [seq, pkt] : s->tx_buffer) {
+				// Skip if we've already received a response
+				if (pkt.seq_ack)
+					continue;
+				// We're waiting for control packets
+				if (expected_flag != 0 && pkt.header_flags != expected_flag)
+					continue;
+				// We're just not getting a response
+				if (pkt.sent_count > MAX_RETRIES)
+					continue;
+				// Skip if it's too soon
+				u64 now_us = (u64)(time_now_d() * BASE_RTO_US);
+				if (now_us - pkt.last_sent_us < BASE_RTO_US)
+					continue;
+
+				auto vpkt = pkt.clone();
+				std::string flags;
+				if (vpkt.header_flags & p2ps_tcp_flags::SYN) flags += "SYN|";
+				if (vpkt.header_flags & p2ps_tcp_flags::PSH) flags += "PSH|";
+				if (vpkt.header_flags & p2ps_tcp_flags::ACK) flags += "ACK|";
+				if (vpkt.header_flags & p2ps_tcp_flags::FIN) flags += "FIN|";
+				if (vpkt.header_flags & p2ps_tcp_flags::RST) flags += "RST|";
+				if (!flags.empty()) flags.pop_back(); // strip trailing '|'
+
+				WARN_LOG(Log::sceNet, "PACKET: Re-Sending %s at listening socket from %s:%u to %s:%u",
+					flags.c_str(), inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), s->addr.c_str(), s->port);
+				if (isLocalTarget(s->dst_addr)) {
+					outbuf.push_back({std::move(vpkt), s->dst_port});
+					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
+					// g_socketManager.vBroadcast(std::move(vpkt), htons(s->dst_port));
+					pkt.last_sent_us = now_us;
+					pkt.sent_count++;
+				} else {
+					sockaddr_in peer{};
+					peer.sin_family = AF_INET;
+					peer.sin_addr.s_addr = s->dst_addr;
+					peer.sin_port = htons(s->dst_port);
+
+					auto [_len, _data] = vpkt.Pack(s->port);
+					auto dccp_sock = g_socketManager.GetDCCP();
+					// Skip local send
+					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
+					if (ret < 0) {
+						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
+					} else {
+						pkt.last_sent_us = now_us;
+					}
+					pkt.sent_count++;
+				}
+			}
+	for (auto& [vpkt, dst_port] : outbuf) {
+        g_socketManager.vBroadcast(std::move(vpkt), htons(dst_port));
+    }
 }
 
 bool SocketManager::Close(InetSocket *inetSocket) {
@@ -2648,40 +2711,10 @@ bool PacketSocket::ProcessNetStack() {
 				INFO_LOG(Log::sceNet, "PACKET: Received FIN at listening socket from %s:%u to port %u",
 					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
                 tcp_state = TCPState::CloseWait;
+				rx_seq++;
             }
         }
     }
-	// Peek the last sequential packet
 
-	uint32_t last_seq = rx_seq; // defaults to last pulled from recv
-	for (auto const& [seq, pkt] : rx_buffer) {
-		if (seq == last_seq+1)
-			last_seq = seq;
-	}
-	// If our receive is out of sync, send PSH|ACK to confirm it was the last packet
-	if (rx_seq_fin < last_seq) {
-		auto it = rx_buffer.find(last_seq);
-		VirtualPacket& pkt = it->second;
- 		if (!isLocalTarget(dst_addr)) {
-			sockaddr_in peer{};
-			peer.sin_family = AF_INET;
-			peer.sin_addr.s_addr = dst_addr;
-			peer.sin_port = htons(dst_port);
-
-			pkt.header_flags = (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK);
-
-			// In case we want to send the entire packet for validation
-			// if (pkt.len > 0)
-			// 	memcpy(packet.get() + VPORT_HEADER_SIZE, pkt.data.get(), pkt.len);
-
-			auto [_len, _data] = pkt.Pack(port);
-			auto dccp_sock = g_socketManager.GetDCCP();
-			// Skip local send
-			int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
-			if (ret < 0) {
-				ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
-			}
-		}
-	}
 	return hadData;
 }
