@@ -2495,7 +2495,6 @@ int PacketSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, Sc
 
 bool PacketSocket::ProcessNetStack() {
 	bool hadData = has_pending_data(); // Needs queue_lock
-    std::unique_lock<std::mutex> lock(queue_lock);
     const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
     u64 current_time_us = (u64)(time_now_d() * 1000000.0);
 
@@ -2517,90 +2516,68 @@ bool PacketSocket::ProcessNetStack() {
             continue;
         }
 
-        if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::FIN)) {
-			INFO_LOG(Log::sceNet, "PACKET: Received PSH|FIN at listening socket from %s:%u to port %u",
-				inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
-			// synchronize so we stop requesting this
-			if (pkt.seq_id > rx_seq_fin) {
-				rx_seq_fin = pkt.seq_id;
+        // if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::FIN)) {
+		// 	INFO_LOG(Log::sceNet, "PACKET: Received PSH|FIN at listening socket from %s:%u to port %u",
+		// 		inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
+		// }
+        // else 
+		if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK)) {
+			INFO_LOG(Log::sceNet, "PACKET: Received PSH|ACK at listening socket from %s:%u to %s:%u",
+				inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), addr.c_str(), port);
+			// Do not increment rx_seq, this is just a confirmation
+
+			std::lock_guard<std::mutex> buffer(buffer_lock);
+			auto ack = tx_buffer.find(pkt.seq_id);
+			// Safety check, should never trigger
+			if (ack != tx_buffer.end()) {
+				VirtualPacket& vpkt = ack->second;
+				// Flag as acquired
+				vpkt.seq_ack = true;
 			}
-
-			// We know everything up to this packet is sync'd, they'll be purged when received, or timed out
 		}
-        else if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK)) {
-			INFO_LOG(Log::sceNet, "PACKET: Received PSH|ACK at listening socket from %s:%u to port %u",
-				inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
+        else if (pkt.header_flags == p2ps_tcp_flags::PSH) {
+			if (tcp_state != TCPState::Listening) {
+				INFO_LOG(Log::sceNet, "PACKET: Received PSH at listening socket from %s:%u to %s:%u [seq=%d,tx=%d/rx=%d,hpd=%d]",
+					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), addr.c_str(), port, pkt.seq_id, tx_seq, rx_seq, has_pending_data());
+				// Do not increment rx_seq until Recv is called
 
-			if (pkt.seq_id == tx_seq) {
-				// repurpose the received packet
-				pkt.src_addr.sin_port = htons(this->port);
-				if (inet_pton(AF_INET, this->addr.c_str(), &pkt.src_addr.sin_addr) <= 0) {
-					pkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
+				// Buffer the received packet
+				auto pkt_seq = pkt.seq_id;
+				rx_buffer[pkt_seq] = std::move(pkt);
+				// Return PSH|ACK to notify it was received
+				VirtualPacket vpkt{};
+				vpkt.len = 0;
+				vpkt.header_flags = (p2ps_tcp_flags::PSH|p2ps_tcp_flags::ACK);
+				vpkt.src_addr.sin_family = AF_INET;
+				// vpkt.src_addr.sin_addr.s_addr = this->addr;
+				if (inet_pton(AF_INET, this->addr.c_str(), &vpkt.src_addr.sin_addr) <= 0) {
+					vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
 				}
-				pkt.header_flags = p2ps_tcp_flags::PSH | p2ps_tcp_flags::FIN;
+				vpkt.src_addr.sin_port = htons(port);
+				vpkt.seq_id = pkt_seq; // Just confirm this packet was received
+				// Add timestamp for TTL tracking
+				vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
+
+				// Do NOT save this for re-transmission. Wait for another PSH
+
+				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning PSH-ACK from %s:%u to %s:%u",
+					addr.c_str(), port, ip2str(dst_addr).c_str(), dst_port);
 
 				if (isLocalTarget(dst_addr)) {
-
+					g_socketManager.vBroadcast(std::move(vpkt), htons(dst_port));
 				} else {
-					// This was the last packet sent, respond PSH|FIN to mark sync
 					sockaddr_in peer{};
 					peer.sin_family = AF_INET;
-					peer.sin_addr = pkt.src_addr.sin_addr;
-					peer.sin_port = htons(vport);
+					peer.sin_addr.s_addr = dst_addr;
+					peer.sin_port = htons(dst_port);
 
-					auto [_len, _data] = pkt.Pack(dst_port);
-
+					auto [_len, _data] = vpkt.Pack(port);
 					auto dccp_sock = g_socketManager.GetDCCP();
 					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 					if (ret < 0) {
 						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 					}
 				}
-			}
-			if (pkt.seq_id < tx_seq) {
-				auto dropped = tx_buffer.find(pkt.seq_id);
-				// Safety check, should never trigger
-				if (dropped != tx_buffer.end()) {
-					VirtualPacket& vpkt = dropped->second;
-					pkt.header_flags = p2ps_tcp_flags::PSH;
-					
-					if (isLocalTarget(dst_addr)) {
-
-					} else {
-						sockaddr_in dst_addr{};
-						dst_addr.sin_family = AF_INET;
-						dst_addr.sin_addr = pkt.src_addr.sin_addr;
-						dst_addr.sin_port = htons(vport);
-
-						auto [_len, _data] = vpkt.Pack(dst_port);
-						auto dccp_sock = g_socketManager.GetDCCP();
-						// Now, re-send the dropped packet
-						int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
-						if (ret < 0) {
-							ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
-						}
-						// send(cpy.data.get(), cpy.len, p2ps_tcp_flags::PSH|p2ps_tcp_flags::ACK);
-					}
-				}
-			}
-
-			// We know everything up to this packet is sync'd, purge the rest
-			uint32_t prev = pkt.seq_id - 1;
-			if (tx_buffer.find(prev) != tx_buffer.end()) {
-				tx_buffer.erase(tx_buffer.begin(), tx_buffer.find(prev));
-			}
-		}
-        else if (pkt.header_flags == p2ps_tcp_flags::PSH) {
-			if (tcp_state != TCPState::Listening) {
-				// Normally, we would stop here and let recv pick up the rest of the data.
-				// Instead, we will add it to rx_buffer, and continue processing.
-
-				rx_buffer[pkt.seq_id] = std::move(pkt);
-
-				lock.unlock();
-				INFO_LOG(Log::sceNet, "PACKET: Received PSH at listening socket from %s:%u on port %u [seq=%d,tx=%d/rx=%d,hpd=%d]",
-					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port, pkt.seq_id, tx_seq, rx_seq, has_pending_data());
-				lock.lock();
 			}
         }
         // 2. Process Control Plane (The "Kernel" Logic)
