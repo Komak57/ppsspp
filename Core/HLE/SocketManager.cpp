@@ -266,6 +266,9 @@ InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketS
 		*index = i;
 		inetSock = inetSockets_ + i;
 
+		// Clean up threads
+		if (inetSock->thread.joinable())
+			inetSock->thread.join();
 		// Destroy the old object and construct the appropriate derived type using placement new
 		inetSock->~InetSocket();
 		
@@ -348,10 +351,12 @@ InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const Inet
 
 			InetSocket *inetSock = inetSockets_ + i;
 			
+			// Clean up threads
+			if (inetSock->thread.joinable())
+				inetSock->thread.join();
 			// Determine the type from derive and reconstruct with the correct derived class
 			// This ensures the vtable matches the socket type
 			inetSock->~InetSocket();
-			
 #pragma push_macro("new")
 #undef new
 			switch (derive->type) {
