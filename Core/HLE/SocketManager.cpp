@@ -2055,14 +2055,22 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 	vpkt.seq_id = tx_seq+1;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
+	vpkt.last_sent_us = (u64)(time_now_d() * BASE_RTO_US);
 
+	auto send_pkt = vpkt.clone();
+	{
+		// Add to transmit buffer
+		std::lock_guard<std::mutex> lock(queue_lock);
+		// Place at end
+		tx_buffer[tx_seq+1] = std::move(vpkt);
+	}
 	if (isLocalTarget(dst_addr)) {
 		// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-		g_socketManager.vBroadcast(std::move(vpkt), htons(dst_port));
+		g_socketManager.vBroadcast(std::move(send_pkt), htons(dst_port));
 		tx_seq++; // TODO: Only on ::send success?
 		dbg.sent++;
 		WARN_LOG(Log::sceNet, "%d bytes send to (%s:%u); [tx=%d/rx=%d]", 
-			vpkt.len, ip2str(dst_addr).c_str(), ntohs(dst_port), 
+			send_pkt.len, ip2str(dst_addr).c_str(), ntohs(dst_port), 
 			tx_seq, rx_seq);
 		return len;
 	} else {
@@ -2072,15 +2080,8 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 		peer.sin_addr.s_addr = dst_addr;
 		peer.sin_port = htons(dst_port);
 		
-		{
-			// Add to transmit buffer
-			std::lock_guard<std::mutex> lock(queue_lock);
-			// Place at end
-			tx_buffer[tx_seq] = std::move(vpkt);
-			packet_ready.notify_all();
-		}
 		// Remote delivery to vport (NAT)
-		auto [_len, _data] = vpkt.Pack(vport);
+		auto [_len, _data] = send_pkt.Pack(vport);
 		int ret = ::sendto(dccp_sock->sock, _data.get(), _len, flags, (const sockaddr*)&peer, sizeof(sockaddr_in));
 		if (ret < 0)
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET accept: Failed to send ACK to peer");
