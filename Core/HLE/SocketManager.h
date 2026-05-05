@@ -126,13 +126,6 @@ struct VirtualPacket {
 	}
 };
 
-// Connection request for SOCK_PACKET listen queue
-struct ConnectionRequest {
-	sockaddr_in peer_addr;          // Remote address info
-	u16 peer_port;                 // Remote virtual port
-	TCPState tcp_state;
-};
-
 #pragma pack(push, 8)
 // Internal socket state tracking
 struct InetSocket {
@@ -171,9 +164,9 @@ struct InetSocket {
 	mutable std::mutex queue_lock;
 	std::condition_variable packet_ready;
 
-	// Pending connection for SOCK_PACKET (simplified: one slot only)
-	std::vector<ConnectionRequest> pending_connections;
 	mutable std::mutex conn_lock;
+	std::list<InetSocket*> pending_connections; // Pending connection for SOCK_PACKET
+	int backlog; // limit to buffered pending connections
 
 	fd_set* readfds;
 	fd_set* writefds;
