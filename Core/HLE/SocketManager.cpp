@@ -2583,44 +2583,58 @@ bool PacketSocket::ProcessNetStack() {
         // 2. Process Control Plane (The "Kernel" Logic)
         else if (pkt.header_flags == p2ps_tcp_flags::SYN) {
 			if (tcp_state == TCPState::Listening) {
-				ConnectionRequest conn;
-				conn.peer_addr = pkt.src_addr;
-				conn.peer_port = ntohs(pkt.src_addr.sin_port);
-				conn.tcp_state = TCPState::SynReceived;
-				set_pending_connection(conn);
+				InetSocket* conn = new InetSocket();
+				conn->dst_addr = pkt.src_addr.sin_addr.s_addr;
+				conn->dst_port = ntohs(pkt.src_addr.sin_port);
+				conn->tcp_state = TCPState::SynReceived;
+				conn->tx_seq = 0;
+				if (!set_pending_connection(conn))
+					continue;
+				conn->rx_seq = 1; // Mark this packet received
 				
-				INFO_LOG(Log::sceNet, "PACKET: Received SYN at listening socket from %s:%u on port %u",
-					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
+				INFO_LOG(Log::sceNet, "PACKET: Received SYN at listening socket from %s:%u to %s:%u",
+					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), addr.c_str(), port);
 
-				// repurpose the received packet
-				pkt.src_addr.sin_port = htons(this->port);
-				if (inet_pton(AF_INET, this->addr.c_str(), &pkt.src_addr.sin_addr) <= 0) {
-					pkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
+				VirtualPacket vpkt{};
+				vpkt.len = 0;
+				vpkt.header_flags = (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK);
+				vpkt.src_addr.sin_family = AF_INET;
+				// vpkt.src_addr.sin_addr.s_addr = this->addr;
+				if (inet_pton(AF_INET, this->addr.c_str(), &vpkt.src_addr.sin_addr) <= 0) {
+					vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
 				}
-				pkt.header_flags = p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK;
+				vpkt.src_addr.sin_port = htons(port);
+				vpkt.seq_id = conn->tx_seq+1;
+				// Add timestamp for TTL tracking
+				vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
+				vpkt.last_sent_us = (u64)(time_now_d() * BASE_RTO_US);
 
-				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning SYN-ACK from %s:%u",
-					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port));
+				auto send_pkt = vpkt.clone();
+				{
+					std::lock_guard<std::mutex> buffer(conn->buffer_lock);
+					// Add to transmit buffer
+					conn->tx_buffer[conn->tx_seq+1] = std::move(vpkt);
+				}
+				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning SYN-ACK from %s:%u to %s:%u",
+					addr.c_str(), port, ip2str(conn->dst_addr).c_str(), conn->dst_port);
 					
-				if (isLocalTarget(conn.peer_addr.sin_addr.s_addr)) {
-					lock.unlock();
+				if (isLocalTarget(conn->dst_addr)) {
 					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-					g_socketManager.vBroadcast(std::move(pkt), htons(conn.peer_port));
-					lock.lock();
-					return true;
+					g_socketManager.vBroadcast(std::move(send_pkt), htons(conn->dst_port));
+					conn->tx_seq++;
 				} else {
 					sockaddr_in peer{};
 					peer.sin_family = AF_INET;
-					peer.sin_addr = conn.peer_addr.sin_addr;
-					peer.sin_port = htons(conn.peer_port);
+					peer.sin_addr.s_addr = conn->dst_addr;
+					peer.sin_port = htons(conn->dst_port);
 
-					auto [_len, _data] = pkt.Pack(port);
-
+					auto [_len, _data] = send_pkt.Pack(port);
 					auto dccp_sock = g_socketManager.GetDCCP();
 					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 					if (ret < 0) {
 						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 					}
+					conn->tx_seq++;
 				}
 			}
         } 
