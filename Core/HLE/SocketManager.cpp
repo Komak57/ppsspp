@@ -130,18 +130,24 @@ void InetSocket::clear() {
     dst_port = 0;
     threadID = 0;
 
-    // Clear the queue safely
-    {
-        std::lock_guard<std::mutex> lock(queue_lock);
+	// Clear the queue safely
+	{
+		std::lock_guard<std::mutex> queues(queue_lock);
 		std::deque<VirtualPacket> empty;
 		std::swap(rx_queue, empty);
+	}
+	{
+		std::lock_guard<std::mutex> buffers(buffer_lock);
 		std::map<u32, VirtualPacket> _empty;
 		std::swap(rx_buffer, _empty);
 		std::swap(tx_buffer, _empty);
 		rx_seq = 0;
 		tx_seq = 0;
-		rx_seq_fin = 0;
-    }
+	}
+	{
+		std::lock_guard<std::mutex> connections(conn_lock);
+		pending_connections.clear();
+	}
     
     // Reset pointers
     pending_connections.clear();
@@ -736,15 +742,14 @@ int InetSocket::accept(sockaddr* addr, socklen_t* addrlen) { errno = EOPNOTSUPP;
 int InetSocket::shutdown(int how) { errno = EOPNOTSUPP; return -1; }
 bool InetSocket::ProcessNetStack() { return false; }
 void InetSocket::enqueue_packet(VirtualPacket packet) {
-	std::lock_guard<std::mutex> lock(queue_lock);
+	std::lock_guard<std::mutex> queue(queue_lock);
 	// Add timestamp for TTL tracking
 	packet.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
 	rx_queue.push_back(std::move(packet));
-	packet_ready.notify_all();
 	DEBUG_LOG(Log::sceNet, "Enqueued packet for vport %d (queue size: %zu)", vport, rx_queue.size());
 }
 bool InetSocket::dequeue_packet(VirtualPacket& packet) {
-	std::lock_guard<std::mutex> lock(queue_lock);
+	std::lock_guard<std::mutex> buffers(buffer_lock);
 	const u64 MAX_PACKET_AGE_US = 30000000;  // 30 seconds
 	
 	while (!rx_buffer.empty() && rx_buffer.find(rx_seq + 1) != rx_buffer.end()) {
@@ -767,13 +772,16 @@ bool InetSocket::dequeue_packet(VirtualPacket& packet) {
 	return false;  // Queue is empty
 }
 int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
-    std::lock_guard<std::mutex> lock(queue_lock);
+	std::lock_guard<std::mutex> buffers(buffer_lock);
     const u64 MAX_PACKET_AGE_US = 30000000;  // 30 seconds
     u64 current_time_us = (u64)(time_now_d() * 1000000.0);
     
     int total_copied = 0;
     bool target_locked = false;
     sockaddr_in target_addr{};
+
+	if (!rx_buffer.empty() && rx_buffer.find(rx_seq + 1) == rx_buffer.end())
+		WARN_LOG(Log::sceNet, "dequeue_stream: Missing next packet at %d", rx_seq+1);
     
     while (total_copied < len && !rx_buffer.empty() && rx_buffer.find(rx_seq + 1) != rx_buffer.end()) {
         // Peek at the front packet (do NOT pop yet)
@@ -841,47 +849,89 @@ int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
     return total_copied;
 }
 bool InetSocket::has_pending_data() const {
-	std::lock_guard<std::mutex> lock(queue_lock);
+	std::lock_guard<std::mutex> buffers(buffer_lock);
 	return (!rx_buffer.empty() && rx_buffer.find(rx_seq + 1) != rx_buffer.end());
 }
-void InetSocket::set_pending_connection(const ConnectionRequest& conn) {
-	std::lock_guard<std::mutex> lock(conn_lock);
+bool InetSocket::set_pending_connection(InetSocket* conn) {
+	std::lock_guard<std::mutex> connections(conn_lock);
+	if ((int)pending_connections.size() >= backlog) {
+		ERROR_LOG(Log::sceNet, "Backlog full, dropping SYN from %s:%u", ip2str(conn->dst_addr).c_str(), conn->dst_port);
+		delete conn;
+		return false;
+	}
+	// Check for an existing connection
+	for (auto& existing : pending_connections) {
+        if (existing->dst_addr == conn->dst_addr && 
+            existing->dst_port == conn->dst_port) {
+			ERROR_LOG(Log::sceNet, "Request already exists, dropping SYN from %s:%u", ip2str(conn->dst_addr).c_str(), conn->dst_port);
+            delete conn; // discard the duplicate
+            return false;
+        }
+    }
+
 	pending_connections.push_back(conn);
 	DEBUG_LOG(Log::sceNet, "Set pending connection on vport %d from %s:%u",
-		vport, inet_ntoa(conn.peer_addr.sin_addr), ntohs(conn.peer_addr.sin_port));
+		vport, ip2str(conn->dst_addr).c_str(), conn->dst_port);
+	return true;
 }
 bool InetSocket::update_pending_connection(const sockaddr_in& peer_addr) {
-	std::lock_guard<std::mutex> lock(conn_lock);
+	std::lock_guard<std::mutex> connections(conn_lock);
 	for (auto& conn : pending_connections) {
-        if (conn.peer_addr.sin_addr.s_addr == peer_addr.sin_addr.s_addr && 
-            conn.peer_port == ntohs(peer_addr.sin_port)) {
+        if (conn->dst_addr == peer_addr.sin_addr.s_addr && 
+            conn->dst_port == ntohs(peer_addr.sin_port)) {
             
-            if (conn.tcp_state == TCPState::SynReceived) {
-                conn.tcp_state = TCPState::Established;
+            if (conn->tcp_state == TCPState::SynReceived) {
+                conn->tcp_state = TCPState::Established;
+				{
+					std::lock_guard<std::mutex> buffers(conn->buffer_lock);
+					// Flag SYN|ACK as acquired
+					auto psh_syn = std::find_if(conn->tx_buffer.begin(), conn->tx_buffer.end(), [](const auto& pair) { return pair.second.header_flags == (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK); });
+					if (psh_syn != conn->tx_buffer.end())
+						psh_syn->second.seq_ack = true;
+					conn->rx_seq++; // ACK received
+				}
                 DEBUG_LOG(Log::sceNet, "Promoted connection to Established for %s:%u",
-                    inet_ntoa(conn.peer_addr.sin_addr), conn.peer_port);
+                    ip2str(conn->dst_addr).c_str(), conn->dst_port);
                 return true;
             }
         }
     }
 	return false;
 }
-bool InetSocket::get_pending_connection(ConnectionRequest& conn) {
-	std::lock_guard<std::mutex> lock(conn_lock);
+InetSocket* InetSocket::get_pending_connection() {
+	std::lock_guard<std::mutex> connections(conn_lock);
 	// Find the first connection that has finished the 3-way handshake
-    for (auto it = pending_connections.begin(); it != pending_connections.end(); ++it) {
-        if (it->tcp_state == TCPState::Established) {
-            conn = *it;
-            pending_connections.erase(it); // Remove it from the backlog
-            return true;
+    for (auto& conn : pending_connections) {
+        if (conn->tcp_state == TCPState::Established) {
+			return conn;
         }
     }
-	return false;
+	return nullptr;
+}
+void InetSocket::remove_pending_connection(InetSocket* conn) {
+    std::lock_guard<std::mutex> connections(conn_lock);
+    // pending_connections.erase(
+    //     std::remove_if(pending_connections.begin(), pending_connections.end(),
+    //         [conn](const std::unique_ptr<InetSocket>& p) { return p.get() == conn; }),
+    //     pending_connections.end()
+    // );
+	// pending_connections.remove(conn);
+    // for (auto it = pending_connections.begin(); it != pending_connections.end(); ++it) {
+    //     if (&*it == conn) {
+    //         pending_connections.erase(it);
+    //         return;
+    //     }
+    // }
+    auto it = std::find(pending_connections.begin(), pending_connections.end(), conn);
+    if (it != pending_connections.end()) {
+        delete *it;          // free the heap allocation
+        pending_connections.erase(it);
+    }
 }
 bool InetSocket::has_pending_connection() const {
-	std::lock_guard<std::mutex> lock(conn_lock);
+	std::lock_guard<std::mutex> connections(conn_lock);
 	for (const auto& conn : pending_connections) {
-        if (conn.tcp_state == TCPState::Established) {
+        if (conn->tcp_state == TCPState::Established) {
             return true;
         }
     }

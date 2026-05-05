@@ -155,14 +155,13 @@ struct InetSocket {
 	u32 broadcast_mask = 0;              // Bitfield tracking which "rooms/sessions" this socket participates in
 
 	// Packet queue for virtual sockets (SOCK_PACKET and SOCK_CONN_DGRAM)
-	uint32_t rx_seq;        // Next sequential packet
-	uint32_t tx_seq;        // Next sequential packet
-	uint32_t rx_seq_fin;    // Last acknowledge packet
+	uint32_t rx_seq;		// Next sequential packet
+	uint32_t tx_seq;		// Next sequential packet
+	mutable std::mutex queue_lock;
 	std::deque<VirtualPacket> rx_queue; 		// for received packets
+	mutable std::mutex buffer_lock;
 	std::map<uint32_t, VirtualPacket> rx_buffer; // for sent packets
 	std::map<uint32_t, VirtualPacket> tx_buffer; // for sent packets
-	mutable std::mutex queue_lock;
-	std::condition_variable packet_ready;
 
 	mutable std::mutex conn_lock;
 	std::list<InetSocket*> pending_connections; // Pending connection for SOCK_PACKET
@@ -199,20 +198,20 @@ struct InetSocket {
 
 		// Clear the queue safely
 		{
-			std::lock_guard<std::mutex> lock(queue_lock);
+			std::lock_guard<std::mutex> queues(queue_lock);
 			std::deque<VirtualPacket> empty;
 			std::swap(rx_queue, empty);
-			std::map<uint32_t, VirtualPacket> _empty;
-			std::swap(tx_buffer, _empty);
+		}
+		{
+			std::lock_guard<std::mutex> buffers(buffer_lock);
+			std::map<u32, VirtualPacket> _empty;
+			std::swap(rx_buffer, _empty);
 			std::swap(tx_buffer, _empty);
 			rx_seq = 0;
 			tx_seq = 0;
-			rx_seq_fin = 0;
 		}
-		
-		// Reset pointers
 		{
-			std::lock_guard<std::mutex> lock(conn_lock);
+			std::lock_guard<std::mutex> connections(conn_lock);
 			pending_connections.clear();
 		}
 		readfds = nullptr;
@@ -246,9 +245,10 @@ struct InetSocket {
 	bool dequeue_packet(VirtualPacket& packet);
 	int dequeue_stream(char* buf, int len, sockaddr_in* out_addr);
 	bool has_pending_data() const;
-	void set_pending_connection(const ConnectionRequest& conn);
+	bool set_pending_connection(InetSocket* conn);
 	bool update_pending_connection(const sockaddr_in& peer_addr);
-	bool get_pending_connection(ConnectionRequest& conn);
+	InetSocket* get_pending_connection();
+	void remove_pending_connection(InetSocket* conn);
 	bool has_pending_connection() const;
 };
 #pragma pack(pop)
