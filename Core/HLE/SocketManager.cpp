@@ -2697,13 +2697,11 @@ bool PacketSocket::ProcessNetStack() {
 		}
         else if (pkt.header_flags == p2ps_tcp_flags::ACK) {
             if (tcp_state == TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received ACK at listening socket from %s:%u on port %u",
-					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
+				INFO_LOG(Log::sceNet, "PACKET: Received ACK at listening socket from %s:%u to %s:%u",
+					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), addr.c_str(), port);
 
 				// tcp_state = TCPState::Established;
-                dst_addr = pkt.src_addr.sin_addr.s_addr;
-                dst_port = ntohs(pkt.src_addr.sin_port);
-				update_pending_connection(pkt.src_addr);
+				update_pending_connection(pkt.src_addr); // Increments rx_seq
 
                 // Resume the thread that is currently blocked in sceNetInetConnect
                 if (threadID > 0) {
@@ -2715,8 +2713,8 @@ bool PacketSocket::ProcessNetStack() {
         } 
         else if (pkt.header_flags == p2ps_tcp_flags::FIN) {
             if (tcp_state != TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received FIN at listening socket from %s:%u to port %u",
-					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
+				INFO_LOG(Log::sceNet, "PACKET: Received FIN at listening socket from %s:%u to %s:%u",
+					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), addr.c_str(), port);
                 tcp_state = TCPState::CloseWait;
 				rx_seq++;
             }
