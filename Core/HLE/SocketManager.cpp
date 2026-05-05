@@ -2406,9 +2406,16 @@ int PacketSocket::shutdown(int how) {
 			vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
 		}
 		vpkt.src_addr.sin_port = htons(vport);
-		vpkt.seq_id = 0;
+		vpkt.seq_id = tx_seq+1;
 		// Add timestamp for TTL tracking
 		vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
+
+		{
+			// Add to transmit buffer
+			std::lock_guard<std::mutex> lock(buffer_lock);
+			// Place at end
+			tx_buffer[tx_seq+1] = std::move(vpkt.clone());
+		}
 
 		INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Sending FIN from port %d to %d", port, dst_port);
 		if (isLocalTarget(dst_port)) {
