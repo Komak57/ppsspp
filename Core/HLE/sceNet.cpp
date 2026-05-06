@@ -621,8 +621,8 @@ void SceNetUpnpThread()
 	auto start = std::chrono::steady_clock::now();
 	int newState = SCE_NP_MATCHING2_STATE_NONE;
 	int delayus = 100000;
-	uint64_t net_time;
-	uint64_t upnp_time;
+	uint64_t net_time = 0;
+	uint64_t upnp_time = 0;
 	if (uPnPInitialized) {
 		newState = SCE_NP_MATCHING2_STATE_INIT;
 		delayus = 16000;
