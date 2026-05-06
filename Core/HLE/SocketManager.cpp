@@ -1975,7 +1975,7 @@ int ConnDgramSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds,
 	// Wait Logic?
 }
 bool ConnDgramSocket::ProcessNetStack() {
-    std::lock_guard<std::mutex> lock(queue_lock);
+    std::lock_guard<std::mutex> queue(queue_lock);
     const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
     u64 current_time_us = (u64)(time_now_d() * 1000000.0);
 
@@ -1997,12 +1997,13 @@ bool ConnDgramSocket::ProcessNetStack() {
         }
 		ret = true;
 
-		pkt.seq_id = rx_seq + 1;
-		auto last = rx_buffer.end();
-		if (last != rx_buffer.end())
-			pkt.seq_id = last->first + 1;
-
-		rx_buffer[pkt.seq_id] = std::move(pkt);
+		{
+			std::lock_guard<std::mutex> buffers(buffer_lock);
+			int next_id = 1;
+			if (!rx_buffer.empty())
+				next_id = rx_buffer.rbegin()->first + 1;
+			rx_buffer[next_id] = std::move(pkt);
+		}
 		// DEBUG_LOG(Log::sceNet, "%d=recvfrom(%s:%u) -> vport %d{%02X} (type=%d); [%lld/%lld, %lld/%lld]", 
 		// 	pkt.len, inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), 
 		// 	vport, pkt.header_flags, type,
