@@ -269,9 +269,9 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 	}
 
 	int rdcnt = 0, wrcnt = 0, excnt = 0;
+	int realfds = 0; // Windows compatibility for virtual sockets
 
 	int maxHostSocket = 0;
-
 	// Save the mapping during setup.
 	SelectTarget hostSockets[256]{};
 
@@ -291,9 +291,10 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 			VERBOSE_LOG(Log::sceNet, "Input Read FD #%i (host: %d)", i, inetSock->sock);
 			if (rdcnt < FD_SETSIZE) {
 				// Skip host checks on virtual sockets
-				if (inetSock->type != PSP_NET_INET_SOCK_PACKET && inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM)
+				if (inetSock->type != PSP_NET_INET_SOCK_PACKET && inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM) {
 					FD_SET(inetSock->sock, &rdfds); // This might pointed to a non-existing socket or sockets belonged to other programs on Windows, because most of the time Windows socket have an id above 1k instead of 0-255
-				else if (inetSock->has_pending_data() || inetSock->has_pending_connection() || inetSock->tcp_state == TCPState::CloseWait) {
+					realfds++;
+				} else if (inetSock->has_pending_data() || inetSock->has_pending_connection()) {
 					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
 					tmout.tv_sec = 0;
 					tmout.tv_usec = 0;
@@ -308,9 +309,10 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 			VERBOSE_LOG(Log::sceNet, "Input Write FD #%i (host: %d)", i, inetSock->sock);
 			if (wrcnt < FD_SETSIZE) {
 				// Skip host checks on virtual sockets
-				if (inetSock->type != PSP_NET_INET_SOCK_PACKET && inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM)
+				if (inetSock->type != PSP_NET_INET_SOCK_PACKET && inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM) {
 					FD_SET(inetSock->sock, &wrfds);
-				else if (inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM || inetSock->tcp_state == TCPState::Established) {
+					realfds++;
+				} else if (inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM || inetSock->tcp_state == TCPState::Established) {
 					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
 					tmout.tv_sec = 0;
 					tmout.tv_usec = 0;
@@ -325,8 +327,10 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 			VERBOSE_LOG(Log::sceNet, "Input Except FD #%i (host: %d)", i, inetSock->sock);
 			if (excnt < FD_SETSIZE) {
 				// Skip host checks on virtual sockets
-				if (inetSock->type != PSP_NET_INET_SOCK_PACKET && inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM)
+				if (inetSock->type != PSP_NET_INET_SOCK_PACKET && inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM) {
 					FD_SET(inetSock->sock, &exfds);
+					realfds++;
+				}
 				excnt++;
 			} else {
 				ERROR_LOG(Log::sceNet, "Hit set size (exc)");
@@ -342,7 +346,9 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 	VERBOSE_LOG(Log::sceNet, "Select(host: %d): Read count: %d, Write count: %d, Except count: %d, TimeVal: %u.%u", maxHostSocket + 1, rdcnt, wrcnt, excnt, (int)tmout.tv_sec, (int)tmout.tv_usec);
 	// TODO: Simulate blocking behaviour when timeout = NULL to prevent PPSSPP from freezing
 	// Note: select can overwrite tmout.
-	int retval = select(maxHostSocket + 1, readfds ? &rdfds : nullptr, writefds ? &wrfds : nullptr, exceptfds ? &exfds : nullptr, /*(timeout == NULL) ? NULL :*/ &tmout);
+	int retval = 0;
+	if (realfds > 0) // Windows returns EINVAL when you select with no FDS
+		retval = select(maxHostSocket + 1, readfds ? &rdfds : nullptr, writefds ? &wrfds : nullptr, exceptfds ? &exfds : nullptr, /*(timeout == NULL) ? NULL :*/ &tmout);
 	int ready_count = 0; // Number of waiting FD's
 	// Convert the results back to PSP fd_sets.
 	if (readfds)
