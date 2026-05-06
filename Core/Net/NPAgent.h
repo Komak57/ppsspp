@@ -800,6 +800,7 @@ namespace net {
 		switch (type) {
 		case NPAgentType::PSN: return std::make_unique<PSNAuthAgent>(host, port);
 		case NPAgentType::RPCN: return std::make_unique<RPCNAuthAgent>(host, port);
+		case NPAgentType::FAKE_PSN: return std::make_unique<PSNAuthAgent>(host, port);
 		}
 		return nullptr;
 	}
@@ -807,6 +808,7 @@ namespace net {
 		switch (type) {
 		case NPAgentType::PSN: return std::make_unique<PSNAgent>(host, port);
 		case NPAgentType::RPCN: return std::make_unique<RPCNAgent>(host, port);
+		case NPAgentType::FAKE_PSN: return std::make_unique<PSNAgent>(host, port);
 		}
 		return nullptr;
 	}
