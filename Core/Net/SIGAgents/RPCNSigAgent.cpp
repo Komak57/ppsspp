@@ -9,6 +9,21 @@
 #include "Common/System/OSD.h"
 #include "Common/Data/Text/I18n.h"
 
+/* DOCUMENTATION:
+    RPCN only supports NAT Type 3 communications to support Symmetric NAT routers.
+     This means ALL traffic must be routed through the DCCP socket until such a time
+     as RPCN can provide a secondary socket to confirm NAT Type 2.
+    UPnP can bypass this, and create a NAT Type 2 for a single entity on a local network,
+     but other players on said network will be unable to request the ports, and be
+     limited to NAT Type 3.
+    Because there is no way to test the router's NAT methods, all traffic will need to
+     behave as if it were NAT Type 2.
+
+ - PSP_NET_INET_SOCK_DCCP is being used as the "MASTER" P2P socket for all inbound and outbound traffic
+ - UPNP_SUBSET_SOCK is a virtual UDP socket for handling the STUN responses
+ - P2P_SUBSET_SOCK is a virtual UDP socket for handling P2P connections
+*/
+
 // Used for things like 10s
 using namespace std::chrono_literals;
 
@@ -404,10 +419,14 @@ namespace net {
                             nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1);
                         else if (new_port_sig == SCE_SIGN_PORT) // Direct Port
                             nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2);
+                        // RPCN has no way of detecting a type 2 vs type 3
+                        else
+                            nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3);
 
-                        // We received data from RPCN PING, meaning we are at least a Type 2
-                        if (nat_type.load() < SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2)
-                            nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2);
+                        // Upgrade a Type 3 to a Type 2 when we can test the router's NAT type support
+                        // if (nat_type.load() < SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2)
+                        //    nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2);
+
                     }
 
                     auto n = GetI18NCategory(I18NCat::NETWORKING);
