@@ -1707,10 +1707,10 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(&saddr.addr);
-	u16 dest_vport = (saddr.in.sin_zero[1] << 8) | saddr.in.sin_zero[0];
+	// Network Order
+	u16 dest_vport = ntohs((saddr.in.sin_zero[1] << 8) | saddr.in.sin_zero[0]);
 	if (dest_vport == 0)
 		dest_vport = 1;
-	// Send the packet over P2P
 
 	// DCCP must exist for P2P traffic
 	auto dccp_sock = g_socketManager.GetDCCP();
@@ -1734,7 +1734,7 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	if (inet_pton(AF_INET, this->addr.c_str(), &vpkt.src_addr.sin_addr) <= 0) {
 		vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
 	}
-	vpkt.src_addr.sin_port = htons(vport);
+	vpkt.src_addr.sin_port = htons(port);
 	vpkt.seq_id = tx_seq+1;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -1764,9 +1764,10 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 		"{" + std::to_string(ntohs(dest_vport)) + "|" +std::to_string(vpkt.header_flags) + "}";
 	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, len, 386);
 
-	auto [_len, _data] = vpkt.Pack(dest_vport);
+	// Send the packet over P2P
+	auto [_len, _data] = vpkt.Pack(port);
 	// Send through DCCP
-	int ret = ::sendto(dccp_sock->sock, _data.get(), _len, flags, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	int ret = ::sendto(dccp_sock->sock, _data.get(), _len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (ret > 0)
 		dbg.sent++;
 	tx_seq++;
