@@ -247,15 +247,15 @@ struct InetSocket {
 	virtual bool ProcessNetStack();
 
 	// Helper methods for virtual socket packet handling
-	void enqueue_packet(VirtualPacket packet);
-	bool dequeue_packet(VirtualPacket& packet);
-	int dequeue_stream(char* buf, int len, sockaddr_in* out_addr);
-	bool has_pending_data() const;
-	bool set_pending_connection(InetSocket* conn);
-	bool update_pending_connection(const sockaddr_in& peer_addr);
-	InetSocket* get_pending_connection();
-	void remove_pending_connection(InetSocket* conn);
-	bool has_pending_connection() const;
+	virtual void enqueue_packet(VirtualPacket packet);
+	virtual bool dequeue_packet(VirtualPacket& packet);
+	virtual int dequeue_stream(char* buf, int len, sockaddr_in* out_addr);
+	virtual bool has_pending_data() const;
+	virtual bool set_pending_connection(InetSocket* conn);
+	virtual bool update_pending_connection(const sockaddr_in& peer_addr);
+	virtual InetSocket* get_pending_connection();
+	virtual void remove_pending_connection(InetSocket* conn);
+	virtual bool has_pending_connection() const;
 };
 #pragma pack(pop)
 
@@ -389,6 +389,14 @@ public:
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
 
+	bool dequeue_packet(VirtualPacket& packet) override;
+	int dequeue_stream(char* buf, int len, sockaddr_in* out_addr) override;
+	bool has_pending_data() const override;
+	bool set_pending_connection(InetSocket* conn) override;
+	bool update_pending_connection(const sockaddr_in& peer_addr) override;
+	InetSocket* get_pending_connection() override;
+	void remove_pending_connection(InetSocket* conn) override;
+	bool has_pending_connection() const override;
 	bool ProcessNetStack() override;
 };
 #pragma pack(pop)

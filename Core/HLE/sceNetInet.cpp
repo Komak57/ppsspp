@@ -377,7 +377,7 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		}
 		_log += std::to_string(i) + "[";
 		// Linger supports recv on CloseWait
-		if (readfds && hostSockets[i].wantsRead && (FD_ISSET(hostSockets[i].sock, &rdfds) || inetSock->has_pending_data() || inetSock->has_pending_connection() || inetSock->tcp_state == TCPState::CloseWait)) {
+		if (readfds && hostSockets[i].wantsRead && (FD_ISSET(hostSockets[i].sock, &rdfds) || inetSock->has_pending_data() || inetSock->has_pending_connection())) {
 			NetInetFD_SET(i, readfds);
 			ready_count++;
 			_log += "R";
