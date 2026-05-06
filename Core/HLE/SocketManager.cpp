@@ -2018,6 +2018,9 @@ bool ConnDgramSocket::ProcessNetStack() {
 
 int PacketSocket::send(const char* buf, int len, int flags) { 
 	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::send(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
+
+	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	int flgs = convertMSGFlagsPSP2Host(flags);
 	// // Delegate to sendto with peer address
 	// sockaddr_in peer;
 	// peer.sin_family = AF_INET;
@@ -2109,7 +2112,7 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 		
 		// Remote delivery to vport (NAT)
 		auto [_len, _data] = send_pkt.Pack(vport);
-		int ret = ::sendto(dccp_sock->sock, _data.get(), _len, flags, (const sockaddr*)&peer, sizeof(sockaddr_in));
+		int ret = ::sendto(dccp_sock->sock, _data.get(), _len, flgs, (const sockaddr*)&peer, sizeof(sockaddr_in));
 		if (ret < 0)
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET accept: Failed to send ACK to peer");
 		tx_seq++; // TODO: Only on ::send success?
@@ -2130,6 +2133,9 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 }
 int PacketSocket::recv(char* buf, int len, int flags) { 
 	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::recv(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
+
+	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	int flgs = convertMSGFlagsPSP2Host(flags);
 	if (tcp_state == TCPState::SynSent || tcp_state == TCPState::SynReceived) {
 #if PPSSPP_PLATFORM(WINDOWS)
         SetLastError(WSAEWOULDBLOCK);
