@@ -635,6 +635,8 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen) {
 				INFO_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i): EINPROGRESS", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
 			else
 				ERROR_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i)", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
+			int hostErrno = socket_errno;
+			UpdateErrnoFromHost(inetSock->threadID, hostErrno, __FUNCTION__); // Must update inside the thread, or risk race conditions on windows
 		} else
 			INFO_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i)", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
 		// Emulate blocking behavior
@@ -646,12 +648,8 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen) {
 	});
 	// Put the PSP thread into a wait state until sendRequest finishes
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpSendRequest");
-
-	int hostErrno = socket_errno;
 	
 	// hleLog will throw a stack mismatch here
-	if (retval < 0)
-		return UpdateErrnoFromHost(__KernelGetCurThread(), socket_errno, __FUNCTION__);
 	return retval;
 }
 
