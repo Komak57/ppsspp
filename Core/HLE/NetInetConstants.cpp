@@ -1008,7 +1008,7 @@ int convertInetErrno2PSPError(int error) {
 		return SCE_KERNEL_ERROR_ERRNO_ALREADY; // SCE_KERNEL_ERROR_ERRNO_IS_ALREADY_CONNECTED; // UNO only check for 0x80010077 and 0x80010078
 	case ERROR_INET_ENOTCONN:
 		return SCE_KERNEL_ERROR_ERRNO_NOT_CONNECTED;
-	case ERROR_INET_EAGAIN:
+	case ERROR_INET_EAGAIN: // WARNING! Windows reports this for connect, but should trigger IN_PROGRESS instead, but UNVAILABLE for any other requests
 		return SCE_KERNEL_ERROR_ERRNO_RESOURCE_UNAVAILABLE; // SCE_ERROR_ERRNO_EAGAIN;
 #if !defined(_WIN32)
 	case ERROR_INET_EINPROGRESS:
