@@ -38,6 +38,10 @@ static std::map<int, int> g_inetLastErrno;
 // Returns a PSP errno (ERROR_INET_*), in case it's needed.
 int UpdateErrnoFromHost(int threadID, int hostErrno, const char *func) {
 	int newErrno = convertInetErrnoHost2PSP(hostErrno);
+#if defined(_WIN32)
+	if (newErrno == ERROR_INET_EAGAIN && (func && strcmp(func, "sceNetInetConnect") == 0))
+		newErrno = ERROR_INET_EINPROGRESS;
+#endif
 
 	// This will do the right thing if not already present - insert a zero value.
 	int lastErrno = g_inetLastErrno[threadID];
