@@ -130,6 +130,7 @@ void InetSocket::clear() {
     vport = 0;
     dst_addr = 0;
     dst_port = 0;
+    dst_vport = 0;
     threadID = 0;
 
 	// Clear the queue safely
@@ -459,7 +460,7 @@ void SocketManager::ProcessNetStack(int* timeout) {
 				if (!flags.empty()) flags.pop_back(); // strip trailing '|'
 
 				WARN_LOG(Log::sceNet, "PACKET: Re-Sending %s at listening socket from %s:%u to %s:%u",
-					flags.c_str(), inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), s->addr.c_str(), s->port);
+					flags.c_str(), inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), ip2str(s->dst_addr).c_str(), s->dst_port);
 				if (isLocalTarget(s->dst_addr)) {
 					outbuf.push_back({std::move(vpkt), s->dst_port});
 					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
@@ -470,9 +471,9 @@ void SocketManager::ProcessNetStack(int* timeout) {
 					sockaddr_in peer{};
 					peer.sin_family = AF_INET;
 					peer.sin_addr.s_addr = s->dst_addr;
-					peer.sin_port = htons(s->dst_port);
+					peer.sin_port = htons(s->dst_vport);
 
-					auto [_len, _data] = vpkt.Pack(s->port);
+					auto [_len, _data] = vpkt.Pack(s->dst_port);
 					auto dccp_sock = g_socketManager.GetDCCP();
 					// Skip local send
 					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
@@ -521,7 +522,7 @@ void SocketManager::ProcessNetStack(int* timeout) {
 					if (!flags.empty()) flags.pop_back(); // strip trailing '|'
 
 					WARN_LOG(Log::sceNet, "PACKET: Re-Sending %s at listening socket from %s:%u to %s:%u",
-						flags.c_str(), inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), s->addr.c_str(), s->port);
+						flags.c_str(), inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), ip2str(conn->dst_addr).c_str(), conn->dst_port);
 					if (isLocalTarget(conn->dst_addr)) {
 						outbuf.push_back({std::move(vpkt), conn->dst_port});
 						// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
@@ -532,9 +533,9 @@ void SocketManager::ProcessNetStack(int* timeout) {
 						sockaddr_in peer{};
 						peer.sin_family = AF_INET;
 						peer.sin_addr.s_addr = conn->dst_addr;
-						peer.sin_port = htons(conn->dst_port);
+						peer.sin_port = htons(conn->dst_vport);
 
-						auto [_len, _data] = vpkt.Pack(conn->port);
+						auto [_len, _data] = vpkt.Pack(conn->dst_port);
 						auto dccp_sock = g_socketManager.GetDCCP();
 						// Skip local send
 						int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
@@ -624,13 +625,17 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, u16 port) {
         }
         
 		if (target_sock->type == PSP_NET_INET_SOCK_PACKET && target_sock->tcp_state != TCPState::Listening) {
-			if ((target_sock->dst_addr != vpkt.src_addr.sin_addr.s_addr && target_sock->dst_addr != 0 && vpkt.src_addr.sin_addr.s_addr != 0) || htons(target_sock->dst_port) != vpkt.src_addr.sin_port) {
+			if ((target_sock->dst_addr != vpkt.src_addr.sin_addr.s_addr && target_sock->dst_addr != 0 && vpkt.src_addr.sin_addr.s_addr != 0))
+				continue;
+			// Match port (3658) && vport (12000)
+			if ((target_sock->dst_port != htons(vpkt.src_addr.sin_port)) && target_sock->dst_vport != ntohs(port))
+				continue;
+		} else {
+			// Match port, broadcast to all vports?
+			// A shotgun method can be used for some games, but better logic may be required if this is incorrect.
+			if (target_sock->port != ntohs(port)) {
 				continue;
 			}
-		}
-
-		if (target_sock->port != ntohs(port)) {
-			continue;
 		}
 
         // // Match by vport (convert from network order for comparison)
@@ -642,7 +647,7 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, u16 port) {
         //     continue;  // Not subscribed to this vport
         // }
         
-        DEBUG_LOG(Log::sceNet, "RouteDCCP: Processing socket vport %d (type=%d)", 
+        DEBUG_LOG(Log::sceNet, "RouteDCCP: Processing socket dst_port %d (type=%d)", 
             target_sock->vport, target_sock->type);
 
 		// VirtualPacket vpkt;
@@ -654,8 +659,8 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, u16 port) {
 		// vpkt.header_flags = header.flags;
 		// vpkt.src_addr = _from;
 
-		INFO_LOG(Log::sceNet, "RouteDCCP: DELIVERING %d bytes to port %s:%u (type=%d, vport=%d) from %s:%u", 
-			vpkt.len, target_sock->addr.c_str(), target_sock->port, target_sock->type, target_sock->vport, inet_ntoa(vpkt.src_addr.sin_addr), ntohs(vpkt.src_addr.sin_port));
+		INFO_LOG(Log::sceNet, "RouteDCCP: DELIVERING %d bytes from %s:%u|%u to port %s:%u|%u (type=%d)", 
+			vpkt.len, inet_ntoa(vpkt.src_addr.sin_addr), ntohs(vpkt.src_addr.sin_port), ntohs(port), target_sock->addr.c_str(), target_sock->port, target_sock->vport, target_sock->type);
 		
 		target_sock->enqueue_packet(vpkt.clone());
 		delivered_count++;
@@ -1675,17 +1680,12 @@ bool DccpSocket::ProcessNetStack() {
 		memcpy(vpkt.data.get(), data+i, vpkt.len);
 	}
 	vpkt.header_flags = header.flags;
-	vpkt.src_addr.sin_family = AF_INET;
-	// vpkt.src_addr.sin_addr.s_addr = this->addr;
-	if (inet_pton(AF_INET, this->addr.c_str(), &vpkt.src_addr.sin_addr) <= 0) {
-		vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
-	}
 	vpkt.src_addr = _from;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
 
 	// Log incoming packet details (convert vport from network to host byte order for display)
-	INFO_LOG(Log::sceNet, "RouteDCCP: Received %d bytes from %s:%u -> VPort %d (flags=0x%02x, subset=%d)", 
+	INFO_LOG(Log::sceNet, "RouteDCCP: Received %d bytes from %s:%u -> dst_port %d (flags=0x%02x(=%d))", 
 		ret, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port), ntohs(header.dest), header.flags, header.flags & 0xFF);
 	
 	g_socketManager.vBroadcast(std::move(vpkt), header.dest);
@@ -2111,15 +2111,15 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 		peer.sin_port = htons(dst_port);
 		
 		// Remote delivery to vport (NAT)
-		auto [_len, _data] = send_pkt.Pack(vport);
+		auto [_len, _data] = send_pkt.Pack(dst_vport);
 		int ret = ::sendto(dccp_sock->sock, _data.get(), _len, flgs, (const sockaddr*)&peer, sizeof(sockaddr_in));
 		if (ret < 0)
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET accept: Failed to send ACK to peer");
 		tx_seq++; // TODO: Only on ::send success?
 		dbg.sent++;
 
-		WARN_LOG(Log::sceNet, "%d bytes send to (%s:%u); [tx=%d/rx=%d]", 
-			ret, inet_ntoa(peer.sin_addr), ntohs(peer.sin_port), 
+		WARN_LOG(Log::sceNet, "%d bytes send to %s:%u(%u); [tx=%d/rx=%d]", 
+			ret, inet_ntoa(peer.sin_addr), ntohs(peer.sin_port), dst_port,
 			tx_seq, rx_seq);
 		return len; // Report unmodified packet size
 	}
@@ -2177,8 +2177,9 @@ int PacketSocket::recv(char* buf, int len, int flags) {
 }
 int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) { 
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
+	// Host Order
 	auto _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
-	INFO_LOG(Log::sceNet, "SOCK_PACKET::connect(%s:%u, %d): state=%d", ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), namelen, (int)tcp_state);
+	INFO_LOG(Log::sceNet, "SOCK_PACKET::connect(%s:%u, %d): dest_vport=%u state=%d", ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), namelen, _vport, (int)tcp_state);
 
 	// Validate socket is not already connected/connecting
 	if (tcp_state != TCPState::Disconnected) {
@@ -2198,11 +2199,12 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	// Store connected socket
 	dst_addr = _dest->sin_addr.s_addr;
 	dst_port = ntohs(_dest->sin_port);
+	dst_vport = _vport;
 
 	this->addr = ip2str(INADDR_ANY);
-	this->port = g_socketManager.generateEphemeralPort();
+	this->port = g_socketManager.generateEphemeralPort(); // Adopt a unique port
+	this->vport = _vport; // Adopt the destination vport
 	// this->port = ntohs(_dest->sin_port);
-	this->vport = _vport;
 
 	// Create the transmission vpacket
 	VirtualPacket vpkt;
@@ -2244,17 +2246,12 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 #endif
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: DCCP_SOCK Not Present");
 		}
-
-		// Match the destination port for remote connections
-		this->port = ntohs(_dest->sin_port);
-		dst_port = _vport;
-
 		sockaddr_in peer{};
 		peer.sin_family = AF_INET;
 		peer.sin_addr = _dest->sin_addr;
-		peer.sin_port = htons(_vport);
+		peer.sin_port = htons(dst_port); // Send to Peer's DCCP
 
-		auto [_len, _data] = send_pkt.Pack(port);
+		auto [_len, _data] = send_pkt.Pack(dst_vport); // We want to deliver to the destination port specified
 		int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 		if (ret < 0) {
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Failed to send SYN");
@@ -2361,6 +2358,7 @@ int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 	// Store connected peer
 	new_sock->dst_addr = pending_conn->dst_addr;
 	new_sock->dst_port = pending_conn->dst_port;
+	new_sock->dst_vport = pending_conn->dst_vport;
 	// Store buffer states
 	std::swap(new_sock->rx_queue, pending_conn->rx_queue);
 	std::swap(new_sock->rx_buffer, pending_conn->rx_buffer);
@@ -2403,10 +2401,10 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	// Update socket debug metadata
 	addr = ip2str(saddr.in.sin_addr);
-	port = ntohs(saddr.in.sin_port);
+	vport = ntohs(saddr.in.sin_port);
 	// The PSP is expected to provide 0, and we need to generate a vport
 	// This is later "agreed" upon in the P2P handshake?
-	vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
+	port = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
 
 	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
 
@@ -2464,9 +2462,9 @@ int PacketSocket::shutdown(int how) {
 			sockaddr_in dst_addr{};
 			dst_addr.sin_family = AF_INET;
 			dst_addr.sin_addr = dst_addr.sin_addr;
-			dst_addr.sin_port = htons(vport);
+			dst_addr.sin_port = htons(port);
 
-			auto [_len, _data] = vpkt.Pack(dst_port);
+			auto [_len, _data] = vpkt.Pack(dst_vport);
 			int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
 			if (ret < 0) {
 				ERROR_LOG(Log::sceNet, "SOCK_PACKET shutdown: Failed to send FIN");
@@ -2694,7 +2692,7 @@ bool PacketSocket::update_pending_connection(const sockaddr_in& peer_addr) {
 	std::lock_guard<std::mutex> connections(conn_lock);
 	for (auto& conn : pending_connections) {
         if (conn->dst_addr == peer_addr.sin_addr.s_addr && 
-            conn->dst_port == ntohs(peer_addr.sin_port)) {
+            (conn->dst_port == ntohs(peer_addr.sin_port))) {
             
             if (conn->tcp_state == TCPState::SynReceived) {
                 conn->tcp_state = TCPState::Established;
@@ -2782,8 +2780,8 @@ bool PacketSocket::ProcessNetStack() {
 		// }
         // else 
 		if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK)) {
-			INFO_LOG(Log::sceNet, "PACKET: Received PSH|ACK at listening socket from %s:%u to %s:%u",
-				inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), addr.c_str(), port);
+			INFO_LOG(Log::sceNet, "PACKET: Received PSH|ACK at listening socket on %s:%u|%u",
+				addr.c_str(), port, vport);
 			// Do not increment rx_seq, this is just a confirmation
 
 			std::lock_guard<std::mutex> buffer(buffer_lock);
@@ -2797,8 +2795,8 @@ bool PacketSocket::ProcessNetStack() {
 		}
         else if (pkt.header_flags == p2ps_tcp_flags::PSH) {
 			if (tcp_state != TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received PSH at listening socket from %s:%u to %s:%u [seq=%d,tx=%d/rx=%d,hpd=%d]",
-					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), addr.c_str(), port, pkt.seq_id, tx_seq, rx_seq, has_pending_data());
+				INFO_LOG(Log::sceNet, "PACKET: Received PSH at listening socket from on %s:%u|%u [seq=%d,tx=%d/rx=%d,hpd=%d]",
+					addr.c_str(), port, vport, pkt.seq_id, tx_seq, rx_seq, has_pending_data());
 				// Do not increment rx_seq until Recv is called
 
 				// Buffer the received packet
@@ -2820,8 +2818,8 @@ bool PacketSocket::ProcessNetStack() {
 
 				// Do NOT save this for re-transmission. Wait for another PSH
 
-				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning PSH-ACK from %s:%u to %s:%u",
-					addr.c_str(), port, ip2str(dst_addr).c_str(), dst_port);
+				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning PSH|ACK to %s:%u|%u",
+					ip2str(dst_addr).c_str(), dst_port, dst_vport);
 
 				if (isLocalTarget(dst_addr)) {
 					g_socketManager.vBroadcast(std::move(vpkt), htons(dst_port));
@@ -2829,9 +2827,9 @@ bool PacketSocket::ProcessNetStack() {
 					sockaddr_in peer{};
 					peer.sin_family = AF_INET;
 					peer.sin_addr.s_addr = dst_addr;
-					peer.sin_port = htons(dst_port);
+					peer.sin_port = htons(dst_port); // deliver to the DCCP socket
 
-					auto [_len, _data] = vpkt.Pack(port);
+					auto [_len, _data] = vpkt.Pack(dst_vport); // deliver through the DCCP Socket to actual port
 					auto dccp_sock = g_socketManager.GetDCCP();
 					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 					if (ret < 0) {
@@ -2844,16 +2842,19 @@ bool PacketSocket::ProcessNetStack() {
         else if (pkt.header_flags == p2ps_tcp_flags::SYN) {
 			if (tcp_state == TCPState::Listening) {
 				InetSocket* conn = new InetSocket();
+				// Save the sender's address for replies
 				conn->dst_addr = pkt.src_addr.sin_addr.s_addr;
+				// Default assume local connection
 				conn->dst_port = ntohs(pkt.src_addr.sin_port);
+				conn->dst_vport = this->port;
 				conn->tcp_state = TCPState::SynReceived;
 				conn->tx_seq = 0;
 				if (!set_pending_connection(conn))
 					continue;
 				conn->rx_seq = 1; // Mark this packet received
 				
-				INFO_LOG(Log::sceNet, "PACKET: Received SYN at listening socket from %s:%u to %s:%u",
-					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), addr.c_str(), port);
+				INFO_LOG(Log::sceNet, "PACKET: Received SYN at listening socket from on %s:%u|%u",
+					addr.c_str(), port, vport);
 
 				VirtualPacket vpkt{};
 				vpkt.len = 0;
@@ -2875,8 +2876,8 @@ bool PacketSocket::ProcessNetStack() {
 					// Add to transmit buffer
 					conn->tx_buffer[conn->tx_seq+1] = std::move(vpkt);
 				}
-				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning SYN-ACK from %s:%u to %s:%u",
-					addr.c_str(), port, ip2str(conn->dst_addr).c_str(), conn->dst_port);
+				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning SYN-ACK to %s:%u|%u",
+					ip2str(conn->dst_addr).c_str(), conn->dst_port, conn->dst_vport);
 					
 				if (isLocalTarget(conn->dst_addr)) {
 					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
@@ -2886,9 +2887,9 @@ bool PacketSocket::ProcessNetStack() {
 					sockaddr_in peer{};
 					peer.sin_family = AF_INET;
 					peer.sin_addr.s_addr = conn->dst_addr;
-					peer.sin_port = htons(conn->dst_port);
+					peer.sin_port = htons(conn->dst_port); // deliver to the DCCP socket
 
-					auto [_len, _data] = send_pkt.Pack(port);
+					auto [_len, _data] = send_pkt.Pack(conn->dst_vport); // deliver through the DCCP Socket to actual port
 					auto dccp_sock = g_socketManager.GetDCCP();
 					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 					if (ret < 0) {
@@ -2900,16 +2901,14 @@ bool PacketSocket::ProcessNetStack() {
         } 
         else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK)) {
 			if (tcp_state == TCPState::SynSent) {
-				INFO_LOG(Log::sceNet, "PACKET: Received SYN-ACK at listening socket from %s:%u to %s:%u",
-					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), addr.c_str(), port);
+				INFO_LOG(Log::sceNet, "PACKET: Received SYN|ACK at listening socket to %s:%u|%u",
+					addr.c_str(), port, vport);
 				tcp_state = TCPState::Established;
-				dst_addr = pkt.src_addr.sin_addr.s_addr;
-                dst_port = ntohs(pkt.src_addr.sin_port);
 				rx_seq++;
 				
                 // Resume the thread that is currently blocked in sceNetInetConnect
                 if (threadID > 0) {
-                    DEBUG_LOG(Log::sceNet, "ProcessNetStack: SYN-ACK received, resuming thread %d", threadID);
+                    DEBUG_LOG(Log::sceNet, "ProcessNetStack: SYN|ACK received, resuming thread %d", threadID);
                     __KernelResumeThreadFromWait(threadID, 0);
                     threadID = -1;
                 }
@@ -2932,8 +2931,8 @@ bool PacketSocket::ProcessNetStack() {
 
 				// Do not resend. Let the peer re-send SYN|ACK if it hasn't connected yet
 
-				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning ACK from %s:%u to %s:%u",
-					addr.c_str(), port, inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port));
+				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning ACK to %s:%u|%u",
+					ip2str(dst_addr).c_str(), dst_port, dst_vport);
 				
 				if (isLocalTarget(dst_addr)) {
 					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
@@ -2943,9 +2942,9 @@ bool PacketSocket::ProcessNetStack() {
 					sockaddr_in peer{};
 					peer.sin_family = AF_INET;
 					peer.sin_addr.s_addr = dst_addr;
-					peer.sin_port = htons(dst_port);
+					peer.sin_port = htons(dst_port); // deliver to the DCCP socket
 
-					auto [_len, _data] = vpkt.Pack(port);
+					auto [_len, _data] = vpkt.Pack(dst_vport); 
 					auto dccp_sock = g_socketManager.GetDCCP();
 					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
 					if (ret < 0) {
@@ -2957,9 +2956,10 @@ bool PacketSocket::ProcessNetStack() {
 		}
         else if (pkt.header_flags == p2ps_tcp_flags::ACK) {
             if (tcp_state == TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received ACK at listening socket from %s:%u to %s:%u",
-					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), addr.c_str(), port);
+				INFO_LOG(Log::sceNet, "PACKET: Received ACK at listening socket on %s:%u|%u",
+					addr.c_str(), port, vport);
 
+				
 				// tcp_state = TCPState::Established;
 				update_pending_connection(pkt.src_addr); // Increments rx_seq
 
@@ -2973,8 +2973,8 @@ bool PacketSocket::ProcessNetStack() {
         } 
         else if (pkt.header_flags == p2ps_tcp_flags::FIN) {
             if (tcp_state != TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received FIN at listening socket from %s:%u to %s:%u",
-					inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), addr.c_str(), port);
+				INFO_LOG(Log::sceNet, "PACKET: Received FIN at listening socket on %s:%u|%u",
+					addr.c_str(), port, vport);
                 tcp_state = TCPState::CloseWait;
 				rx_seq++;
             }

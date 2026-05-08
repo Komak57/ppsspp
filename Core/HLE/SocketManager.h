@@ -153,6 +153,7 @@ struct InetSocket {
 	int vport; // Host Order; WARNING: vsocks rely on this, will break if changed
 	u32 dst_addr;
 	u16 dst_port;
+	u16 dst_vport;
 	int threadID = 0;
 	std::thread thread;
 
@@ -197,6 +198,7 @@ struct InetSocket {
 		vport = 0;
 		dst_addr = 0;
 		dst_port = 0;
+		dst_vport = 0;
 		threadID = 0;
 		
 		so_storage.clear();
@@ -220,9 +222,6 @@ struct InetSocket {
 			std::lock_guard<std::mutex> connections(conn_lock);
 			pending_connections.clear();
 		}
-		readfds = nullptr;
-		writefds = nullptr;
-		exceptfds = nullptr;
 	};
 	// Virtual methods - override in derived classes for type-specific behavior
 	// Base implementations return EOPNOTSUPP for unsupported operations
