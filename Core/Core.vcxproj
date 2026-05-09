@@ -554,13 +554,15 @@
     <ClCompile Include="Net\fb_helpers.cpp" />
     <ClCompile Include="Net\HTTPConnection.cpp" />
     <ClCompile Include="Net\HTTPS.cpp" />
+    <ClCompile Include="Net\NpMatching2Cache.cpp" />
     <ClCompile Include="Net\NPAgent.cpp" />
     <ClCompile Include="Net\NPAgents\PSNAgent.cpp" />
     <ClCompile Include="Net\NPAgents\PSNAuthAgent.cpp" />
     <ClCompile Include="Net\NPAgents\RPCNAgent.cpp" />
     <ClCompile Include="Net\NPAgents\RPCNAuthAgent.cpp" />
-    <ClCompile Include="Net\NpMatching2Cache.cpp" />
-    <ClCompile Include="Net\SignalingHandler.cpp" />
+    <ClCompile Include="Net\SIGAgent.cpp" />
+    <ClCompile Include="Net\SIGAgents\PSNSigAgent.cpp" />
+    <ClCompile Include="Net\SIGAgents\RPCNSigAgent.cpp" />
     <ClCompile Include="Replay.cpp" />
     <ClCompile Include="Compatibility.cpp" />
     <ClCompile Include="Config.cpp" />

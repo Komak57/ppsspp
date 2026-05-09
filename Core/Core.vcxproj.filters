@@ -1417,8 +1417,14 @@
     <ClCompile Include="Net\NPAgent.cpp">
       <Filter>Net</Filter>
     </ClCompile>
-    <ClCompile Include="Net\SignalingHandler.cpp">
+    <ClCompile Include="Net\SIGAgent.cpp">
       <Filter>Net</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\SIGAgents\PSNSigAgent.cpp">
+      <Filter>Net\NPAgents</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\SIGAgents\RPCNSigAgent.cpp">
+      <Filter>Net\NPAgents</Filter>
     </ClCompile>
     <ClCompile Include="Net\HTTPConnection.cpp">
       <Filter>Net</Filter>
