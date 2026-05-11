@@ -51,9 +51,9 @@ enum p2ps_tcp_flags : u8
 	RST = (1 << 2),
 	PSH = (1 << 3),
 	ACK = (1 << 4),
-	URG = (1 << 5),
-	ECE = (1 << 6),
-	CWR = (1 << 7),
+	UNUSED1 = (1 << 5),
+	UNUSED2 = (1 << 6),
+	TCP = (1 << 7), // Is using TCP protocols
 };
 
 struct VPORT_HEADER {

@@ -427,9 +427,9 @@ void SocketManager::ProcessNetStack(int* timeout) {
 
 			uint8_t expected_flag = 0;
 			switch (s->tcp_state) {
-				case TCPState::SynSent:			expected_flag = p2ps_tcp_flags::SYN; break;
-				case TCPState::SynReceived:		expected_flag = (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK); break;
-				case TCPState::Disconnected:	expected_flag = p2ps_tcp_flags::FIN; break;
+				case TCPState::SynSent:			expected_flag = (p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP); break;
+				case TCPState::SynReceived:		expected_flag = (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP); break;
+				case TCPState::Disconnected:	expected_flag = (p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP); break;
 				default: break; // Established/Closed/etc. don't need control retransmit
 			}
 
@@ -457,6 +457,7 @@ void SocketManager::ProcessNetStack(int* timeout) {
 				if (vpkt.header_flags & p2ps_tcp_flags::ACK) flags += "ACK|";
 				if (vpkt.header_flags & p2ps_tcp_flags::FIN) flags += "FIN|";
 				if (vpkt.header_flags & p2ps_tcp_flags::RST) flags += "RST|";
+				if (vpkt.header_flags & p2ps_tcp_flags::TCP) flags += "TCP|";
 				if (!flags.empty()) flags.pop_back(); // strip trailing '|'
 
 				WARN_LOG(Log::sceNet, "PACKET: Re-Sending %s at listening socket from %s:%u to %s:%u",
@@ -489,9 +490,9 @@ void SocketManager::ProcessNetStack(int* timeout) {
 			for (auto conn : s->pending_connections) {
 				uint8_t expected_flag = 0;
 				switch (conn->tcp_state) {
-					case TCPState::SynSent:			expected_flag = p2ps_tcp_flags::SYN; break;
-					case TCPState::SynReceived:		expected_flag = (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK); break;
-					case TCPState::Disconnected:	expected_flag = p2ps_tcp_flags::FIN; break;
+					case TCPState::SynSent:			expected_flag = (p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP); break;
+					case TCPState::SynReceived:		expected_flag = (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP); break;
+					case TCPState::Disconnected:	expected_flag = (p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP); break;
 					default: break; // Established/Closed/etc. don't need control retransmit
 				}
 
@@ -519,6 +520,7 @@ void SocketManager::ProcessNetStack(int* timeout) {
 					if (vpkt.header_flags & p2ps_tcp_flags::ACK) flags += "ACK|";
 					if (vpkt.header_flags & p2ps_tcp_flags::FIN) flags += "FIN|";
 					if (vpkt.header_flags & p2ps_tcp_flags::RST) flags += "RST|";
+					if (vpkt.header_flags & p2ps_tcp_flags::TCP) flags += "TCP|";
 					if (!flags.empty()) flags.pop_back(); // strip trailing '|'
 
 					WARN_LOG(Log::sceNet, "PACKET: Re-Sending %s at listening socket from %s:%u to %s:%u",
@@ -620,44 +622,13 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, u16 port) {
         }
 
         // Match only virtual socket types (PACKET and CONN_DGRAM)
-        if (target_sock->type != PSP_NET_INET_SOCK_PACKET && target_sock->type != PSP_NET_INET_SOCK_CONN_DGRAM) {
-            continue;
-        }
-        
-		if (target_sock->type == PSP_NET_INET_SOCK_PACKET && target_sock->tcp_state != TCPState::Listening) {
-			if ((target_sock->dst_addr != vpkt.src_addr.sin_addr.s_addr && target_sock->dst_addr != 0 && vpkt.src_addr.sin_addr.s_addr != 0))
-				continue;
-			// Match port (3658) && vport (12000)
-			if ((target_sock->dst_port != htons(vpkt.src_addr.sin_port)) && target_sock->dst_vport != ntohs(port))
+		if ((vpkt.header_flags & p2ps_tcp_flags::TCP) != 0) {
+			if (target_sock->type != PSP_NET_INET_SOCK_PACKET)
 				continue;
 		} else {
-			// Match port, broadcast to all vports?
-			// A shotgun method can be used for some games, but better logic may be required if this is incorrect.
-			if (target_sock->port != ntohs(port)) {
+			if (target_sock->type != PSP_NET_INET_SOCK_CONN_DGRAM)
 				continue;
-			}
 		}
-
-        // // Match by vport (convert from network order for comparison)
-        // if (target_sock->type == PSP_NET_INET_SOCK_PACKET && htons(target_sock->port) != port) {
-        //     continue;  // Not subscribed to this vport
-        // }
-        // // if (target_sock->type == PSP_NET_INET_SOCK_CONN_DGRAM && htons(target_sock->vport) != header.vport) {
-        // if (target_sock->type == PSP_NET_INET_SOCK_CONN_DGRAM && htons(target_sock->port) != port) {
-        //     continue;  // Not subscribed to this vport
-        // }
-        
-        DEBUG_LOG(Log::sceNet, "RouteDCCP: Processing socket dst_port %d (type=%d)", 
-            target_sock->vport, target_sock->type);
-
-		// VirtualPacket vpkt;
-		// if (data_len > 0 && packet_data != nullptr) {
-		// 	vpkt.data = std::make_unique<char[]>(data_len);
-		// 	memcpy(vpkt.data.get(), packet_data, data_len);
-		// }
-		// vpkt.len = data_len;
-		// vpkt.header_flags = header.flags;
-		// vpkt.src_addr = _from;
 
 		INFO_LOG(Log::sceNet, "RouteDCCP: DELIVERING %d bytes from %s:%u|%u to port %s:%u|%u (type=%d)", 
 			vpkt.len, inet_ntoa(vpkt.src_addr.sin_addr), ntohs(vpkt.src_addr.sin_port), ntohs(port), target_sock->addr.c_str(), target_sock->port, target_sock->vport, target_sock->type);
@@ -2075,13 +2046,7 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 	vpkt.data = std::make_unique<char[]>(len);
 	memcpy(vpkt.data.get(), buf, len);
 	vpkt.len = len;
-	vpkt.header_flags = p2ps_tcp_flags::PSH;
-	vpkt.src_addr.sin_family = AF_INET;
-	// vpkt.src_addr.sin_addr.s_addr = this->addr;
-	if (inet_pton(AF_INET, this->addr.c_str(), &vpkt.src_addr.sin_addr) <= 0) {
-		vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
-	}
-	vpkt.src_addr.sin_port = htons(port);
+	vpkt.header_flags = p2ps_tcp_flags::PSH|p2ps_tcp_flags::TCP;
 	vpkt.seq_id = tx_seq+1;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -2209,13 +2174,7 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	// Create the transmission vpacket
 	VirtualPacket vpkt;
 	vpkt.len = 0;
-	vpkt.header_flags = p2ps_tcp_flags::SYN;
-	vpkt.src_addr.sin_family = AF_INET;
-	// vpkt.src_addr.sin_addr.s_addr = this->addr;
-	if (inet_pton(AF_INET, this->addr.c_str(), &vpkt.src_addr.sin_addr) <= 0) {
-		vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
-	}
-	vpkt.src_addr.sin_port = htons(port);
+	vpkt.header_flags = p2ps_tcp_flags::SYN|p2ps_tcp_flags::TCP;
 	vpkt.seq_id = tx_seq+1;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -2430,13 +2389,7 @@ int PacketSocket::shutdown(int how) {
 		// Create the transmission vpacket
 		VirtualPacket vpkt;
 		vpkt.len = 0;
-		vpkt.header_flags = p2ps_tcp_flags::FIN;
-		vpkt.src_addr.sin_family = AF_INET;
-		// vpkt.src_addr.sin_addr.s_addr = this->addr;
-		if (inet_pton(AF_INET, this->addr.c_str(), &vpkt.src_addr.sin_addr) <= 0) {
-			vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
-		}
-		vpkt.src_addr.sin_port = htons(vport);
+		vpkt.header_flags = p2ps_tcp_flags::FIN|p2ps_tcp_flags::TCP;
 		vpkt.seq_id = tx_seq+1;
 		// Add timestamp for TTL tracking
 		vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -2779,7 +2732,7 @@ bool PacketSocket::ProcessNetStack() {
 		// 		inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
 		// }
         // else 
-		if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK)) {
+		if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
 			INFO_LOG(Log::sceNet, "PACKET: Received PSH|ACK at listening socket on %s:%u|%u",
 				addr.c_str(), port, vport);
 			// Do not increment rx_seq, this is just a confirmation
@@ -2793,7 +2746,7 @@ bool PacketSocket::ProcessNetStack() {
 				vpkt.seq_ack = true;
 			}
 		}
-        else if (pkt.header_flags == p2ps_tcp_flags::PSH) {
+        else if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::TCP)) {
 			if (tcp_state != TCPState::Listening) {
 				INFO_LOG(Log::sceNet, "PACKET: Received PSH at listening socket from on %s:%u|%u [seq=%d,tx=%d/rx=%d,hpd=%d]",
 					addr.c_str(), port, vport, pkt.seq_id, tx_seq, rx_seq, has_pending_data());
@@ -2805,13 +2758,7 @@ bool PacketSocket::ProcessNetStack() {
 				// Return PSH|ACK to notify it was received
 				VirtualPacket vpkt{};
 				vpkt.len = 0;
-				vpkt.header_flags = (p2ps_tcp_flags::PSH|p2ps_tcp_flags::ACK);
-				vpkt.src_addr.sin_family = AF_INET;
-				// vpkt.src_addr.sin_addr.s_addr = this->addr;
-				if (inet_pton(AF_INET, this->addr.c_str(), &vpkt.src_addr.sin_addr) <= 0) {
-					vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
-				}
-				vpkt.src_addr.sin_port = htons(port);
+				vpkt.header_flags = (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP);
 				vpkt.seq_id = pkt_seq; // Just confirm this packet was received
 				// Add timestamp for TTL tracking
 				vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -2839,7 +2786,7 @@ bool PacketSocket::ProcessNetStack() {
 			}
         }
         // 2. Process Control Plane (The "Kernel" Logic)
-        else if (pkt.header_flags == p2ps_tcp_flags::SYN) {
+        else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP)) {
 			if (tcp_state == TCPState::Listening) {
 				InetSocket* conn = new InetSocket();
 				// Save the sender's address for replies
@@ -2858,13 +2805,7 @@ bool PacketSocket::ProcessNetStack() {
 
 				VirtualPacket vpkt{};
 				vpkt.len = 0;
-				vpkt.header_flags = (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK);
-				vpkt.src_addr.sin_family = AF_INET;
-				// vpkt.src_addr.sin_addr.s_addr = this->addr;
-				if (inet_pton(AF_INET, this->addr.c_str(), &vpkt.src_addr.sin_addr) <= 0) {
-					vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
-				}
-				vpkt.src_addr.sin_port = htons(port);
+				vpkt.header_flags = (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP);
 				vpkt.seq_id = conn->tx_seq+1;
 				// Add timestamp for TTL tracking
 				vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -2899,7 +2840,7 @@ bool PacketSocket::ProcessNetStack() {
 				}
 			}
         } 
-        else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK)) {
+        else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
 			if (tcp_state == TCPState::SynSent) {
 				INFO_LOG(Log::sceNet, "PACKET: Received SYN|ACK at listening socket to %s:%u|%u",
 					addr.c_str(), port, vport);
@@ -2918,13 +2859,7 @@ bool PacketSocket::ProcessNetStack() {
 
 				VirtualPacket vpkt{};
 				vpkt.len = 0;
-				vpkt.header_flags = (p2ps_tcp_flags::ACK);
-				vpkt.src_addr.sin_family = AF_INET;
-				// vpkt.src_addr.sin_addr.s_addr = this->addr;
-				if (inet_pton(AF_INET, this->addr.c_str(), &vpkt.src_addr.sin_addr) <= 0) {
-					vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
-				}
-				vpkt.src_addr.sin_port = htons(port);
+				vpkt.header_flags = (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP);
 				vpkt.seq_id = tx_seq+1;
 				// Add timestamp for TTL tracking
 				vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -2954,7 +2889,7 @@ bool PacketSocket::ProcessNetStack() {
 				}
 			}
 		}
-        else if (pkt.header_flags == p2ps_tcp_flags::ACK) {
+        else if (pkt.header_flags == (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
             if (tcp_state == TCPState::Listening) {
 				INFO_LOG(Log::sceNet, "PACKET: Received ACK at listening socket on %s:%u|%u",
 					addr.c_str(), port, vport);
@@ -2971,7 +2906,7 @@ bool PacketSocket::ProcessNetStack() {
                 }
             }
         } 
-        else if (pkt.header_flags == p2ps_tcp_flags::FIN) {
+        else if (pkt.header_flags == (p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP)) {
             if (tcp_state != TCPState::Listening) {
 				INFO_LOG(Log::sceNet, "PACKET: Received FIN at listening socket on %s:%u|%u",
 					addr.c_str(), port, vport);
