@@ -908,9 +908,10 @@ static void DrawSockets(ImConfig &cfg) {
 		ImGui::End();
 		return;
 	}
-	if (ImGui::BeginTable("sock", 9, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH | ImGuiTableFlags_Resizable)) {
+	if (ImGui::BeginTable("sock", 10, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH | ImGuiTableFlags_Resizable)) {
 		ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("Port", ImGuiTableColumnFlags_WidthFixed);
+		ImGui::TableSetupColumn("VPort", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("IP address", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("Non-blocking", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("Created by", ImGuiTableColumnFlags_WidthFixed);
@@ -921,19 +922,22 @@ static void DrawSockets(ImConfig &cfg) {
 
 		ImGui::TableHeadersRow();
 
-		for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < SocketManager::VALID_INET_SOCKET_COUNT; i++) {
+		for (int i = 0; i < SocketManager::VALID_INET_SOCKET_COUNT; i++) {
 			InetSocket *inetSocket;
 			if (!g_socketManager.GetInetSocket(i, &inetSocket)) {
 				continue;
 			}
 
 			uint16_t port = ntohs(inetSocket->src.virt.port);
+			uint16_t vport = ntohs(inetSocket->src.virt.vport);
 			std::string ipaddr = ip2str(inetSocket->src.virt.addr);
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
 			ImGui::Text("%d", i);
 			ImGui::TableNextColumn();
 			ImGui::Text("%d", port);
+			ImGui::TableNextColumn();
+			ImGui::Text("%d", vport);
 			ImGui::TableNextColumn();
 			ImGui::TextUnformatted(ipaddr.c_str());
 			ImGui::TableNextColumn();
