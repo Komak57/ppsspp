@@ -601,7 +601,7 @@ static int sceNetInetBind(int socket, u32 namePtr, int namelen) {
 	// FIXME: Not all ports require port forwarding, especially in Infra P2P
 	// Check the socket type/protocol for SOCK_STREAM/SOCK_DGRAM or IPPROTO_TCP/IPPROTO_UDP instead of forwarding both protocols like in ANR2ME's original change.
 	// unsigned short port = ntohs(saddr.in.sin_port);
-	UPnP_Add((inetSock->type == PSP_NET_INET_SOCK_STREAM) ? IP_PROTOCOL_TCP : IP_PROTOCOL_UDP, inetSock->port, inetSock->port);
+	UPnP_Add((inetSock->type == PSP_NET_INET_SOCK_STREAM) ? IP_PROTOCOL_TCP : IP_PROTOCOL_UDP, ntohs(inetSock->src.virt.port), ntohs(inetSock->src.virt.port));
 
 	// Workaround: Send a dummy 0 size message to AdhocServer IP to make sure the socket actually bound to an address when binded with INADDR_ANY before using getsockname, seems to fix sending DGRAM from incorrect port issue on Android
 	/*saddr.in.sin_addr.s_addr = g_adhocServerIP.in.sin_addr.s_addr;
