@@ -681,6 +681,8 @@ static int sceNetInetAccept(int socket, u32 addrPtr, u32 addrLenPtr) {
 	if (srclen)
 		*srclen = std::min((*srclen) > 0 ? *srclen : 0, static_cast<socklen_t>(sizeof(saddr)));
 
+	auto _vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
+
 	int newHostSocket = inetSock->accept((struct sockaddr*)&saddr.addr, srclen);
 	//newHostSocket = accept(inetSock->sock, (struct sockaddr*)&saddr.addr, srclen);
 	if (newHostSocket < 0) {
@@ -704,7 +706,7 @@ static int sceNetInetAccept(int socket, u32 addrPtr, u32 addrLenPtr) {
 		memcpy(src->sa_data, saddr.addr.sa_data, sizeof(src->sa_data));
 		src->sa_len = srclen ? *srclen : 0;
 	}
-	INFO_LOG(Log::sceNet, "Accept: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	INFO_LOG(Log::sceNet, "Accept: Address = %s, Port = %u, VPort = %u", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), _vport);
 
 	return hleLogInfo(Log::sceNet, newHostSocket);
 }
