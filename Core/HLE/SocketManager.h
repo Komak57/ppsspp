@@ -77,11 +77,24 @@ struct SOCK_DBG {
 	s64 read; // received packets
 };
 
+struct sockaddr_vin {
+	uint16_t		family;
+    uint16_t		port;
+    in_addr 		addr;
+    uint16_t		vport;        // 2 bytes (Maps to sin_zero[0] and sin_zero[1])
+    uint8_t			zero[6];
+};
+
+union VirtualSockAddr {
+    sockaddr_in  host;
+    sockaddr_vin virt;
+};
+
 // Packet structure for virtual socket queuing
 struct VirtualPacket {
 	std::unique_ptr<char[]> data;  // Payload (heap allocated)
 	size_t len;                     // Payload length
-	sockaddr_in src_addr;           // Source address (for recvfrom)
+	VirtualSockAddr src;           // Source address (for recvfrom)
 	u8 header_flags;                // TCP flags from DGRAM_HEADER for control packets
 	uint32_t seq_id;				// key for packet order
 	bool seq_ack;					// key for packet order
@@ -92,7 +105,7 @@ struct VirtualPacket {
     VirtualPacket clone() const {
         VirtualPacket new_pkt;
         new_pkt.len = len;
-        new_pkt.src_addr = src_addr;
+        new_pkt.src = src;
         new_pkt.header_flags = header_flags;
 		new_pkt.seq_id = seq_id;
         new_pkt.enqueue_time_us = enqueue_time_us;
@@ -110,7 +123,7 @@ struct VirtualPacket {
 		// Pack DGRAM_HEADER (3 bytes): [flags][data_len]
 		VPORT_HEADER header;
 		header.flags = header_flags;
-		header.dest = htons(dest);
+		header.dest = dest;
 		return header;
 	}
 	std::tuple<int, std::unique_ptr<char[]>> Pack(u16 dest) {
@@ -143,17 +156,13 @@ struct InetSocket {
 	bool nonblocking;
 
 	// Metadata for debug use only.
-	std::string addr;
-	int port;
+	VirtualSockAddr src;
 	SOCK_DBG dbg;
 
 	// Virtual Socket fields
 	TCPState tcp_state; // Used by SOCK_PACKET
 	int type; // WARNING: vsocks rely on this, will break if changed
-	int vport; // Host Order; WARNING: vsocks rely on this, will break if changed
-	u32 dst_addr;
-	u16 dst_port;
-	u16 dst_vport;
+	VirtualSockAddr dst;
 	int threadID = 0;
 	std::thread thread;
 
@@ -188,17 +197,13 @@ struct InetSocket {
 		protocol = 0;
 		nonblocking = false;
 
-		addr.clear();
-		port = 0;
+		src.host = sockaddr_in{};
 		memset(&dbg, 0, sizeof(dbg));
 
 		// Virtual fields
 		tcp_state = TCPState::Disconnected;
 		type = 0;
-		vport = 0;
-		dst_addr = 0;
-		dst_port = 0;
-		dst_vport = 0;
+		dst.host = sockaddr_in{};
 		threadID = 0;
 		
 		so_storage.clear();
@@ -390,6 +395,7 @@ public:
 
 	bool dequeue_packet(VirtualPacket& packet) override;
 	int dequeue_stream(char* buf, int len, sockaddr_in* out_addr) override;
+	void mark_ack(InetSocket* inetSock, int seq_id);
 	bool has_pending_data() const override;
 	bool set_pending_connection(InetSocket* conn) override;
 	bool update_pending_connection(const sockaddr_in& peer_addr) override;
@@ -421,7 +427,7 @@ public:
 	InetSocket *CreateSocket(int *index, int *returned_errno, SocketState state, int domain, int type, int protocol);
 	// for accept()
 	InetSocket *AdoptSocket(int *index, SOCKET hostSocket, const InetSocket *derive);
-	int vBroadcast(VirtualPacket&& vpkt, u16 port);
+	int vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest);
 
 	bool GetInetSocket(int sock, InetSocket **inetSocket);
 	u16 generateEphemeralPort();

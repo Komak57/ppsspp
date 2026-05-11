@@ -229,17 +229,13 @@ InetSocket* CreateSignalingSocket(u16 port, u16 vport, int domain, int type, int
 	}
 
 	// Bind socket for listening
-	sockaddr_in addr{};
-	getLocalIp(&addr);
-	addr.sin_family = AF_INET;
-	// addr.sin_addr.s_addr = INADDR_ANY;
-	addr.sin_port = htons(port); // Physical Socket
-	inetSocket->addr = ip2str(addr.sin_addr.s_addr);
-	inetSocket->port = port; // P2P Socket
-	inetSocket->vport = vport; // Reachable Socket
+	getLocalIp(&inetSocket->src.host);
+	inetSocket->src.host.sin_family = AF_INET;
+	inetSocket->src.virt.port = htons(port); // P2P Socket
+	inetSocket->src.virt.vport = htons(vport); // Reachable Socket
 
 	// Bypass the Registration
-	int ret = ::bind(inetSocket->sock, (sockaddr*)&addr, sizeof(addr));
+	int ret = ::bind(inetSocket->sock, (sockaddr*)&inetSocket->src.host, sizeof(sockaddr_in));
 	if (ret < 0) {
 		ERROR_LOG(Log::Signaling, "Unable to bind new socket for listening");
 		return nullptr;

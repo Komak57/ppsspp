@@ -927,13 +927,15 @@ static void DrawSockets(ImConfig &cfg) {
 				continue;
 			}
 
+			uint16_t port = ntohs(inetSocket->src.virt.port);
+			std::string ipaddr = ip2str(inetSocket->src.virt.addr);
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
 			ImGui::Text("%d", i);
 			ImGui::TableNextColumn();
-			ImGui::Text("%d", inetSocket->port);
+			ImGui::Text("%d", port);
 			ImGui::TableNextColumn();
-			ImGui::TextUnformatted(inetSocket->addr.c_str());
+			ImGui::TextUnformatted(ipaddr.c_str());
 			ImGui::TableNextColumn();
 			ImGui::TextUnformatted(inetSocket->nonblocking ? "Non-blocking" : "Blocking");
 			ImGui::TableNextColumn();

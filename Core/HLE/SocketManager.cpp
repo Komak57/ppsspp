@@ -48,8 +48,8 @@ u16 SocketManager::generateEphemeralPort() {
 	u16 _vport = 49152;
 	auto sockets = g_socketManager.Sockets();
 	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < SocketManager::VALID_INET_SOCKET_COUNT; i++) {
-		if (sockets[i].state != SocketState::Unused && sockets[i].port >= _vport)
-			_vport = sockets[i].port + 1;
+		if (sockets[i].state != SocketState::Unused && ntohs(sockets[i].src.virt.vport) >= _vport)
+			_vport = ntohs(sockets[i].src.virt.vport) + 1;
 		if (_vport > 65535) {
 #if PPSSPP_PLATFORM(WINDOWS)
 			SetLastError(EADDRINUSE);
@@ -68,8 +68,8 @@ u16 SocketManager::generateVPort() {
 	u16 _vport = 30000;
 	auto sockets = g_socketManager.Sockets();
 	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < SocketManager::VALID_INET_SOCKET_COUNT; i++) {
-		if (sockets[i].state != SocketState::Unused && sockets[i].vport >= _vport)
-			_vport = sockets[i].vport + 1;
+		if (sockets[i].state != SocketState::Unused && ntohs(sockets[i].src.virt.vport) >= _vport)
+			_vport = ntohs(sockets[i].src.virt.vport) + 1;
 		if (_vport > 65535) {
 #if PPSSPP_PLATFORM(WINDOWS)
 			SetLastError(EADDRINUSE);
@@ -120,17 +120,13 @@ void InetSocket::clear() {
     domain = 0;
     protocol = 0;
     nonblocking = false;
-    addr.clear();
-    port = 0;
+	src.host = sockaddr_in{};
     memset(&dbg, 0, sizeof(dbg));
 
     // Virtual fields
     tcp_state = TCPState::Disconnected;
     type = 0;
-    vport = 0;
-    dst_addr = 0;
-    dst_port = 0;
-    dst_vport = 0;
+	dst.host = sockaddr_in{};
     threadID = 0;
 
 	// Clear the queue safely
@@ -224,7 +220,7 @@ InetSocket *SocketManager::CreateSystemSocket(int *index, int *returned_errno, S
 		break;
 	case PSP_NET_INET_SOCK_CONN_DGRAM: // Virtual Socket
 		// TODO: Enable SO_REUSEPORT / SO_REUSEADDR with SO_BROADCAST to recycle ports
-		inetSock->vport = 0;
+		inetSock->src.virt.vport = 0;
 		break;
 	case PSP_NET_INET_SOCK_DCCP: // Parent to all Virtual Sockets
 		dccp_sock = inetSock;
@@ -319,7 +315,7 @@ InetSocket *SocketManager::CreateSocket(int *index, int *returned_errno, SocketS
 		break;
 	case PSP_NET_INET_SOCK_CONN_DGRAM: // Virtual Socket
 		// TODO: Enable SO_REUSEPORT / SO_REUSEADDR with SO_BROADCAST to recycle ports
-		inetSock->vport = 0;
+		inetSock->src.virt.vport = 0;
 		break;
 	case PSP_NET_INET_SOCK_DCCP: // Parent to all Virtual Sockets
 		dccp_sock = inetSock;
@@ -397,8 +393,6 @@ InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const Inet
 			inetSock->type = derive->type;
 			inetSock->protocol = derive->protocol;
 			inetSock->nonblocking = derive->nonblocking;  // should we inherit blocking state?
-			if (derive->type == PSP_NET_INET_SOCK_CONN_DGRAM)
-				inetSock->port = derive->port; // We only need this if we're adopting a CONN_DGRAM (unlikely)
 			return inetSock;
 		}
 	}
@@ -417,7 +411,7 @@ void SocketManager::ProcessNetStack(int* timeout) {
 		// *timeout = (*timeout > elapsed) ? (*timeout - elapsed) : 0;
 		// if (!hadPacket) return;
 	}
-	std::vector<std::pair<VirtualPacket, uint16_t>> outbuf; // <packet, dst_port>
+	std::vector<std::pair<VirtualPacket, VirtualSockAddr>> outbuf; // <packet, dst.virt.port>
 	// Process Each Local Once
 	for (int i = MIN_VALID_INET_SOCKET; i < VALID_INET_SOCKET_COUNT; i++) {
 		InetSocket* s = &inetSockets_[i];
@@ -460,24 +454,19 @@ void SocketManager::ProcessNetStack(int* timeout) {
 				if (vpkt.header_flags & p2ps_tcp_flags::TCP) flags += "TCP|";
 				if (!flags.empty()) flags.pop_back(); // strip trailing '|'
 
-				WARN_LOG(Log::sceNet, "PACKET: Re-Sending %s at listening socket from %s:%u to %s:%u",
-					flags.c_str(), inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), ip2str(s->dst_addr).c_str(), s->dst_port);
-				if (isLocalTarget(s->dst_addr)) {
-					outbuf.push_back({std::move(vpkt), s->dst_port});
+				WARN_LOG(Log::sceNet, "PACKET: Re-Sending %s at listening socket from %s:%u|%u to %s:%u|%u",
+					flags.c_str(), inet_ntoa(pkt.src.virt.addr), ntohs(pkt.src.virt.port), ntohs(pkt.src.virt.vport), ip2str(s->dst.virt.addr).c_str(), ntohs(s->dst.virt.port), ntohs(s->dst.virt.vport));
+				if (isLocalTarget(s->dst.virt.addr.s_addr)) {
+					outbuf.push_back({std::move(vpkt), s->dst});
 					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-					// g_socketManager.vBroadcast(std::move(vpkt), htons(s->dst_port));
+					// g_socketManager.vBroadcast(std::move(vpkt), htons(s->dst.virt.vport));
 					pkt.last_sent_us = now_us;
 					pkt.sent_count++;
 				} else {
-					sockaddr_in peer{};
-					peer.sin_family = AF_INET;
-					peer.sin_addr.s_addr = s->dst_addr;
-					peer.sin_port = htons(s->dst_vport);
-
-					auto [_len, _data] = vpkt.Pack(s->dst_port);
+					auto [_len, _data] = vpkt.Pack(s->dst.virt.vport);
 					auto dccp_sock = g_socketManager.GetDCCP();
 					// Skip local send
-					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
+					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&s->dst.host, sizeof(sockaddr_in));
 					if (ret < 0) {
 						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 					} else {
@@ -523,24 +512,19 @@ void SocketManager::ProcessNetStack(int* timeout) {
 					if (vpkt.header_flags & p2ps_tcp_flags::TCP) flags += "TCP|";
 					if (!flags.empty()) flags.pop_back(); // strip trailing '|'
 
-					WARN_LOG(Log::sceNet, "PACKET: Re-Sending %s at listening socket from %s:%u to %s:%u",
-						flags.c_str(), inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), ip2str(conn->dst_addr).c_str(), conn->dst_port);
-					if (isLocalTarget(conn->dst_addr)) {
-						outbuf.push_back({std::move(vpkt), conn->dst_port});
+					WARN_LOG(Log::sceNet, "PACKET: Re-Sending %s at listening socket from %s:%u|%u to %s:%u|%u",
+						flags.c_str(), inet_ntoa(pkt.src.virt.addr), ntohs(pkt.src.virt.port), ntohs(pkt.src.virt.vport), ip2str(conn->dst.virt.addr).c_str(), ntohs(conn->dst.virt.port), ntohs(conn->dst.virt.vport));
+					if (isLocalTarget(conn->dst.virt.addr.s_addr)) {
+						outbuf.push_back({std::move(vpkt), conn->dst});
 						// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-						// g_socketManager.vBroadcast(std::move(vpkt), htons(conn->dst_port));
+						// g_socketManager.vBroadcast(std::move(vpkt), htons(conn->dst.virt.vport));
 						pkt.last_sent_us = now_us;
 						pkt.sent_count++;
 					} else {
-						sockaddr_in peer{};
-						peer.sin_family = AF_INET;
-						peer.sin_addr.s_addr = conn->dst_addr;
-						peer.sin_port = htons(conn->dst_vport);
-
-						auto [_len, _data] = vpkt.Pack(conn->dst_port);
+						auto [_len, _data] = vpkt.Pack(conn->dst.virt.vport);
 						auto dccp_sock = g_socketManager.GetDCCP();
 						// Skip local send
-						int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
+						int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&conn->dst.host, sizeof(sockaddr_in));
 						if (ret < 0) {
 							ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 						} else {
@@ -552,8 +536,8 @@ void SocketManager::ProcessNetStack(int* timeout) {
 			}
 		}
 	}
-	for (auto& [vpkt, dst_port] : outbuf) {
-        g_socketManager.vBroadcast(std::move(vpkt), htons(dst_port));
+	for (auto& [vpkt, dest] : outbuf) {
+        g_socketManager.vBroadcast(std::move(vpkt), dest);
     }
 }
 
@@ -572,7 +556,7 @@ bool SocketManager::Close(InetSocket *inetSocket) {
 
 bool SocketManager::GetInetSocket(int sock, InetSocket **inetSocket) {
 	std::lock_guard<std::mutex> guard(g_socketMutex);
-	if (sock < MIN_VALID_INET_SOCKET || sock >= ARRAY_SIZE(inetSockets_) || inetSockets_[sock].state == SocketState::Unused) {
+	if (/*sock < MIN_VALID_INET_SOCKET || */sock >= ARRAY_SIZE(inetSockets_) || inetSockets_[sock].state == SocketState::Unused) {
 		*inetSocket = nullptr;
 		return false;
 	}
@@ -609,7 +593,7 @@ void SocketManager::CloseAll() {
 	}
 }
 
-int SocketManager::vBroadcast(VirtualPacket&& vpkt, u16 port) {
+int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
     int delivered_count = 0;
     
     // Match sockets by vport (port-based routing instead of subscriptions)
@@ -625,31 +609,65 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, u16 port) {
 		if ((vpkt.header_flags & p2ps_tcp_flags::TCP) != 0) {
 			if (target_sock->type != PSP_NET_INET_SOCK_PACKET)
 				continue;
+			// Listening sockets must match their connected sockets
+			if (target_sock->tcp_state != TCPState::Listening) {
+				if (target_sock->tcp_state != TCPState::SynSent) {
+					// Matches connected address
+					if ((target_sock->dst.virt.addr.s_addr != INADDR_ANY && vpkt.src.virt.addr.s_addr != target_sock->dst.virt.addr.s_addr))
+						continue;
+				}
+				// Match connected port (3658)
+				if (target_sock->dst.virt.port != vpkt.src.virt.port)
+					continue;
+				// Match connected port (3658)
+				if (target_sock->dst.virt.vport != vpkt.src.virt.vport)
+					continue;
+			}
+			// Matches endpoint address
+			if ((target_sock->src.virt.addr.s_addr != INADDR_ANY && target_sock->src.virt.addr.s_addr != dest.virt.addr.s_addr))
+				continue;
+			// Match endpoint port (3658)
+			if (dest.virt.port != 0 && target_sock->src.virt.port != dest.virt.port)
+				continue;
+			// Matches endpoint vport (12000)
+			if (dest.virt.vport != 0 && target_sock->src.virt.vport != dest.virt.vport)
+				continue;
 		} else {
 			if (target_sock->type != PSP_NET_INET_SOCK_CONN_DGRAM)
 				continue;
+
+			// Matches endpoint address
+			if ((target_sock->src.virt.addr.s_addr != INADDR_ANY && target_sock->src.virt.addr.s_addr != dest.virt.addr.s_addr))
+				continue;
+			// Match endpoint port (3658)
+			if (dest.virt.port != 0 && target_sock->src.virt.port != dest.virt.vport)
+				continue;
+			// Matches endpoint vport (0)
+			if (dest.virt.vport != 0 && target_sock->src.virt.vport != dest.virt.port)
+				continue;
 		}
+        
+        DEBUG_LOG(Log::sceNet, "RouteDCCP: Processing socket dst.virt.port %d (type=%d)", 
+            target_sock->src.virt.vport, target_sock->type);
 
 		INFO_LOG(Log::sceNet, "RouteDCCP: DELIVERING %d bytes from %s:%u|%u to port %s:%u|%u (type=%d)", 
-			vpkt.len, inet_ntoa(vpkt.src_addr.sin_addr), ntohs(vpkt.src_addr.sin_port), ntohs(port), target_sock->addr.c_str(), target_sock->port, target_sock->vport, target_sock->type);
+			vpkt.len, inet_ntoa(vpkt.src.virt.addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ip2str(target_sock->src.virt.addr).c_str(), ntohs(target_sock->src.virt.port), ntohs(target_sock->src.virt.vport), target_sock->type);
 		
 		target_sock->enqueue_packet(vpkt.clone());
 		delivered_count++;
-
-		// Do not immediately process the net stack
-		// This will reduce unecessary network traffic
-
 
 		if (target_sock->ProcessNetStack()) {
 			continue;
 		}
 
-		DEBUG_LOG(Log::sceNet, "RouteDCCP: NOT delivering to vport %d (deliver_data=false)", target_sock->vport);
+		DEBUG_LOG(Log::sceNet, "RouteDCCP: NOT delivering to vport %d (deliver_data=false)", ntohs(target_sock->src.virt.vport));
     }
     
     if (delivered_count > 0) {
-        DEBUG_LOG(Log::sceNet, "RouteDCCP: Total delivered to %d subscribers on VPort %d", delivered_count, port);
-    }
+        DEBUG_LOG(Log::sceNet, "RouteDCCP: Total delivered to %d subscribers matching  %s:%u|%u", delivered_count, ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport));
+    } else {
+        ERROR_LOG(Log::sceNet, "RouteDCCP: Total delivered to %d subscribers matching  %s:%u|%u", delivered_count, ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport));
+	}
 
     return delivered_count;
 }
@@ -857,7 +875,7 @@ void InetSocket::enqueue_packet(VirtualPacket packet) {
 	// Add timestamp for TTL tracking
 	packet.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
 	rx_queue.push_back(std::move(packet));
-	DEBUG_LOG(Log::sceNet, "Enqueued packet for vport %d (queue size: %zu)", vport, rx_queue.size());
+	DEBUG_LOG(Log::sceNet, "Enqueued packet for vport %d (queue size: %zu)", ntohs(src.virt.vport), rx_queue.size());
 }
 bool InetSocket::dequeue_packet(VirtualPacket& packet) {
 	std::lock_guard<std::mutex> buffers(buffer_lock);
@@ -877,7 +895,7 @@ bool InetSocket::dequeue_packet(VirtualPacket& packet) {
             WARN_LOG(Log::sceNet, "dequeue_stream: Receiving stale packet (age: %.2f seconds)", (float)packet_age_us / 1000000.0f);
 		}
 		
-		DEBUG_LOG(Log::sceNet, "Dequeued packet from vport %d (queue size: %zu)", vport, rx_buffer.size());
+		DEBUG_LOG(Log::sceNet, "Dequeued packet from vport %d (queue size: %zu)", ntohs(src.virt.vport), rx_buffer.size());
 		return true;
 	}
 	
@@ -910,19 +928,19 @@ int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
 
         // Lock onto the first valid packet's source address
         if (!target_locked) {
-            target_addr = peek_pkt.src_addr;
+            target_addr = peek_pkt.src.host;
             target_locked = true;
             if (out_addr) {
                 *out_addr = target_addr;
             }
         } else {
             // If we are continuing to fill the buffer, ensure this next packet is from the SAME source
-            if (peek_pkt.src_addr.sin_addr.s_addr != target_addr.sin_addr.s_addr ||
-                peek_pkt.src_addr.sin_port != target_addr.sin_port) {
+            if (peek_pkt.src.virt.addr.s_addr != target_addr.sin_addr.s_addr ||
+                peek_pkt.src.virt.port != target_addr.sin_port) {
                 
                 DEBUG_LOG(Log::sceNet, "dequeue_stream: Source mismatch detected. Halting coalescing. (Expected %s:%u, got %s:%u)",
                     inet_ntoa(target_addr.sin_addr), ntohs(target_addr.sin_port),
-                    inet_ntoa(peek_pkt.src_addr.sin_addr), ntohs(peek_pkt.src_addr.sin_port));
+                    inet_ntoa(peek_pkt.src.virt.addr), ntohs(peek_pkt.src.virt.port));
                 break; // Stop coalescing and leave this packet in the queue
             }
         }
@@ -951,7 +969,7 @@ int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
             
             remainder.len = remaining_len;
             remainder.header_flags = packet.header_flags;
-            remainder.src_addr = packet.src_addr;
+            remainder.src.virt = packet.src.virt;
             remainder.enqueue_time_us = packet.enqueue_time_us; // Preserve TTL
             
 			rx_buffer[rx_seq] = std::move(remainder);
@@ -1090,13 +1108,9 @@ int StreamSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
-	addr = ip2str(saddr.in.sin_addr);
-	port = ntohs(saddr.in.sin_port);
-	// The PSP is expected to provide 0, and we need to generate a vport
-	// This is later "agreed" upon in the P2P handshake?
-	vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
+	src.host = saddr.in;
 
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
+	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -1192,13 +1206,9 @@ int DgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
-	addr = ip2str(saddr.in.sin_addr);
-	port = ntohs(saddr.in.sin_port);
-	// The PSP is expected to provide 0, and we need to generate a vport
-	// This is later "agreed" upon in the P2P handshake?
-	vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
+	src.host = saddr.in;
 
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
+	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -1268,13 +1278,9 @@ int RawSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
-	addr = ip2str(saddr.in.sin_addr);
-	port = ntohs(saddr.in.sin_port);
-	// The PSP is expected to provide 0, and we need to generate a vport
-	// This is later "agreed" upon in the P2P handshake?
-	vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
+	src.host = saddr.in;
 
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
+	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -1343,13 +1349,9 @@ int RdmSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
-	addr = ip2str(saddr.in.sin_addr);
-	port = ntohs(saddr.in.sin_port);
-	// The PSP is expected to provide 0, and we need to generate a vport
-	// This is later "agreed" upon in the P2P handshake?
-	vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
+	src.host = saddr.in;
 
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
+	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -1469,13 +1471,9 @@ int SeqpacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
-	addr = ip2str(saddr.in.sin_addr);
-	port = ntohs(saddr.in.sin_port);
-	// The PSP is expected to provide 0, and we need to generate a vport
-	// This is later "agreed" upon in the P2P handshake?
-	vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
-
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
+	src.host = saddr.in;
+	
+	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -1596,13 +1594,9 @@ int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
-	addr = ip2str(saddr.in.sin_addr);
-	port = ntohs(saddr.in.sin_port);
-	// The PSP is expected to provide 0, and we need to generate a vport
-	// This is later "agreed" upon in the P2P handshake?
-	vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
-
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
+	src.host = saddr.in;
+	
+	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -1641,6 +1635,7 @@ bool DccpSocket::ProcessNetStack() {
 	int i = VPORT_HEADER_SIZE;
 	// Generate the transmission vpacket
 	VirtualPacket vpkt;
+	vpkt.seq_id = 0;
 	if (ret - i >= sizeof(vpkt.seq_id) && header.dest != 0) {
 		memcpy(&vpkt.seq_id, data, sizeof(vpkt.seq_id));
 		i += sizeof(vpkt.seq_id);
@@ -1651,15 +1646,20 @@ bool DccpSocket::ProcessNetStack() {
 		memcpy(vpkt.data.get(), data+i, vpkt.len);
 	}
 	vpkt.header_flags = header.flags;
-	vpkt.src_addr = _from;
+	vpkt.src.host = _from;
+	// vpkt.src.virt.vport = header.dest;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
 
 	// Log incoming packet details (convert vport from network to host byte order for display)
-	INFO_LOG(Log::sceNet, "RouteDCCP: Received %d bytes from %s:%u -> dst_port %d (flags=0x%02x(=%d))", 
-		ret, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port), ntohs(header.dest), header.flags, header.flags & 0xFF);
+	INFO_LOG(Log::sceNet, "RouteDCCP: Received %d bytes from %s:%u|%u -> dst.virt.port %d (flags=0x%02x(=%d))", 
+		ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(header.dest), header.flags, header.flags & 0xFF);
 	
-	g_socketManager.vBroadcast(std::move(vpkt), header.dest);
+	VirtualSockAddr dest{};
+	getLocalIp(&dest.host);
+	dest.virt.port = 0;
+	dest.virt.vport = header.dest;
+	g_socketManager.vBroadcast(std::move(vpkt), dest);
 	
 	return true;
 }
@@ -1700,12 +1700,7 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	memcpy(vpkt.data.get(), buf, len);
 	vpkt.len = len;
 	vpkt.header_flags = p2ps_tcp_flags::PSH;
-	vpkt.src_addr.sin_family = AF_INET;
-	// vpkt.src_addr.sin_addr.s_addr = this->addr;
-	if (inet_pton(AF_INET, this->addr.c_str(), &vpkt.src_addr.sin_addr) <= 0) {
-		vpkt.src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
-	}
-	vpkt.src_addr.sin_port = htons(port);
+	vpkt.src.host = src.host;
 	vpkt.seq_id = tx_seq+1;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -1730,20 +1725,20 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	// 	memcpy(packet.get() + VPORT_HEADER_SIZE, buf, len);
 	// }
 
-	std::string msg = "sendto::SIGN " + std::to_string(vport) + " -> " +
+	std::string msg = "sendto::SIGN " + std::to_string(ntohs(src.virt.vport)) + " -> " +
 		ip2str(_dest->sin_addr) + ":" + std::to_string(ntohs(_dest->sin_port)) + 
-		"{" + std::to_string(ntohs(dest_vport)) + "|" +std::to_string(vpkt.header_flags) + "}";
+		"{" + std::to_string(dest_vport) + "|" +std::to_string(vpkt.header_flags) + "}";
 	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, len, 386);
 
 	// Send the packet over P2P
-	auto [_len, _data] = vpkt.Pack(port);
+	auto [_len, _data] = vpkt.Pack(src.virt.port);
 	// Send through DCCP
 	int ret = ::sendto(dccp_sock->sock, _data.get(), _len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (ret > 0)
 		dbg.sent++;
 	tx_seq++;
 	
-	DEBUG_LOG(Log::sceNet, "VPORT %d s(%d/%d) r(%d,%d)", vport, dbg.sent, dbg.send, dbg.recv, dbg.read);
+	DEBUG_LOG(Log::sceNet, "VPORT %d s(%d/%d) r(%d,%d)", ntohs(src.virt.vport), dbg.sent, dbg.send, dbg.recv, dbg.read);
 
 	// Now shotgun-send using all peer id's
 	// if (sigServer) {
@@ -1805,12 +1800,14 @@ int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr*
 	if (from && fromlen) {
 		sockaddr_in* from_in = (sockaddr_in*)from;
 		// Preserve caller's structure but update only the address and port
-		from_in->sin_addr = pkt.src_addr.sin_addr;
-		from_in->sin_port = pkt.src_addr.sin_port;
+		from_in->sin_addr = pkt.src.host.sin_addr;
+		from_in->sin_port = pkt.src.host.sin_port;
+		from_in->sin_zero[0] = pkt.src.host.sin_zero[0]; // Copy vport
+		from_in->sin_zero[1] = pkt.src.host.sin_zero[1];
 		*fromlen = sizeof(sockaddr_in);  // Always set to actual size
 		
 		// Log with hex dump at INFO level so we see packet pickup
-		std::string msg = "recvfrom(vport " + std::to_string(vport) + "): picked up " + 
+		std::string msg = "recvfrom(vport " + std::to_string(ntohs(src.virt.vport)) + "): picked up " + 
 			std::to_string(copy_len) + " bytes from " + ip2str(from_in->sin_addr.s_addr) + 
 			":" + std::to_string(ntohs(from_in->sin_port));
 		INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, (int)copy_len, 256);
@@ -1821,10 +1818,10 @@ int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr*
 	// Log truncation if it occurred
 	if (copy_len < pkt.len) {
 		DEBUG_LOG(Log::sceNet, "recvfrom: TRUNCATED packet for vport %d (buf=%zu, pkt=%zu, discarding %zu bytes)",
-			vport, copy_len, pkt.len, pkt.len - copy_len);
+			ntohs(src.virt.vport), copy_len, pkt.len, pkt.len - copy_len);
 	}
 
-	DEBUG_LOG(Log::sceNet, "VPORT %d s(%d/%d) r(%d,%d)", vport, dbg.sent, dbg.send, dbg.recv, dbg.read);
+	DEBUG_LOG(Log::sceNet, "VPORT %d s(%d/%d) r(%d,%d)", ntohs(src.virt.vport), dbg.sent, dbg.send, dbg.recv, dbg.read);
 		// Return actual bytes copied (NOT padded to requested size)
 	return hleLogDebug(Log::sceNet, (int)copy_len, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
@@ -1834,9 +1831,9 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	saddr.addr.sa_family = name->sa_family;
 	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
-	if (isLocalServer) {
-		getLocalIp(&saddr.in);
-	}
+	// if (isLocalServer) {
+	// 	getLocalIp(&saddr.in);
+	// }
 	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
 	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
 	//
@@ -1853,19 +1850,11 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
-	addr = ip2str(saddr.in.sin_addr);
-	port = ntohs(saddr.in.sin_port);
-	// if (port == 0)
-		// port = SCE_SIGN_PORT;
-	saddr.in.sin_port = 0; // Emulate SO_BROADCAST + SO_REUSEPORT
-	// The PSP is expected to provide 0, and we need to generate a vport?
-	// This is later "agreed" upon in the P2P handshake?
-	// Alternatively, these don't have unique identifiers, and are expected to BROADCAST to all?
-	vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
-	if (vport == 0)
-		vport = user_id.load();
+	src.host = saddr.in;
+	if (src.virt.vport == 0)
+		src.virt.vport = user_id.load();
 
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, NewPort = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), port, vport);
+	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -1882,16 +1871,16 @@ int ConnDgramSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds,
 
 	// Log select() calls on virtual sockets for debugging
 	INFO_LOG(Log::sceNet, "select: vport %d called (type=%d, readfds=%p, timeout=%p)", 
-		vport, type, readfds, timeout);
+		ntohs(src.virt.vport), type, readfds, timeout);
 	
 	if (readfds && has_pending_data()) {
-		INFO_LOG(Log::sceNet, "select: vport %d HAS PENDING DATA, returning 1", vport);
+		INFO_LOG(Log::sceNet, "select: vport %d HAS PENDING DATA, returning 1", ntohs(src.virt.vport));
 		return 1;
 	}
 	
 	// If we get here with readfds set, there's no data
 	if (readfds) {
-		INFO_LOG(Log::sceNet, "select: vport %d NO PENDING DATA", vport);
+		INFO_LOG(Log::sceNet, "select: vport %d NO PENDING DATA", ntohs(src.virt.vport));
 	}
 	
 	if (writefds) {
@@ -1903,7 +1892,7 @@ int ConnDgramSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds,
 		}
 		
 		if (writable) {
-			INFO_LOG(Log::sceNet, "select: vport %d is writable, returning 1", vport);
+			INFO_LOG(Log::sceNet, "select: vport %d is writable, returning 1", ntohs(src.virt.vport));
 			return 1;
 		}
 	}
@@ -1926,7 +1915,7 @@ int ConnDgramSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds,
 	// Using 'sock' mirrors your default fallback behavior
 	int phys_ready = ::select(sock, p_read, p_write, p_exc, &tv_zero);
 	if (phys_ready > 0) {
-		DEBUG_LOG(Log::sceNet, "select: vport %d has physical data/events", vport);
+		DEBUG_LOG(Log::sceNet, "select: vport %d has physical data/events", ntohs(src.virt.vport));
 		// Copy back the mutated sets so the caller knows exactly what triggered
 		// if (readfds)   *readfds = read_copy;
 		// if (writefds)  *writefds = write_copy;
@@ -1995,8 +1984,8 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 	// // Delegate to sendto with peer address
 	// sockaddr_in peer;
 	// peer.sin_family = AF_INET;
-	// peer.sin_addr.s_addr = dst_addr;
-	// peer.sin_port = htons(dst_port);
+	// peer.sin_addr.s_addr = dst.virt.addr.s_addr;
+	// peer.sin_port = htons(dst.virt.port);
 	
 	// DCCP must exist for P2P traffic
 	auto dccp_sock = g_socketManager.GetDCCP();
@@ -2028,7 +2017,7 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 	// // Pack DGRAM_HEADER (3 bytes): [flags][data_len]
 	// VPORT_HEADER header;
 	// header.flags = p2ps_tcp_flags::PSH;
-	// header.vport = htons(dst_port);
+	// header.vport = htons(dst.virt.port);
 	// memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
 	// memcpy(packet.get() + VPORT_HEADER_SIZE, &next_seq, sizeof(next_seq));
 
@@ -2036,8 +2025,8 @@ int PacketSocket::send(const char* buf, int len, int flags) {
     // if (len > 0 && buf != nullptr)
     //     memcpy(packet.get() + VPORT_HEADER_SIZE + sizeof(next_seq), buf, len);
 
-	std::string msg = "send::PACKET " + ip2str(dst_addr) + ":" + std::to_string(dst_port) + 
-	"[" + std::to_string(vport) + "] (" + std::to_string(dbg.send) + ", " + 
+	std::string msg = "send::PACKET " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) + 
+	"[" + std::to_string(ntohs(dst.virt.vport)) + "] (" + std::to_string(dbg.send) + ", " + 
 	std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
 	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, len, 386);
 
@@ -2047,6 +2036,7 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 	memcpy(vpkt.data.get(), buf, len);
 	vpkt.len = len;
 	vpkt.header_flags = p2ps_tcp_flags::PSH|p2ps_tcp_flags::TCP;
+	vpkt.src.host = src.host;
 	vpkt.seq_id = tx_seq+1;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -2059,32 +2049,26 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 		// Place at end
 		tx_buffer[tx_seq+1] = std::move(vpkt);
 	}
-	if (isLocalTarget(dst_addr)) {
+	if (isLocalTarget(dst.virt.addr.s_addr)) {
 		// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-		g_socketManager.vBroadcast(std::move(send_pkt), htons(dst_port));
+		g_socketManager.vBroadcast(std::move(send_pkt), dst);
 		tx_seq++; // TODO: Only on ::send success?
 		dbg.sent++;
 		WARN_LOG(Log::sceNet, "%d bytes send to (%s:%u); [tx=%d/rx=%d]", 
-			send_pkt.len, ip2str(dst_addr).c_str(), ntohs(dst_port), 
+			send_pkt.len, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.vport),
 			tx_seq, rx_seq);
 		return len;
 	} else {
-		// Delegate to sendto with peer address
-		sockaddr_in peer;
-		peer.sin_family = AF_INET;
-		peer.sin_addr.s_addr = dst_addr;
-		peer.sin_port = htons(dst_port);
-		
 		// Remote delivery to vport (NAT)
-		auto [_len, _data] = send_pkt.Pack(dst_vport);
-		int ret = ::sendto(dccp_sock->sock, _data.get(), _len, flgs, (const sockaddr*)&peer, sizeof(sockaddr_in));
+		auto [_len, _data] = send_pkt.Pack(dst.virt.vport);
+		int ret = ::sendto(dccp_sock->sock, _data.get(), _len, flgs, (const sockaddr*)&dst.host, sizeof(sockaddr_in));
 		if (ret < 0)
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET accept: Failed to send ACK to peer");
 		tx_seq++; // TODO: Only on ::send success?
 		dbg.sent++;
 
 		WARN_LOG(Log::sceNet, "%d bytes send to %s:%u(%u); [tx=%d/rx=%d]", 
-			ret, inet_ntoa(peer.sin_addr), ntohs(peer.sin_port), dst_port,
+			ret, ip2str(dst.virt.addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.port),
 			tx_seq, rx_seq);
 		return len; // Report unmodified packet size
 	}
@@ -2144,7 +2128,7 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
 	// Host Order
 	auto _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
-	INFO_LOG(Log::sceNet, "SOCK_PACKET::connect(%s:%u, %d): dest_vport=%u state=%d", ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), namelen, _vport, (int)tcp_state);
+	INFO_LOG(Log::sceNet, "SOCK_PACKET::connect(%s:%u|%u, %d): state=%d", ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), _vport, namelen, (int)tcp_state);
 
 	// Validate socket is not already connected/connecting
 	if (tcp_state != TCPState::Disconnected) {
@@ -2162,19 +2146,22 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	tx_seq = 0;
 	
 	// Store connected socket
-	dst_addr = _dest->sin_addr.s_addr;
-	dst_port = ntohs(_dest->sin_port);
-	dst_vport = _vport;
+	dst.host.sin_family = _dest->sin_family;
+	dst.host.sin_addr.s_addr = _dest->sin_addr.s_addr;
+	// Flip PSP port/vports
+	dst.virt.port = htons(_vport);
+	dst.virt.vport = _dest->sin_port;
 
-	this->addr = ip2str(INADDR_ANY);
-	this->port = g_socketManager.generateEphemeralPort(); // Adopt a unique port
-	this->vport = _vport; // Adopt the destination vport
+	this->src.virt.addr.s_addr = INADDR_ANY;
+	this->src.virt.port = htons(_vport); // Adopt the destination port
+	this->src.virt.vport = htons(g_socketManager.generateEphemeralPort()); // Adopt a unique vport
 	// this->port = ntohs(_dest->sin_port);
 
 	// Create the transmission vpacket
 	VirtualPacket vpkt;
 	vpkt.len = 0;
 	vpkt.header_flags = p2ps_tcp_flags::SYN|p2ps_tcp_flags::TCP;
+	vpkt.src.host = this->src.host;
 	vpkt.seq_id = tx_seq+1;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -2188,11 +2175,11 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	}
 
 	INFO_LOG(Log::sceNet, "PACKET: Connecting to %s:%u on vport %u",
-		inet_ntoa(_dest->sin_addr), ntohs(_dest->sin_port), _vport);
+		ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport));
 
-	if (isLocalTarget(dst_addr)) {
+	if (isLocalTarget(dst.virt.addr.s_addr)) {
 		// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-		g_socketManager.vBroadcast(std::move(send_pkt), _dest->sin_port);
+		g_socketManager.vBroadcast(std::move(send_pkt), dst);
 		tx_seq++;
 	} else {
 		// DCCP must exist for P2P traffic
@@ -2205,13 +2192,8 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 #endif
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: DCCP_SOCK Not Present");
 		}
-		sockaddr_in peer{};
-		peer.sin_family = AF_INET;
-		peer.sin_addr = _dest->sin_addr;
-		peer.sin_port = htons(dst_port); // Send to Peer's DCCP
-
-		auto [_len, _data] = send_pkt.Pack(dst_vport); // We want to deliver to the destination port specified
-		int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
+		auto [_len, _data] = send_pkt.Pack(dst.virt.vport); // We want to deliver to the destination port specified
+		int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst.host, sizeof(sockaddr_in));
 		if (ret < 0) {
 			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Failed to send SYN");
 		}
@@ -2245,14 +2227,14 @@ int PacketSocket::listen(int backlog) {
 	tcp_state = TCPState::Listening;
 	this->backlog = backlog;
 		
-	INFO_LOG(Log::sceNet, "SOCK_PACKET listen: vport %d now accepting %d connections", vport, this->backlog);
+	INFO_LOG(Log::sceNet, "SOCK_PACKET listen: vport %d now accepting %d connections", ntohs(src.virt.vport), this->backlog);
 
 	// return ::listen(sock, backlog);
 	return 0;
 }
 int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) { 
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(addr);
-	INFO_LOG(Log::sceNet, "SOCK_PACKET::accept(%s:%u, %d): pending=%d state=%d", this->addr.c_str(), this->port, static_cast<int>(*addrlen), (int)pending_connections.size(), (int)tcp_state);
+	INFO_LOG(Log::sceNet, "SOCK_PACKET::accept(%s:%u, %d): pending=%d state=%d", ip2str(this->src.virt.addr).c_str(), ntohs(this->src.virt.port), static_cast<int>(*addrlen), (int)pending_connections.size(), (int)tcp_state);
 
 	// Validate socket is listening
 	if (tcp_state != TCPState::Listening) {
@@ -2279,11 +2261,8 @@ int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 	
 	// Return the peer address to caller
 	if (addr && addrlen) {
-		sockaddr_in peer{};
-		peer.sin_family = AF_INET;
-		peer.sin_addr.s_addr = pending_conn->dst_addr;
-		peer.sin_port = htons(pending_conn->dst_port);
-		memcpy(addr, &peer, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
+		VirtualSockAddr peer = pending_conn->dst;
+		memcpy(addr, &peer.host, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
 		*addrlen = sizeof(sockaddr_in);
 	}
 	
@@ -2309,15 +2288,11 @@ int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 	new_sock->protocol = this->protocol;
 	new_sock->nonblocking = this->nonblocking;  // should we inherit blocking state?
 	// Copy metadata from listening socket to new socket
-	new_sock->vport = this->vport;         // Same vport
-	new_sock->port = this->port;           // Same port
-	new_sock->addr = this->addr;           // Same address
+	new_sock->src.host = this->src.host;
 
 	new_sock->tcp_state = pending_conn->tcp_state;
 	// Store connected peer
-	new_sock->dst_addr = pending_conn->dst_addr;
-	new_sock->dst_port = pending_conn->dst_port;
-	new_sock->dst_vport = pending_conn->dst_vport;
+	new_sock->dst.virt = pending_conn->dst.virt;
 	// Store buffer states
 	std::swap(new_sock->rx_queue, pending_conn->rx_queue);
 	std::swap(new_sock->rx_buffer, pending_conn->rx_buffer);
@@ -2328,8 +2303,8 @@ int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 	new_sock->state = SocketState::UsedNetInet;	
 	
 	INFO_LOG(Log::sceNet, "SOCK_PACKET accept: Accepted connection on listening socket from %s:%u on %s:%u (vport=%u), created socket %d",
-		ip2str(pending_conn->dst_addr).c_str(), pending_conn->dst_port,
-		new_sock->addr.c_str(), new_sock->port, new_sock->vport,
+		ip2str(new_sock->dst.virt.addr.s_addr).c_str(), ntohs(new_sock->dst.virt.port),
+		ip2str(new_sock->src.virt.addr.s_addr).c_str(), ntohs(new_sock->src.virt.port), ntohs(new_sock->src.virt.vport),
 		new_socket_idx);
 	// clean-up
 	remove_pending_connection(pending_conn);
@@ -2359,13 +2334,12 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
-	addr = ip2str(saddr.in.sin_addr);
-	vport = ntohs(saddr.in.sin_port);
-	// The PSP is expected to provide 0, and we need to generate a vport
-	// This is later "agreed" upon in the P2P handshake?
-	port = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
+	src.host = saddr.in;
+	// Flip ports
+	src.virt.port = src.virt.vport;
+	src.virt.vport = saddr.in.sin_port;
 
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(saddr.addr.sa_family).c_str(), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), vport);
+	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), htons(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -2390,6 +2364,7 @@ int PacketSocket::shutdown(int how) {
 		VirtualPacket vpkt;
 		vpkt.len = 0;
 		vpkt.header_flags = p2ps_tcp_flags::FIN|p2ps_tcp_flags::TCP;
+		vpkt.src.host = src.host;
 		vpkt.seq_id = tx_seq+1;
 		// Add timestamp for TTL tracking
 		vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -2401,24 +2376,13 @@ int PacketSocket::shutdown(int how) {
 			tx_buffer[tx_seq+1] = std::move(vpkt.clone());
 		}
 
-		INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Sending FIN from port %d to %d", port, dst_port);
-		if (isLocalTarget(dst_port)) {
-			sockaddr_in src_addr{};
-			src_addr.sin_family = AF_INET;
-			src_addr.sin_port = htons(this->port);
-			if (inet_pton(AF_INET, this->addr.c_str(), &src_addr.sin_addr) <= 0) {
-				src_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
-			}
+		INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Sending FIN from port %d to %d", htons(src.virt.vport), htons(dst.virt.vport));
+		if (isLocalTarget(dst.virt.port)) {
 			// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-			g_socketManager.vBroadcast(std::move(vpkt), htons(vport));
+			g_socketManager.vBroadcast(std::move(vpkt), dst);
 		} else {
-			sockaddr_in dst_addr{};
-			dst_addr.sin_family = AF_INET;
-			dst_addr.sin_addr = dst_addr.sin_addr;
-			dst_addr.sin_port = htons(port);
-
-			auto [_len, _data] = vpkt.Pack(dst_vport);
-			int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst_addr, sizeof(sockaddr_in));
+			auto [_len, _data] = vpkt.Pack(dst.virt.vport);
+			int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst.host, sizeof(sockaddr_in));
 			if (ret < 0) {
 				ERROR_LOG(Log::sceNet, "SOCK_PACKET shutdown: Failed to send FIN");
 				// return -1; // Let it shut down the socket anyways
@@ -2442,24 +2406,24 @@ int PacketSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, Sc
 	}
 		// Log select() calls on virtual sockets for debugging
 	INFO_LOG(Log::sceNet, "select: vport %d called (type=%d, readfds=%p, timeout=%p)", 
-		vport, type, readfds, timeout);
+		ntohs(src.virt.vport), type, readfds, timeout);
 	
 	// 1. Virtual State Checks
 	if (readfds && type == PSP_NET_INET_SOCK_PACKET && tcp_state == TCPState::Listening) {
 		if (has_pending_connection()) {
-			INFO_LOG(Log::sceNet, "select: vport %d has pending connection for accept(), returning 1", vport);
+			INFO_LOG(Log::sceNet, "select: vport %d has pending connection for accept(), returning 1", ntohs(src.virt.vport));
 			return 1;
 		}
 	}
 	
 	if (readfds && has_pending_data()) {
-		INFO_LOG(Log::sceNet, "select: vport %d HAS PENDING DATA, returning 1", vport);
+		INFO_LOG(Log::sceNet, "select: vport %d HAS PENDING DATA, returning 1", ntohs(src.virt.vport));
 		return 1;
 	}
 	
 	// If we get here with readfds set, there's no data
 	if (readfds) {
-		INFO_LOG(Log::sceNet, "select: vport %d NO PENDING DATA", vport);
+		INFO_LOG(Log::sceNet, "select: vport %d NO PENDING DATA", ntohs(src.virt.vport));
 	}
 	
 	if (writefds) {
@@ -2471,7 +2435,7 @@ int PacketSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, Sc
 		}
 		
 		if (writable) {
-			INFO_LOG(Log::sceNet, "select: vport %d is writable, returning 1", vport);
+			INFO_LOG(Log::sceNet, "select: vport %d is writable, returning 1", ntohs(src.virt.vport));
 			return 1;
 		}
 	}
@@ -2494,7 +2458,7 @@ int PacketSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, Sc
 	// Using 'sock' mirrors your default fallback behavior
 	int phys_ready = ::select(sock, p_read, p_write, p_exc, &tv_zero);
 	if (phys_ready > 0) {
-		DEBUG_LOG(Log::sceNet, "select: vport %d has physical data/events", vport);
+		DEBUG_LOG(Log::sceNet, "select: vport %d has physical data/events", ntohs(src.virt.vport));
 		// Copy back the mutated sets so the caller knows exactly what triggered
 		// if (readfds)   *readfds = read_copy;
 		// if (writefds)  *writefds = write_copy;
@@ -2532,7 +2496,7 @@ bool PacketSocket::dequeue_packet(VirtualPacket& packet) {
             WARN_LOG(Log::sceNet, "dequeue_stream: Receiving stale packet (age: %.2f seconds)", (float)packet_age_us / 1000000.0f);
 		}
 		
-		DEBUG_LOG(Log::sceNet, "Dequeued packet from vport %d (queue size: %zu)", vport, rx_buffer.size());
+		DEBUG_LOG(Log::sceNet, "Dequeued packet from vport %d (queue size: %zu)", ntohs(src.virt.vport), rx_buffer.size());
 		return true;
 	}
 	
@@ -2562,19 +2526,20 @@ int PacketSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
 
         // Lock onto the first valid packet's source address
         if (!target_locked) {
-            target_addr = peek_pkt.src_addr;
+            target_addr = peek_pkt.src.host;
             target_locked = true;
             if (out_addr) {
                 *out_addr = target_addr;
             }
         } else {
             // If we are continuing to fill the buffer, ensure this next packet is from the SAME source
-            if (peek_pkt.src_addr.sin_addr.s_addr != target_addr.sin_addr.s_addr ||
-                peek_pkt.src_addr.sin_port != target_addr.sin_port) {
+            if (peek_pkt.src.virt.addr.s_addr != target_addr.sin_addr.s_addr ||
+                peek_pkt.src.virt.port != target_addr.sin_port ||
+				(peek_pkt.src.host.sin_zero[0] != target_addr.sin_zero[0] || peek_pkt.src.host.sin_zero[1] != target_addr.sin_zero[1])) {
                 
                 DEBUG_LOG(Log::sceNet, "dequeue_stream: Source mismatch detected. Halting coalescing. (Expected %s:%u, got %s:%u)",
                     inet_ntoa(target_addr.sin_addr), ntohs(target_addr.sin_port),
-                    inet_ntoa(peek_pkt.src_addr.sin_addr), ntohs(peek_pkt.src_addr.sin_port));
+                    inet_ntoa(peek_pkt.src.virt.addr), ntohs(peek_pkt.src.virt.port));
                 break; // Stop coalescing and leave this packet in the queue
             }
         }
@@ -2604,7 +2569,7 @@ int PacketSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
             
             remainder.len = remaining_len;
             remainder.header_flags = packet.header_flags;
-            remainder.src_addr = packet.src_addr;
+            remainder.src.virt = packet.src.virt;
             remainder.enqueue_time_us = packet.enqueue_time_us; // Preserve TTL
             
 			rx_buffer[rx_seq] = std::move(remainder);
@@ -2615,6 +2580,13 @@ int PacketSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
     
     return total_copied;
 }
+void PacketSocket::mark_ack(InetSocket* inetSock, int seq_id) {
+	std::lock_guard<std::mutex> buffers(inetSock->buffer_lock);
+	// Flag SYN|ACK as acquired
+	auto psh_syn = std::find_if(inetSock->tx_buffer.begin(), inetSock->tx_buffer.end(), [seq_id](const auto& pair) { return pair.second.seq_id == seq_id; });
+	if (psh_syn != inetSock->tx_buffer.end())
+		psh_syn->second.seq_ack = true;
+}
 bool PacketSocket::has_pending_data() const {
 	std::lock_guard<std::mutex> buffers(buffer_lock);
 	return ((!rx_buffer.empty() && rx_buffer.find(rx_seq + 1) != rx_buffer.end()) || tcp_state == TCPState::CloseWait);
@@ -2622,15 +2594,15 @@ bool PacketSocket::has_pending_data() const {
 bool PacketSocket::set_pending_connection(InetSocket* conn) {
 	std::lock_guard<std::mutex> connections(conn_lock);
 	if ((int)pending_connections.size() >= backlog) {
-		ERROR_LOG(Log::sceNet, "Backlog full, dropping SYN from %s:%u", ip2str(conn->dst_addr).c_str(), conn->dst_port);
+		ERROR_LOG(Log::sceNet, "Backlog full, dropping SYN from %s:%u", ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port));
 		delete conn;
 		return false;
 	}
 	// Check for an existing connection
 	for (auto& existing : pending_connections) {
-        if (existing->dst_addr == conn->dst_addr && 
-            existing->dst_port == conn->dst_port) {
-			ERROR_LOG(Log::sceNet, "Request already exists, dropping SYN from %s:%u", ip2str(conn->dst_addr).c_str(), conn->dst_port);
+        if (existing->dst.virt.addr.s_addr == conn->dst.virt.addr.s_addr && 
+            existing->dst.virt.port == conn->dst.virt.port) {
+			ERROR_LOG(Log::sceNet, "Request already exists, dropping SYN from %s:%u", ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port));
             delete conn; // discard the duplicate
             return false;
         }
@@ -2638,27 +2610,24 @@ bool PacketSocket::set_pending_connection(InetSocket* conn) {
 
 	pending_connections.push_back(conn);
 	DEBUG_LOG(Log::sceNet, "Set pending connection on vport %d from %s:%u",
-		vport, ip2str(conn->dst_addr).c_str(), conn->dst_port);
+		ntohs(src.virt.vport), ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port));
 	return true;
 }
 bool PacketSocket::update_pending_connection(const sockaddr_in& peer_addr) {
 	std::lock_guard<std::mutex> connections(conn_lock);
 	for (auto& conn : pending_connections) {
-        if (conn->dst_addr == peer_addr.sin_addr.s_addr && 
-            (conn->dst_port == ntohs(peer_addr.sin_port))) {
+        if (conn->dst.virt.addr.s_addr == peer_addr.sin_addr.s_addr && 
+            (conn->dst.virt.port == peer_addr.sin_port) &&
+			(conn->dst.host.sin_zero[0] == peer_addr.sin_zero[0] && conn->dst.host.sin_zero[1] == peer_addr.sin_zero[1])) {
             
             if (conn->tcp_state == TCPState::SynReceived) {
                 conn->tcp_state = TCPState::Established;
 				{
-					std::lock_guard<std::mutex> buffers(conn->buffer_lock);
-					// Flag SYN|ACK as acquired
-					auto psh_syn = std::find_if(conn->tx_buffer.begin(), conn->tx_buffer.end(), [](const auto& pair) { return pair.second.header_flags == (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK); });
-					if (psh_syn != conn->tx_buffer.end())
-						psh_syn->second.seq_ack = true;
+					mark_ack(conn, 1); // (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK|p2ps_tcp_flags::TCP)
 					conn->rx_seq++; // ACK received
 				}
                 DEBUG_LOG(Log::sceNet, "Promoted connection to Established for %s:%u",
-                    ip2str(conn->dst_addr).c_str(), conn->dst_port);
+                    ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port));
                 return true;
             }
         }
@@ -2734,22 +2703,15 @@ bool PacketSocket::ProcessNetStack() {
         // else 
 		if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
 			INFO_LOG(Log::sceNet, "PACKET: Received PSH|ACK at listening socket on %s:%u|%u",
-				addr.c_str(), port, vport);
+				ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 			// Do not increment rx_seq, this is just a confirmation
 
-			std::lock_guard<std::mutex> buffer(buffer_lock);
-			auto ack = tx_buffer.find(pkt.seq_id);
-			// Safety check, should never trigger
-			if (ack != tx_buffer.end()) {
-				VirtualPacket& vpkt = ack->second;
-				// Flag as acquired
-				vpkt.seq_ack = true;
-			}
+			mark_ack(this, pkt.seq_id);
 		}
         else if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::TCP)) {
 			if (tcp_state != TCPState::Listening) {
 				INFO_LOG(Log::sceNet, "PACKET: Received PSH at listening socket from on %s:%u|%u [seq=%d,tx=%d/rx=%d,hpd=%d]",
-					addr.c_str(), port, vport, pkt.seq_id, tx_seq, rx_seq, has_pending_data());
+					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport), pkt.seq_id, tx_seq, rx_seq, has_pending_data());
 				// Do not increment rx_seq until Recv is called
 
 				// Buffer the received packet
@@ -2759,6 +2721,7 @@ bool PacketSocket::ProcessNetStack() {
 				VirtualPacket vpkt{};
 				vpkt.len = 0;
 				vpkt.header_flags = (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP);
+				vpkt.src.host = src.host;
 				vpkt.seq_id = pkt_seq; // Just confirm this packet was received
 				// Add timestamp for TTL tracking
 				vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -2766,19 +2729,14 @@ bool PacketSocket::ProcessNetStack() {
 				// Do NOT save this for re-transmission. Wait for another PSH
 
 				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning PSH|ACK to %s:%u|%u",
-					ip2str(dst_addr).c_str(), dst_port, dst_vport);
+					ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport));
 
-				if (isLocalTarget(dst_addr)) {
-					g_socketManager.vBroadcast(std::move(vpkt), htons(dst_port));
+				if (isLocalTarget(dst.virt.addr.s_addr)) {
+					g_socketManager.vBroadcast(std::move(vpkt), dst);
 				} else {
-					sockaddr_in peer{};
-					peer.sin_family = AF_INET;
-					peer.sin_addr.s_addr = dst_addr;
-					peer.sin_port = htons(dst_port); // deliver to the DCCP socket
-
-					auto [_len, _data] = vpkt.Pack(dst_vport); // deliver through the DCCP Socket to actual port
+					auto [_len, _data] = vpkt.Pack(dst.virt.vport); // deliver through the DCCP Socket to actual port
 					auto dccp_sock = g_socketManager.GetDCCP();
-					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
+					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst.host, sizeof(sockaddr_in));
 					if (ret < 0) {
 						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 					}
@@ -2789,11 +2747,10 @@ bool PacketSocket::ProcessNetStack() {
         else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP)) {
 			if (tcp_state == TCPState::Listening) {
 				InetSocket* conn = new InetSocket();
-				// Save the sender's address for replies
-				conn->dst_addr = pkt.src_addr.sin_addr.s_addr;
 				// Default assume local connection
-				conn->dst_port = ntohs(pkt.src_addr.sin_port);
-				conn->dst_vport = this->port;
+				conn->src.host = this->src.host;
+				// Save the sender's address for replies
+				conn->dst.host = pkt.src.host;
 				conn->tcp_state = TCPState::SynReceived;
 				conn->tx_seq = 0;
 				if (!set_pending_connection(conn))
@@ -2801,11 +2758,12 @@ bool PacketSocket::ProcessNetStack() {
 				conn->rx_seq = 1; // Mark this packet received
 				
 				INFO_LOG(Log::sceNet, "PACKET: Received SYN at listening socket from on %s:%u|%u",
-					addr.c_str(), port, vport);
+					ip2str(conn->src.virt.addr).c_str(), ntohs(conn->src.virt.port), ntohs(conn->src.virt.vport));
 
 				VirtualPacket vpkt{};
 				vpkt.len = 0;
 				vpkt.header_flags = (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP);
+				vpkt.src.host = conn->src.host;
 				vpkt.seq_id = conn->tx_seq+1;
 				// Add timestamp for TTL tracking
 				vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -2818,21 +2776,16 @@ bool PacketSocket::ProcessNetStack() {
 					conn->tx_buffer[conn->tx_seq+1] = std::move(vpkt);
 				}
 				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning SYN-ACK to %s:%u|%u",
-					ip2str(conn->dst_addr).c_str(), conn->dst_port, conn->dst_vport);
+					ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port), ntohs(conn->dst.virt.vport));
 					
-				if (isLocalTarget(conn->dst_addr)) {
+				if (isLocalTarget(conn->dst.virt.addr.s_addr)) {
 					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-					g_socketManager.vBroadcast(std::move(send_pkt), htons(conn->dst_port));
+					g_socketManager.vBroadcast(std::move(send_pkt), conn->dst);
 					conn->tx_seq++;
 				} else {
-					sockaddr_in peer{};
-					peer.sin_family = AF_INET;
-					peer.sin_addr.s_addr = conn->dst_addr;
-					peer.sin_port = htons(conn->dst_port); // deliver to the DCCP socket
-
-					auto [_len, _data] = send_pkt.Pack(conn->dst_vport); // deliver through the DCCP Socket to actual port
+					auto [_len, _data] = send_pkt.Pack(conn->dst.virt.vport); // deliver through the DCCP Socket to actual port
 					auto dccp_sock = g_socketManager.GetDCCP();
-					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
+					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&conn->dst.host, sizeof(sockaddr_in));
 					if (ret < 0) {
 						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 					}
@@ -2843,7 +2796,9 @@ bool PacketSocket::ProcessNetStack() {
         else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
 			if (tcp_state == TCPState::SynSent) {
 				INFO_LOG(Log::sceNet, "PACKET: Received SYN|ACK at listening socket to %s:%u|%u",
-					addr.c_str(), port, vport);
+					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+				dst.host = pkt.src.host; // Correctly map
+				mark_ack(this, 1);
 				tcp_state = TCPState::Established;
 				rx_seq++;
 				
@@ -2860,6 +2815,7 @@ bool PacketSocket::ProcessNetStack() {
 				VirtualPacket vpkt{};
 				vpkt.len = 0;
 				vpkt.header_flags = (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP);
+				vpkt.src.host = src.host;
 				vpkt.seq_id = tx_seq+1;
 				// Add timestamp for TTL tracking
 				vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
@@ -2867,21 +2823,16 @@ bool PacketSocket::ProcessNetStack() {
 				// Do not resend. Let the peer re-send SYN|ACK if it hasn't connected yet
 
 				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning ACK to %s:%u|%u",
-					ip2str(dst_addr).c_str(), dst_port, dst_vport);
+					ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport));
 				
-				if (isLocalTarget(dst_addr)) {
+				if (isLocalTarget(dst.virt.addr.s_addr)) {
 					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-					g_socketManager.vBroadcast(std::move(vpkt), htons(dst_port));
+					g_socketManager.vBroadcast(std::move(vpkt), dst);
 					tx_seq++;
 				} else {
-					sockaddr_in peer{};
-					peer.sin_family = AF_INET;
-					peer.sin_addr.s_addr = dst_addr;
-					peer.sin_port = htons(dst_port); // deliver to the DCCP socket
-
-					auto [_len, _data] = vpkt.Pack(dst_vport); 
+					auto [_len, _data] = vpkt.Pack(dst.virt.vport); 
 					auto dccp_sock = g_socketManager.GetDCCP();
-					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&peer, sizeof(sockaddr_in));
+					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst.host, sizeof(sockaddr_in));
 					if (ret < 0) {
 						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 					}
@@ -2892,11 +2843,11 @@ bool PacketSocket::ProcessNetStack() {
         else if (pkt.header_flags == (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
             if (tcp_state == TCPState::Listening) {
 				INFO_LOG(Log::sceNet, "PACKET: Received ACK at listening socket on %s:%u|%u",
-					addr.c_str(), port, vport);
+					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 				
 				// tcp_state = TCPState::Established;
-				update_pending_connection(pkt.src_addr); // Increments rx_seq
+				update_pending_connection(pkt.src.host); // Increments rx_seq
 
                 // Resume the thread that is currently blocked in sceNetInetConnect
                 if (threadID > 0) {
@@ -2909,7 +2860,7 @@ bool PacketSocket::ProcessNetStack() {
         else if (pkt.header_flags == (p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP)) {
             if (tcp_state != TCPState::Listening) {
 				INFO_LOG(Log::sceNet, "PACKET: Received FIN at listening socket on %s:%u|%u",
-					addr.c_str(), port, vport);
+					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
                 tcp_state = TCPState::CloseWait;
 				rx_seq++;
             }
