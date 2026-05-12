@@ -430,6 +430,7 @@ public:
 	int vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest);
 
 	bool GetInetSocket(int sock, InetSocket **inetSocket);
+	void exhaustEphemeralPort(u16 port);
 	u16 generateEphemeralPort();
 	u16 generateVPort();
 	SOCKET GetHostSocketFromInetSocket(int sock);
@@ -448,6 +449,7 @@ private:
 	
 	// We use this array from MIN_VALID_INET_SOCKET and forward. It's probably not a good idea to return 0 as a socket.
 	InetSocket inetSockets_[VALID_INET_SOCKET_COUNT];
+	std::unordered_map<u16, u64> exhausted_ports;
 	// SOCK_DCCP should only have 1 instance, ever. Each CONN_DGRAM should point to this for it's sock
 	InetSocket* dccp_sock;
 };

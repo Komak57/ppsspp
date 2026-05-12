@@ -10,6 +10,7 @@
 #include "Common/TimeUtil.h"
 #include "sceNp.h"
 
+#define TIME_WAIT_US 60000000; // TCP waits 60 seconds
 #define BASE_RTO_US 500000.0 // Wait 500ms before first retry
 #define MAX_RETRIES 5
 SocketManager g_socketManager;
@@ -41,15 +42,32 @@ int SocketManager::NextUnusedSocket() {
 	}
 	return -1;
 }
-
+void SocketManager::exhaustEphemeralPort(u16 port) {
+	u64 release_time = (u64)(time_now_d() * 1000000.0) + TIME_WAIT_US;
+	exhausted_ports[port] = release_time;
+}
+// TODO: With the creation of PSN services available for newly developed PSP games,
+//   this ratchet-based vport assignment could become problematic if abused.
+//   It would be wiser to adhere to a POSIX "first available" vport instead.
 u16 SocketManager::generateEphemeralPort() {
     std::lock_guard<std::mutex> guard(g_socketMutex);
 	// Start port at 49152, and be 1 higher than all other existing vports
+	u64 current_time_us = (u64)(time_now_d() * 1000000.0);
+	
+    for (auto it = exhausted_ports.begin(); it != exhausted_ports.end(); ) {
+        if (current_time_us >= it->second) {
+            it = exhausted_ports.erase(it); // Port is clean and ready for reuse
+        } else {
+            ++it;
+        }
+    }
 	u16 _vport = 49152;
 	auto sockets = g_socketManager.Sockets();
 	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < SocketManager::VALID_INET_SOCKET_COUNT; i++) {
 		if (sockets[i].state != SocketState::Unused && ntohs(sockets[i].src.virt.vport) >= _vport)
 			_vport = ntohs(sockets[i].src.virt.vport) + 1;
+		while (exhausted_ports.find(_vport) != exhausted_ports.end())
+			_vport++;
 		if (_vport > 65535) {
 #if PPSSPP_PLATFORM(WINDOWS)
 			SetLastError(EADDRINUSE);
@@ -1652,7 +1670,7 @@ bool DccpSocket::ProcessNetStack() {
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
 
 	// Log incoming packet details (convert vport from network to host byte order for display)
-	INFO_LOG(Log::sceNet, "RouteDCCP: Received %d bytes from %s:%u|%u -> dst.virt.port %d (flags=0x%02x(=%d))", 
+	INFO_LOG(Log::sceNet, "RouteDCCP: Received %d bytes from %s:%u|%u -> vport %d (flags=0x%02x(=%d))", 
 		ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(header.dest), header.flags, header.flags & 0xFF);
 	
 	VirtualSockAddr dest{};
@@ -2359,6 +2377,7 @@ int PacketSocket::shutdown(int how) {
 	}
 	// Transition to disconnected
 	tcp_state = TCPState::Disconnected;
+	g_socketManager.exhaustEphemeralPort(src.virt.vport);
 	
 	// Get DCCP socket for sending FIN
 	auto dccp_sock = g_socketManager.GetDCCP();
@@ -2372,6 +2391,7 @@ int PacketSocket::shutdown(int how) {
 		// Add timestamp for TTL tracking
 		vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
 
+		auto send_pkt = vpkt.clone();
 		{
 			// Add to transmit buffer
 			std::lock_guard<std::mutex> lock(buffer_lock);
@@ -2382,9 +2402,9 @@ int PacketSocket::shutdown(int how) {
 		INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Sending FIN from port %d to %d", htons(src.virt.vport), htons(dst.virt.vport));
 		if (isLocalTarget(dst.virt.port)) {
 			// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-			g_socketManager.vBroadcast(std::move(vpkt), dst);
+			g_socketManager.vBroadcast(std::move(send_pkt), dst);
 		} else {
-			auto [_len, _data] = vpkt.Pack(dst.virt.vport);
+			auto [_len, _data] = send_pkt.Pack(dst.virt.vport);
 			int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst.host, sizeof(sockaddr_in));
 			if (ret < 0) {
 				ERROR_LOG(Log::sceNet, "SOCK_PACKET shutdown: Failed to send FIN");
