@@ -1647,7 +1647,7 @@ bool DccpSocket::ProcessNetStack() {
 	}
 	vpkt.header_flags = header.flags;
 	vpkt.src.host = _from;
-	// vpkt.src.virt.vport = header.dest;
+	vpkt.src.host.sin_family = AF_INET;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
 
@@ -1731,7 +1731,7 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, len, 386);
 
 	// Send the packet over P2P
-	auto [_len, _data] = vpkt.Pack(src.virt.port);
+	auto [_len, _data] = vpkt.Pack(dst.virt.port);
 	// Send through DCCP
 	int ret = ::sendto(dccp_sock->sock, _data.get(), _len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (ret > 0)
@@ -2146,7 +2146,7 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	tx_seq = 0;
 	
 	// Store connected socket
-	dst.host.sin_family = _dest->sin_family;
+	dst.host.sin_family = AF_INET;
 	dst.host.sin_addr.s_addr = _dest->sin_addr.s_addr;
 	// Flip PSP port/vports
 	dst.virt.port = htons(_vport);
@@ -2749,8 +2749,10 @@ bool PacketSocket::ProcessNetStack() {
 				InetSocket* conn = new InetSocket();
 				// Default assume local connection
 				conn->src.host = this->src.host;
+				conn->src.host.sin_family = AF_INET;
 				// Save the sender's address for replies
 				conn->dst.host = pkt.src.host;
+				conn->dst.host.sin_family = AF_INET;
 				conn->tcp_state = TCPState::SynReceived;
 				conn->tx_seq = 0;
 				if (!set_pending_connection(conn))
@@ -2797,7 +2799,7 @@ bool PacketSocket::ProcessNetStack() {
 			if (tcp_state == TCPState::SynSent) {
 				INFO_LOG(Log::sceNet, "PACKET: Received SYN|ACK at listening socket to %s:%u|%u",
 					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
-				dst.host = pkt.src.host; // Correctly map
+				dst.host.sin_family = AF_INET;
 				mark_ack(this, 1);
 				tcp_state = TCPState::Established;
 				rx_seq++;
