@@ -2705,11 +2705,13 @@ bool PacketSocket::ProcessNetStack() {
 		// }
         // else 
 		if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
-			INFO_LOG(Log::sceNet, "PACKET: Received PSH|ACK at listening socket on %s:%u|%u",
-				ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
-			// Do not increment rx_seq, this is just a confirmation
+			if (tcp_state != TCPState::Listening) {
+				INFO_LOG(Log::sceNet, "PACKET: Received PSH|ACK at listening socket on %s:%u|%u",
+					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+				// Do not increment rx_seq, this is just a confirmation
 
-			mark_ack(this, pkt.seq_id);
+				mark_ack(this, pkt.seq_id);
+			}
 		}
         else if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::TCP)) {
 			if (tcp_state != TCPState::Listening) {
