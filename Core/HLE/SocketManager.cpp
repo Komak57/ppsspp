@@ -2805,6 +2805,9 @@ bool PacketSocket::ProcessNetStack() {
 				INFO_LOG(Log::sceNet, "PACKET: Received SYN|ACK at listening socket to %s:%u|%u",
 					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 				dst.host.sin_family = AF_INET;
+				// Correct mapping
+				dst.host.sin_addr = pkt.src.host.sin_addr;
+				dst.host.sin_port = pkt.src.host.sin_port;
 				mark_ack(this, 1);
 				tcp_state = TCPState::Established;
 				rx_seq++;
