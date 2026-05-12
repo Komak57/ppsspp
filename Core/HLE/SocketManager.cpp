@@ -2159,12 +2159,15 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 
 	// Create the transmission vpacket
 	VirtualPacket vpkt;
-	vpkt.len = 0;
 	vpkt.header_flags = p2ps_tcp_flags::SYN|p2ps_tcp_flags::TCP;
 	vpkt.src.host = this->src.host;
 	vpkt.seq_id = tx_seq+1;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
+	// Pack the return port into the SYN payload
+	vpkt.data = std::make_unique<char[]>(2);
+	memcpy(vpkt.data.get(), &src.virt.vport, 2);
+	vpkt.len = 2;
 	
 	auto send_pkt = vpkt.clone();
 	{
@@ -2753,6 +2756,8 @@ bool PacketSocket::ProcessNetStack() {
 				// Save the sender's address for replies
 				conn->dst.host = pkt.src.host;
 				conn->dst.host.sin_family = AF_INET;
+				if (pkt.len >= 2)	
+					memcpy(&conn->dst.virt.vport, pkt.data.get(), 2);
 				conn->tcp_state = TCPState::SynReceived;
 				conn->tx_seq = 0;
 				if (!set_pending_connection(conn))
