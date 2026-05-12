@@ -1613,7 +1613,7 @@ bool DccpSocket::ProcessNetStack() {
 	socket_errno = 0;
 #endif
 
-	char data[2048];
+	char data[0x3000]; // Supplied by many psp buffers
 	sockaddr_in _from{};
 	socklen_t _fromlen = sizeof(_from);
 	int ret = ::recvfrom(sock, data, sizeof(data), 0, reinterpret_cast<sockaddr*>(&_from), &_fromlen);
