@@ -619,8 +619,8 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 				// Match connected port (3658)
 				if (target_sock->dst.virt.port != vpkt.src.virt.port)
 					continue;
-				// Match connected port (3658)
-				if (target_sock->dst.virt.vport != vpkt.src.virt.vport)
+				// Match connected vport (12000)
+				if (vpkt.src.virt.vport != 0 && target_sock->dst.virt.vport != vpkt.src.virt.vport)
 					continue;
 			}
 			// Matches endpoint address
