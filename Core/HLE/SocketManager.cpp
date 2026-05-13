@@ -1007,7 +1007,7 @@ bool InetSocket::set_pending_connection(InetSocket* conn) {
 	delete conn;
 	return false;
 }
-bool InetSocket::update_pending_connection(const sockaddr_in& peer_addr) {
+bool InetSocket::update_pending_connection(const VirtualSockAddr& peer_addr) {
 	ERROR_LOG(Log::sceNet, "Socket does not support connections");
 	return false;
 }
@@ -2636,12 +2636,12 @@ bool PacketSocket::set_pending_connection(InetSocket* conn) {
 		ntohs(src.virt.vport), ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port));
 	return true;
 }
-bool PacketSocket::update_pending_connection(const sockaddr_in& peer_addr) {
+bool PacketSocket::update_pending_connection(const VirtualSockAddr& peer) {
 	std::lock_guard<std::mutex> connections(conn_lock);
 	for (auto& conn : pending_connections) {
-        if (conn->dst.virt.addr.s_addr == peer_addr.sin_addr.s_addr && 
-            (conn->dst.virt.port == peer_addr.sin_port) &&
-			(conn->dst.host.sin_zero[0] == peer_addr.sin_zero[0] && conn->dst.host.sin_zero[1] == peer_addr.sin_zero[1])) {
+        if (conn->dst.virt.addr.s_addr == peer.virt.addr.s_addr && 
+            (conn->dst.virt.port == peer.virt.port) &&
+			(peer.virt.vport == 0 || conn->dst.virt.vport == peer.virt.vport)) {
             
             if (conn->tcp_state == TCPState::SynReceived) {
                 conn->tcp_state = TCPState::Established;
@@ -2879,7 +2879,7 @@ bool PacketSocket::ProcessNetStack() {
 
 				
 				// tcp_state = TCPState::Established;
-				update_pending_connection(pkt.src.host); // Increments rx_seq
+				update_pending_connection(pkt.src); // Increments rx_seq
 
                 // Resume the thread that is currently blocked in sceNetInetConnect
                 if (threadID > 0) {

@@ -256,7 +256,7 @@ struct InetSocket {
 	virtual int dequeue_stream(char* buf, int len, sockaddr_in* out_addr);
 	virtual bool has_pending_data() const;
 	virtual bool set_pending_connection(InetSocket* conn);
-	virtual bool update_pending_connection(const sockaddr_in& peer_addr);
+	virtual bool update_pending_connection(const VirtualSockAddr& peer_addr);
 	virtual InetSocket* get_pending_connection();
 	virtual void remove_pending_connection(InetSocket* conn);
 	virtual bool has_pending_connection() const;
@@ -398,7 +398,7 @@ public:
 	void mark_ack(InetSocket* inetSock, int seq_id);
 	bool has_pending_data() const override;
 	bool set_pending_connection(InetSocket* conn) override;
-	bool update_pending_connection(const sockaddr_in& peer_addr) override;
+	bool update_pending_connection(const VirtualSockAddr& peer_addr) override;
 	InetSocket* get_pending_connection() override;
 	void remove_pending_connection(InetSocket* conn) override;
 	bool has_pending_connection() const override;
