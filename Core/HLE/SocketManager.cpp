@@ -2377,7 +2377,7 @@ int PacketSocket::shutdown(int how) {
 	}
 	// Transition to disconnected
 	tcp_state = TCPState::Disconnected;
-	g_socketManager.exhaustEphemeralPort(src.virt.vport);
+	g_socketManager.exhaustEphemeralPort(ntohs(src.virt.vport));
 	
 	// Get DCCP socket for sending FIN
 	auto dccp_sock = g_socketManager.GetDCCP();
