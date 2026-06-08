@@ -342,7 +342,9 @@ namespace net {
 				{
 					ERROR_LOG(Log::sceNet, "Failed to get the client address from the socket!");
 				}
-				sigServer->local_addr_sig.store(client_addr.sin_addr.s_addr);
+				// Games that don't use sceNp2 won't have the sigServer initialized here
+				if (sigServer)
+					sigServer->local_addr_sig.store(client_addr.sin_addr.s_addr);
 				// Start reading data
 				start_read_thread();
 
