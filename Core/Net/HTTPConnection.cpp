@@ -166,7 +166,7 @@ bool HTTPConnection::SSLConnect(int connectionID, int maxTries, double timeout, 
 			memset(portStr, 0, 8);
 			memcpy(portStr, std::to_string(port).c_str(), std::to_string(port).length());
 			if ((ret = mbedtls_net_connect(&tls.netCtx, addrStr, portStr, MBEDTLS_NET_PROTO_TCP)) != 0) {
-				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call to %s failed with -0x%04x)", addrStr, portStr, (unsigned int)-ret);
+				ERROR_LOG(Log::sceNet, "SSLConnect - mbedtls_net_connect(netCtx, %s, %s, PROTO_TCP) call failed with -0x%04x)", addrStr, portStr, (unsigned int)-ret);
 				goto retry;
 			}
 			// Set NonBlocking
