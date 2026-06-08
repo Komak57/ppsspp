@@ -564,10 +564,16 @@ int convertSockoptNamePSP2Host(int optname, int level) {
 #if defined(SO_NBIO)
 		case PSP_NET_INET_SO_NBIO:
 			return SO_NBIO;
+#else
+		case PSP_NET_INET_SO_NBIO:
+			return O_NONBLOCK;
 #endif
 #if defined(SO_BIO)
 		case PSP_NET_INET_SO_BIO:
 			return SO_BIO;
+#else
+		case PSP_NET_INET_SO_BIO:
+			return O_NONBLOCK;
 #endif
 		case PSP_NET_INET_SO_DCCP_BROADCAST:
 			return SO_BROADCAST;
