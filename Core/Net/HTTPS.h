@@ -42,6 +42,7 @@ public:
 
 class HTTPS {
 public:
+	int LoadDefaultCerts();
 	int InitializeSSL(std::string certPEM = "");
 	void ResetSSL();
 
@@ -61,4 +62,5 @@ public:
 	int useCache = 0;
 	int useAuth = 0;
 	int useRedirect = 0;
+	int useDefaultCerts = 0;
 };

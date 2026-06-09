@@ -614,7 +614,8 @@ static int sceHttpSaveSystemCookie() {
 }
 
 static int sceHttpsLoadDefaultCert(int unknown1, int unknown2) {
-	ERROR_LOG(Log::HTTP, "UNIMPL sceHttpLoadDefaultCert(%d, %d)", unknown1, unknown2);
+	WARN_LOG(Log::HTTP, "UNTESTED sceHttpLoadDefaultCert(%d, %d)", unknown1, unknown2);
+	bufferTemplate.useDefaultCerts = 1;
 	return 0;
 }
 
