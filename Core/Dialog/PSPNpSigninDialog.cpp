@@ -90,7 +90,8 @@ int PSPNpSigninDialog::Init(u32 paramAddr) {
 	transitionStage = SigninStage::INIT;
 	// Initialize default selection pointers
 	InitForms();
-	server = net::CreateNPAuthAgent(net::NPAgentType::RPCN, "rpcn.revurb.us", 31313);
+	// TODO: split address and port from g_Config.proInfraServer
+	server = net::CreateNPAuthAgent((net::NPAgentType)g_Config.proInfraServerType, g_Config.proInfraServer, 31313);
 	StartFade(true);
 	return 0;
 }
