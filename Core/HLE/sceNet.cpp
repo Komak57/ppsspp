@@ -843,10 +843,11 @@ void __NetApctlCallbacks()
 		delayus = (adhocEventDelay + adhocExtraDelay);
 	}
 
+	// NpMatching2 callbacks are processed in the SceNpMatching2 thread
 	// Temporarily borrowing APctl thread for NpMatching2 callbacks for testing purpose
-	if (NpMatching2ProcessEvents()) {
-		delayus = (adhocEventDelay + adhocExtraDelay);
-	}
+	// if (NpMatching2ProcessEvents()) {
+	// 	delayus = (adhocEventDelay + adhocExtraDelay);
+	// }
 
 	// How AP works probably like this: Game use sceNetApctl function -> sceNetApctl let the hardware know and do their's thing and have a new State -> Let the game know the resulting State through Event on their handler
 	if (!apctlEvents.empty()) {
