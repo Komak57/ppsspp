@@ -1,6 +1,7 @@
 #include "Core/Net/NPAgent.h"
 #include <Core/HLE/HLE.h>
 #include <Common/File/FileDescriptor.h>
+#include "Common/File/FileUtil.h"
 #include <TimeUtil.h>
 #include <chrono>
 #include <Core/CoreTiming.h>
@@ -9,6 +10,8 @@
 #include <Core/Net/SIGAgent.h>
 #include <Core/HLE/sceNp.h>
 #include <Core/Config.h>
+#include <Core/System.h>
+
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN
 	RPCNAuthAgent::RPCNAuthAgent(std::string host, int port) {
@@ -193,43 +196,13 @@ namespace net {
 	std::unique_ptr<NPAgent> RPCNAuthAgent::CreateAgent() {
 		return net::CreateNPAgent(NPAgentType::RPCN, this->host_, this->port_);
 	}
-
+	
 	bool RPCNAuthAgent::Connect(int maxTries, double timeout, bool* cancelConnect) {
-		std::string certPem = "-----BEGIN CERTIFICATE-----\n"
-			"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\n"
-			"-----END CERTIFICATE-----\n";
+		std::string certPem = ""; // No cert, obtain through handshake
+		auto cert_path = GetSysDirectory(DIRECTORY_CACHE) / (host_ + ".pem");
+		if (File::Exists(cert_path)) {
+			File::ReadTextFileToString(cert_path, &certPem);
+		}
 		InitializeSSL(certPem);
 		mbedtls_ssl_conf_ciphersuites(&tls.sslConfig, forceCiphers);
 		mbedtls_ssl_conf_max_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
@@ -327,8 +300,44 @@ namespace net {
 
 					mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
 
-					ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
-					goto sslretry;
+					if (tries == maxTries) {
+						WARN_LOG(Log::sceNet, "Connect - mbedtls_ssl_get_verify_result failed (expected on first-connect): %s", vrfy_buf);
+					} else {
+						ERROR_LOG(Log::sceNet, "Connect - mbedtls_ssl_get_verify_result failed: %s", vrfy_buf);
+						goto sslretry;
+					}
+				}
+
+				// 6. Certificate Generation / Caching (The new logic)
+				if (!File::Exists(cert_path)) {
+					const mbedtls_x509_crt* peer_cert = mbedtls_ssl_get_peer_cert(&tls.sslCtx);
+					if (peer_cert != nullptr) {
+						INFO_LOG(Log::sceNet, "Generating local PEM from server certificate...");
+						
+						// MbedTLS stores the raw DER format in peer_cert->raw
+						// We need to Base64 encode it to create a PEM
+						size_t b64_len = 0;
+						mbedtls_base64_encode(nullptr, 0, &b64_len, peer_cert->raw.p, peer_cert->raw.len);
+						
+						std::vector<unsigned char> b64_buf(b64_len + 1);
+						mbedtls_base64_encode(b64_buf.data(), b64_buf.size(), &b64_len, peer_cert->raw.p, peer_cert->raw.len);
+						
+						// Format into standard PEM with 64-character line breaks
+						std::string generatedPem = "-----BEGIN CERTIFICATE-----\n";
+						std::string b64_str((char*)b64_buf.data(), b64_len);
+						
+						for (size_t i = 0; i < b64_str.length(); i += 64) {
+							generatedPem += b64_str.substr(i, 64) + "\n";
+						}
+						generatedPem += "-----END CERTIFICATE-----\n";
+						
+						// Save to disk so next time InitializeSSL(certPem) uses it securely
+						File::WriteStringToFile(true, generatedPem, cert_path);
+						INFO_LOG(Log::sceNet, "Saved server certificate to %s", cert_path.ToString().c_str());
+					} else {
+						ERROR_LOG(Log::sceNet, "Server did not provide a certificate during handshake.");
+						goto sslretry;
+					}
 				}
 
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful. TLS: %s, Cipher: %s", mbedtls_ssl_get_version(&tls.sslCtx), mbedtls_ssl_get_ciphersuite(&tls.sslCtx));
