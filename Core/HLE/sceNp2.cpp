@@ -143,29 +143,7 @@ void __Np2Shutdown() {
 }
 
 
-/* Process Matching server Responses
- * @return void
- * @note Currently processing the P2P responses designated for Signaling
- */
-void SceNpMatching2Thread()
-{
-	hleSkipDeadbeef();
-	if (!npMatching2Inited)
-		return;
-	
-	timeout = 100000;
-	u32 s = sizeof(u32);
-	PSPPointer<u32> result_bits = PSPPointer<u32>::Create(np_memory.Alloc(s));
-	int ret = hleCall(ThreadManForUser, int, sceKernelWaitEventFlag, npMatching2ThreadID, 0xffffffff, 0x21, result_bits.ptr, timeout.ptr);
-	if ((ret != SCE_KERNEL_ERROR_WAIT_TIMEOUT & ret >> 0x1f) != 0)
-		return;
-
-	InvokeAsyncCallbacks(*result_bits);
-
-	hleNoLogVoid();
-}
-
-int InvokeAsyncCallbacks(SceNpMatching2ContextId ctxId) {
+int InvokeAsyncCallbacks() {
 
 	if (npMatching2Events.empty()) {
 		return SCE_NP_MATCHING2_ERROR_REQUEST_NOT_FOUND;
