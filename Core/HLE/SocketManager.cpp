@@ -1994,80 +1994,62 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(&saddr.addr);
+
 	// Network Order
 	u16 dest_vport = ntohs((saddr.in.sin_zero[1] << 8) | saddr.in.sin_zero[0]);
 	if (dest_vport == 0)
 		dest_vport = 1;
 
-	// DCCP must exist for P2P traffic
-	auto dccp_sock = g_socketManager.GetDCCP();
-	if (!dccp_sock) {
-#if PPSSPP_PLATFORM(WINDOWS)
-		SetLastError(EINVAL);
-#else
-		socket_errno = EINVAL;
-#endif
-		return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: DCCP_SOCK Not Present");
-	}
-	
-	// Create the transmission vpacket
-	VirtualPacket vpkt;
-	vpkt.data = std::make_unique<char[]>(len);
-	memcpy(vpkt.data.get(), buf, len);
-	vpkt.len = len;
-	vpkt.header_flags = p2ps_tcp_flags::PSH;
-	vpkt.src.host = src.host;
-	vpkt.seq_id = tx_seq+1;
-	// Add timestamp for TTL tracking
-	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
-
-	// // Build packet: VPORT_HEADER + payload
-	// int packet_size = VPORT_HEADER_SIZE + len;
-	// std::unique_ptr<char[]> packet = std::make_unique<char[]>(packet_size);
-
-	// // Pack DGRAM_HEADER (3 bytes): [flags][data_len]
-	// VPORT_HEADER header;
-	// header.flags = p2ps_tcp_flags::PSH;
-	// header.dest = htons(port);
-	// header.dest = (saddr.in.sin_zero[1] << 8) | saddr.in.sin_zero[0];
-	// // Do not send on vport 0
-	// if (header.dest == 0)
-	// 	header.dest = htons(1);
-	// memcpy(&header.dest, &saddr.in.sin_zero[0], 2);
-	// memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
-
-	// // Pack the message body
-	// if (len > 0) {
-	// 	memcpy(packet.get() + VPORT_HEADER_SIZE, buf, len);
-	// }
-
-	std::string msg = "sendto::SIGN " + std::to_string(ntohs(src.virt.vport)) + " -> " +
-		ip2str(_dest->sin_addr) + ":" + std::to_string(ntohs(_dest->sin_port)) + 
-		"{" + std::to_string(dest_vport) + "|" +std::to_string(vpkt.header_flags) + "}";
-	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, len, 386);
-
-	// Send the packet over P2P
-	auto [_len, _data] = vpkt.Pack(dst.virt.port);
-	// Send through DCCP
-	int ret = ::sendto(dccp_sock->sock, _data.get(), _len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
-	if (ret > 0)
+	if (isLocalTarget(_dest->sin_addr.s_addr)) {
+		int ret = ::sendto(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+		if (ret < 0)
+			return hleLogError(Log::sceNet, ret, "CONN_DGRAM_SOCKET sendto: Failed to send to local");
+		
 		dbg.sent++;
-	tx_seq++;
-	
-	DEBUG_LOG(Log::sceNet, "VPORT %d s(%d/%d) r(%d,%d)", ntohs(src.virt.vport), dbg.sent, dbg.send, dbg.recv, dbg.read);
+		WARN_LOG(Log::sceNet, "%d bytes send to (%s:%u);", 
+			ret, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.vport));
+		return ret;
+	} else {
+		// DCCP must exist for P2P traffic
+		auto p2p_sock = g_socketManager.GetP2PSocket();
+		if (!p2p_sock) {
+#if PPSSPP_PLATFORM(WINDOWS)
+			SetLastError(EINVAL);
+#else
+			socket_errno = EINVAL;
+#endif
+			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: P2P_SOCK Not Present");
+		}
 
-	// Now shotgun-send using all peer id's
-	// if (sigServer) {
-	// 	std::vector<SceNpMatching2RoomMemberId> peers = sigServer->GetPeerList();
-	// 	for (auto peer : peers) {
-	// 		// Alter the vport to point at the peer
-	// 		header.vport = htons(peer);
-	// 		memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
-	// 		::sendto(dccp_sock->sock, packet.get(), packet_size, flags, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
-	// 	}
-	// }
+		int ret = Send_Unrealiable(buf, len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr), dest_vport);
+		if (ret < 0)
+			return hleLogError(Log::sceNet, ret, "CONN_DGRAM_SOCKET send: Failed to send to peer");
+		dbg.sent++;
+		
+		std::string msg = "sendto::CONN_DGRAM " + std::to_string(ntohs(src.virt.vport)) + " -> " +
+			ip2str(_dest->sin_addr) + ":" + std::to_string(ntohs(_dest->sin_port)) + 
+			"{" + std::to_string(dest_vport) + "}";
+		INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
 
-	return ret;
+		WARN_LOG(Log::sceNet, "%d bytes send to %s:%u(%u); [tx=%d/rx=%d]", 
+			ret, ip2str(dst.virt.addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport),
+			tx_seq, rx_seq);
+		DEBUG_LOG(Log::sceNet, "VPORT %d s(%lld/%lld) r(%lld,%lld)", ntohs(src.virt.vport), dbg.sent, dbg.send, dbg.recv, dbg.read);
+
+		// Now shotgun-send using all peer id's
+		// if (sigServer) {
+		// 	std::vector<SceNpMatching2RoomMemberId> peers = sigServer->GetPeerList();
+		// 	for (auto peer : peers) {
+		// 		// Alter the vport to point at the peer
+		// 		header.vport = htons(peer);
+		// 		memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
+		// 		::sendto(p2p_sock->sock, packet.get(), packet_size, flags, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+		// 	}
+		// }
+
+		return ret; // Report unmodified packet size
+	}
+
  }
 int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) { 
 	dbg.read++;
