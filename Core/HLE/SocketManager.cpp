@@ -2059,69 +2059,91 @@ int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr*
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
 
-	// Dequeue from local packet queue for virtual sockets
-	VirtualPacket pkt;
-	if (!dequeue_packet(pkt)) {
-		// Empty Queue, try actual socket
-		int ret = ::recvfrom(sock, buf, len, flags, (struct sockaddr*)&saddr.addr, fromlen);
-		if (ret > 0)
+	if (has_pending_data()) {
+		// Dequeue from local packet queue for virtual sockets
+		VirtualPacket pkt;
+		if (!dequeue_packet(pkt)) {
+			// Empty Queue, try actual socket
+			int ret = ::recvfrom(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, fromlen);
+			if (ret < 0)
+				return ret;
+
 			dbg.recv++;
 
-		if (from) {
-			from->sa_family = saddr.addr.sa_family;
-			memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
-			from->sa_len = fromlen ? *fromlen : 0;
+			if (from) {
+				from->sa_family = saddr.addr.sa_family;
+				memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
+				from->sa_len = fromlen ? *fromlen : 0;
+			}
+			return ret;
 		}
-		return ret;
-	}
-	
-	// ===== STRICT DESTRUCTIVE FIFO SEMANTICS =====
-	// 
-	// If the caller's buffer is smaller than the packet:
-	//   - Copy only what fits (truncate)
-	//   - DISCARD THE REMAINDER (do not queue it back)
-	//   - Return the truncated size
-	//
-	// If the caller's buffer is larger than the packet:
-	//   - Copy the entire packet
-	//   - Return the actual packet size (do NOT pad)
-	//
-	// Always preserve source address information
-	
-	// Copy payload (truncate if necessary)
-	size_t copy_len = std::min((size_t)len, pkt.len);
-	if (copy_len > 0 && buf && pkt.data) {
-		memcpy(buf, pkt.data.get(), copy_len);
-	}
-	
-	// Copy source address (only update sin_addr and sin_port, preserve other fields)
-	if (from && fromlen) {
-		sockaddr_in* from_in = (sockaddr_in*)from;
-		// Preserve caller's structure but update only the address and port
-		from_in->sin_addr = pkt.src.host.sin_addr;
-		from_in->sin_port = pkt.src.host.sin_port;
-		from_in->sin_zero[0] = pkt.src.host.sin_zero[0]; // Copy vport
-		from_in->sin_zero[1] = pkt.src.host.sin_zero[1];
-		*fromlen = sizeof(sockaddr_in);  // Always set to actual size
 		
-		// Log with hex dump at INFO level so we see packet pickup
-		std::string msg = "recvfrom(vport " + std::to_string(ntohs(src.virt.vport)) + "): picked up " + 
-			std::to_string(copy_len) + " bytes from " + ip2str(from_in->sin_addr.s_addr) + 
-			":" + std::to_string(ntohs(from_in->sin_port));
-		INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, (int)copy_len, 256);
-	}
-	
-	dbg.recv++;
-	
-	// Log truncation if it occurred
-	if (copy_len < pkt.len) {
-		DEBUG_LOG(Log::sceNet, "recvfrom: TRUNCATED packet for vport %d (buf=%zu, pkt=%zu, discarding %zu bytes)",
-			ntohs(src.virt.vport), copy_len, pkt.len, pkt.len - copy_len);
+		// ===== STRICT DESTRUCTIVE FIFO SEMANTICS =====
+		// 
+		// If the caller's buffer is smaller than the packet:
+		//   - Copy only what fits (truncate)
+		//   - DISCARD THE REMAINDER (do not queue it back)
+		//   - Return the truncated size
+		//
+		// If the caller's buffer is larger than the packet:
+		//   - Copy the entire packet
+		//   - Return the actual packet size (do NOT pad)
+		//
+		// Always preserve source address information
+		
+		// Copy payload (truncate if necessary)
+		size_t copy_len = std::min((size_t)len, pkt.len);
+		if (copy_len > 0 && buf && pkt.data) {
+			memcpy(buf, pkt.data.get(), copy_len);
+		}
+		
+		// Copy source address (only update sin_addr and sin_port, preserve other fields)
+		if (from && fromlen) {
+			sockaddr_in* from_in = (sockaddr_in*)from;
+			// Preserve caller's structure but update only the address and port
+			from_in->sin_addr = pkt.src.host.sin_addr;
+			from_in->sin_port = pkt.src.host.sin_port;
+			from_in->sin_zero[0] = pkt.src.host.sin_zero[0]; // Copy vport
+			from_in->sin_zero[1] = pkt.src.host.sin_zero[1];
+			*fromlen = sizeof(sockaddr_in);  // Always set to actual size
+			
+			// Log with hex dump at INFO level so we see packet pickup
+			std::string msg = "recvfrom::CONN_DGRAM (vport " + std::to_string(ntohs(src.virt.vport)) + "): picked up " + 
+				std::to_string(copy_len) + " bytes from " + ip2str(from_in->sin_addr.s_addr) + 
+				":" + std::to_string(ntohs(from_in->sin_port));
+			INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, (int)copy_len, 256);
+		}
+		
+		dbg.recv++;
+		
+		// Log truncation if it occurred
+		if (copy_len < pkt.len) {
+			DEBUG_LOG(Log::sceNet, "recvfrom: TRUNCATED packet for vport %d (buf=%zu, pkt=%zu, discarding %zu bytes)",
+				ntohs(src.virt.vport), copy_len, pkt.len, pkt.len - copy_len);
+		}
+
+		DEBUG_LOG(Log::sceNet, "VPORT %d s(%lld/%lld) r(%lld,%lld)", ntohs(src.virt.vport), dbg.sent, dbg.send, dbg.recv, dbg.read);
+			// Return actual bytes copied (NOT padded to requested size)
+		return hleLogDebug(Log::sceNet, (int)copy_len, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+
 	}
 
-	DEBUG_LOG(Log::sceNet, "VPORT %d s(%d/%d) r(%d,%d)", ntohs(src.virt.vport), dbg.sent, dbg.send, dbg.recv, dbg.read);
+	int ret = ::recvfrom(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, fromlen);
+	if (ret < 0)
+		return ret; // Do not report, sceNetInetRecvfrom will handle the error reporting
+
+	if (from) {
+		from->sa_family = saddr.addr.sa_family;
+		memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
+		from->sa_len = fromlen ? *fromlen : 0;
+	}
+	dbg.recv++;
+	std::string msg = "recv::PACKET " + ip2str(saddr.in.sin_addr) + ":" + std::to_string(ntohs(saddr.in.sin_port));
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
+
+	DEBUG_LOG(Log::sceNet, "PORT %u s(%lld/%lld) r(%lld,%lld)", ntohs(saddr.in.sin_port), dbg.sent, dbg.send, dbg.recv, dbg.read);
 		// Return actual bytes copied (NOT padded to requested size)
-	return hleLogDebug(Log::sceNet, (int)copy_len, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) { 
 	SockAddrIN4 saddr{};
