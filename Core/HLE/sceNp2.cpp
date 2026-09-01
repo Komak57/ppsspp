@@ -75,6 +75,7 @@ static int actionAfternpMatching2ThreadMipsCall;
 u32 npMatching2ThreadHackAddr = 0;
 u32_le npMatching2ThreadCode[3];
 SceUID npMatching2ThreadID = 0;
+SceUID npMatching2EventID = 0;
 
 /*
 * This function is added as a placeholder for FakePSN Savestates to
@@ -398,7 +399,7 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
 	NOTICE_LOG(Log::sceNp2, "notifyRequestHandler - %s_%08x(ctxId: %d, reqId: %d, event: 0x%08x, error: 0x%08x, dataPtr: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_REQUEST_EVENT).c_str(), handler->cb.ptr,
 		args[0], args[1], args[2], args[3], args[4], args[5]);
 	
-	hleCall(ThreadManForUser, int, sceKernelSetEventFlag, npMatching2ThreadID, args[0]);
+	hleCall(ThreadManForUser, int, sceKernelSetEventFlag, npMatching2EventID, args[0]);
 	return 0;
 }
 
@@ -442,7 +443,7 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMem
 	NOTICE_LOG(Log::sceNp2, "notifyRoomMessageHandler - %s_%08x(ctxId: %d, roomId: %llu, param_4: %d, memberId: %d, requestEvent: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_MSG_EVENT).c_str(), handler->cb.ptr,
 		args[0], ((u64)args[1] | (u64)args[2] >> 32), args[3], args[4], args[5], args[6], args[7]);
 	
-	hleCall(ThreadManForUser, int, sceKernelSetEventFlag, npMatching2ThreadID, args[0]);
+	hleCall(ThreadManForUser, int, sceKernelSetEventFlag, npMatching2EventID, args[0]);
 	return 0;
 }
 
@@ -487,7 +488,7 @@ int notifyRoomEventHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 	NOTICE_LOG(Log::sceNp2, "notifyRoomEventHandler - %s_%08x(ctxId: %d, roomId: %llu, memberId: %d, event: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_EVENT).c_str(), handler->cb.ptr,
 		args[0], ((u64)args[1] | (u64)args[2] >> 32), args[3], args[4], args[5], args[6]);
 
-	hleCall(ThreadManForUser, int, sceKernelSetEventFlag, npMatching2ThreadID, args[0]);
+	hleCall(ThreadManForUser, int, sceKernelSetEventFlag, npMatching2EventID, args[0]);
 	return 0;
 }
 
@@ -539,7 +540,7 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 	// if (Memory::IsValidAddress(handler->cb.ptr))
 		// hleEnqueueCall(handler->cb.ptr, 8, args);
 
-	hleCall(ThreadManForUser, int, sceKernelSetEventFlag, npMatching2ThreadID, args[0]);
+	sceKernelSetEventFlag(npMatching2EventID, args[0]);
 	return 0;
 }
 
@@ -632,6 +633,9 @@ int _sceNetMemset(int poolSize) {
 int StartNpMatching2Thread(int threadStackSize, int threadPriority) {
 	if (threadPriority < 0x08 || threadPriority > 0x77)
 		return hleLogError(Log::sceNp2, SCE_KERNEL_ERROR_ILLEGAL_PRIORITY, "invalid init thread priority");
+
+	// Create Event Flag
+	npMatching2EventID = sceKernelCreateEventFlag("SceNpMatching2", 0, 0, 0);
 
 	int ret = __KernelCreateThread("SceNpMatching2", __KernelGetCurThreadModuleId(), npMatching2ThreadHackAddr, threadPriority, threadStackSize, PSP_THREAD_ATTR_USER, 0, true);
 	if (ret < 0) {
