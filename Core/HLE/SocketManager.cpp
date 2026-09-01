@@ -494,19 +494,7 @@ void SocketManager::CloseAll() {
 
 int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
     int delivered_count = 0;
-    
-    // Match sockets by vport (port-based routing instead of subscriptions)
-    for (int i = 0; i < SocketManager::VALID_INET_SOCKET_COUNT; i++) {
-        InetSocket* target_sock = &inetSockets_[i];
-        
-        // Skip unused sockets
-        if (!target_sock || target_sock->state == SocketState::Unused) {
-            continue;
-        }
-
-        // Match only virtual socket types (PACKET and CONN_DGRAM)
-		if ((vpkt.header_flags & p2ps_tcp_flags::TCP) != 0) {
-			if (target_sock->type != PSP_NET_INET_SOCK_PACKET)
+			if (target_sock->p2p_mode != p2p_type::RELIABLE)
 				continue;
 			// Listening sockets must match their connected sockets
 			if (target_sock->tcp_state != TCPState::Listening) {
@@ -531,8 +519,7 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 			// Matches endpoint vport (12000)
 			if (dest.virt.vport != 0 && target_sock->src.virt.vport != dest.virt.vport)
 				continue;
-		} else {
-			if (target_sock->type != PSP_NET_INET_SOCK_CONN_DGRAM)
+			if (target_sock->p2p_mode != p2p_type::UNRELIABLE)
 				continue;
 
 			// Matches endpoint address

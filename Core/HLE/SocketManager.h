@@ -56,6 +56,13 @@ enum p2ps_tcp_flags : u8
 	TCP = (1 << 7), // Is using TCP protocols
 };
 
+enum p2p_type : u8
+{
+	DISABLED = 0xFF,
+	RELIABLE = 0x00,
+	UNRELIABLE = 0x01
+};
+
 struct VPORT_HEADER {
 	u16 dest;
 	// UDP uses SUBSET, TCP uses FLAGS
@@ -154,6 +161,7 @@ struct InetSocket {
 	int domain;
 	int protocol;
 	bool nonblocking;
+	p2p_type p2p_mode;
 
 	// Metadata for debug use only.
 	VirtualSockAddr src;
@@ -238,6 +246,7 @@ struct InetSocket {
 		domain = 0;
 		protocol = 0;
 		nonblocking = false;
+		p2p_mode = p2p_type::DISABLED;
 
 		src.host = sockaddr_in{};
 		memset(&dbg, 0, sizeof(dbg));
