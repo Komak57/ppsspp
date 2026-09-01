@@ -119,7 +119,11 @@ void print_bin_search_filter(const SceNpMatching2BinSearchFilter* filt)
 	print_SceNpMatching2BinAttr(&filt->attr);
 }
 
-void print_SceNpMatching2FlagAttr(const SceNpMatching2FlagAttr flagAttr) {
+// Verified against np_matching2.prx (OFW 6.60): flagFilter and flagAttr share the
+// ROOM_FLAG_ATTR bit domain. The firmware serializer (FUN_0000bc40) sends them
+// paired to the server - filter selects which bits to change, attr their values -
+// and omits the block entirely when filter == 0.
+void print_SceNpMatching2FlagAttr(const SceNpMatching2FlagAttr flagAttr, const char *label) {
 	std::vector<std::string> flags;
 	if (flagAttr == 0)
 		flags.push_back("NONE | ");
@@ -138,7 +142,7 @@ void print_SceNpMatching2FlagAttr(const SceNpMatching2FlagAttr flagAttr) {
 			flags.push_back("PROHIBITIVE_MODE | ");
 	}
 	std::string _flags = std::accumulate(flags.begin(), flags.end(), std::string(""));
-	INFO_LOG(Log::sceNet, "flagAttr: 0x%x => %s", flagAttr, _flags.substr(0, _flags.length() - 3).c_str());
+	INFO_LOG(Log::sceNet, "%s: 0x%x => %s", label, flagAttr, _flags.substr(0, _flags.length() - 3).c_str());
 }
 
 void print_SceNpMatching2CreateJoinRoomRequest(const SceNpMatching2CreateJoinRoomRequest* req)
@@ -398,8 +402,7 @@ void print_SceNpMatching2SetRoomDataInternalRequest(const SceNpMatching2SetRoomD
 {
 	INFO_LOG(Log::sceNet, "SceNpMatching2SetRoomDataInternalRequest:");
 	INFO_LOG(Log::sceNet, "roomId: %d", req->roomId);
-	INFO_LOG(Log::sceNet, "flagFilter: 0x%x", req->flagFilter);
-
+	print_SceNpMatching2FlagAttr(req->flagFilter, "flagFilter");
 	print_SceNpMatching2FlagAttr(req->flagAttr);
 
 	INFO_LOG(Log::sceNet, "roomBinAttrInternal: *0x%x", req->roomBinAttrInternal.ptr);
@@ -434,8 +437,7 @@ void print_SceNpMatching2SetRoomMemberDataInternalRequest(const SceNpMatching2Se
 	INFO_LOG(Log::sceNet, "roomId: %d", req->roomId);
 	INFO_LOG(Log::sceNet, "memberId: %d", req->memberId);
 	INFO_LOG(Log::sceNet, "teamId: %d", req->teamId);
-	INFO_LOG(Log::sceNet, "flagFilter: 0x%x", req->flagFilter);
-
+	print_SceNpMatching2FlagAttr(req->flagFilter, "flagFilter");
 	print_SceNpMatching2FlagAttr(req->flagAttr);
 
 	INFO_LOG(Log::sceNet, "roomMemberBinAttrInternal: *0x%x", req->roomMemberBinAttrInternal.ptr);

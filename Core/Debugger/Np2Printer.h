@@ -10,7 +10,7 @@ void print_SceNpMatching2RangeFilter(const SceNpMatching2RangeFilter* filt);
 void print_SceNpMatching2RoomDataInternal(const SceNpMatching2RoomDataInternal* room);
 void print_SceNpMatching2RoomDataExternal(const SceNpMatching2RoomDataExternal* room);
 void print_SceNpMatching2RoomMemberDataInternal(const SceNpMatching2RoomMemberDataInternal* member);
-void print_SceNpMatching2FlagAttr(const SceNpMatching2FlagAttr flagAttr);
+void print_SceNpMatching2FlagAttr(const SceNpMatching2FlagAttr flagAttr, const char *label = "flagAttr");
 
 void print_SceNpMatching2CreateJoinRoomRequest(const SceNpMatching2CreateJoinRoomRequest* req);
 void print_SceNpMatching2CreateJoinRoomResponse(const SceNpMatching2CreateJoinRoomResponse* resp);
