@@ -352,7 +352,7 @@ void SocketManager::NetworkDemultiplexer(int* timeout) {
 				if (vpkt.header_flags & p2ps_tcp_flags::TCP) flags += "TCP|";
 				if (!flags.empty()) flags.pop_back(); // strip trailing '|'
 
-				WARN_LOG(Log::sceNet, "PACKET: Re-Sending %s at listening socket from %s:%u|%u to %s:%u|%u",
+				WARN_LOG(Log::sceNet, "NetworkDemultiplexer: Re-Sending %s at listening socket from %s:%u|%u to %s:%u|%u",
 					flags.c_str(), inet_ntoa(pkt.src.virt.addr), ntohs(pkt.src.virt.port), ntohs(pkt.src.virt.vport), ip2str(s->dst.virt.addr).c_str(), ntohs(s->dst.virt.port), ntohs(s->dst.virt.vport));
 				if (isLocalTarget(s->dst.virt.addr.s_addr)) {
 					outbuf.push_back({std::move(vpkt), s->dst});
@@ -368,7 +368,7 @@ void SocketManager::NetworkDemultiplexer(int* timeout) {
 					phys.sin_port = s->dst.virt.vport;
 					int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
 					if (ret < 0) {
-						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
+						ERROR_LOG(Log::sceNet, "NetworkDemultiplexer connect: Failed to send ACK");
 					} else {
 						pkt.last_sent_us = now_us;
 					}
@@ -412,7 +412,7 @@ void SocketManager::NetworkDemultiplexer(int* timeout) {
 					if (vpkt.header_flags & p2ps_tcp_flags::TCP) flags += "TCP|";
 					if (!flags.empty()) flags.pop_back(); // strip trailing '|'
 
-					WARN_LOG(Log::sceNet, "PACKET: Re-Sending %s at listening socket from %s:%u|%u to %s:%u|%u",
+					WARN_LOG(Log::sceNet, "NetworkDemultiplexer: Re-Sending %s at listening socket from %s:%u|%u to %s:%u|%u",
 						flags.c_str(), inet_ntoa(pkt.src.virt.addr), ntohs(pkt.src.virt.port), ntohs(pkt.src.virt.vport), ip2str(conn->dst.virt.addr).c_str(), ntohs(conn->dst.virt.port), ntohs(conn->dst.virt.vport));
 					if (isLocalTarget(conn->dst.virt.addr.s_addr)) {
 						outbuf.push_back({std::move(vpkt), conn->dst});
@@ -428,7 +428,7 @@ void SocketManager::NetworkDemultiplexer(int* timeout) {
 						phys.sin_port = conn->dst.virt.vport;
 						int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
 						if (ret < 0) {
-							ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
+							ERROR_LOG(Log::sceNet, "NetworkDemultiplexer connect: Failed to send ACK");
 						} else {
 							pkt.last_sent_us = now_us;
 						}
@@ -462,7 +462,7 @@ bool SocketManager::P2PRecv() {
 	
 	// Extract VPORT_HEADER (first 3 bytes: vport + flags)
 	if (ret < VPORT_HEADER_SIZE) {
-		INFO_LOG(Log::sceNet, "RouteDCCP: Packet too small (%d bytes) from %s:%u, ignoring", 
+		INFO_LOG(Log::sceNet, "P2PRecv: Packet too small (%d bytes) from %s:%u, ignoring", 
 			ret, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port));
 		return false; // Packet too small, ignore
 	}
@@ -512,10 +512,10 @@ bool SocketManager::P2PRecv() {
 	// display). For TCP packets show the sender's GAME endpoint from the ext header;
 	// the real sockaddr's sin_zero always displays as vport 0.
 	if ((header.flags & p2ps_tcp_flags::TCP) != 0 && header.dest != 0)
-		INFO_LOG(Log::sceNet, "RouteDCCP: Received %d bytes from %s:%u|%u -> peer %u|%u (flags=0x%02x(=%d))",
+		INFO_LOG(Log::sceNet, "P2PRecv: Received %d bytes from %s:%u|%u -> peer %u|%u (flags=0x%02x(=%d))",
 			ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(vpkt.dst.virt.port), ntohs(vpkt.dst.virt.vport), header.flags, header.flags & 0xFF);
 	else
-		INFO_LOG(Log::sceNet, "RouteDCCP: Received %d bytes from %s:%u|%u -> vport %d (flags=0x%02x(=%d))",
+		INFO_LOG(Log::sceNet, "P2PRecv: Received %d bytes from %s:%u|%u -> vport %d (flags=0x%02x(=%d))",
 			ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(header.dest), header.flags, header.flags & 0xFF);
 
 	VirtualSockAddr dest{};
@@ -628,12 +628,12 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 		}
 		InetSocket* target_sock = exact ? exact : listener;
 		if (!target_sock) {
-			ERROR_LOG(Log::sceNet, "RouteDCCP: No RELIABLE socket for %s:%u|%u -> %u|%u (flags=0x%02x)",
+			ERROR_LOG(Log::sceNet, "vBroadcast: No RELIABLE socket for %s:%u|%u -> %u|%u (flags=0x%02x)",
 				inet_ntoa(vpkt.src.host.sin_addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport),
 				ntohs(dest.virt.port), ntohs(dest.virt.vport), vpkt.header_flags);
 			return 0;
 		}
-		INFO_LOG(Log::sceNet, "RouteDCCP: DELIVERING %i bytes from %s:%u|%u to port %s:%u|%u (type=%d)",
+		INFO_LOG(Log::sceNet, "vBroadcast: DELIVERING %i bytes from %s:%u|%u to port %s:%u|%u (type=%d)",
 			(int)vpkt.len, inet_ntoa(vpkt.src.host.sin_addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport),
 			ip2str(target_sock->src.virt.addr).c_str(), ntohs(target_sock->src.virt.port), ntohs(target_sock->src.virt.vport), target_sock->type);
 		target_sock->enqueue_packet(vpkt.clone());
@@ -668,10 +668,10 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 			} else if (target_sock->src.virt.vport != dest.virt.vport)
 				continue;
 
-			DEBUG_LOG(Log::sceNet, "RouteDCCP: Processing socket dst.virt.port %d (type=%d)", 
+			DEBUG_LOG(Log::sceNet, "vBroadcast: Processing socket dst.virt.port %d (type=%d)", 
 				target_sock->src.virt.vport, target_sock->type);
 
-			INFO_LOG(Log::sceNet, "RouteDCCP: DELIVERING %i bytes from %s:%u|%u to port %s:%u|%u (type=%d)", 
+			INFO_LOG(Log::sceNet, "vBroadcast: DELIVERING %i bytes from %s:%u|%u to port %s:%u|%u (type=%d)", 
 				(int)vpkt.len, inet_ntoa(vpkt.src.virt.addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ip2str(target_sock->src.virt.addr).c_str(), ntohs(target_sock->src.virt.port), ntohs(target_sock->src.virt.vport), target_sock->type);
 			
 			target_sock->enqueue_packet(vpkt.clone());
@@ -682,13 +682,13 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 			}
 		}
         
-		DEBUG_LOG(Log::sceNet, "RouteDCCP: NOT delivering to vport %d (deliver_data=false)", ntohs(target_sock->src.virt.vport));
+		DEBUG_LOG(Log::sceNet, "vBroadcast: NOT delivering to vport %d (deliver_data=false)", ntohs(target_sock->src.virt.vport));
     }
     
     if (delivered_count > 0) {
-        DEBUG_LOG(Log::sceNet, "RouteDCCP: Total delivered to %d subscribers matching  %s:%u|%u", delivered_count, ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport));
+        DEBUG_LOG(Log::sceNet, "vBroadcast: Total delivered to %d subscribers matching  %s:%u|%u", delivered_count, ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport));
     } else {
-        ERROR_LOG(Log::sceNet, "RouteDCCP: Total delivered to %d subscribers matching  %s:%u|%u", delivered_count, ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport));
+        ERROR_LOG(Log::sceNet, "vBroadcast: Total delivered to %d subscribers matching  %s:%u|%u", delivered_count, ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport));
 	}
 
     return delivered_count;
@@ -2039,11 +2039,13 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 		
 		std::string msg = "sendto::CONN_DGRAM " + std::to_string(ntohs(src.virt.vport)) + " -> " +
 			ip2str(_dest->sin_addr) + ":" + std::to_string(ntohs(_dest->sin_port)) + 
-			"{" + std::to_string(dest_vport) + "}";
+			"{" + std::to_string(ntohs(dest_vport)) + "}";
 		INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
 
-		WARN_LOG(Log::sceNet, "%d bytes send to %s:%u(%u); [tx=%d/rx=%d]", 
-			ret, ip2str(dst.virt.addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport),
+		// Report the ACTUAL destination (connectionless sockets never populate dst -
+		// printing it showed "0.0.0.0:0(0)" as if the packet went nowhere)
+		WARN_LOG(Log::sceNet, "%d bytes send to %s:%u(%u); [tx=%d/rx=%d]",
+			ret, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), ntohs(dest_vport),
 			tx_seq, rx_seq);
 		DEBUG_LOG(Log::sceNet, "VPORT %d s(%lld/%lld) r(%lld,%lld)", ntohs(src.virt.vport), dbg.sent, dbg.send, dbg.recv, dbg.read);
 
