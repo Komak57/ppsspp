@@ -1172,9 +1172,14 @@ struct SceNpMatching2GetUserInfoListResponse
 	u32 userInfoNum;
 };
 
+// CAUTION! PSP 6.6.0 np_matching2.prx defines this as 0x10,
+//   with a struct at offset 0 containing a relevant value at offset 0x9c
+//   This is not used in current test games, and may not be relevant.
 // External room member data list request parameter
 struct SceNpMatching2GetRoomMemberDataExternalListRequest
 {
+	PSPPointer<u8[0xa0]> attrs; // important 4-byte value at 0x9c
+	u32 attrNum;
 	SceNpMatching2RoomId roomId;
 };
 
