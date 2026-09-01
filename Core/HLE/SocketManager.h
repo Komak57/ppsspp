@@ -224,9 +224,6 @@ struct InetSocket {
 	std::list<InetSocket*> pending_connections; // Pending connection for SOCK_PACKET
 	int backlog; // limit to buffered pending connections
 
-	fd_set* readfds;
-	fd_set* writefds;
-	fd_set* exceptfds;
 	// Virtual destructor for proper cleanup of derived types
 	virtual ~InetSocket() = default;
 	void clear();
@@ -313,7 +310,6 @@ struct InetSocket {
 	};
 	// Virtual methods - override in derived classes for type-specific behavior
 	// Base implementations return EOPNOTSUPP for unsupported operations
-	virtual int select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout);
 	virtual int setsockopt(int level, int optname, int optval, socklen_t optlen);
 	virtual int setsockopt(int level, int optname, const char* optval, socklen_t optlen);
 	virtual int getsockopt(int level, int optname, char* optval, socklen_t* optlen);

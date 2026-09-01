@@ -572,7 +572,6 @@ const char *SocketStateToString(SocketState state) {
 // Base Socket Class
 // Default fallback functions for things not yet implemented by other sockets
 // ============================================================================
-int InetSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::send(const char* buf, int len, int flags) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::recv(char* buf, int len, int flags) { errno = EOPNOTSUPP; return -1; }
@@ -1021,34 +1020,6 @@ int StreamSocket::shutdown(int how) { return ::shutdown(sock, how); }
 // ============================================================================
 // 
 // ============================================================================
-int DgramSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) {
-
-	// First, translate the specified fd_sets to host sockets.
-	fd_set rdfds, wrfds, exfds;
-	FD_ZERO(&rdfds);
-	FD_ZERO(&wrfds);
-	FD_ZERO(&exfds);
-
-	timeval tmout = { 5, 543210 }; // Workaround timeout value when timeout = NULL
-	if (timeout) {
-		tmout.tv_sec = timeout->tv_sec;
-		tmout.tv_usec = timeout->tv_usec;
-	}
-	// TODO: Simulate blocking behaviour when timeout = NULL to prevent PPSSPP from freezing
-	// Note: select can overwrite tmout.
-	int retval = ::select(sock, readfds ? &rdfds : nullptr, writefds ? &wrfds : nullptr, exceptfds ? &exfds : nullptr, &tmout);
-
-
-	// Convert the results back to PSP fd_sets.
-	if (readfds)
-		NetInetFD_ZERO(readfds);
-	if (writefds)
-		NetInetFD_ZERO(writefds);
-	if (exceptfds)
-		NetInetFD_ZERO(exceptfds);
-
-	return retval;
-}
 int DgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
@@ -1760,116 +1731,7 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 		return hleLogError(Log::sceNet, ret);
 	return ret;
 }
-int ConnDgramSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) {
-	// First, translate the specified fd_sets to host sockets.
-	fd_set rdfds, wrfds, exfds;
-	FD_ZERO(&rdfds);
-	FD_ZERO(&wrfds);
-	FD_ZERO(&exfds);
 
-	// Log select() calls on virtual sockets for debugging
-	INFO_LOG(Log::sceNet, "select: vport %d called (type=%d, readfds=%p, timeout=%p)", 
-		ntohs(src.virt.vport), type, readfds, timeout);
-	
-	if (readfds && has_pending_data()) {
-		INFO_LOG(Log::sceNet, "select: vport %d HAS PENDING DATA, returning 1", ntohs(src.virt.vport));
-		return 1;
-	}
-	
-	// If we get here with readfds set, there's no data
-	if (readfds) {
-		INFO_LOG(Log::sceNet, "select: vport %d NO PENDING DATA", ntohs(src.virt.vport));
-	}
-	
-	if (writefds) {
-		bool writable = false;
-		if (type == PSP_NET_INET_SOCK_CONN_DGRAM) {
-			writable = true;  // UDP always writable
-		} else if (type == PSP_NET_INET_SOCK_PACKET) {
-			writable = (tcp_state == TCPState::Established || tcp_state == TCPState::SynReceived);
-		}
-		
-		if (writable) {
-			INFO_LOG(Log::sceNet, "select: vport %d is writable, returning 1", ntohs(src.virt.vport));
-			return 1;
-		}
-	}
-	
-	// 2. Physical Socket Checks
-	// Poll the underlying physical socket using a non-blocking select
-	timeval tv_zero = {0, 0};
-	
-	// We MUST copy the fd_sets. A 0-timeout select will clear the sets if nothing is ready,
-	// and we don't want to destroy the caller's sets if only virtual data becomes ready later.
-	fd_set read_copy, write_copy, exc_copy;
-	fd_set* p_read = nullptr;
-	fd_set* p_write = nullptr;
-	fd_set* p_exc = nullptr;
-	
-	if (readfds)   { read_copy = rdfds;   p_read = &read_copy;   }
-	if (writefds)  { write_copy = wrfds; p_write = &write_copy; }
-	if (exceptfds) { exc_copy = exfds;  p_exc = &exc_copy;     }
-	
-	// Using 'sock' mirrors your default fallback behavior
-	int phys_ready = ::select(sock, p_read, p_write, p_exc, &tv_zero);
-	if (phys_ready > 0) {
-		DEBUG_LOG(Log::sceNet, "select: vport %d has physical data/events", ntohs(src.virt.vport));
-		// Copy back the mutated sets so the caller knows exactly what triggered
-		// if (readfds)   *readfds = read_copy;
-		// if (writefds)  *writefds = write_copy;
-		// if (exceptfds) *exceptfds = exc_copy;
-
-		// Convert the results back to PSP fd_sets.
-		if (readfds)
-			NetInetFD_ZERO(readfds);
-		if (writefds)
-			NetInetFD_ZERO(writefds);
-		if (exceptfds)
-			NetInetFD_ZERO(exceptfds);
-		return phys_ready;
-	}
-	
-	// Nothing ready yet
-	return 0;
-	// Wait Logic?
-}
-bool ConnDgramSocket::ProcessNetStack() {
-    std::lock_guard<std::mutex> queue(queue_lock);
-    const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
-    u64 current_time_us = (u64)(time_now_d() * 1000000.0);
-
-	bool ret = false;
-    auto it = rx_queue.begin();
-    while (it != rx_queue.end()) {
-        VirtualPacket pkt = (*it).clone();
-		it = rx_queue.erase(it);
-		// FIXME: Should technically support non-broadcast sends
-		// if (!target_sock->is_broadcast_enabled())
-			// continue;
-
-        // 1. Cleanup Stale Packets (Protocol Housekeeping)
-        u64 packet_age_us = current_time_us - pkt.enqueue_time_us;
-        if (packet_age_us > MAX_PACKET_AGE_US) {
-            WARN_LOG(Log::sceNet, "ProcessNetStack: Discarding stale packet (age: %.2f s)", 
-                (float)packet_age_us / 1000000.0f);
-            continue;
-        }
-		ret = true;
-
-		{
-			std::lock_guard<std::mutex> buffers(buffer_lock);
-			int next_id = 1;
-			if (!rx_buffer.empty())
-				next_id = rx_buffer.rbegin()->first + 1;
-			rx_buffer[next_id] = std::move(pkt);
-		}
-		// DEBUG_LOG(Log::sceNet, "%d=recvfrom(%s:%u) -> vport %d{%02X} (type=%d); [%lld/%lld, %lld/%lld]", 
-		// 	pkt.len, inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), 
-		// 	vport, pkt.header_flags, type,
-		// 	dbg.send, dbg.sent, dbg.recv, dbg.read);
-	}
-	return ret;
-}
 // ============================================================================
 // TCP Virtual Socket with UPnP transmission capabilities
 // ============================================================================
@@ -2293,94 +2155,7 @@ int PacketSocket::shutdown(int how) {
 		}
 	}
 	
-	return 0;
-}
-int PacketSocket::select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) {
-	// First, translate the specified fd_sets to host sockets.
-	fd_set rdfds, wrfds, exfds;
-	FD_ZERO(&rdfds);
-	FD_ZERO(&wrfds);
-	FD_ZERO(&exfds);
-
-	timeval tmout = { 5, 543210 }; // Workaround timeout value when timeout = NULL
-	if (timeout) {
-		tmout.tv_sec = timeout->tv_sec;
-		tmout.tv_usec = timeout->tv_usec;
-	}
-		// Log select() calls on virtual sockets for debugging
-	INFO_LOG(Log::sceNet, "select: vport %d called (type=%d, readfds=%p, timeout=%p)", 
-		ntohs(src.virt.vport), type, readfds, timeout);
-	
-	// 1. Virtual State Checks
-	if (readfds && type == PSP_NET_INET_SOCK_PACKET && tcp_state == TCPState::Listening) {
-		if (has_pending_connection()) {
-			INFO_LOG(Log::sceNet, "select: vport %d has pending connection for accept(), returning 1", ntohs(src.virt.vport));
-			return 1;
-		}
-	}
-	
-	if (readfds && has_pending_data()) {
-		INFO_LOG(Log::sceNet, "select: vport %d HAS PENDING DATA, returning 1", ntohs(src.virt.vport));
-		return 1;
-	}
-	
-	// If we get here with readfds set, there's no data
-	if (readfds) {
-		INFO_LOG(Log::sceNet, "select: vport %d NO PENDING DATA", ntohs(src.virt.vport));
-	}
-	
-	if (writefds) {
-		bool writable = false;
-		if (type == PSP_NET_INET_SOCK_CONN_DGRAM) {
-			writable = true;  // UDP always writable
-		} else if (type == PSP_NET_INET_SOCK_PACKET) {
-			writable = (tcp_state == TCPState::Established || tcp_state == TCPState::SynReceived);
-		}
-		
-		if (writable) {
-			INFO_LOG(Log::sceNet, "select: vport %d is writable, returning 1", ntohs(src.virt.vport));
-			return 1;
-		}
-	}
-	
-	// 2. Physical Socket Checks
-	// Poll the underlying physical socket using a non-blocking select
-	timeval tv_zero = {0, 0};
-	
-	// We MUST copy the fd_sets. A 0-timeout select will clear the sets if nothing is ready,
-	// and we don't want to destroy the caller's sets if only virtual data becomes ready later.
-	fd_set read_copy, write_copy, exc_copy;
-	fd_set* p_read = nullptr;
-	fd_set* p_write = nullptr;
-	fd_set* p_exc = nullptr;
-	
-	if (readfds)   { read_copy = rdfds;   p_read = &read_copy;   }
-	if (writefds)  { write_copy = wrfds; p_write = &write_copy; }
-	if (exceptfds) { exc_copy = exfds;  p_exc = &exc_copy;     }
-	
-	// Using 'sock' mirrors your default fallback behavior
-	int phys_ready = ::select(sock, p_read, p_write, p_exc, &tv_zero);
-	if (phys_ready > 0) {
-		DEBUG_LOG(Log::sceNet, "select: vport %d has physical data/events", ntohs(src.virt.vport));
-		// Copy back the mutated sets so the caller knows exactly what triggered
-		// if (readfds)   *readfds = read_copy;
-		// if (writefds)  *writefds = write_copy;
-		// if (exceptfds) *exceptfds = exc_copy;
-
-		// Convert the results back to PSP fd_sets.
-		if (readfds)
-			NetInetFD_ZERO(readfds);
-		if (writefds)
-			NetInetFD_ZERO(writefds);
-		if (exceptfds)
-			NetInetFD_ZERO(exceptfds);
-
-		return phys_ready;
-	}
-	
-	// Nothing ready yet
-	return 0;
-	// Wait Logic?
+	return ::shutdown(sock, how);
 }
 bool PacketSocket::dequeue_packet(VirtualPacket& packet) {
 	std::lock_guard<std::mutex> buffers(buffer_lock);
