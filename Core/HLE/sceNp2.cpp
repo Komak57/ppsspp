@@ -76,6 +76,7 @@ u32 npMatching2ThreadHackAddr = 0;
 u32_le npMatching2ThreadCode[3];
 SceUID npMatching2ThreadID = 0;
 SceUID npMatching2EventID = 0;
+SceUID vplUid = 0;
 
 /*
 * This function is added as a placeholder for FakePSN Savestates to
@@ -693,9 +694,8 @@ int NP2Init(int poolSize, int threadStackSize, int threadPriority) {
 		return hleLogError(Log::sceNp2, ret, "Unable to Allocate Pool");
 
 	// ret = sceKernelQueryMemoryInfo();
-	// ret = sceKernelCreateVpl("SceNet", in_a0, 0x0, in_a1, 0x0);
+	// vplUid = sceKernelCreateVpl("SceNet", npMatching2MemStat.npMemSize, 0x0, poolSize, 0x0);
 	sceKernelGetCompiledSdkVersion(); // return value ignored here?
-
 	// Initializes some memory                                     
     // UNK_088322d0 = 1;
     // UNK_088322b4 = 2;
@@ -1102,7 +1102,10 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamP
 	case SCE_NP_MATCHING2_SERVER_STATUS_MAINTENANCE: ERROR_LOG(Log::sceNp2, " - Server Status: Maintenance"); break;
 	}
 
-	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, SCE_NP_MATCHING2_OKAY, serv_info.ptr);
+	int ret = notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, SCE_NP_MATCHING2_OKAY, serv_info.ptr);
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, serverIdPtr);
+	return ret;
 }
 
 /* Allocates a list of SceNpMatching2World for information about the lobbies, parties, and existing player counts
@@ -1188,7 +1191,8 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 	}
 
 	int ret = npServer->SearchRoom(ctxId, request_id, req);
-
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return SCE_NP_MATCHING2_OKAY;
 }
 
@@ -1251,6 +1255,8 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 
 	int ret = npServer->CreateJoinRoom(ctxId, request_id, req);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return SCE_NP_MATCHING2_OKAY;
 }
 
@@ -1299,7 +1305,8 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u
 	// FIXME: Get roomData from PSN
 	int ret = npServer->JoinRoom(ctxId, request_id, req);
 
-
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return SCE_NP_MATCHING2_OKAY;
 }
 
@@ -1340,8 +1347,10 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, 
 	auto req = PSPPointer<SceNpMatching2LeaveRoomRequest>::Create(reqParamPtr);
 	int ret = npServer->LeaveRoom(ctxId, request_id, req);
 
-	hleEatCycles(30000);
+	// hleEatCycles(30000);
 	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return SCE_NP_MATCHING2_OKAY;
 }
 
@@ -1388,6 +1397,8 @@ static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 
 	int ret = npServer->GetRoomDataInternal(ctxId, request_id, req);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return SCE_NP_MATCHING2_OKAY;
 }
 
@@ -1440,6 +1451,8 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
 
 	int ret = npServer->SetRoomDataExternal(ctxId, request_id, req);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	// After returning, Fat Princess will loop for 64 times (increasing the address by 288 bytes on each loop) or until found a zero status byte (0x08BD4860 + 0x10), looking for empty/available entry to set?
 	return SCE_NP_MATCHING2_OKAY;
 }
@@ -1483,6 +1496,8 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
 	//return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, SCE_NP_MATCHING2_OKAY, 0);
 	int ret = npServer->SetRoomDataInternal(ctxId, request_id, req);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return SCE_NP_MATCHING2_OKAY;
 }
 
@@ -1592,6 +1607,8 @@ static int sceNpMatching2SetUserInfo(int ctxId, u32 reqParamPtr, u32 optParamPtr
 
 	int ret = npServer->SetUserInfo(ctxId, request_id, req);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return SCE_NP_MATCHING2_OKAY;
 }
 
@@ -1631,6 +1648,8 @@ static int sceNpMatching2GetUserInfoList(int ctxId, u32 reqParamPtr, u32 optPara
 
 	// FIXME: GetUserInfoList does not yet exist in RPCN, or is otherwise unimplemented
 	//int ret = npServer->GetUserInfo(ctxId, request_id, req);
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetUserInfoList, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_OKAY, "UNIMPLEMENTED"), 0);
 }
 
@@ -1687,6 +1706,8 @@ static int sceNpMatching2SetSignalingOptParam(int ctxId, u32 reqParamPtr, u32 op
 
 	return notifyRoomEventHandler(0, 0, SCE_NP_MATCHING2_ROOM_EVENT_UpdatedSignalingOptParam, 0);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return SCE_NP_MATCHING2_OKAY;
 }
 
@@ -2147,6 +2168,8 @@ static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32
 
 	int ret = npServer->GetRoomDataExternalList(ctxId, request_id, req);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return SCE_NP_MATCHING2_OKAY;
 }
 
@@ -2241,6 +2264,8 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
 
 	int ret = npServer->SendRoomMessage(ctxId, request_id, req);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return SCE_NP_MATCHING2_OKAY;
 }
 
@@ -2272,6 +2297,8 @@ static int sceNpMatching2GrantRoomOwner(int ctxId, u32 reqParamPtr, u32 optParam
 	if (!npServer)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GrantRoomOwner, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GrantRoomOwner, SCE_NP_MATCHING2_OKAY, 0);
 }
 
@@ -2338,6 +2365,8 @@ static int sceNpMatching2SetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 
 	npServer->SetRoomMemberDataInternal(ctxId, request_id, req);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return hleLogWarning(Log::sceNp2, SCE_NP_MATCHING2_OKAY, "UNTESTED");
 }
 
@@ -2393,6 +2422,8 @@ static int sceNpMatching2GetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u
 
 	npServer->GetRoomMemberDataInternal(ctxId, request_id, req);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return hleLogWarning(Log::sceNp2, SCE_NP_MATCHING2_OKAY, "UNTESTED");
 }
 
@@ -2440,6 +2471,8 @@ static int sceNpMatching2GetRoomMemberDataExternalList(int ctxId, u32 reqParamPt
 	if (!npServer)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataExternalList, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataExternalList, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_OKAY, "UNIMPLEMENTED"), 0);
 }
 
@@ -2471,6 +2504,8 @@ static int sceNpMatching2KickoutRoomMember(int ctxId, u32 reqParamPtr, u32 optPa
 	if (!npServer)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_KickoutRoomMember, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND), 0);
 
+	//SceUID thread = __KernelGetCurThread();
+	// hleCall(ThreadManForUser, int, sceKernelFreeVpl, vplUid, reqParamPtr);
 	return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_KickoutRoomMember, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_OKAY, "UNIMPLEMENTED"), 0);
 }
 
