@@ -315,8 +315,6 @@ void SocketManager::NetworkDemultiplexer(int* timeout) {
 	for (int i = MIN_VALID_INET_SOCKET; i < VALID_INET_SOCKET_COUNT; i++) {
 		InetSocket* s = &inetSockets_[i];
 		if (s->state != SocketState::Unused && s->type == PSP_NET_INET_SOCK_PACKET) {
-			// Run the emulated protocol stack for this socket
-			// s->ProcessNetStack();
 
 			uint8_t expected_flag = 0;
 			switch (s->tcp_state) {
@@ -919,7 +917,6 @@ int InetSocket::connect(SceNetInetSockaddr* name, int namelen) { errno = EOPNOTS
 int InetSocket::listen(int backlog) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::accept(sockaddr* addr, socklen_t* addrlen) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::shutdown(int how) { errno = EOPNOTSUPP; return -1; }
-bool InetSocket::ProcessNetStack() { return false; }
 void InetSocket::enqueue_packet(VirtualPacket packet) {
 	std::lock_guard<std::mutex> queue(queue_lock);
 	// Add timestamp for TTL tracking
@@ -1185,7 +1182,7 @@ bool InetSocket::Process_Unreliable() {
         // 1. Cleanup Stale Packets (Protocol Housekeeping)
         u64 packet_age_us = current_time_us - pkt.enqueue_time_us;
         if (packet_age_us > MAX_PACKET_AGE_US) {
-            WARN_LOG(Log::sceNet, "ProcessNetStack: Discarding stale packet (age: %.2f s)", 
+            WARN_LOG(Log::sceNet, "Process_Unreliable: Discarding stale packet (age: %.2f s)", 
                 (float)packet_age_us / 1000000.0f);
             continue;
         }
@@ -1277,7 +1274,7 @@ bool InetSocket::Process_Reliable() {
         // 1. Cleanup Stale Packets (Protocol Housekeeping)
         u64 packet_age_us = current_time_us - pkt.enqueue_time_us;
         if (packet_age_us > MAX_PACKET_AGE_US) {
-            WARN_LOG(Log::sceNet, "ProcessNetStack: Discarding stale packet (age: %.2f seconds)", (float)packet_age_us / 1000000.0f);
+            WARN_LOG(Log::sceNet, "Process_Reliable: Discarding stale packet (age: %.2f seconds)", (float)packet_age_us / 1000000.0f);
             continue;
         }
 
@@ -1391,7 +1388,7 @@ bool InetSocket::Process_Reliable() {
                 // Resume the thread that is currently blocked in sceNetInetConnect
 				// int tid = threadID.exchange(-1);
                 // if (tid > 0) {
-                //     DEBUG_LOG(Log::sceNet, "ProcessNetStack: SYN|ACK received, resuming thread %d", tid);
+                //     DEBUG_LOG(Log::sceNet, "Process_Reliable: SYN|ACK received, resuming thread %d", tid);
                 //     __KernelResumeThreadFromWait(tid, 0);
                 // }
 
@@ -1429,7 +1426,7 @@ bool InetSocket::Process_Reliable() {
 
                 // Resume the thread that is currently blocked in sceNetInetConnect
                 // if (threadID > 0) {
-                //     DEBUG_LOG(Log::sceNet, "ProcessNetStack: ACK received, resuming thread %d", threadID);
+                //     DEBUG_LOG(Log::sceNet, "Process_Reliable: ACK received, resuming thread %d", threadID);
                 //     __KernelResumeThreadFromWait(threadID, 0);
                 //     threadID = -1;
                 // }
@@ -1982,64 +1979,6 @@ int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	return ret;
 }
 int DccpSocket::shutdown(int how) { return ::shutdown(sock, how); }
-bool DccpSocket::ProcessNetStack() {
-	// Clear the error
-#if PPSSPP_PLATFORM(WINDOWS)
-	SetLastError(0);
-#else
-	socket_errno = 0;
-#endif
-
-	char data[0x3000]; // Supplied by many psp buffers
-	sockaddr_in _from{};
-	socklen_t _fromlen = sizeof(_from);
-	int ret = ::recvfrom(sock, data, sizeof(data), 0, reinterpret_cast<sockaddr*>(&_from), &_fromlen);
-	if (ret <= 0) {
-		// This is normal if no packet is available (non-blocking mode)
-		return false;
-	}
-	
-	// Extract VPORT_HEADER (first 3 bytes: vport + flags)
-	if (ret < VPORT_HEADER_SIZE) {
-		INFO_LOG(Log::sceNet, "RouteDCCP: Packet too small (%d bytes) from %s:%u, ignoring", 
-			ret, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port));
-		return false; // Packet too small, ignore
-	}
-
-	VPORT_HEADER header;
-	memcpy(&header, data, VPORT_HEADER_SIZE);
-	
-	int i = VPORT_HEADER_SIZE;
-	// Generate the transmission vpacket
-	VirtualPacket vpkt;
-	vpkt.seq_id = 0;
-	if (ret - i >= sizeof(vpkt.seq_id) && header.dest != 0) {
-		memcpy(&vpkt.seq_id, data, sizeof(vpkt.seq_id));
-		i += sizeof(vpkt.seq_id);
-	}
-	vpkt.len = ret - i;
-	if (vpkt.len > 0) {
-		vpkt.data = std::make_unique<char[]>(vpkt.len);
-		memcpy(vpkt.data.get(), data+i, vpkt.len);
-	}
-	vpkt.header_flags = header.flags;
-	vpkt.src.host = _from;
-	vpkt.src.host.sin_family = AF_INET;
-	// Add timestamp for TTL tracking
-	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
-
-	// Log incoming packet details (convert vport from network to host byte order for display)
-	INFO_LOG(Log::sceNet, "RouteDCCP: Received %d bytes from %s:%u|%u -> vport %d (flags=0x%02x(=%d))", 
-		ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(header.dest), header.flags, header.flags & 0xFF);
-	
-	VirtualSockAddr dest{};
-	getLocalIp(&dest.host);
-	dest.virt.port = 0;
-	dest.virt.vport = header.dest;
-	g_socketManager.vBroadcast(std::move(vpkt), dest);
-	
-	return true;
-}
 
 // ============================================================================
 // Standard P2P Comm Channel (UDP)
