@@ -611,44 +611,6 @@ int ScheduleUpnpState(int event, int newState, int usec, const char* reason) {
 	return 0;
 }
 
-/*
-*   Signaling is made of 3 parts. This is Part 1, which handles the STUN based public/local IP information
-*/
-void SceNetUpnpThread()
-{
-	// WARN_LOG(Log::Signaling, "UNTESTED %s()", __FUNCTION__);
-	// hleSkipDeadbeef();
-	auto start = std::chrono::steady_clock::now();
-	int newState = SCE_NP_MATCHING2_STATE_NONE;
-	int delayus = 100000;
-	uint64_t net_time = 0;
-	uint64_t upnp_time = 0;
-	if (uPnPInitialized) {
-		newState = SCE_NP_MATCHING2_STATE_INIT;
-		delayus = 16000;
-		if (STUN_addr) {
-			newState = SCE_NP_MATCHING2_STATE_CONNECTED;
-			// FIXME: Needs to maintain the NAT port with sigServer Ping/Pong
-			sigServer->UpnpThreadTick();
-			upnp_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
-		}
-		g_socketManager.ProcessNetStack(&delayus);
-		net_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count() - upnp_time;
-	}
-
-	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
-	// INFO_LOG(Log::sceNet, "SceNetUpnpThread took %lluus [upnp=%llu, net=%llu]", elapsed, upnp_time, net_time);
-	delayus = (elapsed > delayus? 0 : delayus - elapsed);
-	if (delayus > 0) {
-		//ScheduleUpnpState(1, newState, delayus, "Upnp Wait State");
-		// VERBOSE_LOG(Log::sceNp2, "Upnp Waiting %d ms", (delayus / 1000));
-		//int r = hleDelayResult(0, "Upnp Wait State", delayus);
-		// hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
-		// sceKernelDelayThread(delayus);
-		hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
-	}
-	hleNoLogVoid();
-}
 
 void __NetApctlInit() {
 	g_netApctlInited = false;
@@ -1828,6 +1790,51 @@ static int sceNetApctl_lib2_C20A144C(int connIndex, u32 ps3MacAddressPtr) {
 	return sceNetApctlConnect(connIndex);
 }
 
+
+/*
+*   Signaling is made of 3 parts. This is Part 1, which handles the STUN based public/local IP information
+
+* 	Function Table [0]
+*		Waits?
+*	Function Table [1]
+* 		Creates 1 Socket Type 2 (PSP_NET_INET_SOCK_DGRAM) communicating to 239.255.255.250 (Requests UPnP Services)
+* 		Creates 1 Socket Type 1 (PSP_NET_INET_SOCK_STREAM?) stored as +0x30
+*/
+void SceNetUpnpThread()
+{
+	// WARN_LOG(Log::Signaling, "UNTESTED %s()", __FUNCTION__);
+	// hleSkipDeadbeef();
+	auto start = std::chrono::steady_clock::now();
+	int newState = SCE_NP_MATCHING2_STATE_NONE;
+	int delayus = 100000;
+	uint64_t net_time = 0;
+	uint64_t upnp_time = 0;
+	if (uPnPInitialized) {
+		newState = SCE_NP_MATCHING2_STATE_INIT;
+		delayus = 16000;
+		if (STUN_addr) {
+			newState = SCE_NP_MATCHING2_STATE_CONNECTED;
+			// FIXME: Needs to maintain the NAT port with sigServer Ping/Pong
+			//sigServer->UpnpThreadTick();
+			//upnp_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+		}
+		// g_socketManager.NetworkDemultiplexer(&delayus);
+		net_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count() - upnp_time;
+	}
+
+	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+	// INFO_LOG(Log::sceNet, "SceNetUpnpThread took %lluus [upnp=%llu, net=%llu]", elapsed, upnp_time, net_time);
+	delayus = (elapsed > delayus? 0 : delayus - elapsed);
+	if (delayus > 0) {
+		//ScheduleUpnpState(1, newState, delayus, "Upnp Wait State");
+		// VERBOSE_LOG(Log::sceNp2, "Upnp Waiting %d ms", (delayus / 1000));
+		//int r = hleDelayResult(0, "Upnp Wait State", delayus);
+		// hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
+		// sceKernelDelayThread(delayus);
+		hleCall(ThreadManForUser, int, sceKernelDelayThread, delayus);
+	}
+	hleNoLogVoid();
+}
 // PSP2i			sceNetUpnpInit(0x3800, 0x28)
 // Fat Princess		sceNetUpnpInit(0x2000, 0x64)
 // Patapon3			sceNetUpnpInit(0x3800, 0x32)
