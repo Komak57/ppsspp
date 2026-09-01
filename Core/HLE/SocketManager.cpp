@@ -1498,13 +1498,6 @@ int StreamSocket::connect(SceNetInetSockaddr* name, int namelen) {
 		WARN_LOG(Log::G3D, "Game connected to DNS server %s (port 53), likely for doing its own DNS lookups!", ip2str(saddr.in.sin_addr, false).c_str());
 		// We should sniff these messages...
 	}
-	if (ret < 0) {
-		int pspErrno = UpdateErrnoFromHost(__KernelGetCurThread(), hostErrno, __FUNCTION__);
-		if (connectInProgress(hostErrno))
-			return hleLogDebug(Log::sceNet, ret, "errno = %s Address = %s, Port = %d", convertInetErrno2str(pspErrno), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-		else
-			return hleLogError(Log::sceNet, ret, "errno = %s Address = %s, Port = %d", convertInetErrno2str(pspErrno), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-	}
 	return ret;
 }
 int StreamSocket::listen(int backlog) { return ::listen(sock, backlog); }
@@ -1833,13 +1826,6 @@ int SeqpacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 		WARN_LOG(Log::G3D, "Game connected to DNS server %s (port 53), likely for doing its own DNS lookups!", ip2str(saddr.in.sin_addr, false).c_str());
 		// We should sniff these messages...
 	}
-	if (ret < 0) {
-		int pspErrno = UpdateErrnoFromHost(__KernelGetCurThread(), hostErrno, __FUNCTION__);
-		if (connectInProgress(hostErrno))
-			return hleLogDebug(Log::sceNet, ret, "errno = %s Address = %s, Port = %d", convertInetErrno2str(pspErrno), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-		else
-			return hleLogError(Log::sceNet, ret, "errno = %s Address = %s, Port = %d", convertInetErrno2str(pspErrno), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-	}
 	return ret;
 }
 int SeqpacketSocket::listen(int backlog) { return ::listen(sock, backlog); }
@@ -1955,13 +1941,6 @@ int DccpSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	if (saddr.in.sin_port == 53) {
 		WARN_LOG(Log::G3D, "Game connected to DNS server %s (port 53), likely for doing its own DNS lookups!", ip2str(saddr.in.sin_addr, false).c_str());
 		// We should sniff these messages...
-	}
-	if (ret < 0) {
-		int pspErrno = UpdateErrnoFromHost(__KernelGetCurThread(), hostErrno, __FUNCTION__);
-		if (connectInProgress(hostErrno))
-			return hleLogDebug(Log::sceNet, ret, "errno = %s Address = %s, Port = %d", convertInetErrno2str(pspErrno), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-		else
-			return hleLogError(Log::sceNet, ret, "errno = %s Address = %s, Port = %d", convertInetErrno2str(pspErrno), ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 	}
 	return ret;
 }
