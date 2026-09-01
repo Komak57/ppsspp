@@ -171,7 +171,7 @@ void InetSocket::clear() {
     pending_connections.clear();
 }
 
-InetSocket *SocketManager::CreateSystemSocket(int *index, int *returned_errno, SocketState state, int domain, int type, int protocol) {
+InetSocket* SocketManager::CreateSystemSocket(int* index, int* returned_errno, SocketState state, int domain, int type, int protocol) {
 	_dbg_assert_(state != SocketState::Unused);
 
 	int hostDomain = convertSocketDomainPSP2Host(domain);
@@ -707,9 +707,10 @@ const char *SocketStateToString(SocketState state) {
 // Default fallback functions for things not yet implemented by other sockets
 // ============================================================================
 int InetSocket::send(const char* buf, int len, int flags) { errno = EOPNOTSUPP; return -1; }
-int InetSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::recv(char* buf, int len, int flags) { errno = EOPNOTSUPP; return -1; }
+int InetSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) { errno = EOPNOTSUPP; return -1; }
+
 int InetSocket::setsockopt(int level, int optname, int optval, socklen_t optlen) {
 	const char* host_level_srt = inetSockoptLevel2str(level).c_str();
 	const std::string host_optname_str = inetSockoptName2str(optname, level);
@@ -2146,7 +2147,7 @@ int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr*
 		// Return actual bytes copied (NOT padded to requested size)
 	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
-int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) { 
+int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	SockAddrIN4 saddr{};
 	// TODO: Should've created convertSockaddrPSP2Host (and Host2PSP too) function as it's being used pretty often, thus fixing a bug on it will be tedious when scattered all over the places
 	saddr.addr.sa_family = name->sa_family;
