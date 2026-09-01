@@ -1474,7 +1474,7 @@ int StreamSocket::connect(SceNetInetSockaddr* name, int namelen) {
 
 	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
 	if (!nonblocking) {
-		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%d)", socket);
+		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%i)", socket);
 		// changeBlockingMode(sock, 0);
 		// Workaround to avoid blocking for indefinitely
 		setSockTimeout(sock, SO_SNDTIMEO, 5000000);
@@ -1802,7 +1802,7 @@ int SeqpacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 
 	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
 	if (!nonblocking) {
-		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%d)", socket);
+		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%i)", socket);
 		// changeBlockingMode(sock, 0);
 		// Workaround to avoid blocking for indefinitely
 		setSockTimeout(sock, SO_SNDTIMEO, 5000000);
@@ -1918,7 +1918,7 @@ int DccpSocket::connect(SceNetInetSockaddr* name, int namelen) {
 
 	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
 	if (!nonblocking) {
-		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%d)", socket);
+		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%i)", socket);
 		// changeBlockingMode(sock, 0);
 		// Workaround to avoid blocking for indefinitely
 		setSockTimeout(sock, SO_SNDTIMEO, 5000000);
