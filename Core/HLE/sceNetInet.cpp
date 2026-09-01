@@ -581,6 +581,14 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 		return hleLogError(Log::sceNet, ERROR_INET_EBADF, "Bad socket #%d", socket);
 	}
 
+
+	int retval = -1;
+	// Get current PSP thread
+	inetSock->threadID = sceKernelGetThreadId();
+
+	// Run the actual sendRequest on the host asynchronously
+	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval]() mutable
+	{
 		retval = inetSock->recv((char*)Memory::GetPointer(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
 		if (inetSock->abortPending.exchange(false))
 			return;
@@ -597,6 +605,17 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 			DataToHexString(10, 0, Memory::GetPointer(bufPtr), retval, &datahex);
 			VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", retval, datahex.c_str());
 		}
+
+		// Store the result and resume the PSP thread
+		__KernelResumeThreadFromWait(inetSock->threadID, retval);
+		inetSock->threadID = -1;
+	});
+	// Put the PSP thread into a wait state until sendRequest finishes
+	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpRecvRequest");
+
+	return retval;
+}
+
 static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 {
 	INFO_LOG(Log::sceNet, "%s(%i, %08x, %i, %i) at %08x", __FUNCTION__, socket, bufPtr, bufLen, flags, currentMIPS->pc);
@@ -612,6 +631,13 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	DataToHexString(10, 0, Memory::GetPointer(bufPtr), bufLen, &datahex);
 	VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", bufLen, datahex.c_str());
 
+	int retval = -1;
+	// Get current PSP thread
+	inetSock->threadID = sceKernelGetThreadId();
+
+	// Run the actual sendRequest on the host asynchronously
+	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval]() mutable
+	{
 		retval = inetSock->send((char*)Memory::GetPointer(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
 		if (inetSock->abortPending.exchange(false))
 			return;
@@ -625,6 +651,14 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 			else
 				ERROR_LOG(Log::sceNet, "%d=sceNetInetSend(%i, %08x, %i, %i) Error: %08x", retval, socket, bufPtr, bufLen, flags, socket_errno);
 		}
+		// Store the result and resume the PSP thread
+		__KernelResumeThreadFromWait(inetSock->threadID, retval);
+		inetSock->threadID = -1;
+	});
+	// Put the PSP thread into a wait state until sendRequest finishes
+	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpSendRequest");
+
+	return retval;
 }
 
 int sceNetInetSocket(int domain, int type, int protocol)
@@ -767,9 +801,12 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen)
 	inetSock->threadID = sceKernelGetThreadId();
 
 	// Run the actual sendRequest on the host asynchronously
-	inetSock->thread = std::thread([retval, socket, inetSock, dst, sockAddrLen]() mutable {
+	inetSock->thread = std::thread([retval, socket, inetSock, dst, sockAddrLen]() mutable
+	{
 		const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(dst);
 		retval = inetSock->connect(dst, sockAddrLen);
+		if (inetSock->abortPending.exchange(false))
+			return;
 		if (retval < 0) {
 			int hostErrno = convertInetErrnoHost2PSP(socket_errno);
 			// Windows compatibility adjustment
@@ -783,16 +820,14 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen)
 				ERROR_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i) %s", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen, convertInetErrno2str(hostErrno));
 		} else
 			INFO_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i)", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
-		// Emulate blocking behavior
-		if (inetSock->nonblocking && inetSock->threadID > 0) {
-			// Store the result and resume the PSP thread
-			__KernelResumeThreadFromWait(inetSock->threadID, retval);
-			inetSock->threadID = -1;
-		}
+
+		// Store the result and resume the PSP thread
+		__KernelResumeThreadFromWait(inetSock->threadID, retval);
+		inetSock->threadID = -1;
 	});
 	// Put the PSP thread into a wait state until sendRequest finishes
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpSendRequest");
-	
+
 	// hleLog will throw a stack mismatch here
 	return retval;
 }
@@ -1001,6 +1036,16 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 		_sce_pspnet_set_thread_errno(ERROR_INET_EBADF);
 		return hleLogError(Log::sceNet, -1, "Bad socket #%d", socket);
 	}
+	int retval = 0;
+	inetSock->threadID = __KernelGetCurThread();
+
+	// Run the actual sendRequest on the host asynchronously
+	inetSock->thread = std::thread([&retval, socket, inetSock, bufferPtr, len, flags, fromPtr, fromlenPtr]() mutable
+	{
+		SceNetInetSockaddr *src = (SceNetInetSockaddr *)Memory::GetCharPointer(fromPtr);
+		socklen_t *srclen = (socklen_t *)Memory::GetCharPointer(fromlenPtr);
+
+		// TODO: threaded recvfrom?
 		retval = inetSock->recvfrom((char *)Memory::GetPointer(bufferPtr), len, flags, src, srclen);
 		if (inetSock->abortPending.exchange(false))
 			return;
@@ -1019,18 +1064,21 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 			VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", retval, datahex.c_str());
 		}
 
-	// Discard if it came from APIPA address (ie. self-received broadcasts from 169.254.x.x when broadcasting to INADDR_BROADCAST on Windows) on Untold Legends The Warrior's Code / Twisted Metal Head On
-	/*if (isAPIPA(saddr.in.sin_addr.s_addr)) {
-		inetLastErrno = EAGAIN;
-		retval = -1;
-		DEBUG_LOG(Log::sceNet, "RecvFrom: Ignoring Address = %s", ip2str(saddr.in.sin_addr).c_str());
-		hleLogDebug(Log::sceNet, retval, "faked errno = %d", inetLastErrno);
-		return hleDelayResult(retval, "workaround until blocking-socket", 500);
-	}*/
+		// Discard if it came from APIPA address (ie. self-received broadcasts from 169.254.x.x when broadcasting to INADDR_BROADCAST on Windows) on Untold Legends The Warrior's Code / Twisted Metal Head On
+		/*if (isAPIPA(saddr.in.sin_addr.s_addr)) {
+			inetLastErrno = EAGAIN;
+			retval = -1;
+			DEBUG_LOG(Log::sceNet, "RecvFrom: Ignoring Address = %s", ip2str(saddr.in.sin_addr).c_str());
+			hleLogDebug(Log::sceNet, retval, "faked errno = %d", inetLastErrno);
+			return hleDelayResult(retval, "workaround until blocking-socket", 500);
+		}*/
 
-	std::string datahex;
-	DataToHexString(0, 0, Memory::GetPointer(bufferPtr), retval, &datahex);
-	VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", retval, datahex.c_str());
+		// Store the result and resume the PSP thread
+		__KernelResumeThreadFromWait(inetSock->threadID, retval);
+		inetSock->threadID = -1;
+	});
+	// Put the PSP thread into a wait state until sendRequest finishes
+	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpSendRequest");
 
 	// Using hleDelayResult as a workaround for games that need blocking-socket to be implemented (ie. Coded Arms Contagion)
 	// return hleDelayResult(hleLogDebug(Log::sceNet, retval,
@@ -1048,11 +1096,20 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 		_sce_pspnet_set_thread_errno(ERROR_INET_EBADF);
 		return hleLogError(Log::sceNet, -1, "Bad socket #%d", socket);
 	}
+	int retval = 0;
+	inetSock->threadID = __KernelGetCurThread();
 
-	std::string datahex;
-	DataToHexString(0, 0, Memory::GetPointer(bufferPtr), len, &datahex);
-	VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", len, datahex.c_str());
+	// Run the actual sendRequest on the host asynchronously
+	inetSock->thread = std::thread([&retval, socket, inetSock, bufferPtr, len, flags, toPtr, tolen]() mutable
+	{
+		SceNetInetSockaddr *dst = (SceNetInetSockaddr *)Memory::GetCharPointer(toPtr);
 
+		std::string datahex;
+		DataToHexString(0, 0, Memory::GetPointer(bufferPtr), len, &datahex);
+		VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", len, datahex.c_str());
+
+		// TODO: threaded sendto?
+		// Send as-is first. P2P traffic will normally send using our own member_id for the vport
 		int retval = inetSock->sendto((char *)Memory::GetPointer(bufferPtr), len, flags, dst, tolen);
 
 		if (inetSock->abortPending.exchange(false))
@@ -1066,6 +1123,13 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 			else
 				ERROR_LOG(Log::sceNet, "%d=sceNetInetSendto(%i, %08x, %i, %i, %08x, %i): Error: %08x", retval, socket, bufferPtr, len, flags, toPtr, tolen, socket_errno);
 		}
+	
+		// Store the result and resume the PSP thread
+		__KernelResumeThreadFromWait(inetSock->threadID, retval);
+		inetSock->threadID = -1;
+	});
+	// Put the PSP thread into a wait state until sendRequest finishes
+	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpSendRequest");
 
 	return retval;
 }
