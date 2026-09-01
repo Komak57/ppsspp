@@ -980,12 +980,22 @@ static int sceNetInetSocketAbort(int socket)
 		_sce_pspnet_set_thread_errno(ERROR_INET_EBADF);
 		return hleLogError(Log::sceNet, -1, "Bad socket #%d", socket);
 	}
+
+	inetSock->abortPending = true;
+	int tid = inetSock->threadID.exchange(-1);
+	if (tid > 0) {
+		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR, tid);
+		__KernelResumeThreadFromWait(tid, -1);
 	}
 
 	// FIXME: either using shutdown/close or select? probably using select if blocking mode is being simulated with non-blocking
-	int retVal = inetSock->shutdown(SHUT_RDWR);
-	//retVal = shutdown(inetSock->sock, SHUT_RDWR);
-	return hleLogInfo(Log::sceNet, retVal);
+	// int retval = inetSock->shutdown(SHUT_RDWR);
+	// if (retval < 0) {
+	// 	_sce_pspnet_set_thread_errno(convertInetErrnoHost2PSP(socket_errno));
+	// 	return hleLogError(Log::sceNet, retval);
+	// }
+	// retVal = shutdown(inetSock->sock, SHUT_RDWR);
+	return hleLogInfo(Log::sceNet, 0);
 }
 
 int sceNetInetClose(int socket)
