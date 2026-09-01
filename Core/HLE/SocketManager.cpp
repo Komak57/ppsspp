@@ -2480,10 +2480,11 @@ int PacketSocket::listen(int backlog) {
 	tcp_state = TCPState::Listening;
 	this->backlog = backlog;
 		
-	INFO_LOG(Log::sceNet, "SOCK_PACKET listen: vport %d now accepting %d connections", ntohs(src.virt.vport), this->backlog);
+	int ret = ::listen(sock, backlog);
+	INFO_LOG(Log::sceNet, "SOCK_PACKET listen: port %d now accepting %d connections", ntohs(src.virt.port), this->backlog);
 
-	// return ::listen(sock, backlog);
-	return 0;
+	return ret;
+	// return 0;
 }
 int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) { 
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(addr);
