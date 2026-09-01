@@ -165,6 +165,7 @@ struct InetSocket {
 	VirtualSockAddr dst;
 	int threadID = 0;
 	std::thread thread;
+	std::atomic<bool> abortPending = false;
 
 	// Subscription and Broadcasting flags
 	std::unordered_map<uint64_t, std::vector<uint8_t>> so_storage;
@@ -204,7 +205,7 @@ struct InetSocket {
 		tcp_state = TCPState::Disconnected;
 		type = 0;
 		dst.host = sockaddr_in{};
-		threadID = 0;
+		abortPending = false;
 		
 		so_storage.clear();
 		broadcast_mask = 0;
