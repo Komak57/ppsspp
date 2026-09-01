@@ -480,26 +480,24 @@ bool SocketManager::P2PRecv() {
 	vpkt.src.host = _from;
 	vpkt.src.host.sin_family = AF_INET;
 	// vport 0 (RPCN/signaling) is matched on the 3-byte header ALONE - no extended
-	// header, no seq_id. Only p2p packets (dest != 0) carry more.
-	if (header.dest != 0) {
-		if ((header.flags & p2ps_tcp_flags::TCP) != 0 &&
-			ret - i >= VPKT_HEADER_SIZE + (int)sizeof(vpkt.seq_id)) {
-			// RELIABLE p2p: extended header with full game-space addressing.
-			// The dest game port is the VPORT_HEADER key, not in the ext block.
-			memcpy(&vpkt.src.virt.port, data + i, 2); i += 2;
-			memcpy(&vpkt.src.virt.vport, data + i, 2); i += 2;
+	// header, no seq_id. All p2p game packets (dest != 0) carry the ext header.
+	if (header.dest != 0 && ret - i >= VPKT_HEADER_SIZE + (int)sizeof(vpkt.seq_id)) {
+		u16 wire_src_port = 0;
+		memcpy(&wire_src_port, data + i, 2); i += 2;
+		if ((header.flags & p2ps_tcp_flags::TCP) != 0) {
+			// TCP: the strict matcher routes on the sender's game port, and the
+			// dest game port is the VPORT_HEADER key.
+			vpkt.src.virt.port = wire_src_port;
 			vpkt.dst.virt.port = header.dest;
-			memcpy(&vpkt.dst.virt.vport, data + i, 2); i += 2;
-			uint32_t net_seq_id = 0;
-			memcpy(&net_seq_id, data + i, sizeof(net_seq_id));
-			vpkt.seq_id = ntohl(net_seq_id);
-			i += sizeof(net_seq_id);
-		} else if ((header.flags & p2ps_tcp_flags::TCP) == 0 && ret - i >= (int)sizeof(vpkt.seq_id)) {
-			uint32_t net_seq_id = 0;
-			memcpy(&net_seq_id, data + i, sizeof(net_seq_id));
-			vpkt.seq_id = ntohl(net_seq_id);
-			i += sizeof(net_seq_id);
 		}
+		// UDP keeps the REAL transport port in src.virt.port - recvfrom reports it
+		// as the reply sin_port, which must physically reach the peer's DCCP.
+		memcpy(&vpkt.src.virt.vport, data + i, 2); i += 2;
+		memcpy(&vpkt.dst.virt.vport, data + i, 2); i += 2;
+		uint32_t net_seq_id = 0;
+		memcpy(&net_seq_id, data + i, sizeof(net_seq_id));
+		vpkt.seq_id = ntohl(net_seq_id);
+		i += sizeof(net_seq_id);
 	}
 	vpkt.len = ret - i;
 	if (vpkt.len > 0) {
