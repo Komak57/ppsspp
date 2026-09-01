@@ -55,6 +55,9 @@ int SceNpSignalingEchoThread()
 {
 	// WARN_LOG(Log::Signaling, "UNIMPL %s()", __FUNCTION__);
 	int ret = sigServer->EchoThreadTick(&signaling_memory);
+	int delayus = 25000;
+	g_socketManager.NetworkDemultiplexer(&delayus);
+	sigServer->UpnpThreadTick();
 	// hleCall(ThreadManForUser, int, sceKernelDelayThread, 25000);
 	return 0;
 }
