@@ -1149,8 +1149,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 
 	INFO_LOG(Log::sceNp2, " - Selected Server ID %d", serverId);
 	auto err = npServer->GetWorldInfo(ctxId, request_id, serverId, npTitleId);
-
-	return SCE_NP_MATCHING2_OKAY;
+	return err;
 }
 
 /* Searches for all Lobbies/Parties
