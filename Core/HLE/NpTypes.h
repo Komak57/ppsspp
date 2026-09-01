@@ -349,9 +349,11 @@ struct SceNpId
 
 	bool Equals(SceNpId npid) const {
 		char target[17]{};
+		memset(target, 0, 17);
 		memcpy(target, npid.handle.data, 16);
 
 		char source[17]{};
+		memset(source, 0, 17);
 		memcpy(source, handle.data, 16);
 
 		return (std::strcmp(source, target) == 0);
