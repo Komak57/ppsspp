@@ -591,31 +591,69 @@ void SocketManager::CloseAll() {
 
 int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
     int delivered_count = 0;
+
+	// RELIABLE (TCP-flagged) packets are strictly addressed - each PacketSocket is
+	// a pseudo-server keyed by its game port/vport, so deliver to exactly ONE
+	// socket: an established/connecting socket whose peer matches the packet's
+	// game-space source, or failing that the listening socket that owns the
+	// destination endpoint (for SYN and pre-accept handshake traffic).
+	if ((vpkt.header_flags & p2ps_tcp_flags::TCP) != 0) {
+		InetSocket* listener = nullptr;
+		InetSocket* exact = nullptr;
+		for (int i = 0; i < SocketManager::VALID_INET_SOCKET_COUNT; i++) {
+			InetSocket* target_sock = &inetSockets_[i];
+			if (!target_sock || target_sock->state == SocketState::Unused)
+				continue;
 			if (target_sock->p2p_mode != p2p_type::RELIABLE)
 				continue;
-			// Listening sockets must match their connected sockets
-			if (target_sock->tcp_state != TCPState::Listening) {
-				if (target_sock->tcp_state != TCPState::SynSent) {
-					// Matches connected address
-					if ((target_sock->dst.virt.addr.s_addr != INADDR_ANY && vpkt.src.virt.addr.s_addr != target_sock->dst.virt.addr.s_addr))
-						continue;
-				}
-				// Match connected port (3658)
-				if (target_sock->dst.virt.port != vpkt.src.virt.port)
-					continue;
-				// Match connected vport (12000)
-				if (vpkt.src.virt.vport != 0 && target_sock->dst.virt.vport != vpkt.src.virt.vport)
-					continue;
+			// The socket must own the destination game endpoint (port 12000 / vport 3658,
+			// or the connector's ephemeral port for replies)
+			if (target_sock->src.virt.port != dest.virt.port)
+				continue;
+			if (target_sock->src.virt.vport != dest.virt.vport)
+				continue;
+			if (target_sock->src.virt.addr.s_addr != INADDR_ANY && target_sock->src.virt.addr.s_addr != dest.virt.addr.s_addr)
+				continue;
+			if (target_sock->tcp_state == TCPState::Listening) {
+				if (!listener)
+					listener = target_sock;
+				continue;
 			}
-			// Matches endpoint address
-			if ((target_sock->src.virt.addr.s_addr != INADDR_ANY && target_sock->src.virt.addr.s_addr != dest.virt.addr.s_addr))
+			// Connecting/connected: the packet's game-space source must be our peer
+			if (target_sock->dst.virt.addr.s_addr != INADDR_ANY && target_sock->dst.virt.addr.s_addr != vpkt.src.host.sin_addr.s_addr)
 				continue;
-			// Match endpoint port (3658)
-			if (dest.virt.port != 0 && target_sock->src.virt.port != dest.virt.port)
+			if (target_sock->dst.virt.port != vpkt.src.virt.port)
 				continue;
-			// Matches endpoint vport (12000)
-			if (dest.virt.vport != 0 && target_sock->src.virt.vport != dest.virt.vport)
+			if (target_sock->dst.virt.vport != vpkt.src.virt.vport)
 				continue;
+			exact = target_sock;
+			break;
+		}
+		InetSocket* target_sock = exact ? exact : listener;
+		if (!target_sock) {
+			ERROR_LOG(Log::sceNet, "RouteDCCP: No RELIABLE socket for %s:%u|%u -> %u|%u (flags=0x%02x)",
+				inet_ntoa(vpkt.src.host.sin_addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport),
+				ntohs(dest.virt.port), ntohs(dest.virt.vport), vpkt.header_flags);
+			return 0;
+		}
+		INFO_LOG(Log::sceNet, "RouteDCCP: DELIVERING %i bytes from %s:%u|%u to port %s:%u|%u (type=%d)",
+			(int)vpkt.len, inet_ntoa(vpkt.src.host.sin_addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport),
+			ip2str(target_sock->src.virt.addr).c_str(), ntohs(target_sock->src.virt.port), ntohs(target_sock->src.virt.vport), target_sock->type);
+		target_sock->enqueue_packet(vpkt.clone());
+		target_sock->Process_Reliable();
+		return 1;
+	}
+
+    // Match sockets by vport (port-based routing instead of subscriptions)
+    for (int i = 0; i < SocketManager::VALID_INET_SOCKET_COUNT; i++) {
+        InetSocket* target_sock = &inetSockets_[i];
+
+        // Skip unused sockets
+        if (!target_sock || target_sock->state == SocketState::Unused) {
+            continue;
+        }
+
+		{
 			if (target_sock->p2p_mode != p2p_type::UNRELIABLE)
 				continue;
 
@@ -623,26 +661,26 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 			if ((target_sock->src.virt.addr.s_addr != INADDR_ANY && target_sock->src.virt.addr.s_addr != dest.virt.addr.s_addr))
 				continue;
 			// Match endpoint port (3658)
-			if (dest.virt.port != 0 && target_sock->src.virt.port != dest.virt.vport)
+			if (dest.virt.port != 0 && target_sock->src.virt.port != dest.virt.port)
 				continue;
 			// Matches endpoint vport (0)
-			if (dest.virt.vport != 0 && target_sock->src.virt.vport != dest.virt.port)
+			if (target_sock->src.virt.vport != dest.virt.vport)
 				continue;
+
+			DEBUG_LOG(Log::sceNet, "RouteDCCP: Processing socket dst.virt.port %d (type=%d)", 
+				target_sock->src.virt.vport, target_sock->type);
+
+			INFO_LOG(Log::sceNet, "RouteDCCP: DELIVERING %i bytes from %s:%u|%u to port %s:%u|%u (type=%d)", 
+				(int)vpkt.len, inet_ntoa(vpkt.src.virt.addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ip2str(target_sock->src.virt.addr).c_str(), ntohs(target_sock->src.virt.port), ntohs(target_sock->src.virt.vport), target_sock->type);
+			
+			target_sock->enqueue_packet(vpkt.clone());
+			delivered_count++;
+			
+			if (target_sock->Process_Unreliable()) {
+				continue;
+			}
 		}
         
-        DEBUG_LOG(Log::sceNet, "RouteDCCP: Processing socket dst.virt.port %d (type=%d)", 
-            target_sock->src.virt.vport, target_sock->type);
-
-		INFO_LOG(Log::sceNet, "RouteDCCP: DELIVERING %d bytes from %s:%u|%u to port %s:%u|%u (type=%d)", 
-			vpkt.len, inet_ntoa(vpkt.src.virt.addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ip2str(target_sock->src.virt.addr).c_str(), ntohs(target_sock->src.virt.port), ntohs(target_sock->src.virt.vport), target_sock->type);
-		
-		target_sock->enqueue_packet(vpkt.clone());
-		delivered_count++;
-
-		if (target_sock->ProcessNetStack()) {
-			continue;
-		}
-
 		DEBUG_LOG(Log::sceNet, "RouteDCCP: NOT delivering to vport %d (deliver_data=false)", ntohs(target_sock->src.virt.vport));
     }
     
