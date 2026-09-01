@@ -301,9 +301,9 @@ InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const Inet
 	return nullptr;
 }
 
-void SocketManager::ProcessNetStack(int* timeout) {
+void SocketManager::NetworkDemultiplexer(int* timeout) {
 	// Process Remote to Local first
-	while (dccp_sock->ProcessNetStack()) {
+	while (P2PRecv()) {
 		// auto start = std::chrono::steady_clock::now();
 		// bool hadPacket = ;
 		// auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
@@ -362,10 +362,12 @@ void SocketManager::ProcessNetStack(int* timeout) {
 					pkt.last_sent_us = now_us;
 					pkt.sent_count++;
 				} else {
-					auto [_len, _data] = vpkt.Pack(s->dst.virt.vport);
-					auto dccp_sock = g_socketManager.GetDCCP();
-					// Skip local send
-					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&s->dst.host, sizeof(sockaddr_in));
+					auto [_len, _data] = vpkt.Pack(s->dst);
+					auto p2p_sock = g_socketManager.GetP2PSocket();
+					// Physical delivery goes to the peer's real UDP endpoint (game vport)
+					sockaddr_in phys = s->dst.host;
+					phys.sin_port = s->dst.virt.vport;
+					int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
 					if (ret < 0) {
 						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 					} else {
@@ -420,10 +422,12 @@ void SocketManager::ProcessNetStack(int* timeout) {
 						pkt.last_sent_us = now_us;
 						pkt.sent_count++;
 					} else {
-						auto [_len, _data] = vpkt.Pack(conn->dst.virt.vport);
-						auto dccp_sock = g_socketManager.GetDCCP();
-						// Skip local send
-						int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&conn->dst.host, sizeof(sockaddr_in));
+						auto [_len, _data] = vpkt.Pack(conn->dst);
+						auto p2p_sock = g_socketManager.GetP2PSocket();
+						// Physical delivery goes to the peer's real UDP endpoint (game vport)
+						sockaddr_in phys = conn->dst.host;
+						phys.sin_port = conn->dst.virt.vport;
+						int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
 						if (ret < 0) {
 							ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
 						} else {
@@ -438,6 +442,99 @@ void SocketManager::ProcessNetStack(int* timeout) {
 	for (auto& [vpkt, dest] : outbuf) {
         g_socketManager.vBroadcast(std::move(vpkt), dest);
     }
+}
+
+bool SocketManager::P2PRecv() {
+	// Clear the error
+#if PPSSPP_PLATFORM(WINDOWS)
+	SetLastError(0);
+#else
+	socket_errno = 0;
+#endif
+
+	char data[0x3000]; // Supplied by many psp buffers
+	sockaddr_in _from{};
+	socklen_t _fromlen = sizeof(_from);
+	int ret = ::recvfrom(p2p_sock->sock, data, sizeof(data), 0, reinterpret_cast<sockaddr*>(&_from), &_fromlen);
+	if (ret <= 0) {
+		// This is normal if no packet is available (non-blocking mode)
+		return false;
+	}
+	
+	// Extract VPORT_HEADER (first 3 bytes: vport + flags)
+	if (ret < VPORT_HEADER_SIZE) {
+		INFO_LOG(Log::sceNet, "RouteDCCP: Packet too small (%d bytes) from %s:%u, ignoring", 
+			ret, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port));
+		return false; // Packet too small, ignore
+	}
+
+	VPORT_HEADER header;
+	memcpy(&header, data, VPORT_HEADER_SIZE);
+	
+	int i = VPORT_HEADER_SIZE;
+	// Generate the transmission vpacket
+	VirtualPacket vpkt;
+	vpkt.seq_id = 0;
+	// Seed src with the REAL transport endpoint FIRST: src.host and src.virt alias
+	// the same union, so this must happen before the ext-header parse below
+	// overwrites port/vport with the sender's game-space keys (addr stays real).
+	vpkt.src.host = _from;
+	vpkt.src.host.sin_family = AF_INET;
+	// vport 0 (RPCN/signaling) is matched on the 3-byte header ALONE - no extended
+	// header, no seq_id. Only p2p packets (dest != 0) carry more.
+	if (header.dest != 0) {
+		if ((header.flags & p2ps_tcp_flags::TCP) != 0 &&
+			ret - i >= VPKT_HEADER_SIZE + (int)sizeof(vpkt.seq_id)) {
+			// RELIABLE p2p: extended header with full game-space addressing.
+			// The dest game port is the VPORT_HEADER key, not in the ext block.
+			memcpy(&vpkt.src.virt.port, data + i, 2); i += 2;
+			memcpy(&vpkt.src.virt.vport, data + i, 2); i += 2;
+			vpkt.dst.virt.port = header.dest;
+			memcpy(&vpkt.dst.virt.vport, data + i, 2); i += 2;
+			uint32_t net_seq_id = 0;
+			memcpy(&net_seq_id, data + i, sizeof(net_seq_id));
+			vpkt.seq_id = ntohl(net_seq_id);
+			i += sizeof(net_seq_id);
+		} else if ((header.flags & p2ps_tcp_flags::TCP) == 0 && ret - i >= (int)sizeof(vpkt.seq_id)) {
+			uint32_t net_seq_id = 0;
+			memcpy(&net_seq_id, data + i, sizeof(net_seq_id));
+			vpkt.seq_id = ntohl(net_seq_id);
+			i += sizeof(net_seq_id);
+		}
+	}
+	vpkt.len = ret - i;
+	if (vpkt.len > 0) {
+		vpkt.data = std::make_unique<char[]>(vpkt.len);
+		memcpy(vpkt.data.get(), data+i, vpkt.len);
+	}
+	vpkt.header_flags = header.flags;
+	// Add timestamp for TTL tracking
+	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
+
+	// Log incoming packet details (convert vport from network to host byte order for
+	// display). For TCP packets show the sender's GAME endpoint from the ext header;
+	// the real sockaddr's sin_zero always displays as vport 0.
+	if ((header.flags & p2ps_tcp_flags::TCP) != 0 && header.dest != 0)
+		INFO_LOG(Log::sceNet, "RouteDCCP: Received %d bytes from %s:%u|%u -> peer %u|%u (flags=0x%02x(=%d))",
+			ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(vpkt.dst.virt.port), ntohs(vpkt.dst.virt.vport), header.flags, header.flags & 0xFF);
+	else
+		INFO_LOG(Log::sceNet, "RouteDCCP: Received %d bytes from %s:%u|%u -> vport %d (flags=0x%02x(=%d))",
+			ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(header.dest), header.flags, header.flags & 0xFF);
+
+	VirtualSockAddr dest{};
+	getLocalIp(&dest.host);
+	if ((header.flags & p2ps_tcp_flags::TCP) != 0 && header.dest != 0) {
+		// Flip back to game-space: the datagram physically arrived on our real UDP
+		// port (3658), but it's addressed to the game endpoint in the ext header.
+		dest.virt.port = vpkt.dst.virt.port;
+		dest.virt.vport = vpkt.dst.virt.vport;
+	} else {
+		dest.virt.port = 0;
+		dest.virt.vport = header.dest;
+	}
+	g_socketManager.vBroadcast(std::move(vpkt), dest);
+
+	return true;
 }
 
 bool SocketManager::Close(InetSocket *inetSocket) {

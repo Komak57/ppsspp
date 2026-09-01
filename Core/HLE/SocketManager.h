@@ -628,7 +628,8 @@ public:
 	SOCKET GetHostSocketFromInetSocket(int sock);
 	bool Close(InetSocket *inetSocket);
 	void CloseAll();
-	void ProcessNetStack(int* timeout);
+	void NetworkDemultiplexer(int* timeout);
+	bool P2PRecv();
 
 	// For debugger
 	const InetSocket *Sockets() {
