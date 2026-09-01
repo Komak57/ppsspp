@@ -193,6 +193,54 @@ int InvokeAsyncCallbacks() {
 	return SCE_NP_MATCHING2_ERROR_INVALID_REQUEST_PARAMETER;
 }
 
+/* Process Matching server Responses
+ * @return void
+ * @note Currently processing the P2P responses designated for Signaling
+ */
+void SceNpMatching2Thread()
+{
+	hleSkipDeadbeef();
+	if (!npMatching2Inited)
+		return;
+	
+	*timeout = 100000;
+	// if (fds_pending)
+	//     *timeout = 100000;
+	// else if (any_context_stopping || npMatching2ThreadState == NP_SIGNIN_STATUS_STOPPING)
+	//     *timeout = 1000000;
+	// else
+	//     *timeout = 0; // infinite wait
+
+	u32 s = sizeof(u32);
+	PSPPointer<u32> result_bits = PSPPointer<u32>::Create(np_memory.Alloc(s));
+	int ret = sceKernelWaitEventFlag(npMatching2EventID, 0xffffffff, PspEventFlagWaitTypes::PSP_EVENT_WAITANY, result_bits.ptr, ((*timeout == 0)? 0 : timeout.ptr) /* Infinite, or Timeout */);
+	if ((ret != SCE_KERNEL_ERROR_WAIT_TIMEOUT & ret >> 0x1f) != 0)
+		return;
+
+	// Check socket read/write
+	// sceNetInetSelect()
+
+	// Set the next timeout to 100ms
+	// if (max_fd > 0)
+	//      fds_pending = (read_fds[0] != 0 || write_fds[0] != 0);
+
+	InvokeAsyncCallbacks();
+
+	// std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
+
+	// for each active context
+		// for each connected member 0 - 14
+		// 0x5b SendRoomRequestData
+		// 0x5c ReadRoomRequestData
+
+		// is context stopping? set timeout to 1s
+		// if (any_context_stopping && npMatching2ThreadState == NP_SIGNIN_STATUS_STOPPING)
+		//     __Np2Shutdown();
+		//     stop SceNpMatching2Thread
+
+	hleNoLogVoid();
+}
+
 /* Generate a Unique Request Id for various callbacks
  * @param app_req value derrived from AppRequestID
  * @return u32 System RequestID
