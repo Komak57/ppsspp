@@ -80,6 +80,10 @@ static const std::vector<std::string_view> defaultProAdhocServerList = {
 	"socom.cc", "psp.gameplayer.club", // TODO: Add some saved recent history too?
 };
 
+static const std::vector<std::string_view> defaultInfraServerList = {
+	"rpcn.revurb.us", "np.rpcs3.net", // TODO: Add some saved recent history too?
+};
+
 std::string GPUBackendToString(GPUBackend backend) {
 	switch (backend) {
 	case GPUBackend::OPENGL:
@@ -970,6 +974,9 @@ static const ConfigSetting networkSettings[] = {
 	ConfigSetting("DontDownloadInfraJson", SETTING(g_Config, bDontDownloadInfraJson), false, CfgFlag::DONT_SAVE),
 
 	// See comment in header
+	ConfigSetting("infraServerType", SETTING(g_Config, proInfraServerType), 0, CfgFlag::PER_GAME),
+	ConfigSetting("infraServer", SETTING(g_Config, proInfraServer), "", CfgFlag::PER_GAME),
+	ConfigSetting("infraServerList", SETTING(g_Config, proInfraServerList), &defaultInfraServerList, CfgFlag::DEFAULT),
 	ConfigSetting("PSNNPID", SETTING(g_Config, sInfraNpId), &DefaultInfrastructureUsername, CfgFlag::PER_GAME),
 	ConfigSetting("PSNPassword", SETTING(g_Config, sInfraPassword), "", CfgFlag::PER_GAME),
 	ConfigSetting("PSNToken", SETTING(g_Config, sInfraToken), "", CfgFlag::PER_GAME),
