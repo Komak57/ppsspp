@@ -852,7 +852,7 @@ bool WebServerStopped(WebServerFlags flags) {
 void ShutdownWebServer() {
 	StopWebServer(WebServerFlags::ALL);
 
-	if (serverStatus != ServerStatus::STOPPED)
+	if (serverStatus != ServerStatus::STOPPED && serverThread.joinable())
 		serverThread.join();
 	serverStatus = ServerStatus::STOPPED;
 }
