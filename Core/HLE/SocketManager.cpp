@@ -2630,19 +2630,27 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	return ret;
 }
 int PacketSocket::shutdown(int how) { 
-	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::shutdown(how=%d): state=%d", how, (int)tcp_state);
-	// Only allow shutdown if connected
-	if (tcp_state != TCPState::Established && tcp_state != TCPState::SynReceived) {
-		INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Socket not connected (state=%d)", (int)tcp_state);
-		return 0;  // Silently ignore if not connected
+	INFO_LOG(Log::sceNet, "SOCK_PACKET::shutdown(how=%d): state=%d", how, (int)tcp_state);
+	int ret = -1;
+
+	if (isLocalTarget(dst.virt.addr.s_addr)) {
+		tcp_state = TCPState::Disconnected;
+		return ::shutdown(sock, how);
 	}
-	// Transition to disconnected
-	tcp_state = TCPState::Disconnected;
-	g_socketManager.exhaustEphemeralPort(ntohs(src.virt.vport));
-	
+
 	// Get DCCP socket for sending FIN
-	auto dccp_sock = g_socketManager.GetDCCP();
-	if (dccp_sock) {
+	auto p2p_sock = g_socketManager.GetP2PSocket();
+	if (p2p_sock) {
+		// Only allow shutdown if connected
+		if (tcp_state != TCPState::Established && tcp_state != TCPState::SynReceived) {
+			INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Socket not connected (state=%d)", (int)tcp_state);
+			return ::shutdown(sock, how);  // Silently ignore if not connected
+		}
+
+		// Transition to disconnected
+		tcp_state = TCPState::Disconnected;
+		g_socketManager.exhaustEphemeralPort(ntohs(src.virt.vport));
+	
 		// Create the transmission vpacket
 		VirtualPacket vpkt;
 		vpkt.len = 0;
@@ -2661,16 +2669,12 @@ int PacketSocket::shutdown(int how) {
 		}
 
 		INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Sending FIN from port %d to %d", htons(src.virt.vport), htons(dst.virt.vport));
-		if (isLocalTarget(dst.virt.port)) {
-			// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-			g_socketManager.vBroadcast(std::move(send_pkt), dst);
-		} else {
-			auto [_len, _data] = send_pkt.Pack(dst.virt.vport);
-			int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst.host, sizeof(sockaddr_in));
-			if (ret < 0) {
-				ERROR_LOG(Log::sceNet, "SOCK_PACKET shutdown: Failed to send FIN");
-				// return -1; // Let it shut down the socket anyways
-			}
+
+		auto [_len, _data] = send_pkt.Pack(dst);
+		ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst.host, sizeof(sockaddr_in));
+		if (ret < 0) {
+			ERROR_LOG(Log::sceNet, "SOCK_PACKET shutdown: Failed to send FIN");
+			// return -1; // Let it shut down the socket anyways
 		}
 	}
 	
