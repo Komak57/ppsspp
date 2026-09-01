@@ -17,6 +17,27 @@
 
 #pragma once
 
+/** Event flag creation attributes */
+enum PspEventFlagAttributes {
+	/** Allow the event flag to be waited upon by multiple threads */
+	PSP_EVENT_WAITMULTIPLE = 0x200
+};
+
+/** Event flag wait types */
+enum PspEventFlagWaitTypes {
+	/** Wait for all bits in the pattern to be set */
+	PSP_EVENT_WAITAND = 0x00,
+	/** Wait for one or more bits in the pattern to be set */
+	PSP_EVENT_WAITOR = 0x01,
+	/** Clear the entire pattern when it matches. */
+	PSP_EVENT_WAITCLEARALL = 0x10,
+	/** Clear the wait pattern when it matches */
+	PSP_EVENT_WAITCLEAR = 0x20,
+
+	PSP_EVENT_WAITANY = PSP_EVENT_WAITCLEAR | PSP_EVENT_WAITOR,
+	PSP_EVENT_WAITKNOWN = PSP_EVENT_WAITCLEAR | PSP_EVENT_WAITCLEARALL | PSP_EVENT_WAITOR,
+};
+
 int sceKernelCreateEventFlag(const char *name, u32 flag_attr, u32 flag_initPattern, u32 optPtr);
 u32 sceKernelClearEventFlag(SceUID id, u32 bits);
 u32 sceKernelDeleteEventFlag(SceUID uid);

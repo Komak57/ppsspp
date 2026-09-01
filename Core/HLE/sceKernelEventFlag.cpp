@@ -89,25 +89,6 @@ public:
 };
 
 
-/** Event flag creation attributes */
-enum PspEventFlagAttributes {
-	/** Allow the event flag to be waited upon by multiple threads */
-	PSP_EVENT_WAITMULTIPLE = 0x200
-};
-
-/** Event flag wait types */
-enum PspEventFlagWaitTypes {
-	/** Wait for all bits in the pattern to be set */
-	PSP_EVENT_WAITAND = 0x00,
-	/** Wait for one or more bits in the pattern to be set */
-	PSP_EVENT_WAITOR = 0x01,
-	/** Clear the entire pattern when it matches. */
-	PSP_EVENT_WAITCLEARALL = 0x10,
-	/** Clear the wait pattern when it matches */
-	PSP_EVENT_WAITCLEAR = 0x20,
-
-	PSP_EVENT_WAITKNOWN = PSP_EVENT_WAITCLEAR | PSP_EVENT_WAITCLEARALL | PSP_EVENT_WAITOR,
-};
 
 static int eventFlagWaitTimer = -1;
 
