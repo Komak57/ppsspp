@@ -190,6 +190,47 @@ struct InetSocket {
 	// Virtual destructor for proper cleanup of derived types
 	virtual ~InetSocket() = default;
 	void clear();
+	InetSocket(int domain, int protocol) {
+		// Basic types
+		sock = INVALID_SOCKET;
+		state = SocketState::Unused;
+		this->domain = domain;
+		this->protocol = protocol;
+		nonblocking = false;
+		p2p_mode = p2p_type::DISABLED;
+
+		src.host = sockaddr_in{};
+		memset(&dbg, 0, sizeof(dbg));
+
+		// Virtual fields
+		tcp_state = TCPState::Disconnected;
+		type = 0;
+		dst.host = sockaddr_in{};
+		threadID = -1;
+		abortPending = false;
+
+		so_storage.clear();
+		broadcast_mask = 0;
+
+		// Clear the queue safely
+		{
+			std::lock_guard<std::mutex> queues(queue_lock);
+			std::deque<VirtualPacket> empty;
+			std::swap(rx_queue, empty);
+		}
+		{
+			std::lock_guard<std::mutex> buffers(buffer_lock);
+			std::map<u32, VirtualPacket> _empty;
+			std::swap(rx_buffer, _empty);
+			std::swap(tx_buffer, _empty);
+			rx_seq = 0;
+			tx_seq = 0;
+		}
+		{
+			std::lock_guard<std::mutex> connections(conn_lock);
+			pending_connections.clear();
+		}
+	}
 	InetSocket() {
 		// Basic types
 		sock = INVALID_SOCKET;
@@ -270,9 +311,18 @@ struct InetSocket {
 #pragma pack(push, 8)
 class StreamSocket : public InetSocket {
 public:
-	StreamSocket() : InetSocket() {
+	StreamSocket(int domain, int protocol) : InetSocket() {
+		this->clear();  // Reset to default.
 		this->tcp_state = TCPState::Disconnected;
 		this->type = PSP_NET_INET_SOCK_STREAM;
+		this->domain = domain;
+		this->protocol = protocol;
+
+		int hostDomain = convertSocketDomainPSP2Host(domain);
+		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_STREAM);
+		int hostProtocol = convertSocketProtoPSP2Host(protocol);
+
+		this->sock = ::socket(hostDomain, hostType, hostProtocol);
 	}
 	int send(const char* buf, int len, int flags) override;
 	int recv(char* buf, int len, int flags) override;
@@ -287,10 +337,18 @@ static_assert(sizeof(StreamSocket) == sizeof(InetSocket), "Socket size mismatch!
 #pragma pack(push, 8)
 class DgramSocket : public InetSocket {
 public:
-	DgramSocket() : InetSocket() {
+	DgramSocket(int domain, int protocol) : InetSocket() {
+		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_DGRAM;
+		this->domain = domain;
+		this->protocol = protocol;
+
+		int hostDomain = convertSocketDomainPSP2Host(domain);
+		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_DGRAM);
+		int hostProtocol = convertSocketProtoPSP2Host(protocol);
+
+		this->sock = ::socket(hostDomain, hostType, hostProtocol);
 	}
-	int select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) override;
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
@@ -301,8 +359,17 @@ static_assert(sizeof(DgramSocket) == sizeof(InetSocket), "Socket size mismatch!"
 #pragma pack(push, 8)
 class RawSocket : public InetSocket {
 public:
-	RawSocket() : InetSocket() {
+	RawSocket(int domain, int protocol) : InetSocket() {
+		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_RAW;
+		this->domain = domain;
+		this->protocol = protocol;
+
+		int hostDomain = convertSocketDomainPSP2Host(domain);
+		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_RAW);
+		int hostProtocol = convertSocketProtoPSP2Host(protocol);
+
+		this->sock = ::socket(hostDomain, hostType, hostProtocol);
 	}
 	int send(const char* buf, int len, int flags) override;
 	int recv(char* buf, int len, int flags) override;
@@ -315,8 +382,17 @@ static_assert(sizeof(RawSocket) == sizeof(InetSocket), "Socket size mismatch!");
 #pragma pack(push, 8)
 class RdmSocket : public InetSocket {
 public:
-	RdmSocket() : InetSocket() {
+	RdmSocket(int domain, int protocol) : InetSocket() {
+		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_RDM;
+		this->domain = domain;
+		this->protocol = protocol;
+
+		int hostDomain = convertSocketDomainPSP2Host(domain);
+		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_RDM);
+		int hostProtocol = convertSocketProtoPSP2Host(protocol);
+
+		this->sock = ::socket(hostDomain, hostType, hostProtocol);
 	}
 	int send(const char* buf, int len, int flags) override;
 	int recv(char* buf, int len, int flags) override;
@@ -329,8 +405,17 @@ static_assert(sizeof(RdmSocket) == sizeof(InetSocket), "Socket size mismatch!");
 #pragma pack(push, 8)
 class SeqpacketSocket : public InetSocket {
 public:
-	SeqpacketSocket() : InetSocket() {
+	SeqpacketSocket(int domain, int protocol) : InetSocket() {
+		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_SEQPACKET;
+		this->domain = domain;
+		this->protocol = protocol;
+
+		int hostDomain = convertSocketDomainPSP2Host(domain);
+		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_SEQPACKET);
+		int hostProtocol = convertSocketProtoPSP2Host(protocol);
+
+		this->sock = ::socket(hostDomain, hostType, hostProtocol);
 	}
 	int send(const char* buf, int len, int flags) override;
 	int recv(char* buf, int len, int flags) override;
@@ -347,8 +432,27 @@ static_assert(sizeof(SeqpacketSocket) == sizeof(InetSocket), "Socket size mismat
 #pragma pack(push, 8)
 class DccpSocket : public InetSocket {
 public:
-	DccpSocket() : InetSocket() {
+	DccpSocket(int domain, int protocol) : InetSocket() {
+		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_DCCP;
+		this->domain = domain;
+		this->protocol = protocol;
+
+		int hostDomain = convertSocketDomainPSP2Host(domain);
+		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_DCCP);
+		int hostProtocol = convertSocketProtoPSP2Host(protocol);
+
+		this->sock = ::socket(hostDomain, hostType, hostProtocol);
+
+		// This is the "kernel P2P socket" that binds port 3658 first; every
+		// ConnDgramSocket that needs to share that port depends on THIS socket
+		// having set SO_REUSEPORT/SO_REUSEADDR too - reuse only works if every
+		// socket sharing the port opts in, not just the later ones.
+		int reuse = 1;
+#if defined(SO_REUSEPORT)
+		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse));
+#endif
+		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
 	}
 	int send(const char* buf, int len, int flags) override;
 	int recv(char* buf, int len, int flags) override;
@@ -366,10 +470,31 @@ static_assert(sizeof(DccpSocket) == sizeof(InetSocket), "Socket size mismatch!")
 #pragma pack(push, 8)
 class ConnDgramSocket : public InetSocket {
 public:
-	ConnDgramSocket() : InetSocket() {
+	ConnDgramSocket(int domain, int protocol) : InetSocket() {
+		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_CONN_DGRAM;
+		this->src.virt.vport = 0;
+		this->domain = domain;
+		this->protocol = protocol;
+		p2p_mode = p2p_type::UNRELIABLE;
+
+		int hostDomain = convertSocketDomainPSP2Host(domain);
+		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_CONN_DGRAM);
+		int hostProtocol = convertSocketProtoPSP2Host(protocol);
+
+		this->sock = ::socket(hostDomain, hostType, hostProtocol);
+
+		// Real hardware has no actual P2P socket: enabling signaling just redirects all
+		// port-3658 traffic through a kernel-level hijack, so any number of vports can
+		// share the port. Here that means multiple real sockets (one per vport, plus the
+		// signaling PING/PONG listener) all need to bind the same real port, which requires
+		// SO_REUSEADDR set before bind() ever happens.
+		int reuse = 1;
+#if defined(SO_REUSEPORT)
+		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse));
+#endif
+		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
 	}
-	int select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) override;
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
@@ -382,10 +507,22 @@ static_assert(sizeof(ConnDgramSocket) == sizeof(InetSocket), "Socket size mismat
 #pragma pack(push, 8)
 class PacketSocket : public InetSocket {
 public:
-	PacketSocket() : InetSocket() {
+	PacketSocket(int domain, int protocol) : InetSocket() {
+		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_PACKET;
+		this->nonblocking = false;
+		this->tcp_state = TCPState::Disconnected;
+		this->src.virt.vport = 0;
+		this->domain = domain;
+		this->protocol = protocol;
+		p2p_mode = p2p_type::RELIABLE;
+
+		int hostDomain = convertSocketDomainPSP2Host(domain);
+		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_PACKET);
+		int hostProtocol = convertSocketProtoPSP2Host(protocol);
+
+		this->sock = ::socket(hostDomain, hostType, hostProtocol);
 	}
-	int select(SceNetInetFdSet* readfds, SceNetInetFdSet* writefds, SceNetInetFdSet* exceptfds, SceNetInetTimeval* timeout) override;
 	int send(const char* buf, int len, int flags) override;
 	int recv(char* buf, int len, int flags) override;
 	int connect(SceNetInetSockaddr* name, int namelen) override;
@@ -407,6 +544,28 @@ public:
 };
 #pragma pack(pop)
 static_assert(sizeof(PacketSocket) == sizeof(InetSocket), "Socket size mismatch!");
+
+#pragma push_macro("new")
+#undef new
+
+#if PPSSPP_PLATFORM(WINDOWS)
+#include <new>
+#endif
+using SocketFactoryFn = InetSocket* (*)(void*, int, int);
+const SocketFactoryFn InetSocketFactory[] = {
+	[](void* p, int domain, int protocol) -> InetSocket* { return ::new (p) InetSocket(domain, protocol); },			// 0:  Default
+	[](void* p, int domain, int protocol) -> InetSocket* { return ::new (p) StreamSocket(domain, protocol); },			// 1:  PSP_NET_INET_SOCK_STREAM
+	[](void* p, int domain, int protocol) -> InetSocket* { return ::new (p) DgramSocket(domain, protocol); },			// 2:  PSP_NET_INET_SOCK_DGRAM
+	[](void* p, int domain, int protocol) -> InetSocket* { return ::new (p) RawSocket(domain, protocol); },				// 3:  PSP_NET_INET_SOCK_RAW
+	[](void* p, int domain, int protocol) -> InetSocket* { return ::new (p) InetSocket(domain, protocol); },			// 4:  PSP_NET_INET_SOCK_RDM
+	[](void* p, int domain, int protocol) -> InetSocket* { return ::new (p) SeqpacketSocket(domain, protocol); },		// 5:  PSP_NET_INET_SOCK_SEQPACKET
+	[](void* p, int domain, int protocol) -> InetSocket* { return ::new (p) ConnDgramSocket(domain, protocol); },		// 6:  PSP_NET_INET_SOCK_CONN_DGRAM
+	[](void* p, int domain, int protocol) -> InetSocket* { return ::new (p) DccpSocket(domain, protocol); },			// 7:  PSP_NET_INET_SOCK_DCCP
+	[](void* p, int domain, int protocol) -> InetSocket* { return ::new (p) InetSocket(domain, protocol); },			// 8:  UNDOCUMENTED
+	[](void* p, int domain, int protocol) -> InetSocket* { return ::new (p) InetSocket(domain, protocol); },			// 9:  UNDOCUMENTED
+	[](void* p, int domain, int protocol) -> InetSocket* { return ::new (p) PacketSocket(domain, protocol); }			// 10: PSP_NET_INET_SOCK_PACKET
+};
+#pragma pop_macro("new")
 
 // VPort Bus subscription entry (replaced SwitchEntry)
 struct VPortSubscriber {
