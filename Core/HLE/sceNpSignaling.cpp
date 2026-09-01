@@ -87,12 +87,14 @@ int __StartSignalingThread(int threadStackSize, u32 priority) {
 	//memset(optionalAddr, 0, 8);
 
 	// ret = __KernelCreateThread("SceNpSignalingMain", __KernelGetCurThreadModuleId(), signalingThreadAddr, priority, 0x1000, PSP_THREAD_ATTR_USER, 0, true);
-	ret = sceKernelCreateThread("SceNpSignalingMain", signalingThreadAddr, priority, threadStackSize, 0, 0); // would normally be the entire threadStackSize, but only because PSN allocates the entire peer system in here?
+	ret = hleCall(ThreadManForUser, int, sceKernelCreateThread, "SceNpSignalingMain", signalingThreadAddr, priority, threadStackSize, 0, 0);
+	// ret = sceKernelCreateThread("SceNpSignalingMain", signalingThreadAddr, priority, threadStackSize, 0, 0); // would normally be the entire threadStackSize, but only because PSN allocates the entire peer system in here?
 	if (ret < 0)
 		return ret;
 	signalingThreadId = ret;
 
-	ret = sceKernelStartThread(signalingThreadId, 0, 0); // ret = hleCall(ThreadManForUser, int, sceKernelStartThread, signalingThreadId, 0, 0);
+	ret = hleCall(ThreadManForUser, int, sceKernelStartThread, signalingThreadId, 0, 0);
+	// ret = sceKernelStartThread(signalingThreadId, 0, 0); // ret = hleCall(ThreadManForUser, int, sceKernelStartThread, signalingThreadId, 0, 0);
 	if (ret < 0) {
 		sceKernelTerminateThread(signalingThreadId);
 		sceKernelDeleteThread(signalingThreadId);
@@ -108,7 +110,8 @@ int __StartSignalingEchoThread(int threadStackSize, u32 priority) {
 
 	// int ret = __KernelCreateThread("SceNpSignalingEcho", __KernelGetCurThreadModuleId(), signalingEchoThreadAddr, priority, 0x1000, PSP_THREAD_ATTR_USER, 0, true);
 	// u32* option = [8, 0, 0, 0]
-	int ret = sceKernelCreateThread("SceNpSignalingEcho", signalingEchoThreadAddr, priority, threadStackSize, 0, 0);
+	// int ret = sceKernelCreateThread("SceNpSignalingEcho", signalingEchoThreadAddr, priority, threadStackSize, 0, 0);
+	int ret = hleCall(ThreadManForUser, int, sceKernelCreateThread, "SceNpSignalingEcho", signalingEchoThreadAddr, priority, threadStackSize, 0, 0);
 
 	if (-1 < ret) {
 		signalingEchoThreadId = ret;
@@ -116,7 +119,8 @@ int __StartSignalingEchoThread(int threadStackSize, u32 priority) {
 		// WARN_LOG(Log::Signaling, "Creating new socket for vport %d", SCE_INTERNAL_PORT);
 		// SCE_INTERNAL_SOCK = sigServer->CreateSignalingSocket(SCE_SIGN_PORT, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_CONN_DGRAM, PSP_NET_INET_IPPROTO_UNSPEC);
 
-		ret = sceKernelStartThread(signalingEchoThreadId, 0, 0); // ret = hleCall(ThreadManForUser, int, sceKernelStartThread, signalingEchoThreadId, 0, 0);
+		// ret = sceKernelStartThread(signalingEchoThreadId, 0, 0); // ret = hleCall(ThreadManForUser, int, sceKernelStartThread, signalingEchoThreadId, 0, 0);
+		ret = hleCall(ThreadManForUser, int, sceKernelStartThread, signalingEchoThreadId, 0, 0);
 		if (ret < 0) {
 			sceKernelTerminateThread(signalingEchoThreadId);
 			sceKernelDeleteThread(signalingEchoThreadId);
