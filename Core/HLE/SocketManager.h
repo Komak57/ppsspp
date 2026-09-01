@@ -327,7 +327,9 @@ struct InetSocket {
 	virtual int listen(int backlog);
 	virtual int accept(sockaddr* addr, socklen_t* addrlen);
 
-	virtual bool ProcessNetStack();
+	// Process P2P as TCP over UDP with Sequential Ordering and Packet Loss Prevention 
+	virtual int Send_Reliable(const char* buf, int len, int flags);
+	virtual bool Process_Reliable();
 
 	// Helper methods for virtual socket packet handling
 	virtual void enqueue_packet(VirtualPacket packet);
@@ -339,6 +341,7 @@ struct InetSocket {
 	virtual InetSocket* get_pending_connection();
 	virtual void remove_pending_connection(InetSocket* conn);
 	virtual bool has_pending_connection() const;
+	virtual void mark_ack(InetSocket* inetSock, int seq_id);
 };
 #pragma pack(pop)
 
@@ -567,17 +570,6 @@ public:
 	int accept(sockaddr* addr, socklen_t* addrlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
-
-	bool dequeue_packet(VirtualPacket& packet) override;
-	int dequeue_stream(char* buf, int len, sockaddr_in* out_addr) override;
-	void mark_ack(InetSocket* inetSock, int seq_id);
-	bool has_pending_data() const override;
-	bool set_pending_connection(InetSocket* conn) override;
-	bool update_pending_connection(const VirtualSockAddr& peer_addr) override;
-	InetSocket* get_pending_connection() override;
-	void remove_pending_connection(InetSocket* conn) override;
-	bool has_pending_connection() const override;
-	bool ProcessNetStack() override;
 };
 #pragma pack(pop)
 static_assert(sizeof(PacketSocket) == sizeof(InetSocket), "Socket size mismatch!");

@@ -774,15 +774,17 @@ void InetSocket::enqueue_packet(VirtualPacket packet) {
 	rx_queue.push_back(std::move(packet));
 	DEBUG_LOG(Log::sceNet, "Enqueued packet for vport %d (queue size: %zu)", ntohs(src.virt.vport), rx_queue.size());
 }
-bool InetSocket::dequeue_packet(VirtualPacket& packet) {
+bool InetSocket::dequeue_packet(VirtualPacket& packet, bool seq) {
 	std::lock_guard<std::mutex> buffers(buffer_lock);
 	const u64 MAX_PACKET_AGE_US = 30000000;  // 30 seconds
 	
-	while (!rx_buffer.empty()) {
-		auto it = rx_buffer.begin();
-		int next = it->first;
-		packet = std::move(rx_buffer.begin()->second);
-		rx_buffer.erase(next);
+	while (((seq && (rx_buffer.find(rx_seq + 1) != rx_buffer.end())) || !seq) && !rx_buffer.empty()) {
+		if (seq)
+			rx_seq++;
+		else
+			rx_seq = rx_buffer.begin()->first;
+		packet = std::move(rx_buffer.find(rx_seq)->second);
+		rx_buffer.erase(rx_seq);
 		
 		// Check packet TTL
 		u64 current_time_us = (u64)(time_now_d() * 1000000.0);
@@ -798,7 +800,7 @@ bool InetSocket::dequeue_packet(VirtualPacket& packet) {
 	
 	return false;  // Queue is empty
 }
-int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
+int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr, bool seq) {
 	std::lock_guard<std::mutex> buffers(buffer_lock);
     const u64 MAX_PACKET_AGE_US = 30000000;  // 30 seconds
     u64 current_time_us = (u64)(time_now_d() * 1000000.0);
@@ -807,15 +809,13 @@ int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
     bool target_locked = false;
     sockaddr_in target_addr{};
 
-	if (!rx_buffer.empty())
-		WARN_LOG(Log::sceNet, "dequeue_stream: Missing next packet");
+	if ((seq && (rx_buffer.find(rx_seq + 1) == rx_buffer.end()) || !seq) && !rx_buffer.empty())
+		WARN_LOG(Log::sceNet, "dequeue_stream: Missing next packet at %d", rx_seq+1);
     
-	auto it = rx_buffer.begin();
-    while (it != rx_buffer.end()) {
+    while (total_copied < len && (((seq && (rx_buffer.find(rx_seq + 1) != rx_buffer.end())) || !seq) && !rx_buffer.empty())) {
         // Peek at the front packet (do NOT pop yet)
-        VirtualPacket& peek_pkt = it->second;
-        // Now we know we are consuming this packet (at least partially), so pop it
-		rx_buffer.erase(it);
+		u32 seq_id = (seq? rx_seq + 1 : rx_buffer.begin()->first);
+        VirtualPacket& peek_pkt = rx_buffer.find(seq_id)->second;
         
         // Check packet TTL
         u64 packet_age_us = current_time_us - peek_pkt.enqueue_time_us;
@@ -833,7 +833,8 @@ int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
         } else {
             // If we are continuing to fill the buffer, ensure this next packet is from the SAME source
             if (peek_pkt.src.virt.addr.s_addr != target_addr.sin_addr.s_addr ||
-                peek_pkt.src.virt.port != target_addr.sin_port) {
+                peek_pkt.src.virt.port != target_addr.sin_port ||
+				(peek_pkt.src.host.sin_zero[0] != target_addr.sin_zero[0] || peek_pkt.src.host.sin_zero[1] != target_addr.sin_zero[1])) {
                 
                 DEBUG_LOG(Log::sceNet, "dequeue_stream: Source mismatch detected. Halting coalescing. (Expected %s:%u, got %s:%u)",
                     inet_ntoa(target_addr.sin_addr), ntohs(target_addr.sin_port),
@@ -842,9 +843,10 @@ int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
             }
         }
         
+        // Now we know we are consuming this packet (at least partially), so pop it
 		rx_seq++;
-        VirtualPacket packet = std::move(rx_buffer.find(rx_seq)->second);
-        rx_buffer.erase(rx_seq);
+        VirtualPacket packet = std::move(peek_pkt);
+        rx_buffer.erase(seq_id);
         
         int available_in_pkt = packet.len;
         int room_in_buf = len - total_copied;
@@ -869,7 +871,7 @@ int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
             remainder.src.virt = packet.src.virt;
             remainder.enqueue_time_us = packet.enqueue_time_us; // Preserve TTL
             
-			rx_buffer[rx_seq] = std::move(remainder);
+			rx_buffer[seq_id] = std::move(remainder);
 			rx_seq--; // mark this as the next packet to receive
             break; // Buffer is full
         }
@@ -877,21 +879,64 @@ int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
     
     return total_copied;
 }
-bool InetSocket::has_pending_data() const {
+bool InetSocket::has_pending_data(bool seq) const {
 	std::lock_guard<std::mutex> buffers(buffer_lock);
-	return (!rx_buffer.empty());
+	return (((seq && ((rx_buffer.find(rx_seq + 1) != rx_buffer.end()) || tcp_state == TCPState::CloseWait)) || !seq) && !rx_buffer.empty());
 }
 bool InetSocket::set_pending_connection(InetSocket* conn) {
-	ERROR_LOG(Log::sceNet, "Socket does not support connections");
-	delete conn;
-	return false;
+	std::lock_guard<std::mutex> connections(conn_lock);
+	if ((int)pending_connections.size() >= backlog) {
+		ERROR_LOG(Log::sceNet, "Backlog full, dropping SYN from %s:%u", ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port));
+		delete conn;
+		return false;
+	}
+	// Check for an existing connection. The game port is the distinguishing key -
+	// every p2p socket shares the same vport (3658), so it alone can't identify a
+	// connector (two joins from one IP, e.g. multi-instance, differ only by port).
+	for (auto& existing : pending_connections) {
+        if (existing->dst.virt.addr.s_addr == conn->dst.virt.addr.s_addr &&
+            existing->dst.virt.port == conn->dst.virt.port &&
+            existing->dst.virt.vport == conn->dst.virt.vport) {
+			ERROR_LOG(Log::sceNet, "Request already exists, dropping SYN from %s:%u", ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.vport));
+            delete conn; // discard the duplicate
+            return false;
+        }
+    }
+
+	pending_connections.push_back(conn);
+	DEBUG_LOG(Log::sceNet, "Set pending connection on vport %d from %s:%u",
+		ntohs(src.virt.vport), ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port));
+	return true;
 }
-bool InetSocket::update_pending_connection(const VirtualSockAddr& peer_addr) {
-	ERROR_LOG(Log::sceNet, "Socket does not support connections");
+bool InetSocket::update_pending_connection(const VirtualSockAddr& peer) {
+	std::lock_guard<std::mutex> connections(conn_lock);
+	for (auto& conn : pending_connections) {
+        if (conn->dst.virt.addr.s_addr == peer.virt.addr.s_addr && 
+            (conn->dst.virt.port == peer.virt.port) &&
+			(peer.virt.vport == 0 || conn->dst.virt.vport == peer.virt.vport)) {
+            
+            if (conn->tcp_state == TCPState::SynReceived) {
+                conn->tcp_state = TCPState::Established;
+				{
+					mark_ack(conn, 1); // (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK|p2ps_tcp_flags::TCP)
+					conn->rx_seq++; // ACK received
+				}
+                DEBUG_LOG(Log::sceNet, "Promoted connection to Established for %s:%u",
+                    ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port));
+                return true;
+            }
+        }
+    }
 	return false;
 }
 InetSocket* InetSocket::get_pending_connection() {
-	ERROR_LOG(Log::sceNet, "Socket does not support connections");
+	std::lock_guard<std::mutex> connections(conn_lock);
+	// Find the first connection that has finished the 3-way handshake
+    for (auto& conn : pending_connections) {
+        if (conn->tcp_state == TCPState::Established) {
+			return conn;
+        }
+    }
 	return nullptr;
 }
 void InetSocket::remove_pending_connection(InetSocket* conn) {
@@ -915,8 +960,262 @@ void InetSocket::remove_pending_connection(InetSocket* conn) {
     }
 }
 bool InetSocket::has_pending_connection() const {
-	// ERROR_LOG(Log::sceNet, "Socket does not support connections");
+	std::lock_guard<std::mutex> connections(conn_lock);
+	for (const auto& conn : pending_connections) {
+        if (conn->tcp_state == TCPState::Established) {
+            return true;
+        }
+    }
     return false;
+}
+void InetSocket::mark_ack(InetSocket* inetSock, int seq_id) {
+	std::lock_guard<std::mutex> buffers(inetSock->buffer_lock);
+	// Flag SYN|ACK as acquired
+	auto psh_syn = std::find_if(inetSock->tx_buffer.begin(), inetSock->tx_buffer.end(), [seq_id](const auto& pair) { return pair.second.seq_id == seq_id; });
+	if (psh_syn != inetSock->tx_buffer.end())
+		psh_syn->second.seq_ack = true;
+}
+
+int InetSocket::Send_Reliable(const char* buf, int len, int flags) {
+	// DCCP must exist for P2P traffic
+	auto p2p_sock = g_socketManager.GetP2PSocket();
+	if (!p2p_sock) {
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(EINVAL);
+#else
+		socket_errno = EINVAL;
+#endif
+		return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: P2P_SOCK Not Present");
+	}
+
+	// Create the transmission vpacket
+	VirtualPacket vpkt;
+	vpkt.data = std::make_unique<char[]>(len);
+	memcpy(vpkt.data.get(), buf, len);
+	vpkt.len = len;
+	vpkt.header_flags = flags;
+	vpkt.src.host = src.host;
+	vpkt.seq_id = tx_seq+1;
+	// Game-space addressing for the extended wire header
+	vpkt.src.virt.port = src.virt.port;
+	vpkt.src.virt.vport = src.virt.vport;
+	vpkt.dst.virt.port = dst.virt.port;
+	vpkt.dst.virt.vport = dst.virt.vport;
+	// Add timestamp for TTL tracking
+	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
+	vpkt.last_sent_us = (u64)(time_now_d() * BASE_RTO_US);
+
+	auto send_pkt = vpkt.clone();
+	{
+		// Add to transmit buffer
+		std::lock_guard<std::mutex> lock(queue_lock);
+		// Place at end
+		tx_buffer[tx_seq+1] = std::move(vpkt);
+	}
+
+	auto [_len, _data] = send_pkt.Pack(dst);
+	// Flip port/vport for physical delivery: the datagram must reach the peer's
+	// REAL UDP endpoint - their DCCP master, i.e. the game vport (3658) - while the
+	// game port (12000/ephemeral) rides in the vport header + ext header for routing.
+	sockaddr_in phys = dst.host;
+	phys.sin_port = dst.virt.vport;
+	int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (const sockaddr*)&phys, sizeof(sockaddr_in));
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "Send_Reliable: Failed to send to peer");
+	tx_seq++;
+	// Report PAYLOAD bytes, not wire bytes: ::sendto's result includes the vport +
+	// ext + seq headers (e.g. 32 -> 47), and a stream layer that believes 47 bytes
+	// of its 32-byte buffer were consumed desyncs its framing.
+	return (int)len;
+}
+bool InetSocket::Process_Reliable() {
+	bool hadData = has_pending_data(true); // Needs queue_lock
+    const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
+    u64 current_time_us = (u64)(time_now_d() * 1000000.0);
+
+	std::deque<VirtualPacket> local_queue;
+	{
+		std::lock_guard<std::mutex> queue(queue_lock);
+		std::swap(local_queue, rx_queue);
+	}
+
+    auto it = local_queue.begin();
+    while (it != local_queue.end()) {
+        VirtualPacket pkt = (*it).clone();
+		it = local_queue.erase(it);
+
+        // 1. Cleanup Stale Packets (Protocol Housekeeping)
+        u64 packet_age_us = current_time_us - pkt.enqueue_time_us;
+        if (packet_age_us > MAX_PACKET_AGE_US) {
+            WARN_LOG(Log::sceNet, "ProcessNetStack: Discarding stale packet (age: %.2f seconds)", (float)packet_age_us / 1000000.0f);
+            continue;
+        }
+
+        // if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::FIN)) {
+		// 	INFO_LOG(Log::sceNet, "PACKET: Received PSH|FIN at listening socket from %s:%u to port %u",
+		// 		inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
+		// }
+        // else 
+		if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
+			if (tcp_state != TCPState::Listening) {
+				INFO_LOG(Log::sceNet, "PACKET: Received PSH|ACK at listening socket on %s:%u|%u",
+					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+				// Do not increment rx_seq, this is just a confirmation
+
+				mark_ack(this, pkt.seq_id);
+			}
+		}
+        else if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::TCP)) {
+			if (tcp_state != TCPState::Listening) {
+				INFO_LOG(Log::sceNet, "PACKET: Received PSH at listening socket from on %s:%u|%u [seq=%d,tx=%d/rx=%d,hpd=%d]",
+					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport), pkt.seq_id, tx_seq, rx_seq, has_pending_data(true));
+
+				// Store the payload for recv()/dequeue_stream, keyed by wire seq so
+				// the stream is reassembled in order. A duplicate (retransmit) or an
+				// already-consumed seq is not re-stored - just re-ACKed below.
+				{
+					std::lock_guard<std::mutex> buffers(buffer_lock);
+					if (pkt.seq_id > rx_seq && rx_buffer.find(pkt.seq_id) == rx_buffer.end())
+						rx_buffer[pkt.seq_id] = pkt.clone();
+				}
+
+				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning PSH|ACK to %s:%u|%u",
+					ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport));
+
+				// Pure acknowledgement: echoes the RECEIVED seq (so the peer's
+				// mark_ack hits the right tx_buffer entry), sent directly - it does
+				// not consume a tx seq and is never itself retransmitted.
+				VirtualPacket ack{};
+				ack.len = 0;
+				ack.header_flags = (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP);
+				ack.seq_id = pkt.seq_id;
+				ack.src.host = src.host;
+				ack.src.virt.port = src.virt.port;
+				ack.src.virt.vport = src.virt.vport;
+				ack.dst.virt.port = dst.virt.port;
+				ack.dst.virt.vport = dst.virt.vport;
+				auto p2p_sock = g_socketManager.GetP2PSocket();
+				if (p2p_sock) {
+					auto [_len, _data] = ack.Pack(dst);
+					sockaddr_in phys = dst.host;
+					phys.sin_port = dst.virt.vport;
+					int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(phys));
+					if (ret < 0) {
+						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send PSH|ACK");
+					}
+				}
+			}
+        }
+        // 2. Process Control Plane (The "Kernel" Logic)
+        else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP)) {
+			if (tcp_state == TCPState::Listening) {
+				InetSocket* conn = new InetSocket();
+				// Default assume local connection
+				conn->src.host = this->src.host;
+				conn->src.host.sin_family = AF_INET;
+				// Save the sender's address for replies
+				conn->dst.host = pkt.src.host;
+				conn->dst.host.sin_family = AF_INET;
+				// Adopt the connector's game-space endpoint from the extended wire
+				// header - the reply key is their (ephemeral) game port; the vport
+				// alone (legacy 2-byte payload) is shared by every p2p socket and
+				// cannot address the reply.
+				conn->dst.virt.port = pkt.src.virt.port;
+				conn->dst.virt.vport = pkt.src.virt.vport;
+				conn->tcp_state = TCPState::SynReceived;
+				conn->tx_seq = 0;
+				if (!set_pending_connection(conn))
+					continue;
+				conn->rx_seq = 1; // Mark this packet received
+				
+				INFO_LOG(Log::sceNet, "PACKET: Received SYN at listening socket from on %s:%u|%u",
+					ip2str(conn->src.virt.addr).c_str(), ntohs(conn->src.virt.port), ntohs(conn->src.virt.vport));
+
+				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning SYN-ACK to %s:%u|%u",
+					ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port), ntohs(conn->dst.virt.vport));
+
+				// Reply from conn, not the listener: conn->dst holds the peer (the
+				// listener's dst is empty), and this way the SYN-ACK lands in
+				// conn->tx_buffer where the pending-connection retransmit loop
+				// expects it. Send_Reliable increments conn->tx_seq itself.
+				char data[1] = {};
+				int ret = conn->Send_Reliable(data, 0, (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP));
+				if (ret < 0) {
+					ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send SYN-ACK");
+				}
+			}
+        } 
+        else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
+			if (tcp_state == TCPState::SynSent) {
+				INFO_LOG(Log::sceNet, "PACKET: Received SYN|ACK at listening socket to %s:%u|%u",
+					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+				dst.host.sin_family = AF_INET;
+				// Adopt the real source address; do NOT overwrite sin_port - it
+				// aliases dst.virt.port (the peer's GAME port, needed for routing),
+				// while pkt's real source port is their DCCP transport port.
+				dst.host.sin_addr = pkt.src.host.sin_addr;
+				mark_ack(this, 1);
+				tcp_state = TCPState::Established;
+				rx_seq++;
+				
+                // Resume the thread that is currently blocked in sceNetInetConnect
+				// int tid = threadID.exchange(-1);
+                // if (tid > 0) {
+                //     DEBUG_LOG(Log::sceNet, "ProcessNetStack: SYN|ACK received, resuming thread %d", tid);
+                //     __KernelResumeThreadFromWait(tid, 0);
+                // }
+
+				// TODO: Mark the tx_buffer SYN packet as acquired
+				// pkt.seq_ack = true;
+
+				// Do not resend. Let the peer re-send SYN|ACK if it hasn't connected yet
+
+				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning ACK to %s:%u|%u",
+					ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport));
+				
+				char data[1] = {};
+				// Send_Reliable increments tx_seq itself - no manual increment here
+				int ret = Send_Reliable(data, 0, (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP));
+				if (ret < 0) {
+					ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
+				}
+			}
+		}
+        else if (pkt.header_flags == (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
+            if (tcp_state == TCPState::Listening) {
+				INFO_LOG(Log::sceNet, "PACKET: Received ACK at listening socket on %s:%u|%u",
+					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+
+				
+				// tcp_state = TCPState::Established;
+				// Match the pending conn by the peer's GAME endpoint (from the
+				// extended header) - pkt.src holds the real transport endpoint,
+				// whose port is the peer's DCCP port, not their game port.
+				VirtualSockAddr peer{};
+				peer.virt.addr = pkt.src.host.sin_addr;
+				peer.virt.port = pkt.src.virt.port;
+				peer.virt.vport = pkt.src.virt.vport;
+				update_pending_connection(peer); // Increments rx_seq
+
+                // Resume the thread that is currently blocked in sceNetInetConnect
+                // if (threadID > 0) {
+                //     DEBUG_LOG(Log::sceNet, "ProcessNetStack: ACK received, resuming thread %d", threadID);
+                //     __KernelResumeThreadFromWait(threadID, 0);
+                //     threadID = -1;
+                // }
+            }
+        } 
+        else if (pkt.header_flags == (p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP)) {
+            if (tcp_state != TCPState::Listening) {
+				INFO_LOG(Log::sceNet, "PACKET: Received FIN at listening socket on %s:%u|%u",
+					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+                tcp_state = TCPState::CloseWait;
+				rx_seq++;
+            }
+        }
+    }
+
+	return hadData;
 }
 
 // Close a virtual socket
@@ -2156,403 +2455,4 @@ int PacketSocket::shutdown(int how) {
 	}
 	
 	return ::shutdown(sock, how);
-}
-bool PacketSocket::dequeue_packet(VirtualPacket& packet) {
-	std::lock_guard<std::mutex> buffers(buffer_lock);
-	const u64 MAX_PACKET_AGE_US = 30000000;  // 30 seconds
-	
-	while (!rx_buffer.empty() && rx_buffer.find(rx_seq + 1) != rx_buffer.end()) {
-		rx_seq++;
-		packet = std::move(rx_buffer.find(rx_seq)->second);
-		rx_buffer.erase(rx_seq);
-		
-		// Check packet TTL
-		u64 current_time_us = (u64)(time_now_d() * 1000000.0);
-		u64 packet_age_us = current_time_us - packet.enqueue_time_us;
-		
-		if (packet_age_us > MAX_PACKET_AGE_US) {
-            WARN_LOG(Log::sceNet, "dequeue_stream: Receiving stale packet (age: %.2f seconds)", (float)packet_age_us / 1000000.0f);
-		}
-		
-		DEBUG_LOG(Log::sceNet, "Dequeued packet from vport %d (queue size: %zu)", ntohs(src.virt.vport), rx_buffer.size());
-		return true;
-	}
-	
-	return false;  // Queue is empty
-}
-int PacketSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr) {
-	std::lock_guard<std::mutex> buffers(buffer_lock);
-    const u64 MAX_PACKET_AGE_US = 30000000;  // 30 seconds
-    u64 current_time_us = (u64)(time_now_d() * 1000000.0);
-    
-    int total_copied = 0;
-    bool target_locked = false;
-    sockaddr_in target_addr{};
-
-	if (!rx_buffer.empty() && rx_buffer.find(rx_seq + 1) == rx_buffer.end())
-		WARN_LOG(Log::sceNet, "dequeue_stream: Missing next packet at %d", rx_seq+1);
-    
-    while (total_copied < len && !rx_buffer.empty() && rx_buffer.find(rx_seq + 1) != rx_buffer.end()) {
-        // Peek at the front packet (do NOT pop yet)
-        VirtualPacket& peek_pkt = rx_buffer.find(rx_seq + 1)->second;
-        
-        // Check packet TTL
-        u64 packet_age_us = current_time_us - peek_pkt.enqueue_time_us;
-        if (packet_age_us > MAX_PACKET_AGE_US) {
-            WARN_LOG(Log::sceNet, "dequeue_stream: Receiving stale packet (age: %.2f seconds)", (float)packet_age_us / 1000000.0f);
-        }
-
-        // Lock onto the first valid packet's source address
-        if (!target_locked) {
-            target_addr = peek_pkt.src.host;
-            target_locked = true;
-            if (out_addr) {
-                *out_addr = target_addr;
-            }
-        } else {
-            // If we are continuing to fill the buffer, ensure this next packet is from the SAME source
-            if (peek_pkt.src.virt.addr.s_addr != target_addr.sin_addr.s_addr ||
-                peek_pkt.src.virt.port != target_addr.sin_port ||
-				(peek_pkt.src.host.sin_zero[0] != target_addr.sin_zero[0] || peek_pkt.src.host.sin_zero[1] != target_addr.sin_zero[1])) {
-                
-                DEBUG_LOG(Log::sceNet, "dequeue_stream: Source mismatch detected. Halting coalescing. (Expected %s:%u, got %s:%u)",
-                    inet_ntoa(target_addr.sin_addr), ntohs(target_addr.sin_port),
-                    inet_ntoa(peek_pkt.src.virt.addr), ntohs(peek_pkt.src.virt.port));
-                break; // Stop coalescing and leave this packet in the queue
-            }
-        }
-        
-        // Now we know we are consuming this packet (at least partially), so pop it
-		rx_seq++;
-        VirtualPacket packet = std::move(rx_buffer.find(rx_seq)->second);
-        rx_buffer.erase(rx_seq);
-        
-        int available_in_pkt = packet.len;
-        int room_in_buf = len - total_copied;
-        int bytes_to_copy = std::min(available_in_pkt, room_in_buf);
-        
-        // Copy data to the caller's buffer
-        if (bytes_to_copy > 0 && packet.data != nullptr) {
-            memcpy(buf + total_copied, packet.data.get(), bytes_to_copy);
-            total_copied += bytes_to_copy;
-        }
-        
-        // If we didn't consume the whole packet, push the remainder back to the FRONT
-        if (bytes_to_copy < available_in_pkt) {
-            VirtualPacket remainder;
-            int remaining_len = available_in_pkt - bytes_to_copy;
-            
-            remainder.data = std::make_unique<char[]>(remaining_len);
-            memcpy(remainder.data.get(), packet.data.get() + bytes_to_copy, remaining_len);
-            
-            remainder.len = remaining_len;
-            remainder.header_flags = packet.header_flags;
-            remainder.src.virt = packet.src.virt;
-            remainder.enqueue_time_us = packet.enqueue_time_us; // Preserve TTL
-            
-			rx_buffer[rx_seq] = std::move(remainder);
-			rx_seq--; // mark this as the next packet to receive
-            break; // Buffer is full
-        }
-    }
-    
-    return total_copied;
-}
-void PacketSocket::mark_ack(InetSocket* inetSock, int seq_id) {
-	std::lock_guard<std::mutex> buffers(inetSock->buffer_lock);
-	// Flag SYN|ACK as acquired
-	auto psh_syn = std::find_if(inetSock->tx_buffer.begin(), inetSock->tx_buffer.end(), [seq_id](const auto& pair) { return pair.second.seq_id == seq_id; });
-	if (psh_syn != inetSock->tx_buffer.end())
-		psh_syn->second.seq_ack = true;
-}
-bool PacketSocket::has_pending_data() const {
-	std::lock_guard<std::mutex> buffers(buffer_lock);
-	return ((!rx_buffer.empty() && rx_buffer.find(rx_seq + 1) != rx_buffer.end()) || tcp_state == TCPState::CloseWait);
-}
-bool PacketSocket::set_pending_connection(InetSocket* conn) {
-	std::lock_guard<std::mutex> connections(conn_lock);
-	if ((int)pending_connections.size() >= backlog) {
-		ERROR_LOG(Log::sceNet, "Backlog full, dropping SYN from %s:%u", ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port));
-		delete conn;
-		return false;
-	}
-	// Check for an existing connection
-	for (auto& existing : pending_connections) {
-        if (existing->dst.virt.addr.s_addr == conn->dst.virt.addr.s_addr && 
-            existing->dst.virt.port == conn->dst.virt.port) {
-			ERROR_LOG(Log::sceNet, "Request already exists, dropping SYN from %s:%u", ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port));
-            delete conn; // discard the duplicate
-            return false;
-        }
-    }
-
-	pending_connections.push_back(conn);
-	DEBUG_LOG(Log::sceNet, "Set pending connection on vport %d from %s:%u",
-		ntohs(src.virt.vport), ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port));
-	return true;
-}
-bool PacketSocket::update_pending_connection(const VirtualSockAddr& peer) {
-	std::lock_guard<std::mutex> connections(conn_lock);
-	for (auto& conn : pending_connections) {
-        if (conn->dst.virt.addr.s_addr == peer.virt.addr.s_addr && 
-            (conn->dst.virt.port == peer.virt.port) &&
-			(peer.virt.vport == 0 || conn->dst.virt.vport == peer.virt.vport)) {
-            
-            if (conn->tcp_state == TCPState::SynReceived) {
-                conn->tcp_state = TCPState::Established;
-				{
-					mark_ack(conn, 1); // (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK|p2ps_tcp_flags::TCP)
-					conn->rx_seq++; // ACK received
-				}
-                DEBUG_LOG(Log::sceNet, "Promoted connection to Established for %s:%u",
-                    ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port));
-                return true;
-            }
-        }
-    }
-	return false;
-}
-InetSocket* PacketSocket::get_pending_connection() {
-	std::lock_guard<std::mutex> connections(conn_lock);
-	// Find the first connection that has finished the 3-way handshake
-    for (auto& conn : pending_connections) {
-        if (conn->tcp_state == TCPState::Established) {
-			return conn;
-        }
-    }
-	return nullptr;
-}
-void PacketSocket::remove_pending_connection(InetSocket* conn) {
-    std::lock_guard<std::mutex> connections(conn_lock);
-    // pending_connections.erase(
-    //     std::remove_if(pending_connections.begin(), pending_connections.end(),
-    //         [conn](const std::unique_ptr<InetSocket>& p) { return p.get() == conn; }),
-    //     pending_connections.end()
-    // );
-	// pending_connections.remove(conn);
-    // for (auto it = pending_connections.begin(); it != pending_connections.end(); ++it) {
-    //     if (&*it == conn) {
-    //         pending_connections.erase(it);
-    //         return;
-    //     }
-    // }
-    auto it = std::find(pending_connections.begin(), pending_connections.end(), conn);
-    if (it != pending_connections.end()) {
-        delete *it;          // free the heap allocation
-        pending_connections.erase(it);
-    }
-}
-bool PacketSocket::has_pending_connection() const {
-	std::lock_guard<std::mutex> connections(conn_lock);
-	for (const auto& conn : pending_connections) {
-        if (conn->tcp_state == TCPState::Established) {
-            return true;
-        }
-    }
-    return false;
-}
-bool PacketSocket::ProcessNetStack() {
-	bool hadData = has_pending_data(); // Needs queue_lock
-    const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
-    u64 current_time_us = (u64)(time_now_d() * 1000000.0);
-
-	std::deque<VirtualPacket> local_queue;
-	{
-		std::lock_guard<std::mutex> queue(queue_lock);
-		std::swap(local_queue, rx_queue);
-	}
-
-    auto it = local_queue.begin();
-    while (it != local_queue.end()) {
-        VirtualPacket pkt = (*it).clone();
-		it = local_queue.erase(it);
-
-        // 1. Cleanup Stale Packets (Protocol Housekeeping)
-        u64 packet_age_us = current_time_us - pkt.enqueue_time_us;
-        if (packet_age_us > MAX_PACKET_AGE_US) {
-            WARN_LOG(Log::sceNet, "ProcessNetStack: Discarding stale packet (age: %.2f seconds)", (float)packet_age_us / 1000000.0f);
-            continue;
-        }
-
-        // if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::FIN)) {
-		// 	INFO_LOG(Log::sceNet, "PACKET: Received PSH|FIN at listening socket from %s:%u to port %u",
-		// 		inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), port);
-		// }
-        // else 
-		if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
-			if (tcp_state != TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received PSH|ACK at listening socket on %s:%u|%u",
-					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
-				// Do not increment rx_seq, this is just a confirmation
-
-				mark_ack(this, pkt.seq_id);
-			}
-		}
-        else if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::TCP)) {
-			if (tcp_state != TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received PSH at listening socket from on %s:%u|%u [seq=%d,tx=%d/rx=%d,hpd=%d]",
-					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport), pkt.seq_id, tx_seq, rx_seq, has_pending_data());
-				// Do not increment rx_seq until Recv is called
-
-				// Buffer the received packet
-				auto pkt_seq = pkt.seq_id;
-				rx_buffer[pkt_seq] = std::move(pkt);
-				// Return PSH|ACK to notify it was received
-				VirtualPacket vpkt{};
-				vpkt.len = 0;
-				vpkt.header_flags = (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP);
-				vpkt.src.host = src.host;
-				vpkt.seq_id = pkt_seq; // Just confirm this packet was received
-				// Add timestamp for TTL tracking
-				vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
-
-				// Do NOT save this for re-transmission. Wait for another PSH
-
-				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning PSH|ACK to %s:%u|%u",
-					ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport));
-
-				if (isLocalTarget(dst.virt.addr.s_addr)) {
-					g_socketManager.vBroadcast(std::move(vpkt), dst);
-				} else {
-					auto [_len, _data] = vpkt.Pack(dst.virt.vport); // deliver through the DCCP Socket to actual port
-					auto dccp_sock = g_socketManager.GetDCCP();
-					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst.host, sizeof(sockaddr_in));
-					if (ret < 0) {
-						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
-					}
-				}
-			}
-        }
-        // 2. Process Control Plane (The "Kernel" Logic)
-        else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP)) {
-			if (tcp_state == TCPState::Listening) {
-				InetSocket* conn = new InetSocket();
-				// Default assume local connection
-				conn->src.host = this->src.host;
-				conn->src.host.sin_family = AF_INET;
-				// Save the sender's address for replies
-				conn->dst.host = pkt.src.host;
-				conn->dst.host.sin_family = AF_INET;
-				if (pkt.len >= 2)	
-					memcpy(&conn->dst.virt.vport, pkt.data.get(), 2);
-				conn->tcp_state = TCPState::SynReceived;
-				conn->tx_seq = 0;
-				if (!set_pending_connection(conn))
-					continue;
-				conn->rx_seq = 1; // Mark this packet received
-				
-				INFO_LOG(Log::sceNet, "PACKET: Received SYN at listening socket from on %s:%u|%u",
-					ip2str(conn->src.virt.addr).c_str(), ntohs(conn->src.virt.port), ntohs(conn->src.virt.vport));
-
-				VirtualPacket vpkt{};
-				vpkt.len = 0;
-				vpkt.header_flags = (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP);
-				vpkt.src.host = conn->src.host;
-				vpkt.seq_id = conn->tx_seq+1;
-				// Add timestamp for TTL tracking
-				vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
-				vpkt.last_sent_us = (u64)(time_now_d() * BASE_RTO_US);
-
-				auto send_pkt = vpkt.clone();
-				{
-					std::lock_guard<std::mutex> buffer(conn->buffer_lock);
-					// Add to transmit buffer
-					conn->tx_buffer[conn->tx_seq+1] = std::move(vpkt);
-				}
-				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning SYN-ACK to %s:%u|%u",
-					ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port), ntohs(conn->dst.virt.vport));
-					
-				if (isLocalTarget(conn->dst.virt.addr.s_addr)) {
-					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-					g_socketManager.vBroadcast(std::move(send_pkt), conn->dst);
-					conn->tx_seq++;
-				} else {
-					auto [_len, _data] = send_pkt.Pack(conn->dst.virt.vport); // deliver through the DCCP Socket to actual port
-					auto dccp_sock = g_socketManager.GetDCCP();
-					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&conn->dst.host, sizeof(sockaddr_in));
-					if (ret < 0) {
-						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
-					}
-					conn->tx_seq++;
-				}
-			}
-        } 
-        else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
-			if (tcp_state == TCPState::SynSent) {
-				INFO_LOG(Log::sceNet, "PACKET: Received SYN|ACK at listening socket to %s:%u|%u",
-					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
-				dst.host.sin_family = AF_INET;
-				// Correct mapping
-				dst.host.sin_addr = pkt.src.host.sin_addr;
-				dst.host.sin_port = pkt.src.host.sin_port;
-				mark_ack(this, 1);
-				tcp_state = TCPState::Established;
-				rx_seq++;
-				
-                // Resume the thread that is currently blocked in sceNetInetConnect
-                if (threadID > 0) {
-                    DEBUG_LOG(Log::sceNet, "ProcessNetStack: SYN|ACK received, resuming thread %d", threadID);
-                    __KernelResumeThreadFromWait(threadID, 0);
-                    threadID = -1;
-                }
-
-				// TODO: Mark the tx_buffer SYN packet as acquired
-				// pkt.seq_ack = true;
-
-				VirtualPacket vpkt{};
-				vpkt.len = 0;
-				vpkt.header_flags = (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP);
-				vpkt.src.host = src.host;
-				vpkt.seq_id = tx_seq+1;
-				// Add timestamp for TTL tracking
-				vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
-
-				// Do not resend. Let the peer re-send SYN|ACK if it hasn't connected yet
-
-				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning ACK to %s:%u|%u",
-					ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport));
-				
-				if (isLocalTarget(dst.virt.addr.s_addr)) {
-					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-					g_socketManager.vBroadcast(std::move(vpkt), dst);
-					tx_seq++;
-				} else {
-					auto [_len, _data] = vpkt.Pack(dst.virt.vport); 
-					auto dccp_sock = g_socketManager.GetDCCP();
-					int ret = ::sendto(dccp_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst.host, sizeof(sockaddr_in));
-					if (ret < 0) {
-						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
-					}
-					tx_seq++;
-				}
-			}
-		}
-        else if (pkt.header_flags == (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
-            if (tcp_state == TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received ACK at listening socket on %s:%u|%u",
-					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
-
-				
-				// tcp_state = TCPState::Established;
-				update_pending_connection(pkt.src); // Increments rx_seq
-
-                // Resume the thread that is currently blocked in sceNetInetConnect
-                if (threadID > 0) {
-                    DEBUG_LOG(Log::sceNet, "ProcessNetStack: ACK received, resuming thread %d", threadID);
-                    __KernelResumeThreadFromWait(threadID, 0);
-                    threadID = -1;
-                }
-            }
-        } 
-        else if (pkt.header_flags == (p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP)) {
-            if (tcp_state != TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received FIN at listening socket on %s:%u|%u",
-					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
-                tcp_state = TCPState::CloseWait;
-				rx_seq++;
-            }
-        }
-    }
-
-	return hadData;
 }
