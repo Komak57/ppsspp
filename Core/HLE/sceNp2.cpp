@@ -2443,10 +2443,11 @@ static int sceNpMatching2GetRoomMemberDataInternalList(int ctxId)
 }
 
 /* Incomplete - Requests an extended list of information from an external source
- * @param reqParamPtr ?
+ * @param reqParamPtr ? Request Parameter not confirmed.
  * @param optParam Pointer to SceNpMatching2RequestOptParam containing Callback information
  * @param assignedReqIdPtr Pointer to a pre-specified request id to be overwritten
  * @return 0; or System Error
+ * @note No known games use this system call, and the reqParamPtr has not been validated
  */
 static int sceNpMatching2GetRoomMemberDataExternalList(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
