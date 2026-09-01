@@ -976,6 +976,83 @@ void InetSocket::mark_ack(InetSocket* inetSock, int seq_id) {
 		psh_syn->second.seq_ack = true;
 }
 
+int InetSocket::Send_Unrealiable(const char* buf, int len, int flags, const sockaddr* to, int tolen, u16 dest_vport) {
+	// DCCP must exist for P2P traffic
+	auto p2p_sock = g_socketManager.GetP2PSocket();
+	if (!p2p_sock) {
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(EINVAL);
+#else
+		socket_errno = EINVAL;
+#endif
+		return hleLogError(Log::sceNet, -1, "Send_Unreliable: P2P_SOCK Not Present");
+	}
+
+	// Create the transmission vpacket
+	VirtualPacket vpkt;
+	vpkt.data = std::make_unique<char[]>(len);
+	memcpy(vpkt.data.get(), buf, len);
+	vpkt.len = len;
+	vpkt.header_flags = p2ps_tcp_flags::PSH;
+	vpkt.src.host = src.host;
+	vpkt.seq_id = tx_seq+1;
+	// Add timestamp for TTL tracking
+	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
+	VirtualSockAddr dest{};
+	memcpy(&dest.host, to, sizeof(sockaddr_in));
+	dest.virt.vport = dest_vport;
+
+	// Send the packet over P2P. dest_vport is the per-call destination (from the
+	// caller's `to` address), NOT this->dst.virt.vport - ConnDgramSocket sends are
+	// connectionless and never populate dst.virt.vport (only StreamSocket/PacketSocket
+	// connect()/accept() do), so using dst.virt.vport here always packed vport 0.
+	auto [_len, _data] = vpkt.Pack(dest);
+	// Send through DCCP
+	int ret = ::sendto(p2p_sock->sock, _data.get(), _len, flags, to, sizeof(sockaddr));
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "Send_Unreliable: Failed to send to peer");
+	tx_seq++;
+	// Report PAYLOAD bytes, not wire bytes (see Send_Reliable)
+	return (int)len;
+}
+bool InetSocket::Process_Unreliable() {
+    std::lock_guard<std::mutex> queue(queue_lock);
+    const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
+    u64 current_time_us = (u64)(time_now_d() * 1000000.0);
+
+	bool ret = false;
+    auto it = rx_queue.begin();
+    while (it != rx_queue.end()) {
+        VirtualPacket pkt = (*it).clone();
+		it = rx_queue.erase(it);
+		// FIXME: Should technically support non-broadcast sends
+		// if (!target_sock->is_broadcast_enabled())
+			// continue;
+
+        // 1. Cleanup Stale Packets (Protocol Housekeeping)
+        u64 packet_age_us = current_time_us - pkt.enqueue_time_us;
+        if (packet_age_us > MAX_PACKET_AGE_US) {
+            WARN_LOG(Log::sceNet, "ProcessNetStack: Discarding stale packet (age: %.2f s)", 
+                (float)packet_age_us / 1000000.0f);
+            continue;
+        }
+		ret = true;
+
+		{
+			std::lock_guard<std::mutex> buffers(buffer_lock);
+			int next_id = 1;
+			if (!rx_buffer.empty())
+				next_id = rx_buffer.rbegin()->first + 1;
+			rx_buffer[next_id] = std::move(pkt);
+		}
+		// DEBUG_LOG(Log::sceNet, "%d=recvfrom(%s:%u) -> vport %d{%02X} (type=%d); [%lld/%lld, %lld/%lld]", 
+		// 	pkt.len, inet_ntoa(pkt.src_addr.sin_addr), ntohs(pkt.src_addr.sin_port), 
+		// 	vport, pkt.header_flags, type,
+		// 	dbg.send, dbg.sent, dbg.recv, dbg.read);
+	}
+	return ret;
+}
+
 int InetSocket::Send_Reliable(const char* buf, int len, int flags) {
 	// DCCP must exist for P2P traffic
 	auto p2p_sock = g_socketManager.GetP2PSocket();
