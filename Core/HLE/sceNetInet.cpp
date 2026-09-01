@@ -617,6 +617,12 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	// Get current PSP thread
 	inetSock->threadID = sceKernelGetThreadId();
 
+	// Register the wait BEFORE spawning the worker: once the thread is marked
+	// waiting, the worker's resume is valid no matter how quickly it completes.
+	// (Waiting after the spawn races a fast worker - its resume no-ops against a
+	// not-yet-waiting thread and the wait then never ends.)
+	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetRecv");
+
 	// Run the actual sendRequest on the host asynchronously
 	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval]() mutable
 	{
@@ -641,8 +647,6 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 		__KernelResumeThreadFromWait(inetSock->threadID, retval);
 		inetSock->threadID = -1;
 	});
-	// Put the PSP thread into a wait state until sendRequest finishes
-	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpRecvRequest");
 
 	return retval;
 }
@@ -677,6 +681,11 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	// Get current PSP thread
 	inetSock->threadID = sceKernelGetThreadId();
 
+	// Register the wait BEFORE spawning the worker (see sceNetInetRecv) - a
+	// non-blocking send completes in microseconds and its resume must land on an
+	// already-waiting thread or user_main parks forever.
+	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetSend");
+
 	// Run the actual sendRequest on the host asynchronously
 	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval]() mutable
 	{
@@ -697,8 +706,6 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 		__KernelResumeThreadFromWait(inetSock->threadID, retval);
 		inetSock->threadID = -1;
 	});
-	// Put the PSP thread into a wait state until sendRequest finishes
-	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpSendRequest");
 
 	return retval;
 }
@@ -854,6 +861,9 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen)
 	// Get current PSP thread
 	inetSock->threadID = sceKernelGetThreadId();
 
+	// Register the wait BEFORE spawning the worker (see sceNetInetRecv)
+	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetConnect");
+
 	// Run the actual sendRequest on the host asynchronously
 	inetSock->thread = std::thread([retval, socket, inetSock, dst, sockAddrLen]() mutable
 	{
@@ -879,8 +889,6 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen)
 		__KernelResumeThreadFromWait(inetSock->threadID, retval);
 		inetSock->threadID = -1;
 	});
-	// Put the PSP thread into a wait state until sendRequest finishes
-	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpSendRequest");
 
 	// hleLog will throw a stack mismatch here
 	return retval;
@@ -1127,8 +1135,13 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 	int retval = 0;
 	inetSock->threadID = __KernelGetCurThread();
 
-	// Run the actual sendRequest on the host asynchronously
-	inetSock->thread = std::thread([&retval, socket, inetSock, bufferPtr, len, flags, fromPtr, fromlenPtr]() mutable
+	// Register the wait BEFORE spawning the worker (see sceNetInetRecv).
+	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetRecvfrom");
+
+	// Run the actual sendRequest on the host asynchronously. retval is captured BY
+	// VALUE - the real result reaches the PSP thread via the resume value; writing
+	// through a reference into this (already dead) stack frame would smash the stack.
+	inetSock->thread = std::thread([retval, socket, inetSock, bufferPtr, len, flags, fromPtr, fromlenPtr]() mutable
 	{
 		SceNetInetSockaddr *src = (SceNetInetSockaddr *)Memory::GetCharPointer(fromPtr);
 		socklen_t *srclen = (socklen_t *)Memory::GetCharPointer(fromlenPtr);
@@ -1165,8 +1178,6 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 		__KernelResumeThreadFromWait(inetSock->threadID, retval);
 		inetSock->threadID = -1;
 	});
-	// Put the PSP thread into a wait state until sendRequest finishes
-	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpSendRequest");
 
 	// Using hleDelayResult as a workaround for games that need blocking-socket to be implemented (ie. Coded Arms Contagion)
 	// return hleDelayResult(hleLogDebug(Log::sceNet, retval,
@@ -1199,8 +1210,12 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 	int retval = 0;
 	inetSock->threadID = __KernelGetCurThread();
 
-	// Run the actual sendRequest on the host asynchronously
-	inetSock->thread = std::thread([&retval, socket, inetSock, bufferPtr, len, flags, toPtr, tolen]() mutable
+	// Register the wait BEFORE spawning the worker (see sceNetInetRecv).
+	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetSendto");
+
+	// Run the actual sendRequest on the host asynchronously. retval captured BY
+	// VALUE - the result travels via the resume value (see sceNetInetRecvfrom).
+	inetSock->thread = std::thread([retval, socket, inetSock, bufferPtr, len, flags, toPtr, tolen]() mutable
 	{
 		SceNetInetSockaddr *dst = (SceNetInetSockaddr *)Memory::GetCharPointer(toPtr);
 
@@ -1228,8 +1243,6 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 		__KernelResumeThreadFromWait(inetSock->threadID, retval);
 		inetSock->threadID = -1;
 	});
-	// Put the PSP thread into a wait state until sendRequest finishes
-	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceHttpSendRequest");
 
 	return retval;
 }
