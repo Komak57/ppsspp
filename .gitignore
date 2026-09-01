@@ -152,3 +152,5 @@ cmake-build-*/
 # git submodule update --init --recursive
 ext/vulkan/
 /installed.txt
+devtools/Isolated_Modules/*
+devtools/*
