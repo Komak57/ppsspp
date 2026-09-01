@@ -2058,8 +2058,8 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
 	if (0xfef >= v)
 		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
 
-	if (npMatching2Inited)
-		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ALREADY_INITIALIZED);
+	if (!npMatching2Inited)
+		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
 	auto _context = ctx.find(ctxId);
 	if (_context == ctx.end())
