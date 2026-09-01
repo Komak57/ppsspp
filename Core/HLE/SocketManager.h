@@ -336,9 +336,9 @@ struct InetSocket {
 
 	// Helper methods for virtual socket packet handling
 	virtual void enqueue_packet(VirtualPacket packet);
-	virtual bool dequeue_packet(VirtualPacket& packet);
-	virtual int dequeue_stream(char* buf, int len, sockaddr_in* out_addr);
-	virtual bool has_pending_data() const;
+	virtual bool dequeue_packet(VirtualPacket& packet, bool seq = false);
+	virtual int dequeue_stream(char* buf, int len, sockaddr_in* out_addr, bool seq = false);
+	virtual bool has_pending_data(bool seq = false) const;
 	virtual bool set_pending_connection(InetSocket* conn);
 	virtual bool update_pending_connection(const VirtualSockAddr& peer_addr);
 	virtual InetSocket* get_pending_connection();
