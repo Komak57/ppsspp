@@ -632,7 +632,7 @@ public:
 	const InetSocket *Sockets() {
 		return inetSockets_;
 	}
-	InetSocket* GetDCCP() { return dccp_sock; }
+	InetSocket* GetP2PSocket() { return p2p_sock; }
 private:
 	int NextUnusedSystemSocket();
 	int NextUnusedSocket();
@@ -641,7 +641,7 @@ private:
 	InetSocket inetSockets_[VALID_INET_SOCKET_COUNT];
 	std::unordered_map<u16, u64> exhausted_ports;
 	// SOCK_DCCP should only have 1 instance, ever. Each CONN_DGRAM should point to this for it's sock
-	InetSocket* dccp_sock;
+	InetSocket* p2p_sock;
 };
 
 extern SocketManager g_socketManager;

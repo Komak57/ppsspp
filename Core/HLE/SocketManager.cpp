@@ -1866,7 +1866,7 @@ int SeqpacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 int SeqpacketSocket::shutdown(int how) { return ::shutdown(sock, how); }
 
 // ============================================================================
-// Primary socket for UPnP/P2P traffic (UDP)
+// 
 // ============================================================================
 int DccpSocket::send(const char* buf, int len, int flags) { return ::send(sock, buf, len, flags); }
 int DccpSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
