@@ -1262,7 +1262,6 @@ static int sceNetApctlInit(int stackSize, int initPriority) {
 	if (apctlThreadID > 0) {
 		__KernelStartThread(apctlThreadID, 0, 0);
 	}
-	SceNetUpnpThreadID = __KernelCreateThread("SceNetUpnpThread", __KernelGetCurThreadModuleId(), SceNetUpnpThreadHackAddr, initPriority, stackSize, PSP_THREAD_ATTR_USER, 0, true);
 
 	// Note: Borrowing AdhocServer for Grouping purpose
 	u32 structsz = sizeof(SceNetAdhocctlAdhocId);
@@ -1838,6 +1837,9 @@ void SceNetUpnpThread()
 // PSP2i			sceNetUpnpInit(0x3800, 0x28)
 // Fat Princess		sceNetUpnpInit(0x2000, 0x64)
 // Patapon3			sceNetUpnpInit(0x3800, 0x32)
+
+// Initializes a connection to stun.playstation.net
+// Creates and starts SceNetUpnpThread thread
 static int sceNetUpnpInit(int size,int offset) {
 	WARN_LOG(Log::sceNet, "UNIMPL %s(0x%04x, 0x%02x)", __FUNCTION__, size, offset);
 	// Create the Master Socket for transmissions
@@ -1858,6 +1860,14 @@ static int sceNetUpnpInit(int size,int offset) {
 	if (!sigServer || !sigServer->IsIntialized())
 		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND, "UPnP Signaling agent could not be started");
 
+	SceNetUpnpThreadID = __KernelCreateThread("SceNetUpnpThread", __KernelGetCurThreadModuleId(), SceNetUpnpThreadHackAddr, offset, size, PSP_THREAD_ATTR_USER, 0, true);
+
+	if (!SceNetUpnpThreadID)
+		return hleLogError(Log::sceNet, ret, "Upnp thread not initialized");
+	
+	if ((ret = __KernelStartThread(SceNetUpnpThreadID, 0, 0)) < 0)
+		return hleLogError(Log::sceNet, ret, "Unable to start Upnp thread");
+
 	uPnPInitialized = true;
 	return hleLogWarning(Log::sceNet, 0, "Untested");
 }
@@ -1865,12 +1875,6 @@ static int sceNetUpnpInit(int size,int offset) {
 static int sceNetUpnpStart() {
 	WARN_LOG(Log::sceNet, "UNIMPL %s()", __FUNCTION__);
 	int ret = SCE_NP_SIGNALING_ERROR_NOT_INITIALIZED;
-
-	if (!SceNetUpnpThreadID)
-		return hleLogError(Log::sceNet, ret, "Upnp thread not initialized");
-	
-	if ((ret = sceKernelStartThread(SceNetUpnpThreadID, 0, 0)) < 0)
-		return hleLogError(Log::sceNet, ret, "Unable to start Upnp thread");
 
 	// FIXME: This thread runs even when you trigger break
 	// RPCS3 has only 1 connection perpetually active
@@ -1882,7 +1886,7 @@ static int sceNetUpnpStart() {
 	else
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Signaling Loop could not be started");*/
 
-	return hleLogWarning(Log::sceNet, ret, "Untested");
+	return hleLogWarning(Log::sceNet, 0, "Untested");
 }
 // return usually ignored
 static int sceNetUpnpStop() {
