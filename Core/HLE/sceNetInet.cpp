@@ -121,14 +121,21 @@ static int sceNetInetGetErrno() {
 	}
 }
 
-int sceNetInetGetPspError() {
+int sceNetInetGetPspError()
+{
+	if (sceKernelCheckThreadStack() < 0xff0)
+		return hleLogError(Log::sceNet, 0x80410005, "Socket Stack Error");
 	int threadID = __KernelGetCurThread();
-	const int lastErrno = g_inetLastErrno[threadID];
+	const int errorno = g_inetLastErrno[threadID];
+	if (errorno == 0)
+		return hleLogVerbose(Log::sceNet, 0, "Success");
+	const int psp_error_code = 0x80010000 | (errorno & 0xFFFF); // Correct convertInetErrno2PSPError conversion
+	// Official firmware uses 
 
-	uint32_t error = convertInetErrno2PSPError(lastErrno);
-	if (lastErrno == EAGAIN)
-		return hleLogVerbose(Log::sceNet, error, "returning %s converted to %08x at %08x", convertInetErrno2str(lastErrno), error, currentMIPS->pc);
-	return hleLogInfo(Log::sceNet, error, "returning %s converted to %08x at %08x", convertInetErrno2str(lastErrno), error, currentMIPS->pc);
+	// uint32_t error = convertInetErrno2PSPError(lastErrno);
+	if (errorno == ERROR_INET_EAGAIN || errorno == ERROR_INET_EINPROGRESS || errorno == ERROR_INET_EWOULDBLOCK)
+		return hleLogVerbose(Log::sceNet, psp_error_code, "returning %s converted to %08x at %08x", convertInetErrno2str(errorno), psp_error_code, currentMIPS->pc);
+	return hleLogInfo(Log::sceNet, psp_error_code, "returning %s converted to %08x at %08x", convertInetErrno2str(errorno), psp_error_code, currentMIPS->pc);
 }
 
 static int sceNetInetInetPton(int af, const char *hostname, u32 inAddrPtr)
