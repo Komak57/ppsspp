@@ -97,11 +97,21 @@ union VirtualSockAddr {
     sockaddr_vin virt;
 };
 
+// Extended on-wire header for RELIABLE (TCP-flagged) p2p packets, following the
+// 3-byte VPORT_HEADER: [src_port u16][src_vport u16][dst_vport u16], all network
+// order, then the u32 seq_id. The dest game PORT is NOT duplicated here - it is
+// the VPORT_HEADER's dest key for TCP packets. RPCN/signaling packets
+// (header.dest == 0) MUST stay exactly [VPORT_HEADER][payload] - the receiver
+// matches vport 0 on the 3-byte header alone before ever looking for this
+// extension.
+const int VPKT_HEADER_SIZE = 6;
+
 // Packet structure for virtual socket queuing
 struct VirtualPacket {
 	std::unique_ptr<char[]> data;  // Payload (heap allocated)
 	size_t len;                     // Payload length
-	VirtualSockAddr src;           // Source address (for recvfrom)
+	VirtualSockAddr src;            // Source address (for recvfrom)
+	VirtualSockAddr dst;            // Destination address (for distribution)
 	u8 header_flags;                // TCP flags from DGRAM_HEADER for control packets
 	uint32_t seq_id;				// key for packet order
 	bool seq_ack;					// key for packet order
@@ -113,6 +123,7 @@ struct VirtualPacket {
         VirtualPacket new_pkt;
         new_pkt.len = len;
         new_pkt.src = src;
+        new_pkt.dst = dst;
         new_pkt.header_flags = header_flags;
 		new_pkt.seq_id = seq_id;
         new_pkt.enqueue_time_us = enqueue_time_us;
@@ -133,20 +144,41 @@ struct VirtualPacket {
 		header.dest = dest;
 		return header;
 	}
-	std::tuple<int, std::unique_ptr<char[]>> Pack(u16 dest) {
-		// Build packet: VPORT_HEADER + payload
-		int packet_size = VPORT_HEADER_SIZE + len + sizeof(seq_id);
+	std::tuple<int, std::unique_ptr<char[]>> Pack(VirtualSockAddr dest) {
+		memcpy(&dst.virt, &dest.virt, sizeof(sockaddr_vin));
+		// Wire formats (selected by the receiver in the same order):
+		//   key == 0 (RPCN/signaling):  [VPORT_HEADER][payload] - 3-byte header ONLY.
+		//   TCP-flagged p2p:            [VPORT_HEADER][P2P_EXT_HEADER][seq_id][payload]
+		//   other p2p (UDP-over-UDP):   [VPORT_HEADER][seq_id][payload]
+		// The single u16 header key differs by transport: TCP routes on the dest
+		// GAME PORT; UDP routes on the dest VPORT (0 = signaling - dst.virt.port
+		// holds the sockaddr's real sin_port there and must NOT be used as key).
+		u16 key = (header_flags & p2ps_tcp_flags::TCP) != 0 ? dst.virt.port : dst.virt.vport;
+		bool tcp = (header_flags & p2ps_tcp_flags::TCP) != 0 && key != 0;
+		bool has_seq = key != 0;
+		int packet_size = VPORT_HEADER_SIZE + (tcp ? VPKT_HEADER_SIZE : 0) + (has_seq ? (int)sizeof(seq_id) : 0) + (int)len;
 		std::unique_ptr<char[]> packet = std::make_unique<char[]>(packet_size);
 
 		// Pack DGRAM_HEADER (3 bytes): [flags][data_len]
-		VPORT_HEADER header = GetHeader(dest);
+		VPORT_HEADER header = GetHeader(key);
 		memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
-		auto net_seq_id = htonl(seq_id);
-		memcpy(packet.get() + VPORT_HEADER_SIZE, &net_seq_id, sizeof(net_seq_id));
+		int off = VPORT_HEADER_SIZE;
+		if (tcp) {
+			// Fields are already network order (they mirror sockaddr storage).
+			// dst.virt.port is NOT written - it rides in header.dest (the key).
+			memcpy(packet.get() + off, &src.virt.port, 2); off += 2;
+			memcpy(packet.get() + off, &src.virt.vport, 2); off += 2;
+			memcpy(packet.get() + off, &dst.virt.vport, 2); off += 2;
+		}
+		if (has_seq) {
+			auto net_seq_id = htonl(seq_id);
+			memcpy(packet.get() + off, &net_seq_id, sizeof(net_seq_id));
+			off += sizeof(net_seq_id);
+		}
 
 		// Pack the message body
 		if (len > 0) {
-			memcpy(packet.get() + VPORT_HEADER_SIZE + sizeof(seq_id), data.get(), len);
+			memcpy(packet.get() + off, data.get(), len);
 		}
 		return {packet_size, std::move(packet)};
 	}
