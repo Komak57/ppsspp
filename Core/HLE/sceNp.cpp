@@ -642,7 +642,7 @@ static int sceNpServiceInit(u32 poolSize, u32 stackSize, u32 threadPrio)
 
 	//SceNetUpnpThreadID = __KernelCreateThread("SceNetUpnpThread", __KernelGetCurThreadModuleId(), SceNetUpnpThreadHackAddr, threadPrio, stackSize, PSP_THREAD_ATTR_USER, 0, true);
 
-	return hleLogError(Log::sceNet, 0, "UNIMPL");
+	return hleLogInfo(Log::sceNet, 0, "UNTESTED");
 }
 
 static int sceNpServiceGetMemoryStat(u32 memStatAddr) {

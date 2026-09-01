@@ -5,7 +5,7 @@
 #include "Common/Net/SocketCompat.h"
 
 // Similar to https://ftp.netbsd.org/pub/NetBSD/NetBSD-current/src/sys/sys/fd_set.h
-#define		PSP_NET_INET_FD_SETSIZE		256		// PSP can support upto 256 fd(s) while the default FD_SETSIZE on Windows is only 64 
+#define		PSP_NET_INET_FD_SETSIZE		256		// PSP can support upto 256 fd(s); host FD_SETSIZE is widened to 1024 on Windows in SocketCompat.h to match (its native default is only 64)
 #define		PSP_NET_INET_NFDBITS		32		// Default: 32 = sizeof(u32) * 8 (8-bits of each byte) = number of bits for each element in fds_bits
 #define		PSP_NET_INET_NFDBITS_SHIFT	5		// 2^5 = 32 
 #define		PSP_NET_INET_NFDBITS_MASK	0x1F	// 0x1F = 5 bit mask (NFDBITS - 1)

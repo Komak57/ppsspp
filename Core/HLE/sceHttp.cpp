@@ -458,7 +458,7 @@ static int sceHttpsDisableOption(int optionId) {
 
 // Parameter "method" should be one of PSPHttpMethod's listed entries
 static int sceHttpCreateRequest(int connectionID, int method, const char *path, u64 contentLength) {
-	DEBUG_LOG(Log::HTTP, "UNTESTED sceHttpCreateRequest(%d, %d, %s, %d)", connectionID, method, safe_string(path), contentLength);
+	DEBUG_LOG(Log::HTTP, "UNTESTED sceHttpCreateRequest(%d, %d, %s, %llu)", connectionID, method, safe_string(path), contentLength);
 	std::lock_guard<std::mutex> guard(httpLock);
 	if (connectionID <= 0 || connectionID >= NextObjectID())
 		return hleLogError(Log::HTTP, SCE_HTTP_ERROR_INVALID_ID, "invalid id");
