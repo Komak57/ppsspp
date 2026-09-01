@@ -1072,17 +1072,18 @@ namespace net {
 
 		int ret = notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, SCE_NP_MATCHING2_OKAY, respData.ptr);
 		// Force a join-room event
-		auto host = respData->roomDataInternal->memberList.me;
-		if (host) {
-			u32 _size = sizeof(SceNpMatching2RoomMemberUpdateInfo);
-			u32 ptr = np_memory.Alloc(_size);
-			auto notif = PSPPointer<SceNpMatching2RoomMemberUpdateInfo>::Create(ptr);
-			// Populate from the host's member data
-			notif->roomMemberDataInternal = host;
-			notif->eventCause = 0;
-			notif->optData.length = 0;
-			notifyRoomEventHandler(respData->roomDataInternal->roomId, host->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, notif.ptr);
-		}
+		//auto host = respData->roomDataInternal->memberList.me;
+		//if (host) {
+		//	u32 _size = sizeof(SceNpMatching2RoomMemberUpdateInfo);
+		//	u32 ptr = np_memory.Alloc(_size);
+		//	auto notif = PSPPointer<SceNpMatching2RoomMemberUpdateInfo>::Create(ptr);
+		//	// Populate from the host's member data
+		//	notif->roomMemberDataInternal = host;
+		//	notif->eventCause = 0;
+		//	notif->optData.length = 0;
+		//	notifyRoomEventHandler(respData->roomDataInternal->roomId, host->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberJoined, notif.ptr);
+		//}
+
 		// RPCS3 triggers this in sceNpSignalingActivateConnection
 		//sigServer->init_sig(*npId, respData->roomDataInternal->roomId, respData->roomDataInternal->memberList.me->memberId);
 		//sigServer->init_sig(*npId);
