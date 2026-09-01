@@ -853,6 +853,23 @@ int InetSocket::setsockopt(int level, int optname, const char* optval, socklen_t
 int InetSocket::getsockopt(int level, int optname, char* optval, socklen_t* optlen) {
 	if (!optval || !optlen) return -1;
 
+	// SPECIAL CASE: SO_ERROR for hybrid sockets needs custom handling
+	if (level == PSP_NET_INET_SOL_SOCKET && optname == PSP_NET_INET_SO_ERROR && 
+	    p2p_mode != p2p_type::DISABLED) {
+		// For hybrid sockets, check if connection succeeded locally
+		if (tcp_state == TCPState::Established) {
+			// Local connection succeeded, return 0
+			if (*optlen >= sizeof(int)) {
+				*(int*)optval = 0;
+				*optlen = sizeof(int);
+				// Clear our cached error too
+				uint64_t optkey = ((uint64_t)level << 32) | (uint32_t)optname;
+				so_storage.erase(optkey);
+				return 0;
+			}
+		}
+		// Fall through to normal handling for other states
+	}
     // 1. Check our Internal Shadow Registry first
     uint64_t optkey = ((uint64_t)level << 32) | (uint32_t)optname;
     
@@ -865,6 +882,11 @@ int InetSocket::getsockopt(int level, int optname, char* optval, socklen_t* optl
         
         // Update the caller on how many bytes were actually written
         *optlen = copy_len;
+
+		// SO_ERROR should clear itself after being read
+		if (level == PSP_NET_INET_SOL_SOCKET && optname == PSP_NET_INET_SO_ERROR) {
+			so_storage.erase(optkey);
+		}
         return 0;
     }
 
@@ -877,9 +899,13 @@ int InetSocket::getsockopt(int level, int optname, char* optval, socklen_t* optl
         
         // If the host call succeeds, cache it for next time
         if (ret == 0) {
-            auto& so_flags = so_storage[optkey];
-            so_flags.assign(reinterpret_cast<const uint8_t*>(optval), 
-                         reinterpret_cast<const uint8_t*>(optval) + *optlen);
+			// Cache it for next time, but SO_ERROR shouldn't be cached
+			// since it clears itself
+			if (!(level == PSP_NET_INET_SOL_SOCKET && optname == PSP_NET_INET_SO_ERROR)) {
+				auto& so_flags = so_storage[optkey];
+				so_flags.assign(reinterpret_cast<const uint8_t*>(optval), 
+					         reinterpret_cast<const uint8_t*>(optval) + *optlen);
+			}
         }
         return ret;
     }
