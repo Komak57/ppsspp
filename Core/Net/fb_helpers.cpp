@@ -6,6 +6,7 @@
 #include <Core/Config.h>
 #include <Core/HLE/sceRtc.h>
 #include <Core/HLE/sceKernelMemory.h>
+#include <Core/Net/SIGAgent.h>
 
 u32 RegisterIp(const flatbuffers::Vector<u8>* vec) {
 	if (vec->size() == 4)
@@ -424,6 +425,11 @@ namespace np
 				//edata.add_relocation<SceNpMatching2RoomMemberDataInternal>(room_info->memberList.me);
 				room_info->memberList.me = room_info->memberList.members + i;
 				member_id = sce_member->memberId;
+				// RPCN (matching RPCS3) doesn't validate/compute NAT type server-side and just
+				// echoes a fixed placeholder for every member. For our own entry we actually know
+				// the real value, so use it instead of trusting the server's echo.
+				if (sigServer)
+					sce_member->natType = sigServer->nat_type.load();
 				INFO_LOG(Log::sceNet, " - Member #%d[%d] = %s, is Self at %08x", i, sce_member->memberId, sce_member->userInfo.npId.handle.data, room_info->memberList.me.ptr);
 				break;
 			}
