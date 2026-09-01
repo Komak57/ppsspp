@@ -735,10 +735,6 @@ int InetSocket::setsockopt(int level, int optname, int optval, socklen_t optlen)
 			}
 			return hleLogWarning(Log::sceNet, 0, "%s emulated", host_optname_str.c_str());
 			// break;
-		case PSP_NET_INET_SO_REUSEADDR:// TODO: Ignoring SO_REUSEADDR flag to prevent disrupting multiple-instance feature
-			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
-		case PSP_NET_INET_SO_REUSEPORT:// TODO: Ignoring SO_REUSEPORT flag to prevent disrupting multiple-instance feature (not sure if PSP has SO_REUSEPORT or not tho, defined as 15 on Android)
-			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
 		case 0x1022:// TODO: Ignoring SO_NOSIGPIPE flag to prevent crashing PPSSPP (not sure if PSP has NOSIGPIPE or not tho, defined as 0x1022 on Darwin)
 			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
 		case PSP_NET_INET_SO_DCCP_BROADCAST:
@@ -802,10 +798,6 @@ int InetSocket::setsockopt(int level, int optname, const char* optval, socklen_t
 			// break;
 		case PSP_NET_INET_SO_BROADCAST:
 			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
-		case PSP_NET_INET_SO_REUSEADDR:
-			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
-		case PSP_NET_INET_SO_REUSEPORT:
-			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
 		case PSP_NET_INET_SO_NOSIGPIPE:
 			return hleLogWarning(Log::sceNet, 0, "NOSIGPIPE should never be modified (should always be off)");
 		case PSP_NET_INET_SO_RCVBUF:
@@ -852,7 +844,7 @@ int InetSocket::setsockopt(int level, int optname, const char* optval, socklen_t
 	int host_level = convertSockoptLevelPSP2Host(level);
 	int host_optname = convertSockoptNamePSP2Host(optname, level);
 
-	int ret = ::setsockopt(sock, host_level, host_optname, reinterpret_cast<char*>(&optval), optlen);
+	int ret = ::setsockopt(sock, host_level, host_optname, const_cast<char*>(optval), optlen);
 	if (ret < 0) {
 		return hleLogWarning(Log::sceNet, 0, "InetSocket::setsockopt: failed for level=%d optname=%d, accepting gracefully", level, optname);
 	}
