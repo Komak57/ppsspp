@@ -155,7 +155,7 @@ namespace net {
                 // We had no connection to peer for 60 seconds, consider the connection dead
                 ERROR_LOG(Log::Signaling, "Timeout disconnection");
                 update_si_status(sig.sig_info, SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, SCE_NP_SIGNALING_ERROR_TIMEOUT);
-                retire_packet(sig.sig_info, SceNpSignalingCommand::Ping); // Retire ping packet if necessary
+                retire_all_packets(sig.sig_info); // Retire every queued packet for this peer, not just Ping
                 break; // qpackets has been emptied of all packets for this user so we're requeuing
             }
 
