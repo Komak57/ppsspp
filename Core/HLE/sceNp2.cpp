@@ -62,6 +62,7 @@ std::atomic<u16> match2_event_cnt = 1;
 //std::unordered_map<u32, NpMatching2Handler> npSignalingHandlers;
 //std::map<int, NpMatching2Context> npMatching2Contexts;
 //u16 tServer;
+SceNpMatching2ContextId last_ctx;
 
 //std::map<u16, std::unique_ptr<net::NPAgent>> servers;
 std::unique_ptr<net::NPAgent> npServer = nullptr;
@@ -809,7 +810,9 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 	SceNpCommunicationPassphrase* passph = (SceNpCommunicationPassphrase*)Memory::GetCharPointer(passPhrasePtr);
 
 	// It seems ctxId need to be in the range of 1 to 7 to be valid ?
-	SceNpMatching2ContextId ctxId = 1;
+	SceNpMatching2ContextId ctxId = last_ctx+1;
+	if (ctxId > CONTEXT_MAX_ID)
+		ctxId = 1;
 	for (ctxId = 1; ctxId <= CONTEXT_MAX_ID; ctxId++) {
 		if (ctx.find(ctxId) != ctx.end())
 			continue;
@@ -833,6 +836,7 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 		INFO_LOG(Log::sceNp2, "%s - Passphrase: \n%s", __FUNCTION__, datahex.c_str());
 
 		Memory::Write_U16(ctxId, ctxIdPtr);
+		last_ctx = ctxId;
 		// TODO: Allocate & zeroed a memory of 68 bytes where npId (36 bytes) is copied to offset 8, offset 44 = 0x00026808, offset 48 = 0
 		return SCE_NP_MATCHING2_OKAY;
 	}
