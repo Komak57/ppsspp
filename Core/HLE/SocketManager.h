@@ -507,7 +507,6 @@ public:
 	int accept(sockaddr* addr, socklen_t* addrlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
-	bool ProcessNetStack() override;
 };
 #pragma pack(pop)
 static_assert(sizeof(DccpSocket) == sizeof(InetSocket), "Socket size mismatch!");
@@ -542,9 +541,6 @@ public:
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
-
-	bool ProcessNetStack() override;
-	void clear();
 };
 #pragma pack(pop)
 static_assert(sizeof(ConnDgramSocket) == sizeof(InetSocket), "Socket size mismatch!");
