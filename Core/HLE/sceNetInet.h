@@ -32,7 +32,8 @@ void Register_sceNetInet();
 
 void __NetInetShutdown();
 
-int UpdateErrnoFromHost(int threadID, int hostErrno, const char *func);
+// int UpdateErrnoFromHost(int threadID, int hostErrno, const char *func);
+int _sce_pspnet_set_thread_errno(int error, int thread_id);
 int NetApctl_GetState();
 int sceNetInetPoll(u32 fdsPtr, u32 nfds, int timeout);
 int sceNetInetSocket(int domain, int type, int protocol);
