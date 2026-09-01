@@ -227,6 +227,7 @@ int convertSocketTypePSP2Host(int type) {
 		return SOCK_STREAM;				// SOCK_RAW?
 	}
 
+	_dbg_assert_msg_(false, "Invalid Socket Type (%d)", type);
 	return hleLogError(Log::sceNet, type, "Unknown Socket Type") & PSP_NET_INET_SOCK_TYPE_MASK;
 }
 
