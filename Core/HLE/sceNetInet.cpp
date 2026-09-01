@@ -1112,7 +1112,7 @@ static int sceNetInetCloseWithRST(int socket)
 
 static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32 fromPtr, u32 fromlenPtr)
 {
-	INFO_LOG(Log::sceNet, "%s(%i, %08x, %i, %i, %08x, %08x) at %08x", __FUNCTION__, socket, bufferPtr, len, flags, fromPtr, fromlenPtr, currentMIPS->pc);
+	DEBUG_LOG(Log::sceNet, "%s(%i, %08x, %i, %i, %08x, %08x) at %08x", __FUNCTION__, socket, bufferPtr, len, flags, fromPtr, fromlenPtr, currentMIPS->pc);
 	_sce_pspnet_set_thread_errno(0);
 	InetSocket *inetSock;
 	if (!g_socketManager.GetInetSocket(socket, &inetSock))
