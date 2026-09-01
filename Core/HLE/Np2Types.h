@@ -1434,6 +1434,7 @@ struct SceNpMatching2SetRoomMemberDataInternalRequest
 };
 
 // Internal room member data request parameters
+// Suspicious - contains a pointer at offset 0x0 that contains a struct with an important value at 0x9c
 struct SceNpMatching2GetRoomMemberDataInternalRequest
 {
 	SceNpMatching2RoomId roomId;
@@ -1447,6 +1448,15 @@ struct SceNpMatching2GetRoomMemberDataInternalRequest
 struct SceNpMatching2GetRoomMemberDataInternalResponse
 {
 	PSPPointer<SceNpMatching2RoomMemberDataInternal> roomMemberDataInternal;
+};
+
+// Suspicious. 
+struct SceNpMatching2GetRoomMemberDataInternalListRequest
+{
+	PSPPointer<u32> unknown_a; // PSP OFW 6.6.0 marks this as a pointer to a struct containing an important value at 0x9c
+	u8 padding[4]; // unused
+	PSPPointer<SceNpMatching2AttributeId> attrId;
+	u32 attrIdNum;
 };
 
 // Signaling option parameter setting request parameter
