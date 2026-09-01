@@ -70,6 +70,12 @@ struct VPORT_HEADER {
 };
 const int VPORT_HEADER_SIZE = 3;
 
+// Wildcard vport for UNRELIABLE game traffic whose sender supplied no dest vport
+// (games that address peers by the real IP:port from signaling). The receiver
+// delivers to every game socket (vport != 0) of that peer. 0 stays reserved for
+// RPCN/signaling. Byte-order invariant by construction.
+const u16 VPORT_ANY = 0xFFFF;
+
 // Must be exactly 3 bytes: (u8 flags) + (u16 data_len in network order)
 // struct DGRAM_HEADER {
 // 	u8 flags;

@@ -662,8 +662,12 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 			// Match endpoint port (3658)
 			if (dest.virt.port != 0 && target_sock->src.virt.port != dest.virt.port)
 				continue;
-			// Matches endpoint vport (0)
-			if (target_sock->src.virt.vport != dest.virt.vport)
+			// Matches endpoint vport (0). VPORT_ANY (sender supplied no dest vport)
+			// delivers to every game socket, but never to signaling (vport 0).
+			if (dest.virt.vport == VPORT_ANY) {
+				if (target_sock->src.virt.vport == 0)
+					continue;
+			} else if (target_sock->src.virt.vport != dest.virt.vport)
 				continue;
 
 			DEBUG_LOG(Log::sceNet, "RouteDCCP: Processing socket dst.virt.port %d (type=%d)", 
@@ -1997,10 +2001,17 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	}
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(&saddr.addr);
 
-	// Network Order
-	u16 dest_vport = ntohs((saddr.in.sin_zero[1] << 8) | saddr.in.sin_zero[0]);
-	if (dest_vport == 0)
-		dest_vport = 1;
+	// Raw overlay read: (sin_zero[1] << 8) | sin_zero[0] IS the u16 as stored in the
+	// sockaddr - the same network-order representation bind() copies into
+	// src.virt.vport. The old extra ntohs() double-swapped it (vport 8875/0x22AB
+	// went on the wire as 0xAB22/43810 and matched nothing).
+	u16 dest_vport = (saddr.in.sin_zero[1] << 8) | saddr.in.sin_zero[0];
+	if (dest_vport == 0) {
+		// The game addressed the peer by real IP:port only (signaling has no vport
+		// concept) - send as wildcard: the receiver delivers to every game socket
+		// of this peer. Wire key 0 stays reserved for RPCN/signaling.
+		dest_vport = VPORT_ANY;
+	}
 
 	if (isLocalTarget(_dest->sin_addr.s_addr)) {
 		int ret = ::sendto(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
@@ -2174,7 +2185,7 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	// Update socket debug metadata
 	src.host = saddr.in;
 	if (src.virt.vport == 0)
-		src.virt.vport = user_id.load();
+		src.virt.vport = htons(user_id.load());
 
 	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
