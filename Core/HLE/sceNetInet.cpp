@@ -352,53 +352,87 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		hostSockets[i].sock = inetSock->sock;
 		if (inetSock->sock > maxHostSocket)
 			maxHostSocket = inetSock->sock;
-		if (readfds && (NetInetFD_ISSET(i, readfds))) {
+		if (readfds && (NetInetFD_ISSET(i, readfds)))
+		{
 			hostSockets[i].wantsRead = true;
 			VERBOSE_LOG(Log::sceNet, "Input Read FD #%i (host: %d)", i, inetSock->sock);
-			if (rdcnt < FD_SETSIZE) {
+			if (rdcnt < FD_SETSIZE)
+			{
 				// Skip host checks on virtual sockets
-				if (inetSock->type != PSP_NET_INET_SOCK_PACKET && inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM) {
-					FD_SET(inetSock->sock, &rdfds); // This might pointed to a non-existing socket or sockets belonged to other programs on Windows, because most of the time Windows socket have an id above 1k instead of 0-255
-					realfds++;
-				} else if (inetSock->has_pending_data() || inetSock->has_pending_connection()) {
+				if (inetSock->p2p_mode == p2p_type::RELIABLE && (inetSock->has_pending_data(true) || inetSock->has_pending_connection()))
+				{
 					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
 					tmout.tv_sec = 0;
 					tmout.tv_usec = 0;
 				}
+				else if (inetSock->p2p_mode == p2p_type::UNRELIABLE && inetSock->has_pending_data())
+				{
+					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
+					tmout.tv_sec = 0;
+					tmout.tv_usec = 0;
+				}
+				else
+				{
+					FD_SET(inetSock->sock, &rdfds); // This might pointed to a non-existing socket or sockets belonged to other programs on Windows, because most of the time Windows socket have an id above 1k instead of 0-255
+					realfds++;
+				}
 				rdcnt++;
-			} else {
+			}
+			else
+			{
 				ERROR_LOG(Log::sceNet, "Hit set size (rd)");
 			}
 		}
-		if (writefds && (NetInetFD_ISSET(i, writefds))) {
+		if (writefds && (NetInetFD_ISSET(i, writefds)))
+		{
 			hostSockets[i].wantsWrite = true;
 			VERBOSE_LOG(Log::sceNet, "Input Write FD #%i (host: %d)", i, inetSock->sock);
-			if (wrcnt < FD_SETSIZE) {
+			if (wrcnt < FD_SETSIZE)
+			{
 				// Skip host checks on virtual sockets
-				if (inetSock->type != PSP_NET_INET_SOCK_PACKET && inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM) {
-					FD_SET(inetSock->sock, &wrfds);
-					realfds++;
-				} else if (inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM || inetSock->tcp_state == TCPState::Established) {
+				if (inetSock->p2p_mode == p2p_type::RELIABLE && (inetSock->has_pending_data(true) || inetSock->has_pending_connection()))
+				{
 					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
 					tmout.tv_sec = 0;
 					tmout.tv_usec = 0;
 				}
+				else if (inetSock->p2p_mode == p2p_type::UNRELIABLE && inetSock->has_pending_data())
+				{
+					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
+					tmout.tv_sec = 0;
+					tmout.tv_usec = 0;
+				}
+				else
+				{
+					FD_SET(inetSock->sock, &wrfds);
+					realfds++;
+				}
 				wrcnt++;
-			} else {
+			}
+			else
+			{
 				ERROR_LOG(Log::sceNet, "Hit set size (wr)");
 			}
 		}
-		if (exceptfds && (NetInetFD_ISSET(i, exceptfds))) {
+		if (exceptfds && (NetInetFD_ISSET(i, exceptfds)))
+		{
 			hostSockets[i].wantsExcept = true;
 			VERBOSE_LOG(Log::sceNet, "Input Except FD #%i (host: %d)", i, inetSock->sock);
-			if (excnt < FD_SETSIZE) {
+			if (excnt < FD_SETSIZE)
+			{
 				// Skip host checks on virtual sockets
-				if (inetSock->type != PSP_NET_INET_SOCK_PACKET && inetSock->type != PSP_NET_INET_SOCK_CONN_DGRAM) {
-					FD_SET(inetSock->sock, &exfds);
-					realfds++;
-				}
+				// if (inetSock->protocol == PSP_NET_INET_IPPROTO_TCP && (inetSock->has_pending_data(true) || inetSock->has_pending_connection())) {
+				// 	// skip
+				// } else if (inetSock->protocol == PSP_NET_INET_IPPROTO_UDP && inetSock->has_pending_data()) {
+				// 	// skip
+				// } else {
+				FD_SET(inetSock->sock, &exfds);
+				realfds++;
+				// }
 				excnt++;
-			} else {
+			}
+			else
+			{
 				ERROR_LOG(Log::sceNet, "Hit set size (exc)");
 			}
 		}
@@ -440,24 +474,27 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		}
 		_log += std::to_string(i) + "[";
 		// Linger supports recv on CloseWait
-		if (readfds && hostSockets[i].wantsRead && (FD_ISSET(hostSockets[i].sock, &rdfds) || inetSock->has_pending_data() || inetSock->has_pending_connection())) {
+		if (readfds && hostSockets[i].wantsRead && (FD_ISSET(hostSockets[i].sock, &rdfds) || (inetSock->p2p_mode == p2p_type::RELIABLE && (inetSock->has_pending_data(true) || inetSock->has_pending_connection())) || (inetSock->p2p_mode == p2p_type::UNRELIABLE && inetSock->has_pending_data())))
+		{
 			NetInetFD_SET(i, readfds);
 			ready_count++;
 			_log += "R";
 		}
-		if (writefds && hostSockets[i].wantsWrite && (FD_ISSET(hostSockets[i].sock, &wrfds) || inetSock->type == PSP_NET_INET_SOCK_CONN_DGRAM || inetSock->tcp_state == TCPState::Established)) {
+		if (writefds && hostSockets[i].wantsWrite && (FD_ISSET(hostSockets[i].sock, &wrfds) || (inetSock->p2p_mode == p2p_type::RELIABLE && inetSock->tcp_state == TCPState::Established)))
+		{
 			NetInetFD_SET(i, writefds);
 			ready_count++;
 			_log += "W";
 		}
-		if (exceptfds && hostSockets[i].wantsExcept && FD_ISSET(hostSockets[i].sock, &exfds)) {
+		if (exceptfds && hostSockets[i].wantsExcept && FD_ISSET(hostSockets[i].sock, &exfds))
+		{
 			NetInetFD_SET(i, exceptfds);
 			ready_count++;
 			_log += "E";
 		}
 		_log += "] ";
 	}
-	VERBOSE_LOG(Log::sceNet, "Select(host: %d): %s", maxHostSocket + 1, _log.c_str());
+	DEBUG_LOG(Log::sceNet, "Select(host: %d): %s", maxHostSocket + 1, _log.c_str());
 
 	if (retval < 0)
 	{
@@ -466,7 +503,7 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		return hleLogDebug(Log::sceNet, retval);
 	}
 	// if (retval == 0)
-		// return hleDelayResult(hleLogDebug(Log::sceNet, retval), "workaround until blocking-socket", 500); // Using hleDelayResult as a workaround for games that need blocking-socket to be implemented (ie. Coded Arms Contagion)
+	// return hleDelayResult(hleLogDebug(Log::sceNet, retval), "workaround until blocking-socket", 500); // Using hleDelayResult as a workaround for games that need blocking-socket to be implemented (ie. Coded Arms Contagion)
 	return hleLogDebug(Log::sceNet, ready_count);
 }
 
