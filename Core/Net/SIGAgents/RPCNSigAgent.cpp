@@ -52,7 +52,7 @@ namespace net {
     }
     
     RPCNSigAgent::RPCNSigAgent() {
-        auto DccpSocket = g_socketManager.GetDCCP();
+        auto DccpSocket = g_socketManager.GetP2PSocket();
         // Create the Virtual Socket for p2p handshakes
         WARN_LOG(Log::Signaling, "RPCN: Creating signaling socket for UPnP on vport %d", SCE_INTERNAL_PORT);
         UPNP_SUBSET_SOCK = CreateSignalingSocket(0, 0, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_CONN_DGRAM, PSP_NET_INET_IPPROTO_UNSPEC);
@@ -967,7 +967,7 @@ namespace net {
 
         std::string datahex;
         DEBUG_HEXLOG(Log::Signaling, "RPCNSigAgent::sendto", reinterpret_cast<const char*>(data.data()), data.size(), 386);
-        auto dccpSocket = g_socketManager.GetDCCP();
+        auto dccpSocket = g_socketManager.GetP2PSocket();
         if (!dccpSocket) {
             ERROR_LOG(Log::sceNet, "Socket not found");
             return false;
