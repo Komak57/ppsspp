@@ -2244,49 +2244,97 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 	
 	return ret;
 }
-int PacketSocket::recv(char* buf, int len, int flags) { 
+int PacketSocket::recv(char* buf, int len, int flags) {
 	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::recv(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	int flgs = convertMSGFlagsPSP2Host(flags);
-	if (tcp_state == TCPState::SynSent || tcp_state == TCPState::SynReceived) {
+
+	// A TCP socket has exactly one peer, held in dst - if it isn't local, this is a
+	// virtual connection and data only ever arrives through the DCCP relay queue.
+	// The host socket is never connected for these, so it must not be touched.
+	if (!isLocalTarget(dst.virt.addr.s_addr)) {
+		if (tcp_state == TCPState::SynSent || tcp_state == TCPState::SynReceived) {
 #if PPSSPP_PLATFORM(WINDOWS)
-        SetLastError(WSAEWOULDBLOCK);
+			SetLastError(WSAEWOULDBLOCK);
 #else
-        socket_errno = EWOULDBLOCK;
+			socket_errno = EWOULDBLOCK;
 #endif
-		return hleLogDebug(Log::sceNet, -1, "Socket waiting for Established state (state=%d)", (int)tcp_state);
-    }
-	if (tcp_state != TCPState::Established && tcp_state != TCPState::CloseWait) {
+			return hleLogDebug(Log::sceNet, -1, "Socket waiting for Established state (state=%d)", (int)tcp_state);
+		}
+		if (tcp_state != TCPState::Established && tcp_state != TCPState::CloseWait) {
 #if PPSSPP_PLATFORM(WINDOWS)
-        SetLastError(WSAENOTCONN);
+			SetLastError(WSAENOTCONN);
 #else
-        socket_errno = ENOTCONN;
+			socket_errno = ENOTCONN;
 #endif
-		return hleLogError(Log::sceNet, -1, "Socket not in Listening state (state=%d)", (int)tcp_state);
-    }
-
-	sockaddr_in source_addr{};
-	int copy_len = dequeue_stream(buf, len, &source_addr);
-
-	VERBOSE_LOG(Log::sceNet, "%d bytes received from (%s:%u); [tx=%d/rx=%d]", 
-		copy_len, inet_ntoa(source_addr.sin_addr), ntohs(source_addr.sin_port), 
-		tx_seq, rx_seq);
-	
-	if (copy_len == 0 && tcp_state != TCPState::CloseWait) {
+			return hleLogError(Log::sceNet, -1, "Socket not connected (state=%d)", (int)tcp_state);
+		}
+		if (!has_pending_data(true)) {
+			if (tcp_state == TCPState::CloseWait)
+				return 0; // Peer closed and the queue is drained - EOF
 #if PPSSPP_PLATFORM(WINDOWS)
-        SetLastError(WSAEWOULDBLOCK);
+			SetLastError(WSAEWOULDBLOCK);
 #else
-        socket_errno = EWOULDBLOCK;
+			socket_errno = EWOULDBLOCK;
 #endif
-        return -1;
-    }
+			return hleLogDebug(Log::sceNet, -1, "No virtual data pending (state=%d)", (int)tcp_state);
+		}
 
-	std::string msg = "recv::PACKET " + ip2str(source_addr.sin_addr) + ":" + std::to_string(ntohs(source_addr.sin_port));
-	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, copy_len, 386);
+		sockaddr_in source_addr{};
+		int copy_len = dequeue_stream(buf, len, &source_addr, true);
 
-	dbg.recv++;
-	return copy_len;
+		VERBOSE_LOG(Log::sceNet, "%d bytes received from (%s:%u); [tx=%d/rx=%d]",
+			copy_len, inet_ntoa(source_addr.sin_addr), ntohs(source_addr.sin_port),
+			tx_seq, rx_seq);
+
+		if (copy_len == 0 && tcp_state != TCPState::CloseWait) {
+#if PPSSPP_PLATFORM(WINDOWS)
+			SetLastError(WSAEWOULDBLOCK);
+#else
+			socket_errno = EWOULDBLOCK;
+#endif
+			return -1;
+		}
+
+		std::string msg = "recv::PACKET " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) +
+		"[" + std::to_string(ntohs(dst.virt.vport)) + "] (" + std::to_string(dbg.send) + ", " +
+		std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
+		INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, copy_len, 386);
+
+		WARN_LOG(Log::sceNet, "%d bytes received from virtual (%s:%u);",
+			copy_len, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port));
+
+		dbg.recv++;
+		return copy_len;
+	}
+
+	// Local connection: the host socket carries the data
+	int ret = ::recv(sock, buf, len, flgs);
+	if (ret < 0) {
+		// While a connect is in progress the PSP's NetBSD-derived stack treats the
+		// socket as SS_ISCONNECTING and recv() waits (EWOULDBLOCK when non-blocking)
+		// rather than failing - the local host connect may not have completed yet.
+		if (socket_errno == ENOTCONN &&
+			(tcp_state == TCPState::SynSent || tcp_state == TCPState::SynReceived)) {
+#if PPSSPP_PLATFORM(WINDOWS)
+			SetLastError(WSAEWOULDBLOCK);
+#else
+			socket_errno = EWOULDBLOCK;
+#endif
+			return hleLogDebug(Log::sceNet, -1, "Socket waiting for Established state (state=%d)", (int)tcp_state);
+		}
+		return ret; //return hleLogError(Log::sceNet, ret, "SOCK_PACKET recv: Failed to receive");
+	}
+
+	std::string msg = "recv::PACKET " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) + 
+	"[" + std::to_string(ntohs(dst.virt.vport)) + "] (" + std::to_string(dbg.send) + ", " + 
+	std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
+
+	WARN_LOG(Log::sceNet, "%d bytes received from (%s:%u);", 
+		ret, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port));
+	return ret;
 }
 int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) { 
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
