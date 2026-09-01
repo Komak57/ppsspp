@@ -350,6 +350,7 @@ static void encode_domain_name(const char *domain, unsigned char *encoded) {
 static bool parse_dns_response(unsigned char *buffer, size_t response_len, uint32_t *output) {
 	DNSHeader *dns = (DNSHeader *)buffer;
 	unsigned char *ptr = buffer + sizeof(struct DNSHeader);
+	unsigned char *end = buffer + response_len;
 
 	DEBUG_LOG(Log::sceNet, "DNS Response:");
 	DEBUG_LOG(Log::sceNet, "ID: 0x%x", ntohs(dns->id));
@@ -359,13 +360,23 @@ static bool parse_dns_response(unsigned char *buffer, size_t response_len, uint3
 	DEBUG_LOG(Log::sceNet, "Authority Records: %d", ntohs(dns->auth_count));
 	DEBUG_LOG(Log::sceNet, "Additional Records: %d", ntohs(dns->add_count));
 
+	// Track whether we exited via a compressed pointer
+	// so we don't over-advance past the type/class fields.
+	bool q_compressed = false;
 	// Skip over the question section
 	const int q_count = ntohs(dns->q_count);
 	for (int i = 0; i < q_count; i++) {
-		while (*ptr != 0) {
-			ptr += (*ptr) + 1;
+		while (ptr < end && *ptr != 0) {
+				if ((*ptr & 0xC0) == 0xC0) {
+				ptr += 2;
+				q_compressed = true;
+				break;
+			}
+			ptr += *ptr + 1;
 		}
-		ptr += 5; // Null byte + QTYPE (2 bytes) + QCLASS (2 bytes)
+		if (!q_compressed && ptr < end) ptr++;  // Skip null terminator
+		if (ptr + 4 > end) break;
+		ptr += 4;  // Skip type and class
 	}
 
 	*output = 0;
@@ -374,14 +385,28 @@ static bool parse_dns_response(unsigned char *buffer, size_t response_len, uint3
 	const int ans_count = ntohs(dns->ans_count);
 	for (int i = 0; i < ans_count; i++) {
 		DEBUG_LOG(Log::sceNet, "Answer %d:\n", i + 1);
+		// If we exit via a compressed pointer, ptr is already positioned
+		// at the start of the type field and the null-terminator check
+		// must be skipped, otherwise we over-advance.
+		bool name_compressed = false;
+		while (ptr < end && *ptr != 0) {
+            if ((*ptr & 0xC0) == 0xC0) {
+                ptr += 2;
+                name_compressed = true;
+                break;
+            }
+            ptr += *ptr + 1;
+        }
 
 		// Skip the name (can be a pointer or a sequence)
-		if ((*ptr & 0xC0) == 0xC0) {
-			ptr += 2; // Pointer (2 bytes)
-		} else {
-			while (*ptr != 0) ptr += (*ptr) + 1;
-			ptr++;
-		}
+        if (!name_compressed && ptr < end && *ptr == 0) ptr++;
+		if (ptr + 10 > end) break;
+		// if ((*ptr & 0xC0) == 0xC0) {
+		// 	ptr += 2; // Pointer (2 bytes)
+		// } else {
+		// 	while (*ptr != 0) ptr += (*ptr) + 1;
+		// 	ptr++;
+		// }
 
 		// TODO: Use a struct or something.
 		uint16_t type = ntohs(*((uint16_t *)ptr));
