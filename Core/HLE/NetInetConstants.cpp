@@ -565,16 +565,10 @@ int convertSockoptNamePSP2Host(int optname, int level) {
 #if defined(SO_NBIO)
 		case PSP_NET_INET_SO_NBIO:
 			return SO_NBIO;
-#else
-		case PSP_NET_INET_SO_NBIO:
-			return O_NONBLOCK;
 #endif
 #if defined(SO_BIO)
 		case PSP_NET_INET_SO_BIO:
 			return SO_BIO;
-#else
-		case PSP_NET_INET_SO_BIO:
-			return O_NONBLOCK;
 #endif
 		case PSP_NET_INET_SO_DCCP_BROADCAST:
 			return SO_BROADCAST;
@@ -938,6 +932,7 @@ const char *convertInetErrno2str(int error) {
 	case ERROR_INET_EISCONN: return "EISCONN";
 	case ERROR_INET_ENOTCONN: return "ENOTCONN";
 	case ERROR_INET_EAGAIN: return "EAGAIN";
+	case ERROR_INET_EINPROGRESS: return "EINPROGRESS";
 	default: return "(unknown!)";
 	}
 }
@@ -1017,10 +1012,8 @@ int convertInetErrno2PSPError(int error) {
 		return SCE_KERNEL_ERROR_ERRNO_NOT_CONNECTED;
 	case ERROR_INET_EAGAIN: // WARNING! Windows reports this for connect, but should trigger IN_PROGRESS instead, but UNVAILABLE for any other requests
 		return SCE_KERNEL_ERROR_ERRNO_RESOURCE_UNAVAILABLE; // SCE_ERROR_ERRNO_EAGAIN;
-#if !defined(_WIN32)
 	case ERROR_INET_EINPROGRESS:
 		return SCE_KERNEL_ERROR_ERRNO_IN_PROGRESS;
-#endif
 	}
 	if (error != 0)
 		return hleLogError(Log::sceNet, error, "Unknown PSP Error Number (%d)", error);
