@@ -581,6 +581,16 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 		return hleLogError(Log::sceNet, ERROR_INET_EBADF, "Bad socket #%d", socket);
 	}
 
+    // Check if a previous send is still pending.
+	if (inetSock->thread.joinable()) {
+		inetSock->thread.join();
+	}
+	if (inetSock->threadID > 0) {
+		// UpdateErrnoFromHost(__KernelGetCurThread(), , __FUNCTION__);
+		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR);
+		_dbg_assert_msg_(false, "Socket currently running an operation in another thread.")
+		return hleLogError(Log::sceNet, -1, "Socket is busy with previous send operation");
+    }
 
 	int retval = -1;
 	// Get current PSP thread
@@ -630,6 +640,17 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	std::string datahex;
 	DataToHexString(10, 0, Memory::GetPointer(bufPtr), bufLen, &datahex);
 	VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", bufLen, datahex.c_str());
+
+    // Check if a previous send is still pending.
+	if (inetSock->thread.joinable()) {
+		inetSock->thread.join();
+	}
+	if (inetSock->threadID > 0) {
+		// UpdateErrnoFromHost(__KernelGetCurThread(), , __FUNCTION__);
+		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR);
+		_dbg_assert_msg_(false, "Socket currently running an operation in another thread.")
+		return hleLogError(Log::sceNet, -1, "Socket is busy with previous send operation");
+    }
 
 	int retval = -1;
 	// Get current PSP thread
@@ -794,7 +815,18 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen)
 
 	// Still using warn log here so it stands out in the log
 
-	SceNetInetSockaddr* dst = (SceNetInetSockaddr*)Memory::GetPointer(sockAddrPtr);
+	SceNetInetSockaddr *dst = (SceNetInetSockaddr *)Memory::GetPointer(sockAddrPtr);
+
+    // Check if a previous send is still pending.
+	if (inetSock->thread.joinable()) {
+		inetSock->thread.join();
+	}
+	if (inetSock->threadID > 0) {
+		// UpdateErrnoFromHost(__KernelGetCurThread(), , __FUNCTION__);
+		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR);
+		_dbg_assert_msg_(false, "Socket currently running an operation in another thread.")
+		return hleLogError(Log::sceNet, -1, "Socket is busy with previous send operation");
+    }
 
 	int retval = -1;
 	// Get current PSP thread
@@ -1046,6 +1078,18 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 		_sce_pspnet_set_thread_errno(ERROR_INET_EBADF);
 		return hleLogError(Log::sceNet, -1, "Bad socket #%d", socket);
 	}
+
+    // Check if a previous send is still pending.
+	if (inetSock->thread.joinable()) {
+		inetSock->thread.join();
+	}
+	if (inetSock->threadID > 0) {
+		// UpdateErrnoFromHost(__KernelGetCurThread(), , __FUNCTION__);
+		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR);
+		_dbg_assert_msg_(false, "Socket currently running an operation in another thread.")
+		return hleLogError(Log::sceNet, -1, "Socket is busy with previous send operation");
+    }
+
 	int retval = 0;
 	inetSock->threadID = __KernelGetCurThread();
 
@@ -1106,6 +1150,18 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 		_sce_pspnet_set_thread_errno(ERROR_INET_EBADF);
 		return hleLogError(Log::sceNet, -1, "Bad socket #%d", socket);
 	}
+
+    // Check if a previous send is still pending.
+	if (inetSock->thread.joinable()) {
+		inetSock->thread.join();
+	}
+	if (inetSock->threadID > 0) {
+		// UpdateErrnoFromHost(__KernelGetCurThread(), , __FUNCTION__);
+		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR);
+		_dbg_assert_msg_(false, "Socket currently running an operation in another thread.")
+		return hleLogError(Log::sceNet, -1, "Socket is busy with previous send operation");
+    }
+
 	int retval = 0;
 	inetSock->threadID = __KernelGetCurThread();
 
