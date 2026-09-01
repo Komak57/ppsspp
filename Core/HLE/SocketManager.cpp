@@ -2599,6 +2599,7 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
 
 	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::bind(%s:%u, %d): state=%d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), namelen, (int)tcp_state);
+	auto _vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
 	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
 	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
 	//
@@ -2617,15 +2618,15 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	// Update socket debug metadata
 	src.host = saddr.in;
 	// Flip ports
-	src.virt.port = src.virt.vport;
-	src.virt.vport = saddr.in.sin_port;
+	src.virt.port = saddr.in.sin_port;
+	src.virt.vport = htons(_vport);
 
 	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), htons(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
-	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
+	int ret = ::bind(sock, reinterpret_cast<struct sockaddr*>(&saddr.in), sizeof(sockaddr_in));
 	if (ret < 0)
-		return hleLogError(Log::sceNet, ret);
+		return ret;
 	return ret;
 }
 int PacketSocket::shutdown(int how) { 
