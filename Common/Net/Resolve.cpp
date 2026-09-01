@@ -498,13 +498,19 @@ bool DirectDNSLookupIPV4(const char *dns_server_ip, const char *domain, uint32_t
 	*((uint16_t *)qinfo) = htons(DNS_QUERY_TYPE_A); // Query type: A
 	*((uint16_t *)(qinfo + 2)) = htons(DNS_QUERY_CLASS_IN); // Query class: IN
 
-	// Send DNS query
-	size_t query_len = sizeof(DNSHeader) + (qinfo - buffer) + 4;
+	// Send DNS query; qname already includes the 12-byte header offset
+	size_t query_len = (qinfo - buffer) + 4;
 	if (sendto(sockfd, (const char *)buffer, (int)query_len, 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
 		ERROR_LOG(Log::sceNet, "Failed to send DNS query");
 		closesocket(sockfd);
 		return 1;
 	}
+
+	// Set up a timeout
+	struct timeval timeout;
+	timeout.tv_sec = 3;  // 3 second timeout
+	timeout.tv_usec = 0;
+	setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof(timeout));
 
 	// Receive DNS response
 	socklen_t server_len = sizeof(server_addr);
