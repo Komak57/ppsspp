@@ -5,6 +5,13 @@
 #if PPSSPP_PLATFORM(WINDOWS)
 #include "Common/CommonWindows.h"
 #include <io.h>
+// Winsock's fd_set is count-based and defaults FD_SETSIZE to 64, unlike POSIX's
+// value-indexed bitmap (glibc default 1024). The PSP-side fd_set supports up to
+// PSP_NET_INET_FD_SETSIZE (256, see Core/HLE/NetInetTypes.h) descriptors per
+// select()/poll() call, so the host cap must be widened to match before any
+// concurrent socket count in that range silently stops being watched. Must be
+// defined before winsock2.h's first inclusion in each translation unit.
+#define FD_SETSIZE 1024
 #include <winsock2.h>
 #include <WS2tcpip.h>
 #else
