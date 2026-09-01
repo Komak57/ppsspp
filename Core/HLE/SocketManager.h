@@ -203,7 +203,7 @@ struct InetSocket {
 	TCPState tcp_state; // Used by SOCK_PACKET
 	int type; // WARNING: vsocks rely on this, will break if changed
 	VirtualSockAddr dst;
-	int threadID = 0;
+	std::atomic<int> threadID = -1;
 	std::thread thread;
 	std::atomic<bool> abortPending = false;
 
@@ -284,6 +284,7 @@ struct InetSocket {
 		tcp_state = TCPState::Disconnected;
 		type = 0;
 		dst.host = sockaddr_in{};
+		threadID = -1;
 		abortPending = false;
 		
 		so_storage.clear();

@@ -145,6 +145,7 @@ void InetSocket::clear() {
     tcp_state = TCPState::Disconnected;
     type = 0;
 	dst.host = sockaddr_in{};
+    threadID = -1;
 	abortPending.exchange(false);
 
 	// Clear the queue safely
