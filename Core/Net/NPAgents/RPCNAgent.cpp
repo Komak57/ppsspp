@@ -244,6 +244,7 @@ namespace net {
 		if (File::Exists(cert_path)) {
 			File::ReadTextFileToString(cert_path, &certPem);
 		}
+		InitializeSSL(certPem);
 		mbedtls_ssl_conf_ciphersuites(&tls.sslConfig, forceCiphers);
 		mbedtls_ssl_conf_max_version(&tls.sslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 		WARN_LOG(Log::sceNet, "UNTESTED RPCNAuthAgent::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
