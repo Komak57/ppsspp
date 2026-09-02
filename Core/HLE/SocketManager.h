@@ -214,6 +214,16 @@ struct InetSocket {
 	std::thread thread;
 	std::atomic<bool> abortPending = false;
 
+	// Async-op completion handoff. Worker threads (the bridge that provides REAL
+	// host blocking/non-blocking semantics, unlike adhoc's simulated blocking)
+	// must NEVER touch kernel state - scheduler mutation from a foreign thread
+	// corrupts the ready queue (GetFast asserts, then faults). The worker stores
+	// its outcome here and the emu thread's poll event (__NetInetResume) applies
+	// errno + resumes the waiting PSP thread.
+	std::atomic<bool> opDone = false;
+	std::atomic<int> pendingResult = 0;
+	std::atomic<int> pendingErrno = 0;   // PSP errno (already converted), 0 = none
+
 	// Subscription and Broadcasting flags
 	std::unordered_map<uint64_t, std::vector<uint8_t>> so_storage;
 	u32 broadcast_mask = 0;              // Bitfield tracking which "rooms/sessions" this socket participates in
