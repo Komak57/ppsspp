@@ -31,6 +31,10 @@ extern const char *const defaultNetSSID;
 void Register_sceNetInet();
 
 void __NetInetShutdown();
+// CoreTiming event used to apply async-op results on the emu thread (worker
+// threads must never resume PSP threads directly - scheduler isn't thread-safe)
+void __NetInetRegisterEvents();
+void __NetInetRestoreEvents();
 
 // int UpdateErrnoFromHost(int threadID, int hostErrno, const char *func);
 int _sce_pspnet_set_thread_errno(int error, int thread_id);

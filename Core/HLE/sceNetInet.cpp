@@ -16,6 +16,7 @@
 #include "Core/HLE/sceNp.h"
 #include "Core/HLE/sceNp2.h"
 #include "Core/HLE/NetInetConstants.h"
+#include "Core/CoreTiming.h"
 #include "Core/MIPS/MIPS.h"
 #include "Core/Config.h"
 #include "Core/System.h"
@@ -82,6 +83,51 @@ int _sce_pspnet_set_thread_errno(int error, int thread_id = -1) {
 		threadID = __KernelGetCurThread();
 	g_inetLastErrno[threadID] = error;
 	return error;
+}
+
+// ============================================================================
+// Async-op completion polling. Worker threads (the bridge that provides REAL
+// host blocking/non-blocking semantics until a system-wide solution exists;
+// unlike adhoc's fully-simulated blocking) must never touch kernel state -
+// resuming a thread from a foreign thread mutates the scheduler ready-queue
+// concurrently with the emu thread, corrupting it (GetFast asserts, segfault).
+// Workers store their outcome in the InetSocket (opDone/pendingResult/
+// pendingErrno) and this event - running on the emu thread - applies the errno
+// and resumes the waiting PSP thread.
+// ============================================================================
+static int netInetResumeEvent = -1;
+static const int NETINET_RESUME_POLL_US = 200;
+
+static void __NetInetResume(u64 userdata, int cyclesLate) {
+	int socket = (int)userdata;
+	InetSocket *inetSock;
+	if (!g_socketManager.GetInetSocket(socket, &inetSock)) {
+		// Socket was closed with the op still in flight; nothing left to resume
+		// safely (matches previous behavior on close-during-op).
+		return;
+	}
+	if (!inetSock->opDone.load(std::memory_order_acquire)) {
+		// Worker still running - poll again shortly.
+		CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, userdata);
+		return;
+	}
+	int tid = inetSock->threadID.exchange(-1);
+	if (tid > 0) {
+		int pspErrno = inetSock->pendingErrno.load();
+		if (pspErrno != 0)
+			_sce_pspnet_set_thread_errno(pspErrno, tid);
+		__KernelResumeThreadFromWait(tid, inetSock->pendingResult.load());
+	}
+	// tid <= 0: the op was aborted (sceNetInetSocketAbort already resumed the
+	// thread with EINTR on the emu thread) - nothing to do.
+}
+
+void __NetInetRegisterEvents() {
+	netInetResumeEvent = CoreTiming::RegisterEvent("__NetInetResume", __NetInetResume);
+}
+
+void __NetInetRestoreEvents() {
+	CoreTiming::RestoreRegisterEvent(netInetResumeEvent, "__NetInetResume", __NetInetResume);
 }
 
 bool netInetInited = false;
@@ -616,24 +662,22 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	int retval = -1;
 	// Get current PSP thread
 	inetSock->threadID = sceKernelGetThreadId();
-
-	// Register the wait BEFORE spawning the worker: once the thread is marked
-	// waiting, the worker's resume is valid no matter how quickly it completes.
-	// (Waiting after the spawn races a fast worker - its resume no-ops against a
-	// not-yet-waiting thread and the wait then never ends.)
+	inetSock->opDone.store(false, std::memory_order_relaxed);
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetRecv");
+	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
 
 	// Run the actual sendRequest on the host asynchronously
 	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval]() mutable
 	{
 		retval = inetSock->recv((char*)Memory::GetPointer(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
-		if (inetSock->abortPending.exchange(false))
+		if (inetSock->abortPending.exchange(false)) {
+			inetSock->opDone.store(true, std::memory_order_release);
 			return;
-		//int retval = recv(inetSock->sock, (char*)Memory::GetPointer(bufPtr), bufLen, flgs | MSG_NOSIGNAL);
+		}
+		int pspErrno = 0;
 		if (retval < 0) {
-			int errorno = convertInetErrnoHost2PSP(socket_errno);
-			_sce_pspnet_set_thread_errno(errorno, inetSock->threadID);
-			if (errorno == ERROR_INET_EAGAIN)
+			pspErrno = convertInetErrnoHost2PSP(socket_errno);
+			if (pspErrno == ERROR_INET_EAGAIN)
 				DEBUG_LOG(Log::sceNet, "%d=sceNetInetRecv(%i, %08x, %i, %i): EAGAIN", retval, socket, bufPtr, bufLen, flags);
 			else
 				ERROR_LOG(Log::sceNet, "%d=sceNetInetRecv(%i, %08x, %i, %i): Error: %d", retval, socket, bufPtr, bufLen, flags, socket_errno);
@@ -643,9 +687,10 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 			VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", retval, datahex.c_str());
 		}
 
-		// Store the result and resume the PSP thread
-		__KernelResumeThreadFromWait(inetSock->threadID, retval);
-		inetSock->threadID = -1;
+		// Hand the outcome to the emu thread - no kernel calls from here
+		inetSock->pendingErrno.store(pspErrno);
+		inetSock->pendingResult.store(retval);
+		inetSock->opDone.store(true, std::memory_order_release);
 	});
 
 	return retval;
@@ -680,31 +725,32 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	int retval = -1;
 	// Get current PSP thread
 	inetSock->threadID = sceKernelGetThreadId();
+	inetSock->opDone.store(false, std::memory_order_relaxed);
 
-	// Register the wait BEFORE spawning the worker (see sceNetInetRecv) - a
-	// non-blocking send completes in microseconds and its resume must land on an
-	// already-waiting thread or user_main parks forever.
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetSend");
+	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
 
 	// Run the actual sendRequest on the host asynchronously
 	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval]() mutable
 	{
 		retval = inetSock->send((char*)Memory::GetPointer(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
-		if (inetSock->abortPending.exchange(false))
+		if (inetSock->abortPending.exchange(false)) {
+			inetSock->opDone.store(true, std::memory_order_release);
 			return;
+		}
 		//int retval = send(inetSock->sock, (char*)Memory::GetPointer(bufPtr), bufLen, flgs | MSG_NOSIGNAL);
+		int pspErrno = 0;
 		if (retval < 0) {
-			// UpdateErrnoFromHost(inetSock->threadID, socket_errno, "sceNetInetSend");
-			int hostErrno = convertInetErrnoHost2PSP(socket_errno);
-			_sce_pspnet_set_thread_errno(hostErrno, inetSock->threadID);
-			if (hostErrno == ERROR_INET_EAGAIN)
+			pspErrno = convertInetErrnoHost2PSP(socket_errno);
+			if (pspErrno == ERROR_INET_EAGAIN)
 				DEBUG_LOG(Log::sceNet, "%d=sceNetInetSend(%i, %08x, %i, %i): EAGAIN", retval, socket, bufPtr, bufLen, flags);
 			else
 				ERROR_LOG(Log::sceNet, "%d=sceNetInetSend(%i, %08x, %i, %i) Error: %08x", retval, socket, bufPtr, bufLen, flags, socket_errno);
 		}
-		// Store the result and resume the PSP thread
-		__KernelResumeThreadFromWait(inetSock->threadID, retval);
-		inetSock->threadID = -1;
+		// Hand the outcome to the emu thread - no kernel calls from here
+		inetSock->pendingErrno.store(pspErrno);
+		inetSock->pendingResult.store(retval);
+		inetSock->opDone.store(true, std::memory_order_release);
 	});
 
 	return retval;
@@ -860,34 +906,38 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen)
 	int retval = -1;
 	// Get current PSP thread
 	inetSock->threadID = sceKernelGetThreadId();
+	inetSock->opDone.store(false, std::memory_order_relaxed);
 
-	// Register the wait BEFORE spawning the worker (see sceNetInetRecv)
+	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetConnect");
+	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
 
 	// Run the actual sendRequest on the host asynchronously
 	inetSock->thread = std::thread([retval, socket, inetSock, dst, sockAddrLen]() mutable
 	{
 		const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(dst);
 		retval = inetSock->connect(dst, sockAddrLen);
-		if (inetSock->abortPending.exchange(false))
+		if (inetSock->abortPending.exchange(false)) {
+			inetSock->opDone.store(true, std::memory_order_release);
 			return;
+		}
+		int pspErrno = 0;
 		if (retval < 0) {
-			int hostErrno = convertInetErrnoHost2PSP(socket_errno);
+			pspErrno = convertInetErrnoHost2PSP(socket_errno);
 			// Windows compatibility adjustment
-			if (hostErrno == ERROR_INET_EAGAIN)
-				hostErrno = ERROR_INET_EINPROGRESS;
-			_sce_pspnet_set_thread_errno(hostErrno, inetSock->threadID);
-			// UpdateErrnoFromHost(inetSock->threadID, hostErrno, "sceNetInetConnect"); // Must update inside the thread, or risk race conditions on windows
-			if (hostErrno == ERROR_INET_EINPROGRESS)
+			if (pspErrno == ERROR_INET_EAGAIN)
+				pspErrno = ERROR_INET_EINPROGRESS;
+			if (pspErrno == ERROR_INET_EINPROGRESS)
 				INFO_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i): EINPROGRESS", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
 			else
-				ERROR_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i) %s", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen, convertInetErrno2str(hostErrno));
+				ERROR_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i) %s", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen, convertInetErrno2str(pspErrno));
 		} else
 			INFO_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i)", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
 
-		// Store the result and resume the PSP thread
-		__KernelResumeThreadFromWait(inetSock->threadID, retval);
-		inetSock->threadID = -1;
+		// Hand the outcome to the emu thread - no kernel calls from here
+		inetSock->pendingErrno.store(pspErrno);
+		inetSock->pendingResult.store(retval);
+		inetSock->opDone.store(true, std::memory_order_release);
 	});
 
 	// hleLog will throw a stack mismatch here
@@ -1134,9 +1184,10 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 
 	int retval = 0;
 	inetSock->threadID = __KernelGetCurThread();
+	inetSock->opDone.store(false, std::memory_order_relaxed);
 
-	// Register the wait BEFORE spawning the worker (see sceNetInetRecv).
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetRecvfrom");
+	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
 
 	// Run the actual sendRequest on the host asynchronously. retval is captured BY
 	// VALUE - the real result reaches the PSP thread via the resume value; writing
@@ -1148,14 +1199,16 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 
 		// TODO: threaded recvfrom?
 		retval = inetSock->recvfrom((char *)Memory::GetPointer(bufferPtr), len, flags, src, srclen);
-		if (inetSock->abortPending.exchange(false))
+		if (inetSock->abortPending.exchange(false)) {
+			inetSock->opDone.store(true, std::memory_order_release);
 			return;
+		}
 		// retval = recvfrom(inetSock->sock, (char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, srclen);
+		int pspErrno = 0;
 		if (retval < 0)
 		{
-			int errorno = convertInetErrnoHost2PSP(socket_errno);
-			_sce_pspnet_set_thread_errno(errorno);
-			if (errorno == ERROR_INET_EAGAIN)
+			pspErrno = convertInetErrnoHost2PSP(socket_errno);
+			if (pspErrno == ERROR_INET_EAGAIN)
 				DEBUG_LOG(Log::sceNet, "%d=sceNetInetRecvfrom(%i, %08x, %i, %i, %08x, %i): EAGAIN", retval, socket, bufferPtr, len, flags, fromPtr, (int)*srclen);
 			else
 				DEBUG_LOG(Log::sceNet, "%d=sceNetInetRecvfrom(%i, %08x, %i, %i, %08x, %i): Error: %08x", retval, socket, bufferPtr, len, flags, fromPtr, (int)*srclen, socket_errno);
@@ -1174,9 +1227,10 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 			return hleDelayResult(retval, "workaround until blocking-socket", 500);
 		}*/
 
-		// Store the result and resume the PSP thread
-		__KernelResumeThreadFromWait(inetSock->threadID, retval);
-		inetSock->threadID = -1;
+		// Hand the outcome to the emu thread - no kernel calls from here
+		inetSock->pendingErrno.store(pspErrno);
+		inetSock->pendingResult.store(retval);
+		inetSock->opDone.store(true, std::memory_order_release);
 	});
 
 	// Using hleDelayResult as a workaround for games that need blocking-socket to be implemented (ie. Coded Arms Contagion)
@@ -1209,9 +1263,10 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 
 	int retval = 0;
 	inetSock->threadID = __KernelGetCurThread();
+	inetSock->opDone.store(false, std::memory_order_relaxed);
 
-	// Register the wait BEFORE spawning the worker (see sceNetInetRecv).
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetSendto");
+	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
 
 	// Run the actual sendRequest on the host asynchronously. retval captured BY
 	// VALUE - the result travels via the resume value (see sceNetInetRecvfrom).
@@ -1227,21 +1282,24 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 		// Send as-is first. P2P traffic will normally send using our own member_id for the vport
 		int retval = inetSock->sendto((char *)Memory::GetPointer(bufferPtr), len, flags, dst, tolen);
 
-		if (inetSock->abortPending.exchange(false))
+		if (inetSock->abortPending.exchange(false)) {
+			inetSock->opDone.store(true, std::memory_order_release);
 			return;
+		}
+		int pspErrno = 0;
 		if (retval < 0)
 		{
-			int errorno = convertInetErrnoHost2PSP(socket_errno);
-			_sce_pspnet_set_thread_errno(errorno);
-			if (errorno == ERROR_INET_EAGAIN)
+			pspErrno = convertInetErrnoHost2PSP(socket_errno);
+			if (pspErrno == ERROR_INET_EAGAIN)
 				DEBUG_LOG(Log::sceNet, "%d=sceNetInetSendto(%i, %08x, %i, %i, %08x, %i): EAGAIN", retval, socket, bufferPtr, len, flags, toPtr, tolen);
 			else
 				ERROR_LOG(Log::sceNet, "%d=sceNetInetSendto(%i, %08x, %i, %i, %08x, %i): Error: %08x", retval, socket, bufferPtr, len, flags, toPtr, tolen, socket_errno);
 		}
-	
-		// Store the result and resume the PSP thread
-		__KernelResumeThreadFromWait(inetSock->threadID, retval);
-		inetSock->threadID = -1;
+
+		// Hand the outcome to the emu thread - no kernel calls from here
+		inetSock->pendingErrno.store(pspErrno);
+		inetSock->pendingResult.store(retval);
+		inetSock->opDone.store(true, std::memory_order_release);
 	});
 
 	return retval;

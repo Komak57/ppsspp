@@ -649,6 +649,8 @@ void __NetCallbackInit() {
 void __NetInit() {
 	g_infraDNSConfig = InfraDNSConfig();
 
+	__NetInetRegisterEvents();
+
 	// Windows: Assuming WSAStartup already called beforehand
 	portOffset = g_Config.iPortOffset;
 	isOriPort = g_Config.bEnableUPnP && g_Config.bUPnPUseOriginalPort;
@@ -771,6 +773,7 @@ void __NetDoState(PointerWrap &p) {
 		apctlStateEvent = -1;
 	}
 	CoreTiming::RestoreRegisterEvent(apctlStateEvent, "__ApctlState", __ApctlState);
+	__NetInetRestoreEvents();
 	if (s >= 6) {
 		Do(p, netApctlInfoId);
 		Do(p, netApctlInfo);
