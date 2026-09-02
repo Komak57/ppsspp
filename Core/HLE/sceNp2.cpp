@@ -77,6 +77,7 @@ u32 npMatching2ThreadHackAddr = 0;
 u32_le npMatching2ThreadCode[3];
 SceUID npMatching2ThreadID = 0;
 SceUID npMatching2EventID = 0;
+u32 npMatching2Result = 0;
 SceUID vplUid = 0;
 
 /*
@@ -214,8 +215,7 @@ void SceNpMatching2Thread()
 	// else
 	//     *timeout = 0; // infinite wait
 
-	u32 s = sizeof(u32);
-	PSPPointer<u32> result_bits = PSPPointer<u32>::Create(np_memory.Alloc(s));
+	PSPPointer<u32> result_bits = PSPPointer<u32>::Create(npMatching2Result);
 	int ret = sceKernelWaitEventFlag(npMatching2EventID, 0xffffffff, PspEventFlagWaitTypes::PSP_EVENT_WAITANY, result_bits.ptr, ((*timeout == 0)? 0 : timeout.ptr) /* Infinite, or Timeout */);
 	if ((ret != SCE_KERNEL_ERROR_WAIT_TIMEOUT & ret >> 0x1f) != 0)
 		return;
@@ -638,6 +638,7 @@ int StartNpMatching2Thread(int threadStackSize, int threadPriority) {
 
 	// Create Event Flag
 	npMatching2EventID = sceKernelCreateEventFlag("SceNpMatching2", 0, 0, 0);
+	u32 s = sizeof(u32); npMatching2Result = np_memory.Alloc(s);
 
 	int ret = __KernelCreateThread("SceNpMatching2", __KernelGetCurThreadModuleId(), npMatching2ThreadHackAddr, threadPriority, threadStackSize, PSP_THREAD_ATTR_USER, 0, true);
 	if (ret < 0) {
