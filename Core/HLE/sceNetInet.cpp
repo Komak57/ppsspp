@@ -663,6 +663,13 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	// Get current PSP thread
 	inetSock->threadID = sceKernelGetThreadId();
 	inetSock->opDone.store(false, std::memory_order_relaxed);
+
+	if (!inetSock->nonblocking) {
+		if (!(flags & PSP_NET_INET_MSG_DONTWAIT))
+			WARN_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
+		else
+			NOTICE_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - flagged as MSG_DONTWAIT", __FUNCTION__, socket);
+	}
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetRecv");
 	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
 
@@ -727,6 +734,13 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	inetSock->threadID = sceKernelGetThreadId();
 	inetSock->opDone.store(false, std::memory_order_relaxed);
 
+	if (!inetSock->nonblocking) {
+		if (!(flags & PSP_NET_INET_MSG_DONTWAIT))
+			WARN_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
+		else
+			NOTICE_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - flagged as MSG_DONTWAIT", __FUNCTION__, socket);
+	}
+	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetSend");
 	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
 
@@ -908,6 +922,9 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen)
 	inetSock->threadID = sceKernelGetThreadId();
 	inetSock->opDone.store(false, std::memory_order_relaxed);
 
+	// A BLOCKING socket's worker can stall until the handshake resolves
+	if (!inetSock->nonblocking)
+		WARN_LOG(Log::sceNet, "%s: BLOCKING connect on socket #%d - worker may stall until the handshake resolves", __FUNCTION__, socket);
 	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetConnect");
 	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
@@ -985,6 +1002,11 @@ static int sceNetInetAccept(int socket, u32 addrPtr, u32 addrLenPtr)
 		*srclen = std::min((*srclen) > 0 ? *srclen : 0, static_cast<socklen_t>(sizeof(saddr)));
 
 	auto _vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
+
+	// Accept runs directly on the emu thread - a BLOCKING host accept with no
+	// pending connection would stall the whole emulator, not just this PSP thread
+	if (!inetSock->nonblocking)
+		WARN_LOG(Log::sceNet, "%s: BLOCKING accept on socket #%d directly on the emu thread - if the emulator freezes here, this is why", __FUNCTION__, socket);
 
 	int newHostSocket = inetSock->accept((struct sockaddr *)&saddr.addr, srclen);
 	// newHostSocket = accept(inetSock->sock, (struct sockaddr*)&saddr.addr, srclen);
@@ -1186,6 +1208,13 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 	inetSock->threadID = __KernelGetCurThread();
 	inetSock->opDone.store(false, std::memory_order_relaxed);
 
+	if (!inetSock->nonblocking) {
+		if (!(flags & PSP_NET_INET_MSG_DONTWAIT))
+			WARN_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
+		else
+			NOTICE_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - flagged as MSG_DONTWAIT", __FUNCTION__, socket);
+	}
+	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetRecvfrom");
 	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
 
@@ -1265,6 +1294,13 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 	inetSock->threadID = __KernelGetCurThread();
 	inetSock->opDone.store(false, std::memory_order_relaxed);
 
+	if (!inetSock->nonblocking) {
+		if (!(flags & PSP_NET_INET_MSG_DONTWAIT))
+			WARN_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
+		else
+			NOTICE_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - flagged as MSG_DONTWAIT", __FUNCTION__, socket);
+	}
+	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetSendto");
 	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
 

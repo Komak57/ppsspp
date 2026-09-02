@@ -2064,13 +2064,17 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	}
 
  }
-int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) { 
+int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
 	dbg.read++;
 	SockAddrIN4 saddr{};
 	if (fromlen)
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
+
+	// The caller wants non-blocking either via the socket flag or per-call
+	// MSG_DONTWAIT (games poll their p2p socket this way).
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
 
 	if (has_pending_data()) {
 		// Dequeue from local packet queue for virtual sockets
@@ -2141,7 +2145,17 @@ int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr*
 
 	}
 
+	// No virtual data queued, so fall through to the host fd (loopback side-channel).
+	// A blocking host recvfrom here hangs forever for a virtual socket - p2p data
+	// arrives via the relay, not this fd - which froze PSP2i/Patapon. When the
+	// caller wants non-blocking but the host fd is blocking (per-call MSG_DONTWAIT
+	// on a blocking socket), flip it just for this call so ::recvfrom returns
+	// EWOULDBLOCK immediately, then restore - don't leave the socket's mode changed.
+	// (The fd's mode tracks `nonblocking` via SO_NBIO, so no OS query is needed.)
+	const bool restoreBlocking = dontwait && !nonblocking;
+	if (restoreBlocking) changeBlockingMode(sock, 1);
 	int ret = ::recvfrom(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, fromlen);
+	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
 		return ret; // Do not report, sceNetInetRecvfrom will handle the error reporting
 
@@ -2322,8 +2336,13 @@ int PacketSocket::recv(char* buf, int len, int flags) {
 		return copy_len;
 	}
 
-	// Local connection: the host socket carries the data
+	// Local connection: the host socket carries the data. If the caller wants
+	// non-blocking but the host fd is blocking, flip it for this call so ::recv
+	// can't hang, then restore (see ConnDgramSocket::recvfrom).
+	const bool restoreBlocking = !nonblocking && (flags & PSP_NET_INET_MSG_DONTWAIT);
+	if (restoreBlocking) changeBlockingMode(sock, 1);
 	int ret = ::recv(sock, buf, len, flgs);
+	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0) {
 		// While a connect is in progress the PSP's NetBSD-derived stack treats the
 		// socket as SS_ISCONNECTING and recv() waits (EWOULDBLOCK when non-blocking)
