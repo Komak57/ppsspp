@@ -728,8 +728,8 @@ static int sceNpMatching2Init(int poolSize, int matchingPriority, int threadStac
 	if (0x37ff < threadStackSize) {
 		threadStack = sceKernelCheckThreadStack();
 		ret = SCE_NP_ERROR_INVALID_THREAD;
-		if (0xfdf < threadStack)
-			WARN_LOG(Log::sceNp2, "%d is an Invalid Thread Stack?", ret); // return hleLogError(Log::sceNp2, ret, "Invalid Thread Stack?");
+		if (0xfdf >= threadStack)
+			return hleLogError(Log::sceNp2, ret, "Invalid Thread Stack?");
 
 		ret = SCE_NP_MATCHING2_ERROR_ALREADY_INITIALIZED;
 		if (npMatching2Inited)
