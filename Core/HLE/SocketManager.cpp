@@ -2079,21 +2079,7 @@ int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr*
 	if (has_pending_data()) {
 		// Dequeue from local packet queue for virtual sockets
 		VirtualPacket pkt;
-		if (!dequeue_packet(pkt)) {
-			// Empty Queue, try actual socket
-			int ret = ::recvfrom(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, fromlen);
-			if (ret < 0)
-				return ret;
-
-			dbg.recv++;
-
-			if (from) {
-				from->sa_family = saddr.addr.sa_family;
-				memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
-				from->sa_len = fromlen ? *fromlen : 0;
-			}
-			return ret;
-		}
+		_dbg_assert_msg_(dequeue_packet(pkt), "Impossibly empty virtual queue");
 		
 		// ===== STRICT DESTRUCTIVE FIFO SEMANTICS =====
 		// 
