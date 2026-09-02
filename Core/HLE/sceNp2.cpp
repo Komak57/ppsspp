@@ -182,8 +182,8 @@ int InvokeAsyncCallbacks() {
 		ERROR_LOG(Log::sceNp2, "UNIMPLEMENTED SceNpMatching2LobbyMessageCallback - %s_%08x(ctxId: %d)", EventToString(event.event_type).c_str(), event.handler.cb.ptr, event.args[0]);
 		return SCE_NP_MATCHING2_ERROR_INVALID_REQUEST_PARAMETER;
 	case SCE_NP_MATCHING2_SIGNALING_EVENT:
-		NOTICE_LOG(Log::sceNp2, "SceNpMatching2SignalingCallback - %s_%08x(ctxId: %d, roomId: %llu, conn_state: %d, memberId: %d, event: %08x, error_code: %08x, cbArgsPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
-			event.args[0], ((u64)event.args[1] | (u64)event.args[2] >> 32), event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
+		NOTICE_LOG(Log::sceNp2, "SceNpMatching2SignalingCallback - %s_%08x(ctxId: %d, ctxPtr: %08x, roomId: %llu, memberId: %d, event: %08x, error_code: %08x, cbArgsPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
+			event.args[0], event.args[1], ((u64)event.args[2] | ((u64)event.args[3] << 32)), event.args[4], event.args[5], event.args[6], event.args[7]);
 		break;
 	default:
 		ERROR_LOG(Log::sceNp2, "UNHANDLED Callback Type %d - FUN_%08x(ctxId: %d)", event.event_type, event.handler.cb.ptr, event.args[0]);
@@ -191,9 +191,10 @@ int InvokeAsyncCallbacks() {
 		return SCE_NP_MATCHING2_ERROR_INVALID_REQUEST_PARAMETER;
 	}
 	//DEBUG_LOG(Log::sceNp2, "NpMatching2Callback [HandlerID=%i][EventID=%04x][State=%04x][ArgsPtr=%08x]", it->first, event, stat, event.handler.argument);
-	if (Memory::IsValidAddress(event.handler.cb.ptr))
+	if (Memory::IsValidAddress(event.handler.cb.ptr)) {
 		hleEnqueueCall(event.handler.cb.ptr, event.argc, event.args);
 		return 0;
+	}
 	return SCE_NP_MATCHING2_ERROR_INVALID_REQUEST_PARAMETER;
 }
 
@@ -512,30 +513,35 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 	if (auto def = defaultOptParams.find(SCE_NP_MATCHING2_SIGNALING_EVENT); def != defaultOptParams.end())
 		handler = &def->second;
 
-	// args[3] = conn_state;	// unknown? Ace Combat uses this as arg4 of sceNpMatching2SignalingGetPeerNetInfo
-	// FIXME: Need confirmation on arguments for conn_id, room_id
+	// Verified against np_matching2.prx (InvokeAsyncCallbacks @ 0x1f5d4): the firmware
+	// invokes the signaling callback as
+	//   cb(ctxId, ctxPtr, roomId.lo, roomId.hi, peerMemberId, event, errorCode, cbArg)
+	// i.e. a1 is the internal context POINTER (not roomId, and there is no conn_state
+	// argument - that was a misread). roomId is the 64-bit id split across a2/a3.
+	// The old layout was shifted one slot low, so games read roomId.upper (0) as
+	// roomId.lower and printed roomID=0.
 	u32 args[8];
-	args[0] = 0;		// ContextID
-	args[1] = (u32)(room_id & 0xFFFFFFFF);	// room_id.lower
-	args[2] = (u32)(room_id >> 32);			// room_id.upper
-	args[3] = conn_state;	// unknown? connId? Ace Combat uses this as arg4 of sceNpMatching2SignalingGetPeerNetInfo
-	args[4] = memberId;		// roomMemberId
-	args[5] = event;		// EventCode
-	args[6] = errorCode;	// ErrorCode
-	args[7] = 0;			// cbArgs
+	args[0] = 0;			// ContextID
+	args[1] = 0;			// a1: internal context pointer - games read their own ctx from cbArg, so 0 is safe
+	args[2] = (u32)(room_id & 0xFFFFFFFF);	// room_id.lower
+	args[3] = (u32)(room_id >> 32);			// room_id.upper
+	args[4] = memberId;		// stack: peerMemberId (u16)
+	args[5] = event;		// stack: event (u16)
+	args[6] = errorCode;	// stack: errorCode
+	args[7] = 0;			// stack: cbArg (set to handler->cb_arg.ptr below)
 
 	// Consume if the event handler has no callback
 	if (handler == nullptr) {
-		NOTICE_LOG(Log::sceNp2, "notifySignalingHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %llu, connId?: %d, memberId: %d, event: 0x%04x, errorCode: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(),
-			args[0], ((u64)args[1] | (u64)args[2] >> 32), args[3], args[4], args[5], args[6], args[7]);
+		NOTICE_LOG(Log::sceNp2, "notifySignalingHandler - Destroying %s_EMPTY(ctxId: %d, roomId: %llu, memberId: %d, event: 0x%04x, errorCode: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(),
+			args[0], ((u64)args[2] | ((u64)args[3] << 32)), args[4], args[5], args[6], args[7]);
 		return 0;
 	}
 
 	args[0] = handler->ctx_id;
 	args[7] = handler->cb_arg.ptr;
 
-	NOTICE_LOG(Log::sceNp2, "notifySignalingHandler - %s_%08x(ctxId: %d, roomId: %llu, connState: %d, memberId: %d, event: 0x%04x, errorCode: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(), handler->cb.ptr,
-		args[0], ((u64)args[1] | (u64)args[2] >> 32), args[3], args[4], args[5], args[6], args[7]);
+	NOTICE_LOG(Log::sceNp2, "notifySignalingHandler - %s_%08x(ctxId: %d, ctxPtr: %08x, roomId: %llu, memberId: %d, event: 0x%04x, errorCode: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_SIGNALING_EVENT).c_str(), handler->cb.ptr,
+		args[0], args[1], ((u64)args[2] | ((u64)args[3] << 32)), args[4], args[5], args[6], args[7]);
 
 	npMatching2Events.push_back(NpMatching2Args(*handler, 8, args, SCE_NP_MATCHING2_SIGNALING_EVENT));
 
