@@ -460,7 +460,7 @@ namespace net {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
-	int NPAgent::RequestSignalingInfo(std::string npid, u32 conn_id) {
+	int NPAgent::RequestSignalingInfo(std::string npid, u32 conn_id, bool isNetInfo) {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}

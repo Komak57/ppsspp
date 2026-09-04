@@ -1869,11 +1869,13 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
  * @return 0; or System Error
  * @note This might request the information from the target player, rather than providing what it knows
  */
-static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 conn_id, u32 room_id_lower, u32 room_id_upper, u32 peer_id, u32 unknown1)
+static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 conn_id, u32 room_id_lower, u32 room_id_upper, u32 peer_id, u32 assignedReqIdPtr)
 {
-	SceNpMatching2RoomId room_id = (u64)room_id_lower | (u64)room_id_upper >> 32;
-	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, room_id, peer_id, currentMIPS->pc);
-
+	SceNpMatching2RoomId room_id = (u64)room_id_lower | ((u64)room_id_upper << 32);
+	ERROR_LOG(Log::sceNp2, "UNTESTED %s(%i, %d, %llu, %d, %08x[%d]) at %08x", __FUNCTION__, ctxId, conn_id, room_id, peer_id, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	int v = sceKernelCheckThreadStack();
+	if (0xfdf >= v)
+		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
 	// ThreadStart
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED, "NpMatching2 Not Initialized");
@@ -1882,16 +1884,30 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 conn_id, u32 roo
 	if (_context == ctx.end())
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND, "Invalid Context");
 
-	auto member_exists = npServer->cache.Exists(room_id, peer_id);
-	if (!member_exists)
-		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
-	auto connId = sigServer->get_conn_id_from_npid(npServer->cache.GetNpId(room_id, peer_id));
-	if (!connId)
-		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_CONNID_NOT_AVAILABLE, "ConnId Not Found"); ;
-	auto si = sigServer->get_sig_infos(*connId);
-	if (!si)
-		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_NETINFO_NOT_AVAILABLE, "SigInfo Not Available"); ;
+	SceNpMatching2RoomMemberId memberId = peer_id & 0xffff;
 
+	if (!Memory::IsValidAddress(assignedReqIdPtr))
+		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "assignedReqIdPtr NullPtr");
+
+	// The peer must be a known room member so we can resolve their NpId. The firmware
+	// offloads this to the server; RPCN's RequestSignalingInfo needs the NpId locally.
+	if (!npServer->cache.Exists(room_id, memberId))
+		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
+
+	auto npid = npServer->cache.GetNpId(room_id, memberId);
+
+	// Resolve (creating if needed) the internal signaling conn_id for this peer and set its
+	// room_id/member_id. This conn_id is the handle handed back to the game as its request
+	// id, and the key used to look the peer up again in GetPeerNetInfoResult.
+	// NOTE: conn_id is NOT the memberId - sig_peers is keyed by an internal counter, and
+	// connect()/get_sig_infos() call sig_peers.at(conn_id), which would throw for a memberId.
+	u32 connId = sigServer->init_sig(npid, room_id, memberId);
+
+	// Kick off the async net-info request. isNetInfo=true routes the reply through the
+	// NetinfoResult signaling event, prompting the game to call GetPeerNetInfoResult.
+	npServer->RequestSignalingInfo(npid.ToString(), connId, true);
+
+	Memory::Write_U32(connId, assignedReqIdPtr);
 	return SCE_NP_MATCHING2_OKAY;
 }
 

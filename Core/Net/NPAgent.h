@@ -542,7 +542,7 @@ namespace net {
 		virtual int SendRoomMessage(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SendRoomMessageRequest* req);
 		virtual int SetUserInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2SetUserInfoRequest* req);
 		virtual int PingRoomOwner(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2RoomId room_id);
-		virtual int RequestSignalingInfo(std::string npid, u32 conn_id);
+		virtual int RequestSignalingInfo(std::string npid, u32 conn_id, bool isNetInfo = false);
 
 		virtual void start_read_thread() = 0;
 		virtual void stop_read_thread() = 0;
@@ -591,7 +591,7 @@ namespace net {
 		int GetServers(SceNpCommunicationId npTitleId) override;
 
 		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) override;
-		int RequestSignalingInfo(std::string npid, u32 conn_id) override;
+		int RequestSignalingInfo(std::string npid, u32 conn_id, bool isNetInfo = false) override;
 		int SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) override;
 		int CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) override;
 
@@ -616,7 +616,7 @@ namespace net {
 
 		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) override;
 		int GetWorldInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
-		int RequestSignalingInfo(std::string npid, u32 conn_id) override;
+		int RequestSignalingInfo(std::string npid, u32 conn_id, bool isNetInfo = false) override;
 		int RequestSignalingInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId conn_id, RPCNResponse resp);
 		int SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) override;
 		int SearchRoom_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);

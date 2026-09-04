@@ -677,12 +677,12 @@ namespace net {
 
 		return notifyRequestHandler(ctxId, reqId, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, SCE_NP_MATCHING2_OKAY, response.ptr);
 	}
-	int RPCNAgent::RequestSignalingInfo(std::string npid, u32 conn_id) {
+	int RPCNAgent::RequestSignalingInfo(std::string npid, u32 conn_id, bool isNetInfo) {
 		Packet packet = Packet();
 		packet.Write(npid);
 		packet.Write((u8)0);
 
-		auto reqId = generate_uid(1, conn_id);
+		auto reqId = generate_uid((isNetInfo? 1: 0), conn_id);
 		packet.Pack(CommandType::RequestSignalingInfos, reqId);
 
 		INFO_LOG(Log::Matching, "Requesting Signaling Info for %s", npid.c_str());
@@ -703,6 +703,12 @@ namespace net {
 		case ErrorType::NotFound:
 		{
 			ERROR_LOG(Log::Matching, "Signaling information was requested for a user that doesn't exist or is not online");
+			// Still deliver a NetinfoResult so a pending GetPeerNetInfo doesn't hang on an
+			// offline/absent peer; GetPeerNetInfoResult then surfaces the failure to the game.
+			if (ctxId == 1) {
+				if (auto si = sigServer->get_sig_infos(conn_id))
+					notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND);
+			}
 			return SCE_NP_MATCHING2_SIGNALING_ERROR_MATCHING2_PEER_NOT_FOUND;
 		}
 		default:
@@ -726,6 +732,18 @@ namespace net {
 			port = SCE_INTERNAL_PORT;*/
 
 		sigServer->connect(conn_id, addr, port);
+
+		// ctxId here is the isNetInfo gate packed into the high uid slot by
+		// RequestSignalingInfo (1 = request originated from sceNpMatching2SignalingGetPeerNetInfo).
+		// Fire NetinfoResult so the game reads the info back via GetPeerNetInfoResult(conn_id).
+		// room_id/member_id/conn_status come from the peer's si (keyed by conn_id).
+		if (ctxId == 1) {
+			if (auto si = sigServer->get_sig_infos(conn_id))
+				notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult, SCE_NP_MATCHING2_OKAY);
+			else
+				ERROR_LOG(Log::Matching, "NetinfoResult requested for unknown conn_id %u", conn_id);
+		}
+
 		return SCE_NP_MATCHING2_OKAY;
 	}
 	int RPCNAgent::SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) {

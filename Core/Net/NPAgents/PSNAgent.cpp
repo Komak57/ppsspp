@@ -396,7 +396,7 @@ namespace net {
 		return 0;
 	}
 
-	int PSNAgent::RequestSignalingInfo(std::string npid, u32 conn_id) {
+	int PSNAgent::RequestSignalingInfo(std::string npid, u32 conn_id, bool isNetInfo) {
 		return 0;
 	}
 
