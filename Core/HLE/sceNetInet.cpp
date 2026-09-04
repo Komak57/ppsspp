@@ -864,6 +864,25 @@ static int sceNetInetBind(int socket, u32 namePtr, int namelen)
 	}
 
 	SceNetInetSockaddr *name = (SceNetInetSockaddr *)Memory::GetPointer(namePtr);
+
+	// Port 3658 (SCE_SIGN_PORT) is the P2P/signaling convention port. On real hardware it's a
+	// kernel-level hijack that any number of sockets share via vports; here that means multiple
+	// real host sockets must bind the same port, so 3658 must ALWAYS be reusable. Apply this to
+	// ANY socket binding 3658 - a game re-binding a port it already owns just to probe whether
+	// it's taken would be an absurd counter-measure to something the SDK made impossible.
+	if (name && inetSock->sock != INVALID_SOCKET) {
+		SockAddrIN4 baddr{};
+		baddr.addr.sa_family = name->sa_family;
+		memcpy(baddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
+		if (ntohs(baddr.in.sin_port) == SCE_SIGN_PORT) {
+			int reuse = 1;
+#if defined(SO_REUSEPORT)
+			::setsockopt(inetSock->sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse));
+#endif
+			::setsockopt(inetSock->sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
+		}
+	}
+
 	int retval = inetSock->bind(name, namelen);
 	// retval = bind(inetSock->sock, (struct sockaddr*)&saddr, len);
 	if (retval < 0)
