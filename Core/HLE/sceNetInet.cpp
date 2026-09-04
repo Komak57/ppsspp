@@ -736,9 +736,9 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 
 	if (!inetSock->nonblocking) {
 		if (!(flags & PSP_NET_INET_MSG_DONTWAIT))
-			WARN_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
+			WARN_LOG(Log::sceNet, "%s: BLOCKING send on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
 		else
-			NOTICE_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - flagged as MSG_DONTWAIT", __FUNCTION__, socket);
+			NOTICE_LOG(Log::sceNet, "%s: BLOCKING send on socket #%d - flagged as MSG_DONTWAIT", __FUNCTION__, socket);
 	}
 	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetSend");
@@ -1208,11 +1208,8 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 	inetSock->threadID = __KernelGetCurThread();
 	inetSock->opDone.store(false, std::memory_order_relaxed);
 
-	if (!inetSock->nonblocking) {
-		if (!(flags & PSP_NET_INET_MSG_DONTWAIT))
-			WARN_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
-		else
-			NOTICE_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - flagged as MSG_DONTWAIT", __FUNCTION__, socket);
+	if (!inetSock->nonblocking && !(flags & PSP_NET_INET_MSG_DONTWAIT)) {
+		WARN_LOG(Log::sceNet, "%s: BLOCKING recvfrom on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
 	}
 	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetRecvfrom");
@@ -1294,11 +1291,8 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 	inetSock->threadID = __KernelGetCurThread();
 	inetSock->opDone.store(false, std::memory_order_relaxed);
 
-	if (!inetSock->nonblocking) {
-		if (!(flags & PSP_NET_INET_MSG_DONTWAIT))
-			WARN_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
-		else
-			NOTICE_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - flagged as MSG_DONTWAIT", __FUNCTION__, socket);
+	if (!inetSock->nonblocking && !(flags & PSP_NET_INET_MSG_DONTWAIT)) {
+		WARN_LOG(Log::sceNet, "%s: BLOCKING sendto on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
 	}
 	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetSendto");
