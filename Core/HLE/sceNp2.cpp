@@ -1840,7 +1840,7 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	if (netInfo->size != 0x18) {
 		if (netInfo->size != 0x1c)
 			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_OPT_SIZE, "Invalid Size");
-		netInfo->port = htons(sigServer->GetSigPort());
+		netInfo->port = sigServer->GetSigPort();
 	}
 	if (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE) {
 		netInfo->natStatus = sigServer->nat_type.load();
@@ -1856,7 +1856,7 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 		netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
 
 	// Not actually set in the official firmware
-	// netInfo->localAddr = sigServer->GetLocalAddr();	// Local  IP
+	netInfo->localAddr = sigServer->GetLocalAddr();	// Local  IP
 
 	return SCE_NP_MATCHING2_OKAY;
 }
