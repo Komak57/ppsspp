@@ -310,7 +310,13 @@ namespace net {
 		std::vector<SignalingMessage> sign_msgs{};
 
 		std::map<std::chrono::steady_clock::time_point, queued_packet> qpackets;
-		
+
+		// Event flag the Echo thread signals when a signaling packet arrives (or a queued
+		// retransmit comes due), so the Main thread wakes immediately instead of riding out a
+		// fixed poll - mirrors the OFW SceNpSignalingMain_thread blocking on its MsgPipe.
+		// -1 until lazily created on the Main thread's first tick.
+		int sigWakeEvent = -1;
+
 		std::mutex sig_mutex;
 		std::chrono::steady_clock::time_point last_ping_time_ipv4{}, last_pong_time_ipv4{};
 		std::chrono::steady_clock::time_point last_ping_time_ipv6{}, last_pong_time_ipv6{};

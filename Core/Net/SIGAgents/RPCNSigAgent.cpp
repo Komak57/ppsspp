@@ -4,6 +4,7 @@
 #include <Core/HLE/proAdhoc.h>
 #include <Core/HLE/sceNp.h>
 #include <Core/HLE/sceNp2.h>
+#include <Core/HLE/sceKernelEventFlag.h>
 #include <Core/Net/fb_helpers.h>
 #include <Core/Debugger/Np2Printer.h>
 #include "Common/System/OSD.h"
@@ -49,6 +50,10 @@ namespace net {
         P2P_SUBSET_SOCK->shutdown(SHUT_RDWR);
         UPNP_SUBSET_SOCK->shutdown(SHUT_RDWR);
         // g_socketManager.Close(UPNP_SUBSET_SOCK);
+        if (sigWakeEvent >= 0) {
+            sceKernelDeleteEventFlag(sigWakeEvent);
+            sigWakeEvent = -1;
+        }
     }
     
     RPCNSigAgent::RPCNSigAgent() {
@@ -136,7 +141,12 @@ namespace net {
     }
 
     int RPCNSigAgent::MainThreadTick(BlockAllocator* signaling_memory) {
-	    HandleP2PPacket(); 
+        // Lazily create the wake event flag on this (kernel) thread. Only the Main thread waits
+        // on it; the Echo thread signals it. Bit 0 = "work pending".
+        if (sigWakeEvent < 0)
+            sigWakeEvent = sceKernelCreateEventFlag("SceNpSignalingWake", 0, 0, 0);
+
+	    HandleP2PPacket();
 
         const auto now = std::chrono::steady_clock::now();
 
@@ -214,32 +224,15 @@ namespace net {
             reschedule_packet(si, cmd, now + delay);
         }
 
-        // TODO: Sleep until next queued packet, or next packet received
-        const auto current_timestamp = std::chrono::steady_clock::now();
-        if (!qpackets.empty())
-        {
-            const auto next_timestamp = qpackets.begin()->first;
-            if (current_timestamp > next_timestamp)
-            {
-                return 0;
-            } else {
-                // set thread wait duration to nanoseconds until next queued packet
-                auto _delay = std::chrono::duration_cast<std::chrono::microseconds>(next_timestamp - current_timestamp);
-                if (_delay > REPEAT_PING_DELAY)
-                    hleCall(ThreadManForUser, int, sceKernelDelayThread, std::chrono::duration_cast<std::chrono::microseconds>(REPEAT_PING_DELAY).count());
-                else
-                    hleCall(ThreadManForUser, int, sceKernelDelayThread, _delay.count());
-                return 0;
-            }
-        }
-        else {
-            // set thread wait duration to infinity
-            if (sig_peers.size() > 0)
-                hleCall(ThreadManForUser, int, sceKernelDelayThread, std::chrono::duration_cast<std::chrono::microseconds>(REPEAT_PING_DELAY).count());
-            else
-                hleCall(ThreadManForUser, int, sceKernelDelayThread, std::chrono::duration_cast<std::chrono::microseconds>(10s).count());
-            return 0;
-        }
+        // Mirror the OFW SceNpSignalingMain_thread lifecycle: block until the Echo thread
+        // signals a packet arrived (sceKernelSetEventFlag) or a queued retransmit came due,
+        // instead of riding out a fixed sleep. WAITOR|WAITCLEAR consumes the wake bit; timeout
+        // 0 => wait indefinitely (the Echo thread's fast poll is what bounds retransmit latency).
+        if (sigWakeEvent >= 0)
+            hleCall(ThreadManForUser, int, sceKernelWaitEventFlag, sigWakeEvent, 1u,
+                    (u32)(PSP_EVENT_WAITOR | PSP_EVENT_WAITCLEAR), 0u, 0u);
+        else
+            hleCall(ThreadManForUser, int, sceKernelDelayThread, 2000);
 
 	    // // WARN_LOG(Log::Signaling, "UNTESTED %s()", __FUNCTION__);
         // // TODO: Check for ping/pong/timeout?
@@ -309,12 +302,24 @@ namespace net {
                 sign_msgs.push_back(std::move(msg));
             }
             sign_msg_cv.notify_all();
-            if (signalingThreadId > 0)
-                __KernelResumeThreadFromWait(signalingThreadId, 0);
+            // Wake the Main thread immediately (replaces the fragile resume-from-delay hack).
+            if (sigWakeEvent >= 0)
+                sceKernelSetEventFlag(sigWakeEvent, 1);
         }
-        // Process all NAT messages
-        // auto wait_us = ProcessUPnPMessages().count();
-        hleCall(ThreadManForUser, int, sceKernelDelayThread, 100000);
+
+        // Also wake Main when a queued retransmit is due (it otherwise blocks until a packet
+        // arrives). Safe without a lock: HLE threads run cooperatively - neither this nor the
+        // Main thread is preempted between here and the next sceKernel* yield.
+        if (sigWakeEvent >= 0 && !qpackets.empty() && qpackets.begin()->first <= std::chrono::steady_clock::now())
+            sceKernelSetEventFlag(sigWakeEvent, 1);
+
+        // Poll fast while any peer is still handshaking so CONNECT/ACK/CONFIRM are picked up
+        // within ~1ms (LAN RTT is ~200us); relax to a lazy cadence once every peer is established.
+        bool handshaking = false;
+        for (auto& kv : sig_peers)
+            if (kv.second->conn_status == SCE_NP_SIGNALING_CONN_STATUS_PENDING) { handshaking = true; break; }
+
+        hleCall(ThreadManForUser, int, sceKernelDelayThread, handshaking ? 1000 : 100000);
         return 0;
     }
     
@@ -1177,6 +1182,10 @@ namespace net {
         {
             si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
             si->sig_status = SCE_NP_SIGNALING_EVENT_DEAD;
+            // Clear the mutual-activation flag too, otherwise a stale op_activated wedges the
+            // next establishment: update_si_status would compute last==now==MUTUAL and never
+            // re-fire Established, producing a join/leave loop on rejoin.
+            si->op_activated = false;
 
             notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, error_code);
             retire_all_packets(si);
