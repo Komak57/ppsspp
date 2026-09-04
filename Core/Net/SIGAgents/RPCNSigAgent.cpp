@@ -1387,6 +1387,9 @@ namespace net {
         //if (conn_id) {
         //	//stop_sig(conn_id.value(), false);
         //}
+        // Enqueue the room MemberLeft event BEFORE tearing down signaling.
+        int room_event_result = notifyRoomEventHandler(room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, notif_data.ptr);
+
         auto conn_id = get_conn_id_from_npid(notif_data->roomMemberDataInternal->userInfo.npId);
         if (conn_id) {
             auto si = sig_peers.at(conn_id.value());
@@ -1398,7 +1401,7 @@ namespace net {
 
         //extra_nps::print_SceNpMatching2RoomMemberDataInternal(notif_data->roomMemberDataInternal.get_ptr());
 
-        return notifyRoomEventHandler(room_id, notif_data->roomMemberDataInternal->memberId, SCE_NP_MATCHING2_ROOM_EVENT_MemberLeft, notif_data.ptr);
+        return room_event_result;
     }
 
     int RPCNSigAgent::RoomDestroyed(net::RPCNResponse resp) {
