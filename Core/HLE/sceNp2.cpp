@@ -1918,7 +1918,7 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 conn_id, u32 roo
  */
 static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingReqIdPtr, u32 netInfoPtr)
 {
-	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x[%08x], %08x) at %08x", __FUNCTION__, ctxId, signalingReqIdPtr, Memory::Read_U32(signalingReqIdPtr), netInfoPtr, currentMIPS->pc);
+	DEBUG_LOG(Log::sceNp2, "%s(%d, %08x[%08x], %08x) at %08x", __FUNCTION__, ctxId, signalingReqIdPtr, Memory::Read_U32(signalingReqIdPtr), netInfoPtr, currentMIPS->pc);
 
 	// ThreadStart
 	if (!npMatching2Inited)
@@ -1936,27 +1936,27 @@ static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingR
 
 	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
 
-	//auto member_exists = npServer->cache.Exists(room_id, roomMemberId);
-	//if (!member_exists)
-	//	return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_ROOM_MEMBER_NOT_FOUND, "Member Not Found");
-	//auto connId = sigServer->get_conn_id_from_npid(npServer->cache.GetNpId(room_id, roomMemberId));
-	//if (!connId)
-	//	return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_CONNID_NOT_AVAILABLE, "ConnId Not Found"); ;
-	//auto si = sigServer->get_sig_infos(*connId);
-	//if (!si)
-	//	return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_NETINFO_NOT_AVAILABLE, "SigInfo Not Available"); ;
+	// The request id handed back by GetPeerNetInfo is the peer's internal conn_id.
+	u32 conn_id = Memory::Read_U32(signalingReqIdPtr);
 
-	//// FIXME: Use npServer->local_addr_sig
-	//netInfo->localAddr = si->addr;
-	//netInfo->mappedAddr = si->mapped_addr;	// PublicIP
-	//// Pure speculation
-	////si->conn_status
-	//netInfo->natStatus = si->nat_type;
-	//// Unverified extra data?
-	//netInfo->UPnPStatus = SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID;
-	//netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-	//netInfo->port = htons(si->mapped_port);
+	auto si = sigServer->get_sig_infos(conn_id);
+	if (!si)
+		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SIGNALING_ERROR_NETINFO_NOT_AVAILABLE, "SigInfo Not Available");
 
+	// Firmware writes the port only when the caller-provided struct size is 0x1c (0x18 omits it)
+	if (netInfo->size != 0x18) {
+		if (netInfo->size != 0x1c)
+			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_OPT_SIZE, "Invalid Size");
+		netInfo->port = htons(si->mapped_port);
+	}
+
+	netInfo->localAddr = si->addr;			// Peer's NAT-bypass address
+	netInfo->mappedAddr = si->mapped_addr;	// Public address the peer sends from
+	netInfo->natStatus = si->nat_type;
+	netInfo->UPnPStatus = (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
+	netInfo->portStatus = (sigServer && sigServer->IsIntialized()) ? SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN : SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
+
+	DEBUG_LOG(Log::sceNp2, "%s(ctx=%d, reqId/connId=%u) -> mappedAddr=%08x port=%d nat=%d", __FUNCTION__, ctxId, conn_id, si->mapped_addr, si->mapped_port, si->nat_type);
 	return SCE_NP_MATCHING2_OKAY;
 }
 
