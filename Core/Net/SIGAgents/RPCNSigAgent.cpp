@@ -1022,7 +1022,12 @@ namespace net {
             si->nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3;
         }
 
-        notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
+        // Do NOT fire Established here: at this point the connection is only PENDING.
+        // Firing 0x5102 before mutual establishment makes the game believe the peer is
+        // reachable, poll GetConnectionStatus (still pending), and then receive a second
+        // Established once the CONFIRM actually lands. Established must only be signalled
+        // on the mutual-activated transition, which update_si_status / update_ext_si_status
+        // handle when the P2P handshake completes.
 
         return conn_id;
     }
