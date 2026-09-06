@@ -311,136 +311,75 @@ void SocketManager::NetworkDemultiplexer(int* timeout) {
 		// *timeout = (*timeout > elapsed) ? (*timeout - elapsed) : 0;
 		// if (!hadPacket) return;
 	}
-	std::vector<std::pair<VirtualPacket, VirtualSockAddr>> outbuf; // <packet, dst.virt.port>
-	// Process Each Local Once
+	// Retransmit any un-acked reliable packets. Every buffered VirtualPacket now carries its own
+	// src and dst (Send_Reliable / Shutdown_Reliable stamp pkt.dst), so delivery reads the packet,
+	// not the owning socket - which also lets a connectionless-reliable socket fan out to different
+	// peers per send. Local traffic no longer rides virtual sockets, so there is no loopback
+	// re-injection here; everything goes straight to the peer's real UDP endpoint (the game vport).
+	auto retransmit_buffer = [](InetSocket* owner) {
+		auto p2p_sock = g_socketManager.GetP2PSocket();
+		if (!p2p_sock)
+			return;
+		// Only the control packet matching the current handshake stage is retransmitted; a
+		// data (PSH) socket sits in Established/CloseWait, where expected_flag stays 0 (any).
+		uint8_t expected_flag = 0;
+		switch (owner->tcp_state) {
+			case TCPState::SynSent:			expected_flag = (p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP); break;
+			case TCPState::SynReceived:		expected_flag = (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP); break;
+			case TCPState::Disconnected:	expected_flag = (p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP); break;
+			default: break; // Established/Closed/etc. don't need control retransmit
+		}
+
+		std::lock_guard<std::mutex> buffer(owner->buffer_lock);
+		for (auto& [seq, pkt] : owner->tx_buffer) {
+			if (pkt.seq_ack)											// already acknowledged
+				continue;
+			if (expected_flag != 0 && pkt.header_flags != expected_flag)// wrong stage
+				continue;
+			if (pkt.sent_count > MAX_RETRIES)							// given up
+				continue;
+			u64 now_us = (u64)(time_now_d() * BASE_RTO_US);
+			if (now_us - pkt.last_sent_us < BASE_RTO_US)				// too soon
+				continue;
+
+			auto vpkt = pkt.clone();
+			std::string flags;
+			if (vpkt.header_flags & p2ps_tcp_flags::SYN) flags += "SYN|";
+			if (vpkt.header_flags & p2ps_tcp_flags::PSH) flags += "PSH|";
+			if (vpkt.header_flags & p2ps_tcp_flags::ACK) flags += "ACK|";
+			if (vpkt.header_flags & p2ps_tcp_flags::FIN) flags += "FIN|";
+			if (vpkt.header_flags & p2ps_tcp_flags::RST) flags += "RST|";
+			if (vpkt.header_flags & p2ps_tcp_flags::TCP) flags += "TCP|";
+			if (!flags.empty()) flags.pop_back(); // strip trailing '|'
+
+			WARN_LOG(Log::sceNet, "NetworkDemultiplexer: Re-Sending %s from %s:%u|%u to %s:%u|%u",
+				flags.c_str(), inet_ntoa(vpkt.src.virt.addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport),
+				ip2str(vpkt.dst.virt.addr).c_str(), ntohs(vpkt.dst.virt.port), ntohs(vpkt.dst.virt.vport));
+
+			auto [_len, _data] = vpkt.Pack(vpkt.dst);
+			// Physical delivery goes to the peer's real UDP endpoint (the game vport).
+			sockaddr_in phys = vpkt.dst.host;
+			phys.sin_port = vpkt.dst.virt.vport;
+			int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
+			if (ret < 0)
+				ERROR_LOG(Log::sceNet, "NetworkDemultiplexer: retransmit sendto failed");
+			else
+				pkt.last_sent_us = now_us;
+			pkt.sent_count++;
+		}
+	};
+
+	// Reliable sockets (the function pointer, not the type, marks them) drive retransmission for
+	// their own tx_buffer plus every pending (half-open) connection they are still handshaking.
 	for (int i = MIN_VALID_INET_SOCKET; i < VALID_INET_SOCKET_COUNT; i++) {
 		InetSocket* s = &inetSockets_[i];
-		if (s->state != SocketState::Unused && s->type == PSP_NET_INET_SOCK_PACKET) {
-
-			uint8_t expected_flag = 0;
-			switch (s->tcp_state) {
-				case TCPState::SynSent:			expected_flag = (p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP); break;
-				case TCPState::SynReceived:		expected_flag = (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP); break;
-				case TCPState::Disconnected:	expected_flag = (p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP); break;
-				default: break; // Established/Closed/etc. don't need control retransmit
-			}
-
-			// Find all sent packets
-    		std::lock_guard<std::mutex> buffer(s->buffer_lock);
-			for (auto& [seq, pkt] : s->tx_buffer) {
-				// Skip if we've already received a response
-				if (pkt.seq_ack)
-					continue;
-				// We're waiting for control packets
-				if (expected_flag != 0 && pkt.header_flags != expected_flag)
-					continue;
-				// We're just not getting a response
-				if (pkt.sent_count > MAX_RETRIES)
-					continue;
-				// Skip if it's too soon
-				u64 now_us = (u64)(time_now_d() * BASE_RTO_US);
-				if (now_us - pkt.last_sent_us < BASE_RTO_US)
-					continue;
-
-				auto vpkt = pkt.clone();
-				std::string flags;
-				if (vpkt.header_flags & p2ps_tcp_flags::SYN) flags += "SYN|";
-				if (vpkt.header_flags & p2ps_tcp_flags::PSH) flags += "PSH|";
-				if (vpkt.header_flags & p2ps_tcp_flags::ACK) flags += "ACK|";
-				if (vpkt.header_flags & p2ps_tcp_flags::FIN) flags += "FIN|";
-				if (vpkt.header_flags & p2ps_tcp_flags::RST) flags += "RST|";
-				if (vpkt.header_flags & p2ps_tcp_flags::TCP) flags += "TCP|";
-				if (!flags.empty()) flags.pop_back(); // strip trailing '|'
-
-				WARN_LOG(Log::sceNet, "NetworkDemultiplexer: Re-Sending %s at listening socket from %s:%u|%u to %s:%u|%u",
-					flags.c_str(), inet_ntoa(pkt.src.virt.addr), ntohs(pkt.src.virt.port), ntohs(pkt.src.virt.vport), ip2str(s->dst.virt.addr).c_str(), ntohs(s->dst.virt.port), ntohs(s->dst.virt.vport));
-				if (isLocalTarget(s->dst.virt.addr.s_addr)) {
-					outbuf.push_back({std::move(vpkt), s->dst});
-					// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-					// g_socketManager.vBroadcast(std::move(vpkt), htons(s->dst.virt.vport));
-					pkt.last_sent_us = now_us;
-					pkt.sent_count++;
-				} else {
-					auto [_len, _data] = vpkt.Pack(s->dst);
-					auto p2p_sock = g_socketManager.GetP2PSocket();
-					// Physical delivery goes to the peer's real UDP endpoint (game vport)
-					sockaddr_in phys = s->dst.host;
-					phys.sin_port = s->dst.virt.vport;
-					int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
-					if (ret < 0) {
-						ERROR_LOG(Log::sceNet, "NetworkDemultiplexer connect: Failed to send ACK");
-					} else {
-						pkt.last_sent_us = now_us;
-					}
-					pkt.sent_count++;
-				}
-			}
-			std::lock_guard<std::mutex> connections(s->conn_lock);
-			for (auto conn : s->pending_connections) {
-				uint8_t expected_flag = 0;
-				switch (conn->tcp_state) {
-					case TCPState::SynSent:			expected_flag = (p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP); break;
-					case TCPState::SynReceived:		expected_flag = (p2ps_tcp_flags::SYN|p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP); break;
-					case TCPState::Disconnected:	expected_flag = (p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP); break;
-					default: break; // Established/Closed/etc. don't need control retransmit
-				}
-
-				// Find all sent packets
-				std::lock_guard<std::mutex> buffers(conn->buffer_lock);
-				for (auto& [seq, pkt] : conn->tx_buffer) {
-					// Skip if we've already received a response
-					if (pkt.seq_ack)
-						continue;
-					// We're waiting for control packets
-					if (expected_flag != 0 && pkt.header_flags != expected_flag)
-						continue;
-					// We're just not getting a response
-					if (pkt.sent_count > MAX_RETRIES)
-						continue;
-					// Skip if it's too soon
-					u64 now_us = (u64)(time_now_d() * BASE_RTO_US);
-					if (now_us - pkt.last_sent_us < BASE_RTO_US)
-						continue;
-
-					auto vpkt = pkt.clone();
-					std::string flags;
-					if (vpkt.header_flags & p2ps_tcp_flags::SYN) flags += "SYN|";
-					if (vpkt.header_flags & p2ps_tcp_flags::PSH) flags += "PSH|";
-					if (vpkt.header_flags & p2ps_tcp_flags::ACK) flags += "ACK|";
-					if (vpkt.header_flags & p2ps_tcp_flags::FIN) flags += "FIN|";
-					if (vpkt.header_flags & p2ps_tcp_flags::RST) flags += "RST|";
-					if (vpkt.header_flags & p2ps_tcp_flags::TCP) flags += "TCP|";
-					if (!flags.empty()) flags.pop_back(); // strip trailing '|'
-
-					WARN_LOG(Log::sceNet, "NetworkDemultiplexer: Re-Sending %s at listening socket from %s:%u|%u to %s:%u|%u",
-						flags.c_str(), inet_ntoa(pkt.src.virt.addr), ntohs(pkt.src.virt.port), ntohs(pkt.src.virt.vport), ip2str(conn->dst.virt.addr).c_str(), ntohs(conn->dst.virt.port), ntohs(conn->dst.virt.vport));
-					if (isLocalTarget(conn->dst.virt.addr.s_addr)) {
-						outbuf.push_back({std::move(vpkt), conn->dst});
-						// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-						// g_socketManager.vBroadcast(std::move(vpkt), htons(conn->dst.virt.vport));
-						pkt.last_sent_us = now_us;
-						pkt.sent_count++;
-					} else {
-						auto [_len, _data] = vpkt.Pack(conn->dst);
-						auto p2p_sock = g_socketManager.GetP2PSocket();
-						// Physical delivery goes to the peer's real UDP endpoint (game vport)
-						sockaddr_in phys = conn->dst.host;
-						phys.sin_port = conn->dst.virt.vport;
-						int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
-						if (ret < 0) {
-							ERROR_LOG(Log::sceNet, "NetworkDemultiplexer connect: Failed to send ACK");
-						} else {
-							pkt.last_sent_us = now_us;
-						}
-						pkt.sent_count++;
-					}
-				}
-			}
-		}
+		if (s->state == SocketState::Unused || s->sendP2P != &InetSocket::Send_Reliable)
+			continue;
+		retransmit_buffer(s);
+		std::lock_guard<std::mutex> connections(s->conn_lock);
+		for (auto conn : s->pending_connections)
+			retransmit_buffer(conn);
 	}
-	for (auto& [vpkt, dest] : outbuf) {
-        g_socketManager.vBroadcast(std::move(vpkt), dest);
-    }
 }
 
 bool SocketManager::P2PRecv() {
