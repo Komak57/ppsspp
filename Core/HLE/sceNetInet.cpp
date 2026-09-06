@@ -745,10 +745,19 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetSend");
 	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
 
+	const bool routeP2P = inetSock->sendP2P
+		&& sceNpSignalingIsPeerAddress(inetSock->dst.virt.addr.s_addr);
+
 	// Run the actual sendRequest on the host asynchronously
-	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval]() mutable
+	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval, routeP2P]() mutable
 	{
-		retval = inetSock->send((char*)Memory::GetPointer(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
+		if (routeP2P) {
+			// sendP2P's `flags` param means MSG socket flags for Send_Unreliable but wire protocol
+			// flags for Send_Reliable - only the latter wants the PSH|TCP constant here.
+			const bool isReliable = inetSock->sendP2P == &InetSocket::Send_Reliable;
+			retval = (inetSock->*(inetSock->sendP2P))((char*)Memory::GetPointer(bufPtr), bufLen, flags, nullptr, 0);
+		} else
+			retval = inetSock->send((char*)Memory::GetPointer(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
 			return;
