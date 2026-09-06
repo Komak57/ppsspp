@@ -1676,7 +1676,7 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
         }
     }
 
-	return hadData;
+	return true;
 }
 
 // Close a virtual socket
