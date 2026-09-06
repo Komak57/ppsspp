@@ -364,6 +364,7 @@ struct InetSocket {
 	virtual int Recv_Reliable(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen);
 	virtual int Connect_Reliable(SceNetInetSockaddr* name, int namelen);
 	virtual int Accept_Reliable(sockaddr* addr, socklen_t* addrlen);
+	virtual int Shutdown_Reliable(int how);
 	// Process P2P as UDP
 	virtual int Send_Unreliable(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen);
 

@@ -1468,6 +1468,40 @@ int InetSocket::Accept_Reliable(sockaddr* addr, socklen_t* addrlen) {
 	remove_pending_connection(pending_conn);
 	return new_socket_idx;
 }
+int InetSocket::Shutdown_Reliable(int how) {
+	auto p2p_sock = g_socketManager.GetP2PSocket();
+	if (!p2p_sock || (tcp_state != TCPState::Established && tcp_state != TCPState::SynReceived))
+		return ::shutdown(sock, how); // not a live virtual connection - nothing to tear down
+
+	tcp_state = TCPState::Disconnected;
+	g_socketManager.exhaustEphemeralPort(ntohs(src.virt.vport));
+
+	VirtualPacket vpkt;
+	vpkt.len = 0;
+	vpkt.header_flags = p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP;
+	vpkt.sockType = (u8)type;
+	vpkt.src.host = src.host;
+	vpkt.src.virt.port = src.virt.port;
+	vpkt.src.virt.vport = src.virt.vport;
+	vpkt.dst = dst;  // the retransmit loop delivers to the packet's own dst
+	vpkt.seq_id = tx_seq + 1;
+	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
+	auto send_pkt = vpkt.clone();
+	{
+		std::lock_guard<std::mutex> lock(buffer_lock);
+		tx_buffer[tx_seq + 1] = vpkt.clone();
+	}
+	auto [_len, _data] = send_pkt.Pack(dst);
+	// Physical delivery goes to the peer's real UDP endpoint (the game vport, 3658) - dst.host's
+	// sin_port aliases dst.virt.port (the destination GAME port, e.g. 12000), which nothing is
+	// physically listening on. Mirrors Send_Reliable's phys construction.
+	sockaddr_in phys = dst.host;
+	phys.sin_port = dst.virt.vport;
+	int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
+	if (ret < 0)
+		ERROR_LOG(Log::sceNet, "shutdown::RELIABLE: Failed to send FIN");
+	return ::shutdown(sock, how);
+}
     const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
     u64 current_time_us = (u64)(time_now_d() * 1000000.0);
 
@@ -2636,54 +2670,10 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 		return ret;
 	return ret;
 }
-int PacketSocket::shutdown(int how) { 
-	INFO_LOG(Log::sceNet, "SOCK_PACKET::shutdown(how=%d): state=%d", how, (int)tcp_state);
-	int ret = -1;
-
-	if (isLocalTarget(dst.virt.addr.s_addr)) {
-		tcp_state = TCPState::Disconnected;
-		return ::shutdown(sock, how);
-	}
-
-	// Get DCCP socket for sending FIN
-	auto p2p_sock = g_socketManager.GetP2PSocket();
-	if (p2p_sock) {
-		// Only allow shutdown if connected
-		if (tcp_state != TCPState::Established && tcp_state != TCPState::SynReceived) {
-			INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Socket not connected (state=%d)", (int)tcp_state);
-			return ::shutdown(sock, how);  // Silently ignore if not connected
-		}
-
-		// Transition to disconnected
-		tcp_state = TCPState::Disconnected;
-		g_socketManager.exhaustEphemeralPort(ntohs(src.virt.vport));
-	
-		// Create the transmission vpacket
-		VirtualPacket vpkt;
-		vpkt.len = 0;
-		vpkt.header_flags = p2ps_tcp_flags::FIN|p2ps_tcp_flags::TCP;
-		vpkt.src.host = src.host;
-		vpkt.seq_id = tx_seq+1;
-		// Add timestamp for TTL tracking
-		vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
-
-		auto send_pkt = vpkt.clone();
-		{
-			// Add to transmit buffer
-			std::lock_guard<std::mutex> lock(buffer_lock);
-			// Place at end
-			tx_buffer[tx_seq+1] = std::move(vpkt.clone());
-		}
-
-		INFO_LOG(Log::sceNet, "SOCK_PACKET shutdown: Sending FIN from port %d to %d", htons(src.virt.vport), htons(dst.virt.vport));
-
-		auto [_len, _data] = send_pkt.Pack(dst);
-		ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst.host, sizeof(sockaddr_in));
-		if (ret < 0) {
-			ERROR_LOG(Log::sceNet, "SOCK_PACKET shutdown: Failed to send FIN");
-			// return -1; // Let it shut down the socket anyways
-		}
-	}
-	
+int PacketSocket::shutdown(int how) {
+	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
+	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
+	INFO_LOG(Log::sceNet, "shutdown::PacketSocket(how=%d): state=%d (real)", how, (int)tcp_state);
+	tcp_state = TCPState::Disconnected;
 	return ::shutdown(sock, how);
 }
