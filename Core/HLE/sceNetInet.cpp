@@ -1266,8 +1266,16 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 		SceNetInetSockaddr *src = (SceNetInetSockaddr *)Memory::GetCharPointer(fromPtr);
 		socklen_t *srclen = (socklen_t *)Memory::GetCharPointer(fromlenPtr);
 
-		// TODO: threaded recvfrom?
-		retval = inetSock->recvfrom((char *)Memory::GetPointer(bufferPtr), len, flags, src, srclen);
+		// P2P-capable sockets (recvP2P set) drain the virtual relay queue (falling back to the
+		// host fd inside Recv_*); a plain socket uses the host recvfrom. NOTE: the plain path must
+		// remain reachable while signaling runs - server/DNS sockets have no recvP2P and previously
+		// fell through with no recv at all (retval stuck at -1).
+		const bool routeP2P = inetSock->has_pending_data() && inetSock->recvP2P;
+		NOTICE_LOG(Log::sceNet, "sceNetInetRecvfrom taking the %s route.", (routeP2P? "Hybrid" : "Raw"));
+		if (routeP2P)
+			retval = (inetSock->*(inetSock->recvP2P))((char *)Memory::GetPointer(bufferPtr), len, flags, src, srclen);
+		else
+			retval = inetSock->recvfrom((char *)Memory::GetPointer(bufferPtr), len, flags, src, srclen);
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
 			return;
