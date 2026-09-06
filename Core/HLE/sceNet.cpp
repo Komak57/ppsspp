@@ -1860,7 +1860,7 @@ static int sceNetUpnpInit(int size,int offset) {
 		bool ok = g_PortManager.Add("UDP", SCE_SIGN_PORT, SCE_SIGN_PORT);
 
 	sigServer = InitSigAgent((net::NPAgentType)g_Config.proInfraServerType);
-	if (!sigServer || !sigServer->IsIntialized())
+	if (!sigServer || !sigServer->IsInitialized())
 		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND, "UPnP Signaling agent could not be started");
 
 	SceNetUpnpThreadID = __KernelCreateThread("SceNetUpnpThread", __KernelGetCurThreadModuleId(), SceNetUpnpThreadHackAddr, offset, size, PSP_THREAD_ATTR_USER, 0, true);

@@ -33,7 +33,7 @@ namespace net {
 		// virtual void ProcessP2PMessages(PSPPointer<PipePacket> packet);
 
 		bool IsRunning();
-		bool IsIntialized();
+		bool IsInitialized();
 
 		// Returns Local Address in Network Order
 		u32 GetLocalAddr();

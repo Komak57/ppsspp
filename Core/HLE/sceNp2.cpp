@@ -1850,7 +1850,7 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 		netInfo->mappedAddr = 0xffffffff;		// Public IP
 	}
 	netInfo->UPnPStatus = (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
-	if (sigServer && sigServer->IsIntialized())
+	if (sigServer && sigServer->IsInitialized())
 		netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
 	else
 		netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
@@ -1954,7 +1954,7 @@ static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingR
 	netInfo->mappedAddr = si->mapped_addr;	// Public address the peer sends from
 	netInfo->natStatus = si->nat_type;
 	netInfo->UPnPStatus = (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
-	netInfo->portStatus = (sigServer && sigServer->IsIntialized()) ? SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN : SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
+	netInfo->portStatus = (sigServer && sigServer->IsInitialized()) ? SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN : SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
 
 	DEBUG_LOG(Log::sceNp2, "%s(ctx=%d, reqId/connId=%u) -> mappedAddr=%08x port=%d nat=%d", __FUNCTION__, ctxId, conn_id, si->mapped_addr, si->mapped_port, si->nat_type);
 	return SCE_NP_MATCHING2_OKAY;

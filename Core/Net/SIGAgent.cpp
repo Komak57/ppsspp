@@ -20,7 +20,7 @@ namespace net {
 	}
 
     bool SIGAgent::IsRunning() { return running; }
-	bool SIGAgent::IsIntialized() { return initialized; }
+	bool SIGAgent::IsInitialized() { return initialized; }
 
     // Returns Local Address in Network Order
     u32 SIGAgent::GetLocalAddr() {
