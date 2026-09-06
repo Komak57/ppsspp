@@ -953,7 +953,7 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen)
 
 	// A BLOCKING socket's worker can stall until the handshake resolves
 	if (!inetSock->nonblocking)
-		WARN_LOG(Log::sceNet, "%s: BLOCKING connect on socket #%d - worker may stall until the handshake resolves", __FUNCTION__, socket);
+		WARN_LOG(Log::sceNet, "%s: BLOCKING connect on socket #%d", __FUNCTION__, socket);
 	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetConnect");
 	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
@@ -962,7 +962,12 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen)
 	inetSock->thread = std::thread([retval, socket, inetSock, dst, sockAddrLen]() mutable
 	{
 		const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(dst);
-		retval = inetSock->connect(dst, sockAddrLen);
+		// A connect targeting a signaling peer runs the virtual TCP-over-UDP handshake through the
+		// relay; any other destination (servers, loopback) keeps the real host connect.
+		if (dst && sceNpSignalingIsPeerAddress(_dest->sin_addr.s_addr))
+			retval = inetSock->Connect_Reliable(dst, sockAddrLen);
+		else
+			retval = inetSock->connect(dst, sockAddrLen);
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
 			return;
