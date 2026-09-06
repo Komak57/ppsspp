@@ -1806,7 +1806,7 @@ int DgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* fro
 	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return hleLogError(Log::sceNet, ret, "recvfrom::DgramSocket: Failed to send to peer");
+		return ret;
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
@@ -1814,7 +1814,7 @@ int DgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* fro
 		from->sa_len = fromlen ? *fromlen : 0;
 	}
 	
-	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	return hleLogDebug(Log::sceNet, ret, "recvfrom::DgramSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int DgramSocket::bind(SceNetInetSockaddr* name, int namelen) { 
 	SockAddrIN4 saddr{};
@@ -1873,10 +1873,8 @@ int RawSocket::sendto(const char* buf, int len, int flags, const SceNetInetSocka
 	if (restoreBlocking) changeBlockingMode(sock, 1);
 	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (restoreBlocking) changeBlockingMode(sock, 0);
-	if (ret < 0)
-		return hleLogError(Log::sceNet, ret, "sendto::RawSocket: Failed to send to peer");
 
-	return hleLogDebug(Log::sceNet, retval, "SendTo: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	return hleLogDebug(Log::sceNet, ret, "sendto::RawSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int RawSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
 	SockAddrIN4 saddr{};
@@ -1891,7 +1889,7 @@ int RawSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from,
 	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return hleLogError(Log::sceNet, ret, "recvfrom::RawSocket: Failed to send to peer");
+		return ret;
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
@@ -1958,7 +1956,7 @@ int RdmSocket::sendto(const char* buf, int len, int flags, const SceNetInetSocka
 	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return hleLogError(Log::sceNet, ret, "sendto::RdmSocket: Failed to send to peer");
+		return ret;
 
 	return hleLogDebug(Log::sceNet, ret, "sendto::RdmSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
@@ -1975,7 +1973,7 @@ int RdmSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from,
 	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return hleLogError(Log::sceNet, ret, "recvfrom::RdmSocket: Failed to send to peer");
+		return ret;
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
@@ -2042,7 +2040,7 @@ int SeqpacketSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return hleLogError(Log::sceNet, ret, "sendto::SeqpacketSocket: Failed to send to peer");
+		return ret;
 
 	return hleLogDebug(Log::sceNet, ret, "sendto::SeqpacketSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
@@ -2171,7 +2169,7 @@ int DccpSocket::sendto(const char* buf, int len, int flags, const SceNetInetSock
 	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return hleLogError(Log::sceNet, ret, "sendto::DccpSocket: Failed to send to peer");
+		return ret;
 
 	return hleLogDebug(Log::sceNet, ret, "sendto::DccpSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
@@ -2188,7 +2186,7 @@ int DccpSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from
 	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return hleLogError(Log::sceNet, ret, "recvfrom::DccpSocket: Failed to send to peer");
+		return ret;
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
