@@ -1405,6 +1405,69 @@ int InetSocket::Connect_Reliable(SceNetInetSockaddr* name, int namelen) {
 #endif
 	return -1;
 }
+int InetSocket::Accept_Reliable(sockaddr* addr, socklen_t* addrlen) {
+	if (tcp_state != TCPState::Listening) {
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(EINVAL);
+#else
+		socket_errno = EINVAL;
+#endif
+		return hleLogError(Log::sceNet, -1, "accept::RELIABLE: Socket not Listening (state=%d)", (int)tcp_state);
+	}
+	InetSocket* pending_conn = get_pending_connection();
+	if (!pending_conn) {
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(WSAEWOULDBLOCK);
+#else
+		socket_errno = EWOULDBLOCK;
+#endif
+		return hleLogDebug(Log::sceNet, -1, "accept::RELIABLE: No pending connections.");
+	}
+	if (addr && addrlen) {
+		VirtualSockAddr peer = pending_conn->dst;
+		memcpy(addr, &peer.host, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
+		*addrlen = sizeof(sockaddr_in);
+	}
+	int new_socket_idx = -1;
+	int err = 0;
+	InetSocket* new_sock = g_socketManager.CreateSocket(&new_socket_idx, &err, SocketState::UsedNetInet, domain, type, protocol);
+	if (!new_sock) {
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(EMFILE);
+#else
+		socket_errno = EMFILE;
+#endif
+		return hleLogError(Log::sceNet, -1, "accept::RELIABLE: Failed to create new socket (errno=%d)", err);
+	}
+	// Top level copy
+	new_sock->domain = this->domain;
+	new_sock->type = this->type;
+	new_sock->protocol = this->protocol;
+	new_sock->nonblocking = this->nonblocking;  // should we inherit blocking state?
+	// Copy metadata from listening socket to new socket
+	new_sock->src.host = this->src.host;
+
+	new_sock->tcp_state = pending_conn->tcp_state;
+	// Store connected peer
+	new_sock->dst.virt = pending_conn->dst.virt;
+	// Store buffer states?
+	std::swap(new_sock->rx_queue, pending_conn->rx_queue);
+	std::swap(new_sock->rx_buffer, pending_conn->rx_buffer);
+	new_sock->rx_seq = pending_conn->rx_seq;
+	std::swap(new_sock->tx_buffer, pending_conn->tx_buffer);
+	new_sock->tx_seq = pending_conn->tx_seq; // sync with ACK
+
+	new_sock->state = SocketState::UsedNetInet;
+	// The accepted connection is a virtual reliable p2p socket regardless of the listener's type.
+	new_sock->sendP2P = &InetSocket::Send_Reliable;
+	new_sock->recvP2P = &InetSocket::Recv_Reliable;
+	new_sock->processP2P = &InetSocket::Process_Reliable;
+	INFO_LOG(Log::sceNet, "accept::RELIABLE: accepted from %s:%u on %s:%u (vport=%u) -> socket %d",
+		ip2str(new_sock->dst.virt.addr.s_addr).c_str(), ntohs(new_sock->dst.virt.port),
+		ip2str(new_sock->src.virt.addr.s_addr).c_str(), ntohs(new_sock->src.virt.port), ntohs(new_sock->src.virt.vport), new_socket_idx);
+	remove_pending_connection(pending_conn);
+	return new_socket_idx;
+}
     const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
     u64 current_time_us = (u64)(time_now_d() * 1000000.0);
 
@@ -2507,110 +2570,33 @@ int PacketSocket::listen(int backlog) {
 	return ret;
 	// return 0;
 }
-int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) { 
-	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(addr);
-	INFO_LOG(Log::sceNet, "SOCK_PACKET::accept(%s:%u, %d): pending=%d state=%d", ip2str(this->src.virt.addr).c_str(), ntohs(this->src.virt.port), static_cast<int>(*addrlen), (int)pending_connections.size(), (int)tcp_state);
+int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
+	// sceNetInetAccept promotes a pending virtual (relayed) SYN through Accept_Reliable; a call
+	// reaching this override has no pending virtual connection, so it's a real host accept.
+	INFO_LOG(Log::sceNet, "accept::PacketSocket(%s:%u, %d): state=%d (real)", ip2str(this->src.virt.addr).c_str(), ntohs(this->src.virt.port), addrlen ? static_cast<int>(*addrlen) : 0, (int)tcp_state);
 
-	if (has_pending_connection()) {
-		// Validate socket is listening
-		if (tcp_state != TCPState::Listening) {
-			ERROR_LOG(Log::sceNet, "Socket not in Listening state (state=%d)", (int)tcp_state);
-	#if PPSSPP_PLATFORM(WINDOWS)
-			SetLastError(EINVAL);
-	#else
-			socket_errno = EINVAL;
-	#endif
-			return hleLogError(Log::sceNet, -1, "Socket not in Listening state (state=%d)", (int)tcp_state);
-		}
+	int new_socket_idx = -1;
+	int ret = ::accept(sock, addr, addrlen);
+	if (ret < 0)
+		return ret;
 
-		// Check for pending connection (any SYN that arrived)
-		InetSocket* pending_conn = get_pending_connection();
-		if (!pending_conn) {
-			// No virtual connections
-	#if PPSSPP_PLATFORM(WINDOWS)
-			SetLastError(WSAEWOULDBLOCK);
-	#else
-			socket_errno = EWOULDBLOCK;
-	#endif
-			return hleLogDebug(Log::sceNet, -1, "No pending connections.");
-		}
-		
-		// Return the peer address to caller
-		if (addr && addrlen) {
-			VirtualSockAddr peer = pending_conn->dst;
-			memcpy(addr, &peer.host, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
-			*addrlen = sizeof(sockaddr_in);
-		}
-		
-		// Create a NEW InetSocket for the accepted connection
-		// The listening socket remains in Listening state
-		int new_socket_idx = -1;
-		int err = 0;
-		InetSocket* new_sock = g_socketManager.CreateSocket(&new_socket_idx, &err, SocketState::UsedNetInet, 
-			domain, type, protocol);
-		
-		if (!new_sock) {
-	#if PPSSPP_PLATFORM(WINDOWS)
-			SetLastError(EMFILE);
-	#else
-			socket_errno = EMFILE;
-	#endif
-			return hleLogError(Log::sceNet, -1, "Failed to create new socket (errno=%d)", err);
-		}
-		
-		// Top level copy
-		new_sock->domain = this->domain;
-		new_sock->type = this->type;
-		new_sock->protocol = this->protocol;
-		new_sock->nonblocking = this->nonblocking;  // should we inherit blocking state?
-		// Copy metadata from listening socket to new socket
-		new_sock->src.host = this->src.host;
+	InetSocket* new_sock = g_socketManager.AdoptSocket(&new_socket_idx, ret, this);
+	memcpy(&new_sock->src.host, &src.host, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
 
-		new_sock->tcp_state = pending_conn->tcp_state;
-		// Store connected peer
-		new_sock->dst.virt = pending_conn->dst.virt;
-		// Store buffer states?
-		std::swap(new_sock->rx_queue, pending_conn->rx_queue);
-		std::swap(new_sock->rx_buffer, pending_conn->rx_buffer);
-		new_sock->rx_seq = pending_conn->rx_seq;
-		std::swap(new_sock->tx_buffer, pending_conn->tx_buffer);
-		new_sock->tx_seq = pending_conn->tx_seq; // sync with ACK
+	// Copy metadata from listening socket to new socket
+	new_sock->src.host = this->src.host;
 
-		new_sock->state = SocketState::UsedNetInet;	
-		
-		INFO_LOG(Log::sceNet, "SOCK_PACKET accept: Accepted connection on listening socket from %s:%u on %s:%u (vport=%u), created socket %d",
-			ip2str(new_sock->dst.virt.addr.s_addr).c_str(), ntohs(new_sock->dst.virt.port),
-			ip2str(new_sock->src.virt.addr.s_addr).c_str(), ntohs(new_sock->src.virt.port), ntohs(new_sock->src.virt.vport),
-			new_socket_idx);
-		// clean-up
-		remove_pending_connection(pending_conn);
-		return new_socket_idx;
-	} else {
-		int new_socket_idx = -1;
-		int err = 0;
+	new_sock->tcp_state = TCPState::Established;
+	// Store connected peer
+	memcpy(&new_sock->dst.host, addr, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
+	new_sock->dst.virt.vport = src.virt.vport;
 
-		int ret = ::accept(sock, addr, addrlen);
-		if (ret < 0)
-			return ret;
-
-		InetSocket* new_sock = g_socketManager.AdoptSocket(&new_socket_idx, ret, this);
-		memcpy(&new_sock->src.host, &src.host, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
-		
-		// Copy metadata from listening socket to new socket
-		new_sock->src.host = this->src.host;
-
-		new_sock->tcp_state = TCPState::Established;
-		// Store connected peer
-		memcpy(&new_sock->dst.host, addr, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
-		new_sock->dst.virt.vport = src.virt.vport;
-
-		new_sock->state = SocketState::UsedNetInet;
-		INFO_LOG(Log::sceNet, "SOCK_PACKET accept: Accepted connection on listening socket from %s:%u on %s:%u (vport=%u), created socket %d",
-			ip2str(new_sock->dst.virt.addr.s_addr).c_str(), ntohs(new_sock->dst.virt.port),
-			ip2str(new_sock->src.virt.addr.s_addr).c_str(), ntohs(new_sock->src.virt.port), ntohs(new_sock->src.virt.vport),
-			new_socket_idx);
-		return new_socket_idx;
-	}
+	new_sock->state = SocketState::UsedNetInet;
+	INFO_LOG(Log::sceNet, "accept::PacketSocket: Accepted connection on listening socket from %s:%u on %s:%u (vport=%u), created socket %d",
+		ip2str(new_sock->dst.virt.addr.s_addr).c_str(), ntohs(new_sock->dst.virt.port),
+		ip2str(new_sock->src.virt.addr.s_addr).c_str(), ntohs(new_sock->src.virt.port), ntohs(new_sock->src.virt.vport),
+		new_socket_idx);
+	return new_socket_idx;
 }
 int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) { 
 	SockAddrIN4 saddr{};
