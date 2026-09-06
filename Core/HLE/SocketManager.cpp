@@ -1169,12 +1169,89 @@ int InetSocket::Send_Unreliable(const char* buf, int len, int flags, const SceNe
 	// Report PAYLOAD bytes, not wire bytes (see Send_Reliable)
 	return (int)len;
 }
-bool InetSocket::Process_Unreliable() {
+int InetSocket::Recv_Unrealiable(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	dbg.read++;
+	SockAddrIN4 saddr{};
+	if (fromlen)
+		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	flgs = convertMSGFlagsPSP2Host(flgs);
+
+	// The caller wants non-blocking either via the socket flag or per-call
+	// MSG_DONTWAIT (games poll their p2p socket this way).
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
+
+	NOTICE_LOG(Log::sceNet, "Recv_Unreliable taking the Virtual route.");
+	// Dequeue from local packet queue for virtual sockets
+	VirtualPacket pkt;
+	_dbg_assert_msg_(dequeue_packet(pkt), "Impossibly empty virtual queue");
+
+	// ===== STRICT DESTRUCTIVE FIFO SEMANTICS =====
+	//
+	// If the caller's buffer is smaller than the packet:
+	//   - Copy only what fits (truncate)
+	//   - DISCARD THE REMAINDER (do not queue it back)
+	//   - Return the truncated size
+	//
+	// If the caller's buffer is larger than the packet:
+	//   - Copy the entire packet
+	//   - Return the actual packet size (do NOT pad)
+	//
+	// Always preserve source address information
+
+	// Copy payload (truncate if necessary)
+	size_t copy_len = std::min((size_t)len, pkt.len);
+	if (copy_len > 0 && buf && pkt.data) {
+		memcpy(buf, pkt.data.get(), copy_len);
+	}
+	// Log truncation if it occurred
+	if (copy_len < pkt.len) {
+		DEBUG_LOG(Log::sceNet, "recv::UNRELIABLE: TRUNCATED packet for vport %d (buf=%zu, pkt=%zu, discarding %zu bytes)",
+			ntohs(src.virt.vport), copy_len, pkt.len, pkt.len - copy_len);
+	}
+
+	// Copy source address (only update sin_addr and sin_port, preserve other fields)
+	if (from && fromlen) {
+		sockaddr_in* from_in = (sockaddr_in*)from;
+		// Preserve caller's structure but update only the address and port
+		from_in->sin_addr = pkt.src.host.sin_addr;
+		from_in->sin_port = pkt.src.host.sin_port;
+		from_in->sin_zero[0] = pkt.src.host.sin_zero[0]; // Copy vport
+		from_in->sin_zero[1] = pkt.src.host.sin_zero[1];
+		*fromlen = sizeof(sockaddr_in);  // Always set to actual size
+	}
+	// Log with hex dump at INFO level so we see packet pickup
+	std::string msg = "recv::UNRELIABLE (vport " + std::to_string(ntohs(src.virt.vport)) + "): picked up " +
+		std::to_string(copy_len) + " bytes from " + ip2str(pkt.src.host.sin_addr) +
+		":" + std::to_string(ntohs(pkt.src.host.sin_port)) + "|" + std::to_string(ntohs(pkt.src.virt.vport));
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, (int)copy_len, 256);
+
+	dbg.recv++;
+
+	DEBUG_LOG(Log::sceNet, "VPORT %d s(%lld/%lld) r(%lld,%lld)", ntohs(src.virt.vport), dbg.sent, dbg.send, dbg.recv, dbg.read);
+	return (int)copy_len;
+}
+bool InetSocket::Process_Unreliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
+	// sockType demuxes game p2p sockets that share a vport (DGRAM side-channel vs CONN_DGRAM game).
+	// Signaling (vport 0) carries no ext header and no sockType, so it is matched on vport alone.
+	if (dest.virt.vport != 0 && vpkt.sockType != type)
+		return false;
+	if (src.virt.addr.s_addr != INADDR_ANY && src.virt.addr.s_addr != dest.virt.addr.s_addr)
+		return false;
+	if (dest.virt.port != 0 && src.virt.port != dest.virt.port)
+		return false;
+	if (dest.virt.vport == VPORT_ANY) {
+		if (src.virt.vport == 0)
+			return false;
+	} else if (src.virt.vport != dest.virt.vport) {
+		return false;
+	}
+
+	enqueue_packet(std::move(vpkt));
     std::lock_guard<std::mutex> queue(queue_lock);
     const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
     u64 current_time_us = (u64)(time_now_d() * 1000000.0);
 
-	bool ret = false;
     auto it = rx_queue.begin();
     while (it != rx_queue.end()) {
         VirtualPacket pkt = (*it).clone();
@@ -1186,12 +1263,10 @@ bool InetSocket::Process_Unreliable() {
         // 1. Cleanup Stale Packets (Protocol Housekeeping)
         u64 packet_age_us = current_time_us - pkt.enqueue_time_us;
         if (packet_age_us > MAX_PACKET_AGE_US) {
-            WARN_LOG(Log::sceNet, "Process_Unreliable: Discarding stale packet (age: %.2f s)", 
+            WARN_LOG(Log::sceNet, "process::UNRELIABLE: Discarding stale packet (age: %.2f s)", 
                 (float)packet_age_us / 1000000.0f);
             continue;
         }
-		ret = true;
-
 		{
 			std::lock_guard<std::mutex> buffers(buffer_lock);
 			int next_id = 1;
@@ -1204,7 +1279,7 @@ bool InetSocket::Process_Unreliable() {
 		// 	vport, pkt.header_flags, type,
 		// 	dbg.send, dbg.sent, dbg.recv, dbg.read);
 	}
-	return ret;
+	return true;
 }
 
 int InetSocket::Send_Reliable(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
@@ -2306,82 +2381,17 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 
  }
 int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
-	dbg.read++;
+	NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
 
-	// The caller wants non-blocking either via the socket flag or per-call
-	// MSG_DONTWAIT (games poll their p2p socket this way).
 	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
-
-	if (has_pending_data()) {
-		// Dequeue from local packet queue for virtual sockets
-		VirtualPacket pkt;
-		_dbg_assert_msg_(dequeue_packet(pkt), "Impossibly empty virtual queue");
-		
-		// ===== STRICT DESTRUCTIVE FIFO SEMANTICS =====
-		// 
-		// If the caller's buffer is smaller than the packet:
-		//   - Copy only what fits (truncate)
-		//   - DISCARD THE REMAINDER (do not queue it back)
-		//   - Return the truncated size
-		//
-		// If the caller's buffer is larger than the packet:
-		//   - Copy the entire packet
-		//   - Return the actual packet size (do NOT pad)
-		//
-		// Always preserve source address information
-		
-		// Copy payload (truncate if necessary)
-		size_t copy_len = std::min((size_t)len, pkt.len);
-		if (copy_len > 0 && buf && pkt.data) {
-			memcpy(buf, pkt.data.get(), copy_len);
-		}
-		
-		// Copy source address (only update sin_addr and sin_port, preserve other fields)
-		if (from && fromlen) {
-			sockaddr_in* from_in = (sockaddr_in*)from;
-			// Preserve caller's structure but update only the address and port
-			from_in->sin_addr = pkt.src.host.sin_addr;
-			from_in->sin_port = pkt.src.host.sin_port;
-			from_in->sin_zero[0] = pkt.src.host.sin_zero[0]; // Copy vport
-			from_in->sin_zero[1] = pkt.src.host.sin_zero[1];
-			*fromlen = sizeof(sockaddr_in);  // Always set to actual size
-			
-			// Log with hex dump at INFO level so we see packet pickup
-			std::string msg = "recvfrom::CONN_DGRAM (vport " + std::to_string(ntohs(src.virt.vport)) + "): picked up " + 
-				std::to_string(copy_len) + " bytes from " + ip2str(from_in->sin_addr.s_addr) + 
-				":" + std::to_string(ntohs(from_in->sin_port));
-			INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, (int)copy_len, 256);
-		}
-		
-		dbg.recv++;
-		
-		// Log truncation if it occurred
-		if (copy_len < pkt.len) {
-			DEBUG_LOG(Log::sceNet, "recvfrom: TRUNCATED packet for vport %d (buf=%zu, pkt=%zu, discarding %zu bytes)",
-				ntohs(src.virt.vport), copy_len, pkt.len, pkt.len - copy_len);
-		}
-
-		DEBUG_LOG(Log::sceNet, "VPORT %d s(%lld/%lld) r(%lld,%lld)", ntohs(src.virt.vport), dbg.sent, dbg.send, dbg.recv, dbg.read);
-			// Return actual bytes copied (NOT padded to requested size)
-		return hleLogDebug(Log::sceNet, (int)copy_len, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-
-	}
-
-	// No virtual data queued, so fall through to the host fd (loopback side-channel).
-	// A blocking host recvfrom here hangs forever for a virtual socket - p2p data
-	// arrives via the relay, not this fd - which froze PSP2i/Patapon. When the
-	// caller wants non-blocking but the host fd is blocking (per-call MSG_DONTWAIT
-	// on a blocking socket), flip it just for this call so ::recvfrom returns
-	// EWOULDBLOCK immediately, then restore - don't leave the socket's mode changed.
-	// (The fd's mode tracks `nonblocking` via SO_NBIO, so no OS query is needed.)
 	const bool restoreBlocking = dontwait && !nonblocking;
 	if (restoreBlocking) changeBlockingMode(sock, 1);
-	int ret = ::recvfrom(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, fromlen);
+	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
 		return ret; // Do not report, sceNetInetRecvfrom will handle the error reporting
@@ -2392,12 +2402,12 @@ int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr*
 		from->sa_len = fromlen ? *fromlen : 0;
 	}
 	dbg.recv++;
-	std::string msg = "recv::PACKET " + ip2str(saddr.in.sin_addr) + ":" + std::to_string(ntohs(saddr.in.sin_port));
+	std::string msg = "recvfrom::ConnDgramSocket " + ip2str(saddr.in.sin_addr) + ":" + std::to_string(ntohs(saddr.in.sin_port));
 	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
 
 	DEBUG_LOG(Log::sceNet, "PORT %u s(%lld/%lld) r(%lld,%lld)", ntohs(saddr.in.sin_port), dbg.sent, dbg.send, dbg.recv, dbg.read);
 		// Return actual bytes copied (NOT padded to requested size)
-	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	return hleLogDebug(Log::sceNet, ret, "recvfrom::ConnDgramSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	SockAddrIN4 saddr{};
