@@ -1108,7 +1108,11 @@ static int sceNetInetShutdown(int socket, int how)
 		break;
 	}
 
-	int retVal = inetSock->shutdown(hostHow);
+	int retVal = -1;
+	if (!sceNpSignalingIsPeerAddress(inetSock->dst.virt.addr.s_addr))
+		retVal = inetSock->Shutdown_Reliable(hostHow);
+	else
+		retVal = inetSock->shutdown(hostHow);
 	// retVal = shutdown(inetSock->sock, hostHow);  // no translation
 	if (retVal < 0)
 	{
