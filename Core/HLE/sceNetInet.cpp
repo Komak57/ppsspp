@@ -15,6 +15,7 @@
 #include "Core/HLE/sceNetInet.h"
 #include "Core/HLE/sceNp.h"
 #include "Core/HLE/sceNp2.h"
+#include "Core/HLE/sceNpSignaling.h"
 #include "Core/HLE/NetInetConstants.h"
 #include "Core/CoreTiming.h"
 #include "Core/MIPS/MIPS.h"
@@ -1354,14 +1355,28 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 	inetSock->thread = std::thread([retval, socket, inetSock, bufferPtr, len, flags, toPtr, tolen]() mutable
 	{
 		SceNetInetSockaddr *dst = (SceNetInetSockaddr *)Memory::GetCharPointer(toPtr);
+		SockAddrIN4 saddr{};
+		int dstlen = std::min(tolen > 0 ? tolen : 0, static_cast<int>(sizeof(saddr)));
+		if (dst) {
+			saddr.addr.sa_family = dst->sa_family;
+			memcpy(saddr.addr.sa_data, dst->sa_data, sizeof(dst->sa_data));
+		}
+		const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(&saddr.addr);
+		// Same sin_zero decode as Connect_Reliable: [0]=MSB, [1]=LSB -> host order, no swap needed.
+		const u16 dest_vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
 
+		INFO_LOG(Log::sceNet, "sendto(%i, %s:%u|%u) at %08x", len, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), dest_vport, currentMIPS->pc);
+		
 		std::string datahex;
 		DataToHexString(0, 0, Memory::GetPointer(bufferPtr), len, &datahex);
 		VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", len, datahex.c_str());
 
-		// TODO: threaded sendto?
-		// Send as-is first. P2P traffic will normally send using our own member_id for the vport
-		int retval = inetSock->sendto((char *)Memory::GetPointer(bufferPtr), len, flags, dst, tolen);
+		const bool routeP2P = inetSock->sendP2P && dst && sceNpSignalingIsPeerAddress(_dest->sin_addr.s_addr);
+		int retval;
+		if (routeP2P) {
+			retval = (inetSock->*(inetSock->sendP2P))((char *)Memory::GetPointer(bufferPtr), len, flags, dst, tolen);
+		} else
+			retval = inetSock->sendto((char *)Memory::GetPointer(bufferPtr), len, flags, dst, tolen);
 
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
