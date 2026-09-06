@@ -1600,7 +1600,7 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 				// conn->tx_buffer where the pending-connection retransmit loop
 				// expects it. Send_Reliable increments conn->tx_seq itself.
 				char data[1] = {};
-				int ret = conn->Send_Reliable(data, 0, (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP));
+				int ret = conn->Send_Reliable(data, 0, (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP), nullptr, 0);
 				if (ret < 0) {
 					ERROR_LOG(Log::sceNet, "process::RELIABLE: Failed to send SYN-ACK");
 				}
@@ -1636,7 +1636,7 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 				
 				char data[1] = {};
 				// Send_Reliable increments tx_seq itself - no manual increment here
-				int ret = Send_Reliable(data, 0, (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP));
+				int ret = Send_Reliable(data, 0, (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP), nullptr, 0);
 				if (ret < 0) {
 					ERROR_LOG(Log::sceNet, "process::RELIABLE: Failed to send ACK");
 				}
