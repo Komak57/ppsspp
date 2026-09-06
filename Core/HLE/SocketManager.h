@@ -215,7 +215,9 @@ struct InetSocket {
 	int domain;
 	int protocol;
 	bool nonblocking;
-	p2p_type p2p_mode;
+	int (InetSocket::*sendP2P)(const char*, int, int, const SceNetInetSockaddr*, int) = nullptr;
+	int (InetSocket::*recvP2P)(char*, int, int, SceNetInetSockaddr*, socklen_t*) = nullptr;
+	bool (InetSocket::*processP2P)(VirtualPacket&&, VirtualSockAddr) = nullptr;
 
 	// Metadata for debug use only.
 	VirtualSockAddr src;
@@ -266,7 +268,6 @@ struct InetSocket {
 		this->domain = domain;
 		this->protocol = protocol;
 		nonblocking = false;
-		p2p_mode = p2p_type::DISABLED;
 
 		src.host = sockaddr_in{};
 		memset(&dbg, 0, sizeof(dbg));
@@ -307,7 +308,6 @@ struct InetSocket {
 		domain = 0;
 		protocol = 0;
 		nonblocking = false;
-		p2p_mode = p2p_type::DISABLED;
 
 		src.host = sockaddr_in{};
 		memset(&dbg, 0, sizeof(dbg));
@@ -418,6 +418,9 @@ public:
 		this->type = PSP_NET_INET_SOCK_DGRAM;
 		this->domain = domain;
 		this->protocol = protocol;
+		sendP2P = &InetSocket::Send_Unreliable;
+		recvP2P = &InetSocket::Recv_Unrealiable;
+		processP2P = &InetSocket::Process_Unreliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_DGRAM);
@@ -486,6 +489,11 @@ public:
 		this->type = PSP_NET_INET_SOCK_SEQPACKET;
 		this->domain = domain;
 		this->protocol = protocol;
+		this->tcp_state = TCPState::Disconnected;
+		sendP2P = &InetSocket::Send_Reliable;  // reliable p2p handlers
+		recvP2P = &InetSocket::Recv_Reliable;
+		processP2P = &InetSocket::Process_Reliable;
+
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_SEQPACKET);
@@ -513,6 +521,9 @@ public:
 		this->type = PSP_NET_INET_SOCK_DCCP;
 		this->domain = domain;
 		this->protocol = protocol;
+		sendP2P = &InetSocket::Send_Unreliable;
+		recvP2P = &InetSocket::Recv_Unrealiable;
+		processP2P = &InetSocket::Process_Unreliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_DCCP);
@@ -551,7 +562,9 @@ public:
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
-		p2p_mode = p2p_type::UNRELIABLE;
+		sendP2P = &InetSocket::Send_Unreliable;
+		recvP2P = &InetSocket::Recv_Unrealiable;
+		processP2P = &InetSocket::Process_Unreliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_CONN_DGRAM);
@@ -587,7 +600,9 @@ public:
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
-		p2p_mode = p2p_type::RELIABLE;
+		sendP2P = &InetSocket::Send_Reliable;  // reliable (TCP-over-UDP) p2p handlers
+		recvP2P = &InetSocket::Recv_Reliable;
+		processP2P = &InetSocket::Process_Reliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_PACKET);

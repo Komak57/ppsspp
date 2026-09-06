@@ -417,13 +417,13 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 			if (rdcnt < FD_SETSIZE)
 			{
 				// Skip host checks on virtual sockets
-				if (inetSock->p2p_mode == p2p_type::RELIABLE && (inetSock->has_pending_data(true) || inetSock->has_pending_connection()))
+				if (inetSock->recvP2P == &InetSocket::Recv_Reliable && (inetSock->has_pending_data(true) || inetSock->has_pending_connection()))
 				{
 					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
 					tmout.tv_sec = 0;
 					tmout.tv_usec = 0;
 				}
-				else if (inetSock->p2p_mode == p2p_type::UNRELIABLE && inetSock->has_pending_data())
+				else if (inetSock->recvP2P == &InetSocket::Recv_Unrealiable && inetSock->has_pending_data())
 				{
 					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
 					tmout.tv_sec = 0;
@@ -448,13 +448,7 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 			if (wrcnt < FD_SETSIZE)
 			{
 				// Skip host checks on virtual sockets
-				if (inetSock->p2p_mode == p2p_type::RELIABLE && (inetSock->has_pending_data(true) || inetSock->has_pending_connection()))
-				{
-					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
-					tmout.tv_sec = 0;
-					tmout.tv_usec = 0;
-				}
-				else if (inetSock->p2p_mode == p2p_type::UNRELIABLE && inetSock->has_pending_data())
+				if (inetSock->recvP2P == &InetSocket::Recv_Reliable && (inetSock->tcp_state == TCPState::Established))
 				{
 					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
 					tmout.tv_sec = 0;
@@ -533,13 +527,13 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		}
 		_log += std::to_string(i) + "[";
 		// Linger supports recv on CloseWait
-		if (readfds && hostSockets[i].wantsRead && (FD_ISSET(hostSockets[i].sock, &rdfds) || (inetSock->p2p_mode == p2p_type::RELIABLE && (inetSock->has_pending_data(true) || inetSock->has_pending_connection())) || (inetSock->p2p_mode == p2p_type::UNRELIABLE && inetSock->has_pending_data())))
+		if (readfds && hostSockets[i].wantsRead && (FD_ISSET(hostSockets[i].sock, &rdfds) || (inetSock->recvP2P == &InetSocket::Recv_Reliable && (inetSock->has_pending_data(true) || inetSock->has_pending_connection())) || (inetSock->recvP2P == &InetSocket::Recv_Unrealiable && inetSock->has_pending_data())))
 		{
 			NetInetFD_SET(i, readfds);
 			ready_count++;
 			_log += "R";
 		}
-		if (writefds && hostSockets[i].wantsWrite && (FD_ISSET(hostSockets[i].sock, &wrfds) || (inetSock->p2p_mode == p2p_type::RELIABLE && inetSock->tcp_state == TCPState::Established)))
+		if (writefds && hostSockets[i].wantsWrite && (FD_ISSET(hostSockets[i].sock, &wrfds) || (inetSock->recvP2P == &InetSocket::Recv_Reliable && inetSock->tcp_state == TCPState::Established)))
 		{
 			NetInetFD_SET(i, writefds);
 			ready_count++;
