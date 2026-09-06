@@ -670,7 +670,14 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	// Run the actual sendRequest on the host asynchronously
 	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval]() mutable
 	{
-		retval = inetSock->recv((char*)Memory::GetPointer(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
+		// Sockets created via virtual accept do not have a proper sock
+		// This must gate dest == peer to ensure it does not mis-report ENOTCONN
+		const bool routeP2P = inetSock->recvP2P
+			&& sceNpSignalingIsPeerAddress(inetSock->dst.virt.addr.s_addr);
+		if (routeP2P)
+			retval = (inetSock->*(inetSock->recvP2P))((char*)Memory::GetPointer(bufPtr), bufLen, flags, nullptr, nullptr);
+		else
+			retval = inetSock->recv((char*)Memory::GetPointer(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
 			return;
