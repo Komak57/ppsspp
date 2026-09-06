@@ -794,10 +794,10 @@ std::string inetSockoptName2str(int optname, int level) {
 			return "SO_NBIO"; // SO_NONBLOCK
 		case PSP_NET_INET_SO_BIO:
 			return "SO_BIO";
-		case PSP_NET_INET_SO_DCCP_BROADCAST:
-			return "SO_DCCP_BROADCAST";
-		case PSP_NET_INET_SO_DCCP_LINGER:
-			return "SO_DCCP_LINGER";
+		case SCE_NET_INET_SO_USECRYPTO_RX:
+			return "SO_USECRYPTO_RX";
+		case SCE_NET_INET_SO_USECRYPTO_TX:
+			return "SO_USECRYPTO_TX";
 		}
 	}
 	return StringFromFormat("SO_%08x (Level = %08x)", optname, level);
