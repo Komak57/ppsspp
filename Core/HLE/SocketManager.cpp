@@ -1783,6 +1783,14 @@ int DgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSoc
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
 
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
+	const bool restoreBlocking = dontwait && !nonblocking;
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "sendto::DgramSocket: Failed to send to peer");
+
 	return hleLogDebug(Log::sceNet, ret, "sendto::DgramSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int DgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
@@ -1791,7 +1799,14 @@ int DgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* fro
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
-	int ret = ::recvfrom(sock, buf, len, flags, (struct sockaddr*)&saddr.addr, fromlen);
+
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
+	const bool restoreBlocking = dontwait && !nonblocking;
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "recvfrom::DgramSocket: Failed to send to peer");
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
@@ -1853,7 +1868,13 @@ int RawSocket::sendto(const char* buf, int len, int flags, const SceNetInetSocka
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
 
-	int retval = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
+	const bool restoreBlocking = dontwait && !nonblocking;
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "sendto::RawSocket: Failed to send to peer");
 
 	return hleLogDebug(Log::sceNet, retval, "SendTo: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
@@ -1863,7 +1884,14 @@ int RawSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from,
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
-	int ret = ::recvfrom(sock, buf, len, flags, (struct sockaddr*)&saddr.addr, fromlen);
+
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
+	const bool restoreBlocking = dontwait && !nonblocking;
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "recvfrom::RawSocket: Failed to send to peer");
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
@@ -1924,7 +1952,13 @@ int RdmSocket::sendto(const char* buf, int len, int flags, const SceNetInetSocka
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
 
-	int retval = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
+	const bool restoreBlocking = dontwait && !nonblocking;
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "sendto::RdmSocket: Failed to send to peer");
 
 	return hleLogDebug(Log::sceNet, ret, "sendto::RdmSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
@@ -1934,7 +1968,14 @@ int RdmSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from,
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
-	int ret = ::recvfrom(sock, buf, len, flags, (struct sockaddr*)&saddr.addr, fromlen);
+
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
+	const bool restoreBlocking = dontwait && !nonblocking;
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "recvfrom::RdmSocket: Failed to send to peer");
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
@@ -1995,7 +2036,13 @@ int SeqpacketSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
 
-	int retval = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
+	const bool restoreBlocking = dontwait && !nonblocking;
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "sendto::SeqpacketSocket: Failed to send to peer");
 
 	return hleLogDebug(Log::sceNet, ret, "sendto::SeqpacketSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
@@ -2005,7 +2052,14 @@ int SeqpacketSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr*
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
-	int ret = ::recvfrom(sock, buf, len, flags, (struct sockaddr*)&saddr.addr, fromlen);
+
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
+	const bool restoreBlocking = dontwait && !nonblocking;
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "recvfrom::SeqpacketSocket: Failed to send to peer");
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
@@ -2111,6 +2165,14 @@ int DccpSocket::sendto(const char* buf, int len, int flags, const SceNetInetSock
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
 
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
+	const bool restoreBlocking = dontwait && !nonblocking;
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "sendto::DccpSocket: Failed to send to peer");
+
 	return hleLogDebug(Log::sceNet, ret, "sendto::DccpSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int DccpSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) { 
@@ -2119,7 +2181,14 @@ int DccpSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
-	int ret = ::recvfrom(sock, buf, len, flags, (struct sockaddr*)&saddr.addr, fromlen);
+
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
+	const bool restoreBlocking = dontwait && !nonblocking;
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "recvfrom::DccpSocket: Failed to send to peer");
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
