@@ -387,6 +387,10 @@ struct InetSocket {
 // NOTE: These classes must NOT add member variables to maintain placement new compatibility
 
 #pragma pack(push, 8)
+/* Unknown
+ * @note Not much is known about this socket type's use
+ * @note May be mis-labeled from PacketSocket
+ */
 class StreamSocket : public InetSocket {
 public:
 	StreamSocket(int domain, int protocol) : InetSocket() {
@@ -413,6 +417,9 @@ public:
 #pragma pack(pop)
 static_assert(sizeof(StreamSocket) == sizeof(InetSocket), "Socket size mismatch!");
 #pragma pack(push, 8)
+/* Unknown
+ * @note Not much is known about this socket type's use
+ */
 class DgramSocket : public InetSocket {
 public:
 	DgramSocket(int domain, int protocol) : InetSocket() {
@@ -438,6 +445,9 @@ public:
 #pragma pack(pop)
 static_assert(sizeof(DgramSocket) == sizeof(InetSocket), "Socket size mismatch!");
 #pragma pack(push, 8)
+/* Unknown
+ * @note Not much is known about this socket type's use
+ */
 class RawSocket : public InetSocket {
 public:
 	RawSocket(int domain, int protocol) : InetSocket() {
@@ -461,6 +471,9 @@ public:
 #pragma pack(pop)
 static_assert(sizeof(RawSocket) == sizeof(InetSocket), "Socket size mismatch!");
 #pragma pack(push, 8)
+/* Unknown
+ * @note Not much is known about this socket type's use
+ */
 class RdmSocket : public InetSocket {
 public:
 	RdmSocket(int domain, int protocol) : InetSocket() {
@@ -484,6 +497,8 @@ public:
 #pragma pack(pop)
 static_assert(sizeof(RdmSocket) == sizeof(InetSocket), "Socket size mismatch!");
 #pragma pack(push, 8)
+/* Depicted as a standard TCP Socket
+ */
 class SeqpacketSocket : public InetSocket {
 public:
 	SeqpacketSocket(int domain, int protocol) : InetSocket() {
@@ -516,6 +531,10 @@ public:
 #pragma pack(pop)
 static_assert(sizeof(SeqpacketSocket) == sizeof(InetSocket), "Socket size mismatch!");
 #pragma pack(push, 8)
+/* Standard UDP socket type commonly. Sometimes used for P2P communications.
+ * @note Ace Combat uses this to test peer latency with a blocking socket
+ * @note May require reliable, as Ace Combat sends, and awaits a response
+ */
 class DccpSocket : public InetSocket {
 public:
 	DccpSocket(int domain, int protocol) : InetSocket() {
@@ -556,6 +575,9 @@ public:
 #pragma pack(pop)
 static_assert(sizeof(DccpSocket) == sizeof(InetSocket), "Socket size mismatch!");
 #pragma pack(push, 8)
+/* UDP socket type commonly used for P2P encyrpted traffic.
+ * @note Uses SO_CRYPTO options for TX / RX encryption
+ */
 class ConnDgramSocket : public InetSocket {
 public:
 	ConnDgramSocket(int domain, int protocol) : InetSocket() {
@@ -592,6 +614,10 @@ public:
 #pragma pack(pop)
 static_assert(sizeof(ConnDgramSocket) == sizeof(InetSocket), "Socket size mismatch!");
 #pragma pack(push, 8)
+
+/* TCP socket type commonly used for P2P streams.
+ * @note Likely named StreamSocket based on PSP2i debug logs
+ */
 class PacketSocket : public InetSocket {
 public:
 	PacketSocket(int domain, int protocol) : InetSocket() {

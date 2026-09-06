@@ -1501,7 +1501,7 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
         // 1. Cleanup Stale Packets (Protocol Housekeeping)
         u64 packet_age_us = current_time_us - pkt.enqueue_time_us;
         if (packet_age_us > MAX_PACKET_AGE_US) {
-            WARN_LOG(Log::sceNet, "Process_Reliable: Discarding stale packet (age: %.2f seconds)", (float)packet_age_us / 1000000.0f);
+            WARN_LOG(Log::sceNet, "process::RELIABLE: Discarding stale packet (age: %.2f seconds)", (float)packet_age_us / 1000000.0f);
             continue;
         }
 
@@ -1512,7 +1512,7 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
         // else 
 		if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
 			if (tcp_state != TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received PSH|ACK at listening socket on %s:%u|%u",
+				INFO_LOG(Log::sceNet, "process::RELIABLE: Received PSH|ACK at listening socket on %s:%u|%u",
 					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 				// Do not increment rx_seq, this is just a confirmation
 
@@ -1521,7 +1521,7 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 		}
         else if (pkt.header_flags == (p2ps_tcp_flags::PSH | p2ps_tcp_flags::TCP)) {
 			if (tcp_state != TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received PSH at listening socket from on %s:%u|%u [seq=%d,tx=%d/rx=%d,hpd=%d]",
+				INFO_LOG(Log::sceNet, "process::RELIABLE: Received PSH at listening socket from on %s:%u|%u [seq=%d,tx=%d/rx=%d,hpd=%d]",
 					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport), pkt.seq_id, tx_seq, rx_seq, has_pending_data(true));
 
 				// Store the payload for recv()/dequeue_stream, keyed by wire seq so
@@ -1533,7 +1533,7 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 						rx_buffer[pkt.seq_id] = pkt.clone();
 				}
 
-				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning PSH|ACK to %s:%u|%u",
+				INFO_LOG(Log::sceNet, "process::RELIABLE: Returning PSH|ACK to %s:%u|%u",
 					ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport));
 
 				// Pure acknowledgement: echoes the RECEIVED seq (so the peer's
@@ -1556,7 +1556,7 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 					phys.sin_port = dst.virt.vport;
 					int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(phys));
 					if (ret < 0) {
-						ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send PSH|ACK");
+						ERROR_LOG(Log::sceNet, "process::RELIABLE: Failed to send PSH|ACK");
 					}
 				}
 			}
@@ -1564,6 +1564,9 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
         // 2. Process Control Plane (The "Kernel" Logic)
         else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP)) {
 			if (tcp_state == TCPState::Listening) {
+				INFO_LOG(Log::sceNet, "process::RELIABLE: Received SYN at listening socket from %s:%u|%u",
+					ip2str(pkt.src.virt.addr).c_str(), ntohs(pkt.src.virt.port), ntohs(pkt.src.virt.vport));
+
 				InetSocket* conn = new InetSocket();
 				// Default assume local connection
 				conn->src.host = this->src.host;
@@ -1587,10 +1590,9 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 					continue;
 				conn->rx_seq = 1; // Mark this packet received
 				
-				INFO_LOG(Log::sceNet, "PACKET: Received SYN at listening socket from on %s:%u|%u",
-					ip2str(conn->src.virt.addr).c_str(), ntohs(conn->src.virt.port), ntohs(conn->src.virt.vport));
 
-				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning SYN-ACK to %s:%u|%u",
+				INFO_LOG(Log::sceNet, "process::RELIABLE: Returning SYN-ACK from %s:%u|%u to %s:%u|%u",
+					ip2str(conn->src.virt.addr.s_addr).c_str(), ntohs(conn->src.virt.port), ntohs(conn->src.virt.vport),
 					ip2str(conn->dst.virt.addr.s_addr).c_str(), ntohs(conn->dst.virt.port), ntohs(conn->dst.virt.vport));
 
 				// Reply from conn, not the listener: conn->dst holds the peer (the
@@ -1600,13 +1602,13 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 				char data[1] = {};
 				int ret = conn->Send_Reliable(data, 0, (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP));
 				if (ret < 0) {
-					ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send SYN-ACK");
+					ERROR_LOG(Log::sceNet, "process::RELIABLE: Failed to send SYN-ACK");
 				}
 			}
         } 
         else if (pkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
 			if (tcp_state == TCPState::SynSent) {
-				INFO_LOG(Log::sceNet, "PACKET: Received SYN|ACK at listening socket to %s:%u|%u",
+				INFO_LOG(Log::sceNet, "process::RELIABLE: Received SYN|ACK at listening socket to %s:%u|%u",
 					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 				dst.host.sin_family = AF_INET;
 				// Adopt the real source address; do NOT overwrite sin_port - it
@@ -1629,20 +1631,20 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 
 				// Do not resend. Let the peer re-send SYN|ACK if it hasn't connected yet
 
-				INFO_LOG(Log::sceNet, "SOCK_PACKET connect: Returning ACK to %s:%u|%u",
+				INFO_LOG(Log::sceNet, "process::RELIABLE: Returning ACK to %s:%u|%u",
 					ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport));
 				
 				char data[1] = {};
 				// Send_Reliable increments tx_seq itself - no manual increment here
 				int ret = Send_Reliable(data, 0, (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP));
 				if (ret < 0) {
-					ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Failed to send ACK");
+					ERROR_LOG(Log::sceNet, "process::RELIABLE: Failed to send ACK");
 				}
 			}
 		}
         else if (pkt.header_flags == (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)) {
             if (tcp_state == TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received ACK at listening socket on %s:%u|%u",
+				INFO_LOG(Log::sceNet, "process::RELIABLE: Received ACK at listening socket on %s:%u|%u",
 					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 				
@@ -1666,7 +1668,7 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
         } 
         else if (pkt.header_flags == (p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP)) {
             if (tcp_state != TCPState::Listening) {
-				INFO_LOG(Log::sceNet, "PACKET: Received FIN at listening socket on %s:%u|%u",
+				INFO_LOG(Log::sceNet, "process::RELIABLE: Received FIN at listening socket on %s:%u|%u",
 					ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
                 tcp_state = TCPState::CloseWait;
 				rx_seq++;
@@ -1758,7 +1760,7 @@ int StreamSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	// Update socket debug metadata
 	src.host = saddr.in;
 
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+	INFO_LOG(Log::sceNet, "bind::StreamSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -1781,9 +1783,7 @@ int DgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSoc
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
 
-	int retval = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
-
-	return hleLogDebug(Log::sceNet, retval, "SendTo: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	return hleLogDebug(Log::sceNet, ret, "sendto::DgramSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int DgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
 	SockAddrIN4 saddr{};
@@ -1828,7 +1828,7 @@ int DgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	// Update socket debug metadata
 	src.host = saddr.in;
 
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+	INFO_LOG(Log::sceNet, "bind::DgramSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -1871,7 +1871,7 @@ int RawSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from,
 		from->sa_len = fromlen ? *fromlen : 0;
 	}
 	
-	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	return hleLogDebug(Log::sceNet, ret, "recvfrom::RawSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int RawSocket::bind(SceNetInetSockaddr* name, int namelen) { 
 	SockAddrIN4 saddr{};
@@ -1900,7 +1900,7 @@ int RawSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	// Update socket debug metadata
 	src.host = saddr.in;
 
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+	INFO_LOG(Log::sceNet, "bind::RawSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -1926,7 +1926,7 @@ int RdmSocket::sendto(const char* buf, int len, int flags, const SceNetInetSocka
 
 	int retval = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 
-	return hleLogDebug(Log::sceNet, retval, "SendTo: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	return hleLogDebug(Log::sceNet, ret, "sendto::RdmSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int RdmSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
 	SockAddrIN4 saddr{};
@@ -1971,7 +1971,7 @@ int RdmSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	// Update socket debug metadata
 	src.host = saddr.in;
 
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+	INFO_LOG(Log::sceNet, "bind::RdmSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -1997,7 +1997,7 @@ int SeqpacketSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 
 	int retval = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 
-	return hleLogDebug(Log::sceNet, retval, "SendTo: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	return hleLogDebug(Log::sceNet, ret, "sendto::SeqpacketSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int SeqpacketSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
 	SockAddrIN4 saddr{};
@@ -2086,7 +2086,7 @@ int SeqpacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	// Update socket debug metadata
 	src.host = saddr.in;
 	
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+	INFO_LOG(Log::sceNet, "bind::SeqpacketSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -2111,9 +2111,7 @@ int DccpSocket::sendto(const char* buf, int len, int flags, const SceNetInetSock
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
 
-	int retval = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
-
-	return hleLogDebug(Log::sceNet, retval, "SendTo: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	return hleLogDebug(Log::sceNet, ret, "sendto::DccpSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int DccpSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) { 
 	SockAddrIN4 saddr{};
@@ -2129,7 +2127,7 @@ int DccpSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from
 		from->sa_len = fromlen ? *fromlen : 0;
 	}
 	
-	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	return hleLogDebug(Log::sceNet, ret, "recvfrom::DccpSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int DccpSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	SockAddrIN4 saddr{};
@@ -2202,7 +2200,7 @@ int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	// Update socket debug metadata
 	src.host = saddr.in;
 	
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+	INFO_LOG(Log::sceNet, "bind::DccpSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
@@ -2300,12 +2298,10 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	if (src.virt.vport == 0)
 		src.virt.vport = htons(user_id.load());
 
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+	INFO_LOG(Log::sceNet, "bind::ConnDgramSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
-	if (ret < 0)
-		return hleLogError(Log::sceNet, ret);
 	return ret;
 }
 
@@ -2412,28 +2408,13 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	}
 	return ret;  // Non-blocking: game will check connection status later
 }
-int PacketSocket::listen(int backlog) { 
-	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::listen(%d): state=%d", backlog, (int)tcp_state);
-	// Validate socket is in correct state
-	if (tcp_state != TCPState::Disconnected) {
-		ERROR_LOG(Log::sceNet, "SOCK_PACKET listen: Socket not in Disconnected state (state=%d)", (int)tcp_state);
-#if PPSSPP_PLATFORM(WINDOWS)
-		SetLastError(EINVAL);
-#else
-		socket_errno = EINVAL;
-#endif
-		return -1;
-	}
-		
-	// Set state to Listening
-	tcp_state = TCPState::Listening;
-	this->backlog = backlog;
-		
+int PacketSocket::listen(int backlog) {
+	// sceNetInetListen sets the virtual Listening state/backlog; this just opens the real backlog.
+	VERBOSE_LOG(Log::sceNet, "listen::PacketSocket(%d): state=%d", backlog, (int)tcp_state);
 	int ret = ::listen(sock, backlog);
-	INFO_LOG(Log::sceNet, "SOCK_PACKET listen: port %d now accepting %d connections", ntohs(src.virt.port), this->backlog);
-
+	if (ret >= 0)
+		INFO_LOG(Log::sceNet, "listen::PacketSocket: port %d now accepting %d connections", ntohs(src.virt.port), this->backlog);
 	return ret;
-	// return 0;
 }
 int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 	// sceNetInetAccept promotes a pending virtual (relayed) SYN through Accept_Reliable; a call
@@ -2470,7 +2451,7 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
 
-	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::bind(%s:%u, %d): state=%d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), namelen, (int)tcp_state);
+	VERBOSE_LOG(Log::sceNet, "bind::PacketSocket(%s:%u, %d): state=%d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), namelen, (int)tcp_state);
 	auto _vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
 	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
 	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
@@ -2493,7 +2474,7 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	src.virt.port = saddr.in.sin_port;
 	src.virt.vport = htons(_vport);
 
-	INFO_LOG(Log::sceNet, "sceNetInetBind: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), htons(src.virt.vport));
+	INFO_LOG(Log::sceNet, "bind::PacketSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), htons(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, reinterpret_cast<struct sockaddr*>(&saddr.in), sizeof(sockaddr_in));
