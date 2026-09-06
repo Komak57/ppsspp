@@ -44,6 +44,18 @@ namespace net {
 		u8 GetNatType();
 		u64 GetLatencyUs();
 
+		bool isSignalingPeer(u32 addr) {
+			for (auto const& [id, peer] : sig_peers) {
+				if (peer && 
+					peer->addr == addr &&
+					peer->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE) {
+					
+					return true;
+				}
+			}
+			return false;
+		}
+
 		std::vector<SceNpMatching2RoomMemberId> GetPeerList() {
 			std::vector<SceNpMatching2RoomMemberId> active_members;
 			// Iterate through the unordered_map of shared_ptrs

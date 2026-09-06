@@ -194,6 +194,16 @@ int sceNpSignalingTerm() {
 	return hleLogWarning(Log::sceNet, ret);
 }
 
+bool sceNpSignalingIsPeerAddress(np_in_addr_t peer_addr) {
+	if (!sigServer)
+		return false;
+	if (!sigServer->IsInitialized())
+		return false;
+	return sigServer->isSignalingPeer(peer_addr);
+}
+
+// Dummy functions the PS3 used, that can be replicated, but are NOT system calls used by the game.
+
 int sceNpSignalingActivateConnection(u32 ctxId, PSPPointer<SceNpId> npId, PSPPointer<u32> conn_id)
 {
 	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x) at %08x", __FUNCTION__, ctxId, npId.ptr, conn_id.ptr, currentMIPS->pc);

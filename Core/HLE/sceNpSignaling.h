@@ -180,5 +180,6 @@ void __NpSignalingShutdown();
 
 int __StartSignalingThread(int threadStackSize, u32 priority);
 int __StartSignalingEchoThread(u32 priority);
+bool sceNpSignalingIsPeerAddress(np_in_addr_t peer_addr);
 
 void Register_sceNpSignaling();
