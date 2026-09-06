@@ -1348,6 +1348,63 @@ int InetSocket::Recv_Reliable(char* buf, int len, int flags, SceNetInetSockaddr*
 	dbg.recv++;
 	return copy_len;
 }
+int InetSocket::Connect_Reliable(SceNetInetSockaddr* name, int namelen) {
+	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
+	u16 _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
+
+	auto p2p_sock = g_socketManager.GetP2PSocket();
+	if (!p2p_sock) {
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(EINVAL);
+#else
+		socket_errno = EINVAL;
+#endif
+		return hleLogError(Log::sceNet, -1, "connect::RELIABLE: P2P_SOCK Not Present");
+	}
+	if (tcp_state != TCPState::Disconnected) {
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(EISCONN);
+#else
+		socket_errno = EISCONN;
+#endif
+		return hleLogError(Log::sceNet, -1, "connect::RELIABLE: Socket not Disconnected (state=%d)", (int)tcp_state);
+	}
+
+	// Peer (game-space) endpoint.
+	dst.host.sin_family = AF_INET;
+	dst.host.sin_addr.s_addr = _dest->sin_addr.s_addr;
+	dst.virt.port = _dest->sin_port;
+	dst.virt.vport = htons(_vport);
+
+	// Set state to SynSent (waiting for ACK)
+	tcp_state = TCPState::SynSent;
+	rx_seq = 0;
+	tx_seq = 0;
+	
+	src.virt.addr.s_addr = INADDR_ANY;
+	src.virt.port = htons(g_socketManager.generateEphemeralPort());
+	src.virt.vport = htons(_vport);
+
+	auto data = std::make_unique<char[]>(2);
+	memcpy(data.get(), &src.virt.vport, 2);
+	// Send_Reliable increments tx_seq itself.
+	int ret = Send_Reliable(data.get(), 2, p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP, nullptr, 0);
+	if (ret < 0) {
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(ECONNABORTED);
+#else
+		socket_errno = ECONNABORTED;
+#endif
+		return hleLogError(Log::sceNet, -1, "connect::RELIABLE: Failed to send SYN");
+	}
+	// Non-blocking: the handshake completes asynchronously.
+#if PPSSPP_PLATFORM(WINDOWS)
+	SetLastError(EAGAIN);
+#else
+	socket_errno = EINPROGRESS;
+#endif
+	return -1;
+}
     const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
     u64 current_time_us = (u64)(time_now_d() * 1000000.0);
 
@@ -2366,11 +2423,11 @@ int PacketSocket::recv(char* buf, int len, int flags) {
 		ret, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port));
 	return ret;
 }
-int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) { 
+int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
 	// Host Order
 	auto _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
-	INFO_LOG(Log::sceNet, "SOCK_PACKET::connect(%s:%u|%u, %d): state=%d", ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), _vport, namelen, (int)tcp_state);
+	INFO_LOG(Log::sceNet, "connect::PacketSocket(%s:%u|%u, %d): state=%d", ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), _vport, namelen, (int)tcp_state);
 
 	// The remote branch below validates against the state from BEFORE this call
 	// overwrites it - otherwise the SynSent assignment here makes that check
@@ -2388,109 +2445,43 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	dst.virt.port = _dest->sin_port;
 	dst.virt.vport = htons(_vport);
 
-	INFO_LOG(Log::sceNet, "PACKET: Connecting to %s:%u on vport %u",
+	INFO_LOG(Log::sceNet, "connect::PacketSocket: Connecting to %s:%u on vport %u",
 		ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport));
 
-	int ret = 0;
-	if (isLocalTarget(dst.virt.addr.s_addr)) {
-		// Linux's kernel silently rewrites a connect() target of INADDR_ANY to
-		// loopback (net/ipv4/af_inet.c, inet_stream_connect); Windows has no such
-		// compatibility shim, so connecting to 0.0.0.0 never reaches the listener
-		// and the socket sits in SynSent indefinitely. Do the same rewrite
-		// ourselves so both platforms actually connect.
-		if (dst.host.sin_addr.s_addr == htonl(INADDR_ANY))
-			dst.host.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-		ret = ::connect(sock, reinterpret_cast<struct sockaddr*>(&dst.host), sizeof(sockaddr_in));
-		// g_socketManager.vBroadcast(std::move(send_pkt), dst);
-		// tx_seq++;
-		// if (ret < 0) {
-		// 	return -1; //return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Failed to send SYN");
-		// }
+	// Linux's kernel silently rewrites a connect() target of INADDR_ANY to
+	// loopback (net/ipv4/af_inet.c, inet_stream_connect); Windows has no such
+	// compatibility shim, so connecting to 0.0.0.0 never reaches the listener
+	// and the socket sits in SynSent indefinitely. Do the same rewrite
+	// ourselves so both platforms actually connect.
+	if (dst.host.sin_addr.s_addr == htonl(INADDR_ANY))
+		dst.host.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	int ret = ::connect(sock, reinterpret_cast<struct sockaddr*>(&dst.host), sizeof(sockaddr_in));
+	// g_socketManager.vBroadcast(std::move(send_pkt), dst);
+	// tx_seq++;
+	// if (ret < 0) {
+	// 	return -1; //return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Failed to send SYN");
+	// }
 
-		if (socket_errno == EAGAIN || socket_errno == EINPROGRESS) {
-			// Cache the socket information
-			SockAddrIN4 saddr{};
-			saddr.addr.sa_family = name->sa_family;
-			int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
-			name->sa_len = len;
-			memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
+	if (socket_errno == EAGAIN || socket_errno == EINPROGRESS) {
+		// Cache the socket information
+		SockAddrIN4 saddr{};
+		saddr.addr.sa_family = name->sa_family;
+		int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
+		name->sa_len = len;
+		memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
 
-			getsockname(sock, (sockaddr*)&saddr, (socklen_t*)&len);
-			this->src.host.sin_family = saddr.in.sin_family;
-			this->src.virt.addr = saddr.in.sin_addr;
-			this->src.virt.port = saddr.in.sin_port; // Adopt the ephemeral port
-			this->src.virt.vport = htons(_vport); // Adopt the vport as vport
-			// getsockname resets the inet last error, so we need to swap it back
-#if PPSSPP_PLATFORM(WINDOWS)
-			SetLastError(EAGAIN);
-#else
-			socket_errno = EINPROGRESS;
-#endif
-		}
-	} else {
-		// DCCP must exist for P2P traffic
-		auto p2p_sock = g_socketManager.GetP2PSocket();
-		if (!p2p_sock) {
-#if PPSSPP_PLATFORM(WINDOWS)
-			SetLastError(EINVAL);
-#else
-			socket_errno = EINVAL;
-#endif
-			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: P2P_SOCK Not Present");
-		}
-		// Validate socket is not already connected/connecting
-		if (prior_state != TCPState::Disconnected) {
-			ERROR_LOG(Log::sceNet, "SOCK_PACKET connect: Socket not in Disconnected state (state=%d)", (int)prior_state);
-			tcp_state = prior_state; // undo the clobber above; the existing connection stays as it was
-#if PPSSPP_PLATFORM(WINDOWS)
-			SetLastError(EISCONN);
-#else
-			socket_errno = EISCONN;
-#endif
-			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Socket not in Disconnected state (state=%d)", (int)prior_state);
-		}
-		// Flip PSP port/vports
-		dst.virt.port = _dest->sin_port;
-		dst.virt.vport = htons(_vport);
-		
-		// Set state to SynSent (waiting for ACK)
-		tcp_state = TCPState::SynSent;
-		rx_seq = 0;
-		tx_seq = 0;
-		
-		this->src.virt.addr.s_addr = INADDR_ANY;
-		this->src.virt.port = htons(g_socketManager.generateEphemeralPort()); // Adopt a unique vport
-		this->src.virt.vport =  htons(_vport); // Adopt the destination port
-		// this->port = ntohs(_dest->sin_port);
-
-		auto data = std::make_unique<char[]>(2);
-		memcpy(data.get(), &src.virt.vport, 2);
-
-		// Assigns the outer ret - declaring a fresh one here shadowed it, making the
-		// function return the outer 0 ("connected!") for a SynSent socket.
-		// Send_Reliable increments tx_seq itself - no manual increment here.
-		ret = Send_Reliable(data.get(), 2, p2ps_tcp_flags::SYN|p2ps_tcp_flags::TCP);
-		// int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&dst.host, sizeof(sockaddr_in));
-		if (ret < 0) {
-
-#if PPSSPP_PLATFORM(WINDOWS)
-			SetLastError(ECONNABORTED);
-#else
-			socket_errno = ECONNABORTED;
-#endif
-			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Failed to send SYN");
-		}
-
+		getsockname(sock, (sockaddr*)&saddr, (socklen_t*)&len);
+		this->src.host.sin_family = saddr.in.sin_family;
+		this->src.virt.addr = saddr.in.sin_addr;
+		this->src.virt.port = saddr.in.sin_port; // Adopt the ephemeral port
+		this->src.virt.vport = htons(_vport); // Adopt the vport as vport
+		// getsockname resets the inet last error, so we need to swap it back
 #if PPSSPP_PLATFORM(WINDOWS)
 		SetLastError(EAGAIN);
 #else
 		socket_errno = EINPROGRESS;
 #endif
-		ret = -1;
 	}
-	
-	// INFO_LOG(Log::sceNet, "SOCK_PACKET: Connected vport %d to %s:%u",
-	// 	vport, inet_ntoa(_dest->sin_addr), ntohs(_dest->sin_port));
 	return ret;  // Non-blocking: game will check connection status later
 }
 int PacketSocket::listen(int backlog) { 
