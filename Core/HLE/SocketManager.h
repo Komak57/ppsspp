@@ -116,28 +116,35 @@ union VirtualSockAddr {
 };
 
 // Extended on-wire header for ALL p2p game packets (RELIABLE and UNRELIABLE),
-// following the 3-byte VPORT_HEADER: [src_port u16][src_vport u16][dst_vport u16],
-// all network order, then the u32 seq_id. The header.dest key is the dest game
+// following the 3-byte VPORT_HEADER: [src_port u16][src_vport u16][dst_vport u16][sockType u8],
+// maintaining network order, then the u32 seq_id.
 // PORT for TCP packets and the dest VPORT for UDP packets (where the ext
 // dst_vport duplicates it, keeping the parse uniform). The src vport lets the
 // receiver hand the game a reply-able source address in recvfrom.
 // RPCN/signaling packets (header.dest == 0) MUST stay exactly
 // [VPORT_HEADER][payload] - the receiver matches vport 0 on the 3-byte header
 // alone before ever looking for this extension.
-const int VPKT_HEADER_SIZE = 6;
+const int VPKT_HEADER_SIZE = 11;
 
 // Packet structure for virtual socket queuing
 struct VirtualPacket {
+	// Every field is default-initialized: a default-constructed VirtualPacket (`VirtualPacket p;`)
+	// otherwise leaves the src/dst unions and the scalars as indeterminate garbage. That bit UDP
+	// receive - P2PRecv never sets dst.virt.port for UDP (it addresses by vport), so an uninit
+	// dst.virt.port (seen as 0xCCCC=52428) made Process_Unreliable's port check reject the packet.
 	std::unique_ptr<char[]> data;  // Payload (heap allocated)
-	size_t len;                     // Payload length
-	VirtualSockAddr src;            // Source address (for recvfrom)
-	VirtualSockAddr dst;            // Destination address (for distribution)
-	u8 header_flags;                // TCP flags from DGRAM_HEADER for control packets
-	uint32_t seq_id;				// key for packet order
-	bool seq_ack;					// key for packet order
-	u64 enqueue_time_us;			// Microseconds since received (for TTL checking)
-	u64 last_sent_us;				// Microseconds since re-sent
-	int sent_count;					// Number of attempts to re-send
+	size_t len = 0;                 // Payload length
+	VirtualSockAddr src{};          // Source address (for recvfrom)
+	VirtualSockAddr dst{};          // Destination address (for distribution)
+	u8 header_flags = 0;            // TCP flags from DGRAM_HEADER for control packets
+	u8 sockType = 0;                // raw PSP socket type (the sender's InetSocket::type); the
+	                                // demux matches it so a DGRAM side-channel and a CONN_DGRAM
+	                                // game socket never cross-deliver
+	uint32_t seq_id = 0;			// key for packet order
+	bool seq_ack = false;			// key for packet order
+	u64 enqueue_time_us = 0;		// Microseconds since received (for TTL checking)
+	u64 last_sent_us = 0;			// Microseconds since re-sent
+	int sent_count = 0;				// Number of attempts to re-send
 
     VirtualPacket clone() const {
         VirtualPacket new_pkt;
@@ -145,6 +152,7 @@ struct VirtualPacket {
         new_pkt.src = src;
         new_pkt.dst = dst;
         new_pkt.header_flags = header_flags;
+		new_pkt.sockType = sockType;
 		new_pkt.seq_id = seq_id;
         new_pkt.enqueue_time_us = enqueue_time_us;
 		new_pkt.last_sent_us = last_sent_us;
@@ -172,24 +180,19 @@ struct VirtualPacket {
 		// The single u16 header key differs by transport: TCP routes on the dest
 		// GAME PORT; UDP routes on the dest VPORT (0 = signaling - dst.virt.port
 		// holds the sockaddr's real sin_port there and must NOT be used as key).
-		u16 key = (header_flags & p2ps_tcp_flags::TCP) != 0 ? dst.virt.port : dst.virt.vport;
-		bool ext = key != 0;
-		int packet_size = VPORT_HEADER_SIZE + (ext ? VPKT_HEADER_SIZE + (int)sizeof(seq_id) : 0) + (int)len;
+		bool include_vpkt = dst.virt.port != 0; // RPCN socket or no
+		int packet_size = VPORT_HEADER_SIZE + (include_vpkt ? VPKT_HEADER_SIZE : 0) + (int)len;
 		std::unique_ptr<char[]> packet = std::make_unique<char[]>(packet_size);
 
 		// Pack DGRAM_HEADER (3 bytes): [flags][data_len]
-		VPORT_HEADER header = GetHeader(key);
+		VPORT_HEADER header = GetHeader(dst.virt.port);
 		memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
 		int off = VPORT_HEADER_SIZE;
-		if (ext) {
-			// Fields are already network order (they mirror sockaddr storage).
-			// dst.virt.port is NOT written - TCP carries it in header.dest, and
-			// UDP addressing has no game dest port (dst_vport doubles as the key).
+		if (include_vpkt) {
+			memcpy(packet.get() + off, &dst.virt.vport, 2); off += 2;
 			memcpy(packet.get() + off, &src.virt.port, 2); off += 2;
 			memcpy(packet.get() + off, &src.virt.vport, 2); off += 2;
-			memcpy(packet.get() + off, &dst.virt.vport, 2); off += 2;
-		}
-		if (ext) {
+			memcpy(packet.get() + off, &sockType, 1); off += 1;  // raw type, single byte
 			auto net_seq_id = htonl(seq_id);
 			memcpy(packet.get() + off, &net_seq_id, sizeof(net_seq_id));
 			off += sizeof(net_seq_id);
