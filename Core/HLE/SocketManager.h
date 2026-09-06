@@ -360,12 +360,9 @@ struct InetSocket {
 	virtual int listen(int backlog);
 	virtual int accept(sockaddr* addr, socklen_t* addrlen);
 
-	// Process P2P as TCP over UDP with Sequential Ordering and Packet Loss Prevention 
-	virtual int Send_Reliable(const char* buf, int len, int flags);
-	virtual bool Process_Reliable();
+	virtual int Send_Reliable(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen);
 	// Process P2P as UDP
-	virtual int Send_Unrealiable(const char* buf, int len, int flags, const sockaddr* to, int tolen, u16 dest_vport);
-	virtual bool Process_Unreliable();
+	virtual int Send_Unreliable(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen);
 
 	// Helper methods for virtual socket packet handling
 	virtual void enqueue_packet(VirtualPacket packet);

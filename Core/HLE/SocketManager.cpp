@@ -1130,7 +1130,7 @@ void InetSocket::mark_ack(InetSocket* inetSock, int seq_id) {
 		psh_syn->second.seq_ack = true;
 }
 
-int InetSocket::Send_Unrealiable(const char* buf, int len, int flags, const sockaddr* to, int tolen, u16 dest_vport) {
+int InetSocket::Send_Unreliable(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
 	// DCCP must exist for P2P traffic
 	auto p2p_sock = g_socketManager.GetP2PSocket();
 	if (!p2p_sock) {
@@ -1207,7 +1207,35 @@ bool InetSocket::Process_Unreliable() {
 	return ret;
 }
 
-int InetSocket::Send_Reliable(const char* buf, int len, int flags) {
+int InetSocket::Send_Reliable(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	// A connected reliable socket sends to this->dst. A connectionless-reliable socket
+	// (e.g. UDP, which never handshakes - set Established up front) supplies its
+	// destination per-call through sendto's to/tolen; adopt it as an override, decoded exactly
+	// like a connect target (game port in sin_port, peer's real UDP vport in sin_zero).
+	VirtualSockAddr dest = dst;
+	if (to && tolen >= (int)sizeof(sockaddr_in)) {
+		const sockaddr_in* _to = reinterpret_cast<const sockaddr_in*>(to);
+		u16 _vport = (_to->sin_zero[0] << 8) | _to->sin_zero[1];
+		dest.host.sin_family = AF_INET;
+		dest.host.sin_addr.s_addr = _to->sin_addr.s_addr;
+		dest.virt.port = _to->sin_port;
+		dest.virt.vport = htons(_vport);
+	}
+
+	// A data push (PSH) needs an established connection - the sceNetInetSend path used to gate
+	// this; it now lives here and reports NOTCONN. Control packets (SYN/ACK/FIN handshake, sent
+	// internally) are exempt. A UDP socket wanting reliable delivery can set tcp_state to
+	// Established at the right time to skip the TCP handshake entirely.
+	if ((flags & p2ps_tcp_flags::PSH) && tcp_state != TCPState::Established && tcp_state != TCPState::CloseWait) {
+		ERROR_LOG(Log::sceNet, "send::RELIABLE: Socket not Established (state=%d)", (int)tcp_state);
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(ENOTCONN);
+#else
+		socket_errno = ENOTCONN;
+#endif
+		return -1;
+	}
+
 	// DCCP must exist for P2P traffic
 	auto p2p_sock = g_socketManager.GetP2PSocket();
 	if (!p2p_sock) {
