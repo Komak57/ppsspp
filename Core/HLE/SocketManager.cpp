@@ -1337,7 +1337,7 @@ int InetSocket::Send_Reliable(const char* buf, int len, int flags, const SceNetI
 #else
 		socket_errno = EINVAL;
 #endif
-		return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: P2P_SOCK Not Present");
+		return hleLogError(Log::sceNet, -1, "send::RELIABLE: P2P_SOCK Not Present");
 	}
 
 	// Create the transmission vpacket
@@ -1346,13 +1346,13 @@ int InetSocket::Send_Reliable(const char* buf, int len, int flags, const SceNetI
 	memcpy(vpkt.data.get(), buf, len);
 	vpkt.len = len;
 	vpkt.header_flags = flags;
+	vpkt.sockType = (u8)type;  // raw type, matched in the demux
 	vpkt.src.host = src.host;
 	vpkt.seq_id = tx_seq+1;
-	// Game-space addressing for the extended wire header
+	// Game-space addressing for the extended wire header (dest may be the override, above)
 	vpkt.src.virt.port = src.virt.port;
 	vpkt.src.virt.vport = src.virt.vport;
-	vpkt.dst.virt.port = dst.virt.port;
-	vpkt.dst.virt.vport = dst.virt.vport;
+	vpkt.dst = dest;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
 	vpkt.last_sent_us = (u64)(time_now_d() * BASE_RTO_US);
@@ -1365,15 +1365,15 @@ int InetSocket::Send_Reliable(const char* buf, int len, int flags, const SceNetI
 		tx_buffer[tx_seq+1] = std::move(vpkt);
 	}
 
-	auto [_len, _data] = send_pkt.Pack(dst);
+	auto [_len, _data] = send_pkt.Pack(dest);
 	// Flip port/vport for physical delivery: the datagram must reach the peer's
 	// REAL UDP endpoint - their DCCP master, i.e. the game vport (3658) - while the
 	// game port (12000/ephemeral) rides in the vport header + ext header for routing.
-	sockaddr_in phys = dst.host;
-	phys.sin_port = dst.virt.vport;
+	sockaddr_in phys = dest.host;
+	phys.sin_port = dest.virt.vport;
 	int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (const sockaddr*)&phys, sizeof(sockaddr_in));
 	if (ret < 0)
-		return hleLogError(Log::sceNet, ret, "Send_Reliable: Failed to send to peer");
+		return hleLogError(Log::sceNet, ret, "send::RELIABLE: Failed to send to peer");
 	tx_seq++;
 	// Report PAYLOAD bytes, not wire bytes: ::sendto's result includes the vport +
 	// ext + seq headers (e.g. 32 -> 47), and a stream layer that believes 47 bytes
@@ -2419,61 +2419,20 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 // TCP Virtual Socket with UPnP transmission capabilities
 // ============================================================================
 int PacketSocket::send(const char* buf, int len, int flags) { 
-	VERBOSE_LOG(Log::sceNet, "SOCK_PACKET::send(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
+	VERBOSE_LOG(Log::sceNet, "send::PacketSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	int flgs = convertMSGFlagsPSP2Host(flags);
 
-	std::string msg = "send::PACKET " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) + 
+	std::string msg = "send::PacketSocket " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) + 
 	"[" + std::to_string(ntohs(dst.virt.vport)) + "] (" + std::to_string(dbg.send) + ", " + 
 	std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
 	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, len, 386);
 	
-	int ret = 0;
-	if (isLocalTarget(dst.virt.addr.s_addr)) {
-		// return ::connect(sock, (struct sockaddr*)_dest, sizeof(sockaddr_in));
-		// g_socketManager.vBroadcast(std::move(send_pkt), dst);
-		// tx_seq++; // TODO: Only on ::send success?
-		// MSG_NOSIGNAL: a peer that already closed this connection makes send()
-		// raise SIGPIPE otherwise. PPSSPP ignores SIGPIPE process-wide at startup,
-		// but a native debugger attached to the host binary traps it anyway (it
-		// intercepts delivery before our handler runs) - suppress it at the
-		// syscall level instead, matching every other raw send()/recv() call site
-		// in this codebase.
-		ret = ::send(sock, buf, len, flgs | MSG_NOSIGNAL);
-		if (ret < 0) {
-			return hleLogError(Log::sceNet, ret, "SOCK_PACKET send: Failed to send to local");
-		}
-		dbg.sent++;
-		WARN_LOG(Log::sceNet, "%d bytes send to (%s:%u);", 
-			ret, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port));
-	} else {
-		// For SOCK_PACKET, send() requires an established connection
-		if (tcp_state != TCPState::Established) {
-			ERROR_LOG(Log::sceNet, "SOCK_PACKET send: Socket not Established (state=%d)", (int)tcp_state);
-#if PPSSPP_PLATFORM(WINDOWS)
-			SetLastError(ENOTCONN);
-#else
-			socket_errno = ENOTCONN;
-#endif
-			return -1;
-		}
-		// Remote delivery to vport (NAT)
-		ret = Send_Reliable(buf, len, (p2ps_tcp_flags::PSH | p2ps_tcp_flags::TCP));
-		if (ret < 0)
-			return hleLogError(Log::sceNet, ret, "SOCK_PACKET send: Failed to send to peer");
-		dbg.sent++;
-
-		WARN_LOG(Log::sceNet, "%d bytes send to %s:%u(%u); [tx=%d/rx=%d]", 
-			ret, ip2str(dst.virt.addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport),
-			tx_seq, rx_seq);
-	}
-	
-	// // If this socket has broadcast enabled, replicate to other broadcast subscribers on this VPort
-	// if ((so_flags & SO_FLAGS_DCCP_BROADCAST) && ret > 0) {
-	// 	g_socketManager.BroadcastFromSocket(vport, this, buf, len, &peer);
-	// }
-	
+	int ret = ::send(sock, buf, len, flgs | MSG_NOSIGNAL);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "send::PacketSocket: Failed to send to local");
+	dbg.sent++;
 	return ret;
 }
 int PacketSocket::recv(char* buf, int len, int flags) {
