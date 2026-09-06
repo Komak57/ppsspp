@@ -454,7 +454,7 @@ bool SocketManager::P2PRecv() {
 	char data[0x3000]; // Supplied by many psp buffers
 	sockaddr_in _from{};
 	socklen_t _fromlen = sizeof(_from);
-	int ret = ::recvfrom(p2p_sock->sock, data, sizeof(data), 0, reinterpret_cast<sockaddr*>(&_from), &_fromlen);
+	int ret = ::recvfrom(p2p_sock->sock, data, sizeof(data), 0 | MSG_NOSIGNAL, reinterpret_cast<sockaddr*>(&_from), &_fromlen);
 	if (ret <= 0) {
 		// This is normal if no packet is available (non-blocking mode)
 		return false;
@@ -462,7 +462,7 @@ bool SocketManager::P2PRecv() {
 	
 	// Extract VPORT_HEADER (first 3 bytes: vport + flags)
 	if (ret < VPORT_HEADER_SIZE) {
-		INFO_LOG(Log::sceNet, "P2PRecv: Packet too small (%d bytes) from %s:%u, ignoring", 
+		WARN_LOG(Log::sceNet, "P2PRecv: Packet too small (%d bytes) from %s:%u, ignoring", 
 			ret, inet_ntoa(_from.sin_addr), ntohs(_from.sin_port));
 		return false; // Packet too small, ignore
 	}
@@ -474,60 +474,52 @@ bool SocketManager::P2PRecv() {
 	// Generate the transmission vpacket
 	VirtualPacket vpkt;
 	vpkt.seq_id = 0;
-	// Seed src with the REAL transport endpoint FIRST: src.host and src.virt alias
-	// the same union, so this must happen before the ext-header parse below
-	// overwrites port/vport with the sender's game-space keys (addr stays real).
 	vpkt.src.host = _from;
 	vpkt.src.host.sin_family = AF_INET;
+	vpkt.header_flags = header.flags;
+	vpkt.dst.virt.port = header.dest;
+	if (header.dest == 0)
+		vpkt.sockType = PSP_NET_INET_SOCK_CONN_DGRAM;
 	// vport 0 (RPCN/signaling) is matched on the 3-byte header ALONE - no extended
 	// header, no seq_id. All p2p game packets (dest != 0) carry the ext header.
-	if (header.dest != 0 && ret - i >= VPKT_HEADER_SIZE + (int)sizeof(vpkt.seq_id)) {
+	bool has_vpkt = false;
+	if (header.dest != 0 && ret - i >= VPKT_HEADER_SIZE) {
 		u16 wire_src_port = 0;
-		memcpy(&wire_src_port, data + i, 2); i += 2;
-		if ((header.flags & p2ps_tcp_flags::TCP) != 0) {
-			// TCP: the strict matcher routes on the sender's game port, and the
-			// dest game port is the VPORT_HEADER key.
-			vpkt.src.virt.port = wire_src_port;
-			vpkt.dst.virt.port = header.dest;
-		}
-		// UDP keeps the REAL transport port in src.virt.port - recvfrom reports it
-		// as the reply sin_port, which must physically reach the peer's DCCP.
-		memcpy(&vpkt.src.virt.vport, data + i, 2); i += 2;
 		memcpy(&vpkt.dst.virt.vport, data + i, 2); i += 2;
+		memcpy(&vpkt.src.virt.port, data + i, 2); i += 2;
+		memcpy(&vpkt.src.virt.vport, data + i, 2); i += 2;
+		memcpy(&vpkt.sockType, data + i, 1); i += 1;  // raw type, single byte
 		uint32_t net_seq_id = 0;
 		memcpy(&net_seq_id, data + i, sizeof(net_seq_id));
 		vpkt.seq_id = ntohl(net_seq_id);
 		i += sizeof(net_seq_id);
+		has_vpkt = true;
 	}
+
 	vpkt.len = ret - i;
 	if (vpkt.len > 0) {
 		vpkt.data = std::make_unique<char[]>(vpkt.len);
 		memcpy(vpkt.data.get(), data+i, vpkt.len);
 	}
-	vpkt.header_flags = header.flags;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
 
 	// Log incoming packet details (convert vport from network to host byte order for
 	// display). For TCP packets show the sender's GAME endpoint from the ext header;
 	// the real sockaddr's sin_zero always displays as vport 0.
-	if ((header.flags & p2ps_tcp_flags::TCP) != 0 && header.dest != 0)
-		INFO_LOG(Log::sceNet, "P2PRecv: Received %d bytes from %s:%u|%u -> peer %u|%u (flags=0x%02x(=%d))",
-			ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(vpkt.dst.virt.port), ntohs(vpkt.dst.virt.vport), header.flags, header.flags & 0xFF);
-	else
-		INFO_LOG(Log::sceNet, "P2PRecv: Received %d bytes from %s:%u|%u -> vport %d (flags=0x%02x(=%d))",
-			ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(header.dest), header.flags, header.flags & 0xFF);
+	INFO_LOG(Log::sceNet, "P2PRecv: Received %d bytes from %s:%u|%u -> %u|%u (flags=0x%s, sockType=%d)",
+		ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(vpkt.dst.virt.port), ntohs(vpkt.dst.virt.vport), FlagsToStr(vpkt.header_flags), vpkt.sockType);
 
 	VirtualSockAddr dest{};
 	getLocalIp(&dest.host);
-	if ((header.flags & p2ps_tcp_flags::TCP) != 0 && header.dest != 0) {
+	if (has_vpkt) {
 		// Flip back to game-space: the datagram physically arrived on our real UDP
 		// port (3658), but it's addressed to the game endpoint in the ext header.
 		dest.virt.port = vpkt.dst.virt.port;
 		dest.virt.vport = vpkt.dst.virt.vport;
 	} else {
-		dest.virt.port = 0;
-		dest.virt.vport = header.dest;
+		dest.virt.port = header.dest;
+		dest.virt.vport = ntohs(header.flags);
 	}
 	g_socketManager.vBroadcast(std::move(vpkt), dest);
 
