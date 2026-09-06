@@ -714,7 +714,7 @@ int InetSocket::getsockopt(int level, int optname, char* optval, socklen_t* optl
 
 	// SPECIAL CASE: SO_ERROR for hybrid sockets needs custom handling
 	if (level == PSP_NET_INET_SOL_SOCKET && optname == PSP_NET_INET_SO_ERROR && 
-	    p2p_mode != p2p_type::DISABLED) {
+	    recvP2P) {
 		// For hybrid sockets, check if connection succeeded locally
 		if (tcp_state == TCPState::Established) {
 			// Local connection succeeded, return 0
