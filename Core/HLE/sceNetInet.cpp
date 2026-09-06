@@ -1040,9 +1040,14 @@ static int sceNetInetAccept(int socket, u32 addrPtr, u32 addrLenPtr)
 	// Accept runs directly on the emu thread - a BLOCKING host accept with no
 	// pending connection would stall the whole emulator, not just this PSP thread
 	if (!inetSock->nonblocking)
-		WARN_LOG(Log::sceNet, "%s: BLOCKING accept on socket #%d directly on the emu thread - if the emulator freezes here, this is why", __FUNCTION__, socket);
+		WARN_LOG(Log::sceNet, "%s: BLOCKING accept on socket #%d", __FUNCTION__, socket);
 
-	int newHostSocket = inetSock->accept((struct sockaddr *)&saddr.addr, srclen);
+	// A pending virtual (relayed) SYN is promoted through Accept_Reliable; otherwise real accept.
+	// Gate on the pending connection itself, NOT merely on signaling being up - otherwise a plain
+	// host TCP listener could never accept a real connection while signaling runs.
+	int newHostSocket = inetSock->has_pending_connection()
+		? inetSock->Accept_Reliable((struct sockaddr *)&saddr.addr, srclen)
+		: inetSock->accept((struct sockaddr *)&saddr.addr, srclen);
 	// newHostSocket = accept(inetSock->sock, (struct sockaddr*)&saddr.addr, srclen);
 	if (newHostSocket < 0)
 	{
