@@ -56,6 +56,18 @@ enum p2ps_tcp_flags : u8
 	TCP = (1 << 7), // Is using TCP protocols
 };
 
+inline std::string FlagsToStr(u8 f) {
+    std::string s;
+    if (f & p2ps_tcp_flags::SYN) s += "SYN|";
+    if (f & p2ps_tcp_flags::ACK) s += "ACK|";
+    if (f & p2ps_tcp_flags::PSH) s += "PSH|";
+    if (f & p2ps_tcp_flags::FIN) s += "FIN|";
+    if (f & p2ps_tcp_flags::RST) s += "RST|";
+    if (f & p2ps_tcp_flags::TCP) s += "TCP|";
+    if (!s.empty()) s.pop_back();
+    return s.empty() ? "0" : s;
+}
+
 enum p2p_type : u8
 {
 	DISABLED = 0xFF,
