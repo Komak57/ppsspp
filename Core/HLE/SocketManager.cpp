@@ -761,9 +761,9 @@ int InetSocket::setsockopt(int level, int optname, const char* optval, socklen_t
 				optlen = sizeof(tval);
 				break;
 			}
-		case PSP_NET_INET_SO_DCCP_BROADCAST:
+		case SCE_NET_INET_SO_USECRYPTO_RX:
 			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
-		case PSP_NET_INET_SO_DCCP_LINGER:
+		case SCE_NET_INET_SO_USECRYPTO_TX:
 			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
 		default:
 			break;  // Fall through to host socket options
