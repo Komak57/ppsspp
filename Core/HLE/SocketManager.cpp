@@ -589,109 +589,35 @@ void SocketManager::CloseAll() {
 int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
     int delivered_count = 0;
 
-	// RELIABLE (TCP-flagged) packets are strictly addressed - each PacketSocket is
-	// a pseudo-server keyed by its game port/vport, so deliver to exactly ONE
-	// socket: an established/connecting socket whose peer matches the packet's
-	// game-space source, or failing that the listening socket that owns the
-	// destination endpoint (for SYN and pre-accept handshake traffic).
-	if ((vpkt.header_flags & p2ps_tcp_flags::TCP) != 0) {
-		InetSocket* listener = nullptr;
-		InetSocket* exact = nullptr;
-		for (int i = 0; i < SocketManager::VALID_INET_SOCKET_COUNT; i++) {
-			InetSocket* target_sock = &inetSockets_[i];
-			if (!target_sock || target_sock->state == SocketState::Unused)
-				continue;
-			if (target_sock->p2p_mode != p2p_type::RELIABLE)
-				continue;
-			// The socket must own the destination game endpoint (port 12000 / vport 3658,
-			// or the connector's ephemeral port for replies)
-			if (target_sock->src.virt.port != dest.virt.port)
-				continue;
-			if (target_sock->src.virt.vport != dest.virt.vport)
-				continue;
-			if (target_sock->src.virt.addr.s_addr != INADDR_ANY && target_sock->src.virt.addr.s_addr != dest.virt.addr.s_addr)
-				continue;
-			if (target_sock->tcp_state == TCPState::Listening) {
-				if (!listener)
-					listener = target_sock;
-				continue;
-			}
-			// Connecting/connected: the packet's game-space source must be our peer
-			if (target_sock->dst.virt.addr.s_addr != INADDR_ANY && target_sock->dst.virt.addr.s_addr != vpkt.src.host.sin_addr.s_addr)
-				continue;
-			if (target_sock->dst.virt.port != vpkt.src.virt.port)
-				continue;
-			if (target_sock->dst.virt.vport != vpkt.src.virt.vport)
-				continue;
-			exact = target_sock;
-			break;
+	// Every p2p-capable socket decides for itself whether the packet is addressed to it and,
+	// if so, clones/enqueues/processes it (processP2P -> ProcessP2P_Reliable/Unreliable). This
+	// replaces the inline reliable/unreliable matching and the p2p_mode gate entirely.
+	for (int i = 0; i < SocketManager::VALID_INET_SOCKET_COUNT; i++) {
+		InetSocket* target_sock = &inetSockets_[i];
+		if (!target_sock || target_sock->state == SocketState::Unused)
+			continue;
+
+		if (!target_sock->processP2P) {
+			WARN_LOG(Log::sceNet, "vBroadcast: sock #%d (type=%d) has no processP2P - skipped", i, target_sock->type);
+			continue;
 		}
-		InetSocket* target_sock = exact ? exact : listener;
-		if (!target_sock) {
-			ERROR_LOG(Log::sceNet, "vBroadcast: No RELIABLE socket for %s:%u|%u -> %u|%u (flags=0x%02x)",
-				inet_ntoa(vpkt.src.host.sin_addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport),
-				ntohs(dest.virt.port), ntohs(dest.virt.vport), vpkt.header_flags);
-			return 0;
-		}
-		INFO_LOG(Log::sceNet, "vBroadcast: DELIVERING %i bytes from %s:%u|%u to port %s:%u|%u (type=%d)",
-			(int)vpkt.len, inet_ntoa(vpkt.src.host.sin_addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport),
-			ip2str(target_sock->src.virt.addr).c_str(), ntohs(target_sock->src.virt.port), ntohs(target_sock->src.virt.vport), target_sock->type);
-		target_sock->enqueue_packet(vpkt.clone());
-		target_sock->Process_Reliable();
-		return 1;
+		int got = (target_sock->*(target_sock->processP2P))(vpkt.clone(), dest);
+		delivered_count += got;
+		// A vport-0 ("system") packet carries no ext header, so vpkt.sockType is not real sender
+		// info - print "n/a" rather than a number that looks like a specific (and possibly wrong)
+		// socket type.
+		INFO_LOG(Log::sceNet, "vBroadcast: %s:%u|%u %s sock #%d %s:%u|%u (type=%d)",
+			ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport),
+			got ? "DELIVERED to" : "REJECTED by",
+			i, ip2str(target_sock->src.virt.addr).c_str(), ntohs(target_sock->src.virt.port), ntohs(target_sock->src.virt.vport), target_sock->type);
 	}
 
-    // Match sockets by vport (port-based routing instead of subscriptions)
-    for (int i = 0; i < SocketManager::VALID_INET_SOCKET_COUNT; i++) {
-        InetSocket* target_sock = &inetSockets_[i];
-
-        // Skip unused sockets
-        if (!target_sock || target_sock->state == SocketState::Unused) {
-            continue;
-        }
-
-		{
-			if (target_sock->p2p_mode != p2p_type::UNRELIABLE)
-				continue;
-
-			// Matches endpoint address
-			if ((target_sock->src.virt.addr.s_addr != INADDR_ANY && target_sock->src.virt.addr.s_addr != dest.virt.addr.s_addr))
-				continue;
-			// Match endpoint port (3658)
-			if (dest.virt.port != 0 && target_sock->src.virt.port != dest.virt.port)
-				continue;
-			// Matches endpoint vport (0). VPORT_ANY (sender supplied no dest vport)
-			// delivers to every game socket, but never to signaling (vport 0).
-			if (dest.virt.vport == VPORT_ANY) {
-				if (target_sock->src.virt.vport == 0)
-					continue;
-			} else if (target_sock->src.virt.vport != dest.virt.vport)
-				continue;
-
-			DEBUG_LOG(Log::sceNet, "vBroadcast: Processing socket dst.virt.port %d (type=%d)", 
-				target_sock->src.virt.vport, target_sock->type);
-
-			INFO_LOG(Log::sceNet, "vBroadcast: DELIVERING %i bytes from %s:%u|%u to port %s:%u|%u (type=%d)", 
-				(int)vpkt.len, inet_ntoa(vpkt.src.virt.addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ip2str(target_sock->src.virt.addr).c_str(), ntohs(target_sock->src.virt.port), ntohs(target_sock->src.virt.vport), target_sock->type);
-			
-			target_sock->enqueue_packet(vpkt.clone());
-			delivered_count++;
-			
-			if (target_sock->Process_Unreliable()) {
-				continue;
-			}
-		}
-        
-		DEBUG_LOG(Log::sceNet, "vBroadcast: NOT delivering to vport %d (deliver_data=false)", ntohs(target_sock->src.virt.vport));
-    }
-    
-    if (delivered_count > 0) {
-        DEBUG_LOG(Log::sceNet, "vBroadcast: Total delivered to %d subscribers matching  %s:%u|%u", delivered_count, ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport));
-    } else {
-        ERROR_LOG(Log::sceNet, "vBroadcast: Total delivered to %d subscribers matching  %s:%u|%u", delivered_count, ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport));
+	if (delivered_count == 0) {
+		ERROR_LOG(Log::sceNet, "vBroadcast: NO socket accepted %s:%u|%u (flags=0x%s, sockType=%d)",
+			ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport), FlagsToStr(vpkt.header_flags), vpkt.sockType);
 	}
 
-    return delivered_count;
+	return delivered_count;
 }
 
 const char *SocketStateToString(SocketState state) {
@@ -1595,6 +1521,38 @@ int InetSocket::Shutdown_Reliable(int how) {
 		ERROR_LOG(Log::sceNet, "shutdown::RELIABLE: Failed to send FIN");
 	return ::shutdown(sock, how);
 }
+bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
+	if (src.virt.port != dest.virt.port)
+		return false;
+	if (src.virt.vport != dest.virt.vport)
+		return false;
+	if (src.virt.addr.s_addr != INADDR_ANY && src.virt.addr.s_addr != dest.virt.addr.s_addr)
+		return false;
+	// sockType demuxes game p2p sockets that share a vport (e.g. a DGRAM side-channel vs a
+	// CONN_DGRAM/PACKET game socket). A vport-0 ("system") packet carries no ext header and no
+	// real sockType - it's matched on vport alone, same as Process_Unreliable - so ANY socket type
+	// (ConnDgram or Packet) bound to vport 0 can receive it, not just whichever type P2PRecv
+	// happens to default to for display purposes.
+	if (dest.virt.vport != 0 && vpkt.sockType != type)
+		return false;
+
+	if (tcp_state == TCPState::Listening) {
+		// Only accepts new-connection related packets
+		if (!(vpkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP) || 
+			vpkt.header_flags == (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP) || 
+			vpkt.header_flags == (p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP)))
+			return false;
+	} else {
+		// The packet's game-space source must be our connected peer.
+		if (dst.virt.addr.s_addr != INADDR_ANY && dst.virt.addr.s_addr != vpkt.src.host.sin_addr.s_addr)
+			return false;
+		if (dst.virt.port != vpkt.src.virt.port)
+			return false;
+		if (dst.virt.vport != vpkt.src.virt.vport)
+			return false;
+	}
+
+	enqueue_packet(std::move(vpkt));
     const u64 MAX_PACKET_AGE_US = 30000000; // 30 seconds
     u64 current_time_us = (u64)(time_now_d() * 1000000.0);
 
