@@ -62,7 +62,7 @@ namespace net {
         WARN_LOG(Log::Signaling, "RPCN: Creating signaling socket for UPnP on vport %d", SCE_INTERNAL_PORT);
         UPNP_SUBSET_SOCK = CreateSignalingSocket(0, 0, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_CONN_DGRAM, PSP_NET_INET_IPPROTO_UNSPEC);
         WARN_LOG(Log::Signaling, "RPCN: Creating signaling socket for P2P on vport %d", SCE_INTERNAL_PORT);
-        P2P_SUBSET_SOCK = CreateSignalingSocket(0, 0, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_CONN_DGRAM, PSP_NET_INET_IPPROTO_UNSPEC);
+        P2P_SUBSET_SOCK = CreateSignalingSocket(0, 1, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_CONN_DGRAM, PSP_NET_INET_IPPROTO_UNSPEC);
         
         if (!DccpSocket || !UPNP_SUBSET_SOCK || !P2P_SUBSET_SOCK) {
             ERROR_LOG(Log::Signaling, "Could not initialize Signaling Sockets.");
@@ -92,7 +92,9 @@ namespace net {
             u8 buf[1500];
             SceNetInetSockaddr src{};
             socklen_t slen = sizeof(src);
-            int n = UPNP_SUBSET_SOCK->recvfrom(reinterpret_cast<char*>(buf), sizeof(buf), 0,
+            if (!UPNP_SUBSET_SOCK->has_pending_data())
+                break;
+            int n = (UPNP_SUBSET_SOCK->*(UPNP_SUBSET_SOCK->recvP2P))(reinterpret_cast<char*>(buf), sizeof(buf), 0,
                 &src, &slen);
             if (n < 0) {
                 int errorCode = 0;
@@ -259,7 +261,9 @@ namespace net {
             u8 buf[1500];
             SceNetInetSockaddr src{};
             socklen_t slen = sizeof(src);
-            int n = P2P_SUBSET_SOCK->recvfrom(reinterpret_cast<char*>(buf), sizeof(buf), 0,
+            if (!P2P_SUBSET_SOCK->has_pending_data())
+                break;
+            int n = (P2P_SUBSET_SOCK->*(P2P_SUBSET_SOCK->recvP2P))(reinterpret_cast<char*>(buf), sizeof(buf), 0,
                 &src, &slen);
             if (n < 0) {
                 int errorCode = 0;
