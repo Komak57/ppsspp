@@ -1548,6 +1548,7 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 				ack.src.virt.vport = src.virt.vport;
 				ack.dst.virt.port = dst.virt.port;
 				ack.dst.virt.vport = dst.virt.vport;
+				ack.sockType = type;
 				auto p2p_sock = g_socketManager.GetP2PSocket();
 				if (p2p_sock) {
 					auto [_len, _data] = ack.Pack(dst);
@@ -1578,6 +1579,10 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 				conn->dst.virt.vport = pkt.src.virt.vport;
 				conn->tcp_state = TCPState::SynReceived;
 				conn->tx_seq = 0;
+				conn->type = this->type;
+				conn->recvP2P = this->recvP2P;
+				conn->sendP2P = this->sendP2P;
+				conn->processP2P = this->processP2P;
 				if (!set_pending_connection(conn))
 					continue;
 				conn->rx_seq = 1; // Mark this packet received
