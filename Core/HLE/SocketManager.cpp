@@ -1139,32 +1139,50 @@ int InetSocket::Send_Unreliable(const char* buf, int len, int flags, const SceNe
 #else
 		socket_errno = EINVAL;
 #endif
-		return hleLogError(Log::sceNet, -1, "Send_Unreliable: P2P_SOCK Not Present");
+		return hleLogError(Log::sceNet, -1, "send::UNRELIABLE: P2P_SOCK Not Present");
 	}
 
+	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	flgs = convertMSGFlagsPSP2Host(flgs);
 	// Create the transmission vpacket
 	VirtualPacket vpkt;
 	vpkt.data = std::make_unique<char[]>(len);
 	memcpy(vpkt.data.get(), buf, len);
 	vpkt.len = len;
 	vpkt.header_flags = p2ps_tcp_flags::PSH;
+	// Tag with the sender's raw socket type so the receiver's demux keeps a DGRAM side-channel
+	// (INFRA_PING) and a game CONN_DGRAM apart even under VPORT_ANY delivery.
+	vpkt.sockType = (u8)type;
 	vpkt.src.host = src.host;
 	vpkt.seq_id = tx_seq+1;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
+	// Build the host destination from the caller's address and read its vport. This was
+	// previously done in ConnDgramSocket::sendto; keeping it here lets any socket type reach
+	// the unreliable P2P path through sendP2P (dest_vport is the per-call destination from the
+	// caller's `to`, NOT this->dst.virt.vport - connectionless sends never populate dst).
+	SockAddrIN4 saddr{};
+	if (to) {
+		saddr.addr.sa_family = to->sa_family;
+		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
+	}
+	// sin_zero holds the vport in the same network-order representation bind() copies into
+	// src.virt.vport. 0 -> wildcard to every game socket of this peer (wire key 0 = signaling).
+	u16 dest_vport = (saddr.in.sin_zero[1] << 8) | saddr.in.sin_zero[0];
+	if (dest_vport == 0)
+		dest_vport = VPORT_ANY;
+
 	VirtualSockAddr dest{};
-	memcpy(&dest.host, to, sizeof(sockaddr_in));
+	memcpy(&dest.host, &saddr.in, sizeof(sockaddr_in));
 	dest.virt.vport = dest_vport;
 
-	// Send the packet over P2P. dest_vport is the per-call destination (from the
-	// caller's `to` address), NOT this->dst.virt.vport - ConnDgramSocket sends are
-	// connectionless and never populate dst.virt.vport (only StreamSocket/PacketSocket
-	// connect()/accept() do), so using dst.virt.vport here always packed vport 0.
 	auto [_len, _data] = vpkt.Pack(dest);
-	// Send through DCCP
-	int ret = ::sendto(p2p_sock->sock, _data.get(), _len, flags, to, sizeof(sockaddr));
-	if (ret < 0)
-		return hleLogError(Log::sceNet, ret, "Send_Unreliable: Failed to send to peer");
+	// Send through DCCP to the peer's real endpoint.
+	int ret = ::sendto(p2p_sock->sock, _data.get(), _len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	if (ret < 0) {
+		ERROR_LOG(Log::sceNet, "send::UNRELIABLE: Failed to send to peer (%i)", ret);
+		return ret;
+	}
 	tx_seq++;
 	// Report PAYLOAD bytes, not wire bytes (see Send_Reliable)
 	return (int)len;
@@ -2315,71 +2333,21 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	}
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(&saddr.addr);
 
-	// Raw overlay read: (sin_zero[1] << 8) | sin_zero[0] IS the u16 as stored in the
-	// sockaddr - the same network-order representation bind() copies into
-	// src.virt.vport. The old extra ntohs() double-swapped it (vport 8875/0x22AB
-	// went on the wire as 0xAB22/43810 and matched nothing).
-	u16 dest_vport = (saddr.in.sin_zero[1] << 8) | saddr.in.sin_zero[0];
-	if (dest_vport == 0) {
-		// The game addressed the peer by real IP:port only (signaling has no vport
-		// concept) - send as wildcard: the receiver delivers to every game socket
-		// of this peer. Wire key 0 stays reserved for RPCN/signaling.
-		dest_vport = VPORT_ANY;
-	}
+	// sceNetInetSendto already routed peer-bound (port-3658) traffic to sendP2P; a call reaching
+	// this override is a plain/local loopback send, so just hit the host socket. No per-call
+	// non-blocking flip needed - a loopback UDP send doesn't block.
 
-	if (isLocalTarget(_dest->sin_addr.s_addr)) {
-		int ret = ::sendto(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
-		if (ret < 0)
-			return hleLogError(Log::sceNet, ret, "CONN_DGRAM_SOCKET sendto: Failed to send to local");
-		
-		dbg.sent++;
-		WARN_LOG(Log::sceNet, "%d bytes send to (%s:%u);", 
-			ret, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.vport));
+	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
+	const bool restoreBlocking = dontwait && !nonblocking;
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::sendto(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0)
 		return ret;
-	} else {
-		// DCCP must exist for P2P traffic
-		auto p2p_sock = g_socketManager.GetP2PSocket();
-		if (!p2p_sock) {
-#if PPSSPP_PLATFORM(WINDOWS)
-			SetLastError(EINVAL);
-#else
-			socket_errno = EINVAL;
-#endif
-			return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: P2P_SOCK Not Present");
-		}
+	dbg.sent++;
+	return hleLogDebug(Log::sceNet, ret, "sendto::ConnDgramSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+}
 
-		int ret = Send_Unrealiable(buf, len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr), dest_vport);
-		if (ret < 0)
-			return hleLogError(Log::sceNet, ret, "CONN_DGRAM_SOCKET send: Failed to send to peer");
-		dbg.sent++;
-		
-		std::string msg = "sendto::CONN_DGRAM " + std::to_string(ntohs(src.virt.vport)) + " -> " +
-			ip2str(_dest->sin_addr) + ":" + std::to_string(ntohs(_dest->sin_port)) + 
-			"{" + std::to_string(ntohs(dest_vport)) + "}";
-		INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
-
-		// Report the ACTUAL destination (connectionless sockets never populate dst -
-		// printing it showed "0.0.0.0:0(0)" as if the packet went nowhere)
-		WARN_LOG(Log::sceNet, "%d bytes send to %s:%u(%u); [tx=%d/rx=%d]",
-			ret, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), ntohs(dest_vport),
-			tx_seq, rx_seq);
-		DEBUG_LOG(Log::sceNet, "VPORT %d s(%lld/%lld) r(%lld,%lld)", ntohs(src.virt.vport), dbg.sent, dbg.send, dbg.recv, dbg.read);
-
-		// Now shotgun-send using all peer id's
-		// if (sigServer) {
-		// 	std::vector<SceNpMatching2RoomMemberId> peers = sigServer->GetPeerList();
-		// 	for (auto peer : peers) {
-		// 		// Alter the vport to point at the peer
-		// 		header.vport = htons(peer);
-		// 		memcpy(packet.get(), &header, VPORT_HEADER_SIZE);
-		// 		::sendto(p2p_sock->sock, packet.get(), packet_size, flags, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
-		// 	}
-		// }
-
-		return ret; // Report unmodified packet size
-	}
-
- }
 int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
 	NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
