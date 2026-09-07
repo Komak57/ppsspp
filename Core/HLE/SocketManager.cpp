@@ -316,10 +316,10 @@ void SocketManager::NetworkDemultiplexer(int* timeout) {
 	// not the owning socket - which also lets a connectionless-reliable socket fan out to different
 	// peers per send. Local traffic no longer rides virtual sockets, so there is no loopback
 	// re-injection here; everything goes straight to the peer's real UDP endpoint (the game vport).
-	auto retransmit_buffer = [](InetSocket* owner) {
+	auto retransmit_buffer = [](InetSocket* owner) -> bool {
 		auto p2p_sock = g_socketManager.GetP2PSocket();
 		if (!p2p_sock)
-			return;
+			return false;
 		// Only the control packet matching the current handshake stage is retransmitted; a
 		// data (PSH) socket sits in Established/CloseWait, where expected_flag stays 0 (any).
 		uint8_t expected_flag = 0;
@@ -336,8 +336,11 @@ void SocketManager::NetworkDemultiplexer(int* timeout) {
 				continue;
 			if (expected_flag != 0 && pkt.header_flags != expected_flag)// wrong stage
 				continue;
-			if (pkt.sent_count > MAX_RETRIES)							// given up
+			if (pkt.sent_count > MAX_RETRIES) {							// given up
+				if (expected_flag != 0) // Control flag
+					return true;
 				continue;
+			}
 			u64 now_us = (u64)(time_now_d() * BASE_RTO_US);
 			if (now_us - pkt.last_sent_us < BASE_RTO_US)				// too soon
 				continue;
@@ -367,6 +370,7 @@ void SocketManager::NetworkDemultiplexer(int* timeout) {
 				pkt.last_sent_us = now_us;
 			pkt.sent_count++;
 		}
+		return false;
 	};
 
 	// Reliable sockets (the function pointer, not the type, marks them) drive retransmission for
@@ -377,8 +381,16 @@ void SocketManager::NetworkDemultiplexer(int* timeout) {
 			continue;
 		retransmit_buffer(s);
 		std::lock_guard<std::mutex> connections(s->conn_lock);
-		for (auto conn : s->pending_connections)
-			retransmit_buffer(conn);
+		for (auto it = s->pending_connections.begin(); it != s->pending_connections.end(); ) {
+			if (retransmit_buffer(*it)) {
+				INFO_LOG(Log::sceNet, "Reaping abandoned pending connection from %s:%u",
+					ip2str((*it)->dst.virt.addr.s_addr).c_str(), ntohs((*it)->dst.virt.port));
+				delete *it;                            // pending conns are bare `new InetSocket()`
+				it = s->pending_connections.erase(it); // std::list: erase-while-iterating is safe
+			} else {
+				++it;
+			}
+    	}
 	}
 }
 
