@@ -447,7 +447,7 @@ bool SocketManager::P2PRecv() {
 	// display). For TCP packets show the sender's GAME endpoint from the ext header;
 	// the real sockaddr's sin_zero always displays as vport 0.
 	INFO_LOG(Log::sceNet, "P2PRecv: Received %d bytes from %s:%u|%u -> %u|%u (flags=0x%s, sockType=%d)",
-		ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(vpkt.dst.virt.port), ntohs(vpkt.dst.virt.vport), FlagsToStr(vpkt.header_flags), vpkt.sockType);
+		ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(vpkt.dst.virt.port), ntohs(vpkt.dst.virt.vport), FlagsToStr(vpkt.header_flags).c_str(), vpkt.sockType);
 
 	VirtualSockAddr dest{};
 	getLocalIp(&dest.host);
@@ -545,7 +545,7 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 
 	if (delivered_count == 0) {
 		ERROR_LOG(Log::sceNet, "vBroadcast: NO socket accepted %s:%u|%u (flags=0x%s, sockType=%d)",
-			ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport), FlagsToStr(vpkt.header_flags), vpkt.sockType);
+			ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport), FlagsToStr(vpkt.header_flags).c_str(), vpkt.sockType);
 	}
 
 	return delivered_count;
