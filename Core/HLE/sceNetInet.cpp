@@ -1368,7 +1368,7 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 		DataToHexString(0, 0, Memory::GetPointer(bufferPtr), len, &datahex);
 		VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", len, datahex.c_str());
 
-		const bool routeP2P = inetSock->sendP2P && dst && sceNpSignalingIsPeerAddress(_dest->sin_addr.s_addr);
+		const bool routeP2P = inetSock->sendP2P && (dst && (sceNpSignalingIsPeerAddress(_dest->sin_addr.s_addr) || _dest->sin_port == htons(SCE_SIGN_PORT)));
 		int retval;
 		if (routeP2P) {
 			retval = (inetSock->*(inetSock->sendP2P))((char *)Memory::GetPointer(bufferPtr), len, flags, dst, tolen);
