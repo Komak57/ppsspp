@@ -1129,14 +1129,14 @@ int InetSocket::Recv_Unrealiable(char* buf, int len, int flags, SceNetInetSockad
 bool InetSocket::Process_Unreliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 	// sockType demuxes game p2p sockets that share a vport (DGRAM side-channel vs CONN_DGRAM game).
 	// Signaling (vport 0) carries no ext header and no sockType, so it is matched on vport alone.
-	if (dest.virt.vport != 0 && vpkt.sockType != type)
+	if (vpkt.sockType != type)
 		return false;
 	if (src.virt.addr.s_addr != INADDR_ANY && src.virt.addr.s_addr != dest.virt.addr.s_addr)
 		return false;
-	if (dest.virt.port != 0 && src.virt.port != dest.virt.port)
+	if (src.virt.port != dest.virt.port)
 		return false;
 	if (dest.virt.vport == VPORT_ANY) {
-		if (src.virt.vport == 0)
+		if (src.virt.port == 0)
 			return false;
 	} else if (src.virt.vport != dest.virt.vport) {
 		return false;
