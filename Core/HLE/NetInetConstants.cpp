@@ -570,10 +570,10 @@ int convertSockoptNamePSP2Host(int optname, int level) {
 		case PSP_NET_INET_SO_BIO:
 			return SO_BIO;
 #endif
-		case PSP_NET_INET_SO_DCCP_BROADCAST:
-			return SO_BROADCAST;
-		case PSP_NET_INET_SO_DCCP_LINGER:
-			return SO_LINGER;
+		// case SCE_NET_INET_SO_USECRYPTO_RX:
+		// 	return SO_BROADCAST;
+		// case SCE_NET_INET_SO_USECRYPTO_TX:
+		// 	return SO_LINGER;
 		}
 	}
 	return hleLogError(Log::sceNet, optname, "Unknown or unsupported PSP's SockOpt Name (Level = %08x)", level);
