@@ -1714,93 +1714,176 @@ int InetSocket::closesocket() {
 // ============================================================================
 // 
 // ============================================================================
-int StreamSocket::send(const char* buf, int len, int flags) { return ::send(sock, buf, len, flags); }
-int StreamSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
-int StreamSocket::connect(SceNetInetSockaddr* name, int namelen) {
-	SockAddrIN4 saddr{};
-	int dstlen = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
-	saddr.addr.sa_family = name->sa_family;
-	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
+int StreamSocket::send(const char* buf, int len, int flags) {
+	VERBOSE_LOG(Log::sceNet, "send::StreamSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
-	sockaddr_in* paddr = reinterpret_cast<sockaddr_in*>(&saddr);
-	// If PSP tried to connect to 0.0.0.0, replace with loopback
-	// if (paddr->sin_addr.s_addr == htonl(INADDR_ANY)) {
-	// 	WARN_LOG(Log::sceNet, "Socket attempting to connect to INADDR_ANY! (socket #%d)", socket);
-	// 	sockaddr_in sockAddr{};
-	// 	getLocalIp(&sockAddr);
-	// 	//paddr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	// 	//paddr->sin_addr.s_addr = htonl((ULONG)0xC0A802FE); // hard coded to dev machine
-	// 	paddr->sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	// }
+	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	int flgs = convertMSGFlagsPSP2Host(flags);
 
-	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
-	if (!nonblocking) {
-		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%i)", socket);
-		// changeBlockingMode(sock, 0);
-		// Workaround to avoid blocking for indefinitely
-		setSockTimeout(sock, SO_SNDTIMEO, 5000000);
-		setSockTimeout(sock, SO_RCVTIMEO, 5000000);
-	}
-	INFO_LOG(Log::sceNet, "Connect(%s, %i)", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-	int ret = ::connect(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
-	int hostErrno = socket_errno;
-
-	if (!nonblocking) {
-		// changeBlockingMode(sock, 1);
-		// Since we're temporarily forcing blocking-mode, we'll need to change errno from ETIMEDOUT to EAGAIN
-		if (hostErrno == ETIMEDOUT)
-			hostErrno = EAGAIN;
-	}
-
-	if (saddr.in.sin_port == 53) {
-		WARN_LOG(Log::G3D, "Game connected to DNS server %s (port 53), likely for doing its own DNS lookups!", ip2str(saddr.in.sin_addr, false).c_str());
-		// We should sniff these messages...
-	}
+	std::string msg = "send::PacketSocket " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) + 
+	"[" + std::to_string(ntohs(dst.virt.vport)) + "] (" + std::to_string(dbg.send) + ", " + 
+	std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, len, 386);
+	
+	int ret = ::send(sock, buf, len, flgs | MSG_NOSIGNAL);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "send::StreamSocket: Failed to send to local");
+	dbg.sent++;
 	return ret;
 }
-int StreamSocket::listen(int backlog) { return ::listen(sock, backlog); }
-int StreamSocket::accept(sockaddr* addr, socklen_t* addrlen) { return ::accept(sock, addr, addrlen); }
-int StreamSocket::bind(SceNetInetSockaddr* name, int namelen) { 
+int StreamSocket::recv(char* buf, int len, int flags) {
+	VERBOSE_LOG(Log::sceNet, "recv::StreamSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
+
+	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	int flgs = convertMSGFlagsPSP2Host(flags);
+	const bool restoreBlocking = !nonblocking && (flags & PSP_NET_INET_MSG_DONTWAIT);
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::recv(sock, buf, len, flgs | MSG_NOSIGNAL);
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0) {
+		return ret; //return hleLogError(Log::sceNet, ret, "SOCK_PACKET recv: Failed to receive");
+	}
+
+	std::string msg = "recv::StreamSocket " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) + 
+	"[" + std::to_string(ntohs(dst.virt.vport)) + "] (" + std::to_string(dbg.send) + ", " + 
+	std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
+
+	WARN_LOG(Log::sceNet, "%d bytes received from (%s:%u);", 
+		ret, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port));
+	return ret;
+}
+int StreamSocket::connect(SceNetInetSockaddr* name, int namelen) {
+	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
+	// Host Order
+	auto _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
+	INFO_LOG(Log::sceNet, "connect::StreamSocket(%s:%u|%u, %d): state=%d", ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), _vport, namelen, (int)tcp_state);
+
+	// The remote branch below validates against the state from BEFORE this call
+	// overwrites it - otherwise the SynSent assignment here makes that check
+	// always fail with EISCONN on the first connect to a non-local peer.
+	TCPState prior_state = tcp_state;
+
+	tcp_state = TCPState::SynSent;
+	rx_seq = 0;
+	tx_seq = 0;
+
+	// Store connected socket
+	dst.host.sin_family = AF_INET;
+	dst.host.sin_addr.s_addr = _dest->sin_addr.s_addr;
+	// Flip PSP port/vports
+	dst.virt.port = _dest->sin_port;
+	dst.virt.vport = htons(_vport);
+
+	INFO_LOG(Log::sceNet, "connect::StreamSocket: Connecting to %s:%u on vport %u",
+		ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport));
+
+	// Linux's kernel silently rewrites a connect() target of INADDR_ANY to
+	// loopback (net/ipv4/af_inet.c, inet_stream_connect); Windows has no such
+	// compatibility shim, so connecting to 0.0.0.0 never reaches the listener
+	// and the socket sits in SynSent indefinitely. Do the same rewrite
+	// ourselves so both platforms actually connect.
+	if (dst.host.sin_addr.s_addr == htonl(INADDR_ANY))
+		dst.host.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	int ret = ::connect(sock, reinterpret_cast<struct sockaddr*>(&dst.host), sizeof(sockaddr_in));
+	// g_socketManager.vBroadcast(std::move(send_pkt), dst);
+	// tx_seq++;
+	// if (ret < 0) {
+	// 	return -1; //return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Failed to send SYN");
+	// }
+
+	if (socket_errno == EAGAIN || socket_errno == EINPROGRESS) {
+		// Cache the socket information
+		SockAddrIN4 saddr{};
+		saddr.addr.sa_family = name->sa_family;
+		int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
+		name->sa_len = len;
+		memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
+
+		getsockname(sock, (sockaddr*)&saddr, (socklen_t*)&len);
+		this->src.host.sin_family = saddr.in.sin_family;
+		this->src.virt.addr = saddr.in.sin_addr;
+		this->src.virt.port = saddr.in.sin_port; // Adopt the ephemeral port
+		this->src.virt.vport = htons(_vport); // Adopt the vport as vport
+		// getsockname resets the inet last error, so we need to swap it back
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(EAGAIN);
+#else
+		socket_errno = EINPROGRESS;
+#endif
+	}
+	return ret;  // Non-blocking: game will check connection status later
+}
+int StreamSocket::listen(int backlog) {
+	// sceNetInetListen sets the virtual Listening state/backlog; this just opens the real backlog.
+	VERBOSE_LOG(Log::sceNet, "listen::StreamSocket(%d): state=%d", backlog, (int)tcp_state);
+	int ret = ::listen(sock, backlog);
+	if (ret >= 0)
+		INFO_LOG(Log::sceNet, "listen::StreamSocket: port %d now accepting %d connections", ntohs(src.virt.port), this->backlog);
+	return ret;
+}
+int StreamSocket::accept(sockaddr* addr, socklen_t* addrlen) {
+	// sceNetInetAccept promotes a pending virtual (relayed) SYN through Accept_Reliable; a call
+	// reaching this override has no pending virtual connection, so it's a real host accept.
+	INFO_LOG(Log::sceNet, "accept::StreamSocket(%s:%u, %d): state=%d (real)", ip2str(this->src.virt.addr).c_str(), ntohs(this->src.virt.port), addrlen ? static_cast<int>(*addrlen) : 0, (int)tcp_state);
+
+	int new_socket_idx = -1;
+	int ret = ::accept(sock, addr, addrlen);
+	if (ret < 0)
+		return ret;
+
+	InetSocket* new_sock = g_socketManager.AdoptSocket(&new_socket_idx, ret, this);
+	memcpy(&new_sock->src.host, &src.host, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
+
+	// Copy metadata from listening socket to new socket
+	new_sock->src.host = this->src.host;
+
+	new_sock->tcp_state = TCPState::Established;
+	// Store connected peer
+	memcpy(&new_sock->dst.host, addr, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
+	new_sock->dst.virt.vport = src.virt.vport;
+
+	new_sock->state = SocketState::UsedNetInet;
+	INFO_LOG(Log::sceNet, "accept::StreamSocket: Accepted connection on listening socket from %s:%u on %s:%u (vport=%u), created socket %d",
+		ip2str(new_sock->dst.virt.addr.s_addr).c_str(), ntohs(new_sock->dst.virt.port),
+		ip2str(new_sock->src.virt.addr.s_addr).c_str(), ntohs(new_sock->src.virt.port), ntohs(new_sock->src.virt.vport),
+		new_socket_idx);
+	return new_socket_idx;
+}
+int StreamSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	SockAddrIN4 saddr{};
 	// TODO: Should've created convertSockaddrPSP2Host (and Host2PSP too) function as it's being used pretty often, thus fixing a bug on it will be tedious when scattered all over the places
 	saddr.addr.sa_family = name->sa_family;
 	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
-	if (isLocalServer) {
-		getLocalIp(&saddr.in);
-	}
-	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
-	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
-	//
-	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
-	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-	// 	// Get Local IP Address
-	// 	sockaddr_in sockAddr{};
-	// 	getLocalIp(&sockAddr);
-	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	// }
-	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
-	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
 	src.host = saddr.in;
+	if (src.virt.vport == 0)
+		src.virt.vport = htons(user_id.load());
+	// Re-bind p2p sockets
+	if (src.host.sin_port == htons(SCE_SIGN_PORT))
+		saddr.in.sin_port = 0;
 
 	INFO_LOG(Log::sceNet, "bind::StreamSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
-	if (ret < 0)
-		return hleLogError(Log::sceNet, ret);
 	return ret;
 }
-int StreamSocket::shutdown(int how) { return ::shutdown(sock, how); }
+int StreamSocket::shutdown(int how) {
+	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
+	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
+	INFO_LOG(Log::sceNet, "shutdown::StreamSocket(how=%d): state=%d (real)", how, (int)tcp_state);
+	tcp_state = TCPState::Disconnected;
+	return ::shutdown(sock, how);
+}
 
 // ============================================================================
 // 
 // ============================================================================
 int DgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	dbg.send++;
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
 	SockAddrIN4 saddr{};
@@ -1809,18 +1892,24 @@ int DgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSoc
 		saddr.addr.sa_family = to->sa_family;
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
+	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(&saddr.addr);
+
+	// sceNetInetSendto already routed peer-bound (port-3658) traffic to sendP2P; a call reaching
+	// this override is a plain/local loopback send, so just hit the host socket. No per-call
+	// non-blocking flip needed - a loopback UDP send doesn't block.
 
 	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
 	const bool restoreBlocking = dontwait && !nonblocking;
 	if (restoreBlocking) changeBlockingMode(sock, 1);
-	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	int ret = ::sendto(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return hleLogError(Log::sceNet, ret, "sendto::DgramSocket: Failed to send to peer");
-
+		return ret;
+	dbg.sent++;
 	return hleLogDebug(Log::sceNet, ret, "sendto::DgramSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int DgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	// NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
@@ -1833,59 +1922,93 @@ int DgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* fro
 	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return ret;
+		return ret; // Do not report, sceNetInetRecvfrom will handle the error reporting
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
 		memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
 		from->sa_len = fromlen ? *fromlen : 0;
 	}
-	
+	dbg.recv++;
+	std::string msg = "recvfrom::DgramSocket " + ip2str(saddr.in.sin_addr) + ":" + std::to_string(ntohs(saddr.in.sin_port));
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
+
+	DEBUG_LOG(Log::sceNet, "PORT %u s(%lld/%lld) r(%lld,%lld)", ntohs(saddr.in.sin_port), dbg.sent, dbg.send, dbg.recv, dbg.read);
+		// Return actual bytes copied (NOT padded to requested size)
 	return hleLogDebug(Log::sceNet, ret, "recvfrom::DgramSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
-int DgramSocket::bind(SceNetInetSockaddr* name, int namelen) { 
+int DgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	SockAddrIN4 saddr{};
 	// TODO: Should've created convertSockaddrPSP2Host (and Host2PSP too) function as it's being used pretty often, thus fixing a bug on it will be tedious when scattered all over the places
 	saddr.addr.sa_family = name->sa_family;
 	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
-	if (isLocalServer) {
-		getLocalIp(&saddr.in);
-	}
-	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
-	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
-	//
-	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
-	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-	// 	// Get Local IP Address
-	// 	sockaddr_in sockAddr{};
-	// 	getLocalIp(&sockAddr);
-	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	// }
-	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
-	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
 	src.host = saddr.in;
+	if (src.virt.vport == 0)
+		src.virt.vport = htons(user_id.load());
+	// Re-bind p2p sockets
+	if (src.host.sin_port == htons(SCE_SIGN_PORT))
+		saddr.in.sin_port = 0;
 
 	INFO_LOG(Log::sceNet, "bind::DgramSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
-	if (ret < 0)
-		return hleLogError(Log::sceNet, ret);
 	return ret;
 }
-int DgramSocket::shutdown(int how) { return ::closesocket(sock); }
+int DgramSocket::shutdown(int how) {
+	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
+	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
+	INFO_LOG(Log::sceNet, "shutdown::DgramSocket(how=%d): state=%d (real)", how, (int)tcp_state);
+	tcp_state = TCPState::Disconnected;
+	return ::shutdown(sock, how);}
 
 // ============================================================================
 // 
 // ============================================================================
-int RawSocket::send(const char* buf, int len, int flags) { return ::send(sock, buf, len, flags); }
-int RawSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+int RawSocket::send(const char* buf, int len, int flags) {
+	VERBOSE_LOG(Log::sceNet, "send::RawSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
+
+	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	int flgs = convertMSGFlagsPSP2Host(flags);
+
+	std::string msg = "send::RawSocket " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) + 
+	"[" + std::to_string(ntohs(dst.virt.vport)) + "] (" + std::to_string(dbg.send) + ", " + 
+	std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, len, 386);
+	
+	int ret = ::send(sock, buf, len, flgs | MSG_NOSIGNAL);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "send::RawSocket: Failed to send to local");
+	dbg.sent++;
+	return ret;
+}
+int RawSocket::recv(char* buf, int len, int flags) {
+	VERBOSE_LOG(Log::sceNet, "recv::RawSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
+
+	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	int flgs = convertMSGFlagsPSP2Host(flags);
+	const bool restoreBlocking = !nonblocking && (flags & PSP_NET_INET_MSG_DONTWAIT);
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::recv(sock, buf, len, flgs | MSG_NOSIGNAL);
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0) {
+		return ret; //return hleLogError(Log::sceNet, ret, "SOCK_PACKET recv: Failed to receive");
+	}
+
+	std::string msg = "recv::RawSocket " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) + 
+	"[" + std::to_string(ntohs(dst.virt.vport)) + "] (" + std::to_string(dbg.send) + ", " + 
+	std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
+
+	WARN_LOG(Log::sceNet, "%d bytes received from (%s:%u);", 
+		ret, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port));
+	return ret;
+}
 int RawSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	dbg.send++;
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
 	SockAddrIN4 saddr{};
@@ -1894,16 +2017,24 @@ int RawSocket::sendto(const char* buf, int len, int flags, const SceNetInetSocka
 		saddr.addr.sa_family = to->sa_family;
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
+	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(&saddr.addr);
+
+	// sceNetInetSendto already routed peer-bound (port-3658) traffic to sendP2P; a call reaching
+	// this override is a plain/local loopback send, so just hit the host socket. No per-call
+	// non-blocking flip needed - a loopback UDP send doesn't block.
 
 	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
 	const bool restoreBlocking = dontwait && !nonblocking;
 	if (restoreBlocking) changeBlockingMode(sock, 1);
-	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	int ret = ::sendto(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (restoreBlocking) changeBlockingMode(sock, 0);
-
+	if (ret < 0)
+		return ret;
+	dbg.sent++;
 	return hleLogDebug(Log::sceNet, ret, "sendto::RawSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int RawSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	// NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
@@ -1916,58 +2047,87 @@ int RawSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from,
 	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return ret;
+		return ret; // Do not report, sceNetInetRecvfrom will handle the error reporting
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
 		memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
 		from->sa_len = fromlen ? *fromlen : 0;
 	}
-	
+	dbg.recv++;
+	std::string msg = "recvfrom::RawSocket " + ip2str(saddr.in.sin_addr) + ":" + std::to_string(ntohs(saddr.in.sin_port));
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
+
+	DEBUG_LOG(Log::sceNet, "PORT %u s(%lld/%lld) r(%lld,%lld)", ntohs(saddr.in.sin_port), dbg.sent, dbg.send, dbg.recv, dbg.read);
+		// Return actual bytes copied (NOT padded to requested size)
 	return hleLogDebug(Log::sceNet, ret, "recvfrom::RawSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
-int RawSocket::bind(SceNetInetSockaddr* name, int namelen) { 
+int RawSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	SockAddrIN4 saddr{};
 	// TODO: Should've created convertSockaddrPSP2Host (and Host2PSP too) function as it's being used pretty often, thus fixing a bug on it will be tedious when scattered all over the places
 	saddr.addr.sa_family = name->sa_family;
 	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
-	if (isLocalServer) {
-		getLocalIp(&saddr.in);
-	}
-	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
-	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
-	//
-	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
-	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-	// 	// Get Local IP Address
-	// 	sockaddr_in sockAddr{};
-	// 	getLocalIp(&sockAddr);
-	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	// }
-	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
-	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
 	src.host = saddr.in;
+	if (src.virt.vport == 0)
+		src.virt.vport = htons(user_id.load());
+	// Re-bind p2p sockets
+	if (src.host.sin_port == htons(SCE_SIGN_PORT))
+		saddr.in.sin_port = 0;
 
 	INFO_LOG(Log::sceNet, "bind::RawSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
-	if (ret < 0)
-		return hleLogError(Log::sceNet, ret);
 	return ret;
 }
 
 // ============================================================================
 // 
 // ============================================================================
-int RdmSocket::send(const char* buf, int len, int flags) { return ::send(sock, buf, len, flags); }
-int RdmSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+int RdmSocket::send(const char* buf, int len, int flags) {
+	VERBOSE_LOG(Log::sceNet, "send::RdmSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
+
+	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	int flgs = convertMSGFlagsPSP2Host(flags);
+
+	std::string msg = "send::RdmSocket " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) + 
+	"[" + std::to_string(ntohs(dst.virt.vport)) + "] (" + std::to_string(dbg.send) + ", " + 
+	std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, len, 386);
+	
+	int ret = ::send(sock, buf, len, flgs | MSG_NOSIGNAL);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "send::RdmSocket: Failed to send to local");
+	dbg.sent++;
+	return ret;
+}
+int RdmSocket::recv(char* buf, int len, int flags) {
+	VERBOSE_LOG(Log::sceNet, "recv::RdmSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
+
+	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	int flgs = convertMSGFlagsPSP2Host(flags);
+	const bool restoreBlocking = !nonblocking && (flags & PSP_NET_INET_MSG_DONTWAIT);
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::recv(sock, buf, len, flgs | MSG_NOSIGNAL);
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0) {
+		return ret; //return hleLogError(Log::sceNet, ret, "SOCK_PACKET recv: Failed to receive");
+	}
+
+	std::string msg = "recv::RdmSocket " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) + 
+	"[" + std::to_string(ntohs(dst.virt.vport)) + "] (" + std::to_string(dbg.send) + ", " + 
+	std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
+
+	WARN_LOG(Log::sceNet, "%d bytes received from (%s:%u);", 
+		ret, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port));
+	return ret;
+}
 int RdmSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	dbg.send++;
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
 	SockAddrIN4 saddr{};
@@ -1976,18 +2136,24 @@ int RdmSocket::sendto(const char* buf, int len, int flags, const SceNetInetSocka
 		saddr.addr.sa_family = to->sa_family;
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
+	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(&saddr.addr);
+
+	// sceNetInetSendto already routed peer-bound (port-3658) traffic to sendP2P; a call reaching
+	// this override is a plain/local loopback send, so just hit the host socket. No per-call
+	// non-blocking flip needed - a loopback UDP send doesn't block.
 
 	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
 	const bool restoreBlocking = dontwait && !nonblocking;
 	if (restoreBlocking) changeBlockingMode(sock, 1);
-	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	int ret = ::sendto(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
 		return ret;
-
+	dbg.sent++;
 	return hleLogDebug(Log::sceNet, ret, "sendto::RdmSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int RdmSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	// NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
@@ -2000,58 +2166,87 @@ int RdmSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from,
 	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return ret;
+		return ret; // Do not report, sceNetInetRecvfrom will handle the error reporting
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
 		memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
 		from->sa_len = fromlen ? *fromlen : 0;
 	}
-	
-	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	dbg.recv++;
+	std::string msg = "recvfrom::RdmSocket " + ip2str(saddr.in.sin_addr) + ":" + std::to_string(ntohs(saddr.in.sin_port));
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
+
+	DEBUG_LOG(Log::sceNet, "PORT %u s(%lld/%lld) r(%lld,%lld)", ntohs(saddr.in.sin_port), dbg.sent, dbg.send, dbg.recv, dbg.read);
+		// Return actual bytes copied (NOT padded to requested size)
+	return hleLogDebug(Log::sceNet, ret, "recvfrom::RdmSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
-int RdmSocket::bind(SceNetInetSockaddr* name, int namelen) { 
+int RdmSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	SockAddrIN4 saddr{};
 	// TODO: Should've created convertSockaddrPSP2Host (and Host2PSP too) function as it's being used pretty often, thus fixing a bug on it will be tedious when scattered all over the places
 	saddr.addr.sa_family = name->sa_family;
 	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
-	if (isLocalServer) {
-		getLocalIp(&saddr.in);
-	}
-	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
-	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
-	//
-	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
-	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-	// 	// Get Local IP Address
-	// 	sockaddr_in sockAddr{};
-	// 	getLocalIp(&sockAddr);
-	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	// }
-	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
-	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
 	src.host = saddr.in;
+	if (src.virt.vport == 0)
+		src.virt.vport = htons(user_id.load());
+	// Re-bind p2p sockets
+	if (src.host.sin_port == htons(SCE_SIGN_PORT))
+		saddr.in.sin_port = 0;
 
 	INFO_LOG(Log::sceNet, "bind::RdmSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
-	if (ret < 0)
-		return hleLogError(Log::sceNet, ret);
 	return ret;
 }
 
 // ============================================================================
 // 
 // ============================================================================
-int SeqpacketSocket::send(const char* buf, int len, int flags) { return ::send(sock, buf, len, flags); }
-int SeqpacketSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
+int SeqpacketSocket::send(const char* buf, int len, int flags) {
+	VERBOSE_LOG(Log::sceNet, "send::SeqpacketSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
+
+	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	int flgs = convertMSGFlagsPSP2Host(flags);
+
+	std::string msg = "send::SeqpacketSocket " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) + 
+	"[" + std::to_string(ntohs(dst.virt.vport)) + "] (" + std::to_string(dbg.send) + ", " + 
+	std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, len, 386);
+	
+	int ret = ::send(sock, buf, len, flgs | MSG_NOSIGNAL);
+	if (ret < 0)
+		return hleLogError(Log::sceNet, ret, "send::SeqpacketSocket: Failed to send to local");
+	dbg.sent++;
+	return ret;
+}
+int SeqpacketSocket::recv(char* buf, int len, int flags) {
+	VERBOSE_LOG(Log::sceNet, "recv::SeqpacketSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
+
+	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
+	int flgs = convertMSGFlagsPSP2Host(flags);
+	const bool restoreBlocking = !nonblocking && (flags & PSP_NET_INET_MSG_DONTWAIT);
+	if (restoreBlocking) changeBlockingMode(sock, 1);
+	int ret = ::recv(sock, buf, len, flgs | MSG_NOSIGNAL);
+	if (restoreBlocking) changeBlockingMode(sock, 0);
+	if (ret < 0) {
+		return ret; //return hleLogError(Log::sceNet, ret, "SOCK_PACKET recv: Failed to receive");
+	}
+
+	std::string msg = "recv::SeqpacketSocket " + ip2str(dst.virt.addr.s_addr) + ":" + std::to_string(ntohs(dst.virt.port)) + 
+	"[" + std::to_string(ntohs(dst.virt.vport)) + "] (" + std::to_string(dbg.send) + ", " + 
+	std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
+
+	WARN_LOG(Log::sceNet, "%d bytes received from (%s:%u);", 
+		ret, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port));
+	return ret;
+}
 int SeqpacketSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	dbg.send++;
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
 	SockAddrIN4 saddr{};
@@ -2060,18 +2255,24 @@ int SeqpacketSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 		saddr.addr.sa_family = to->sa_family;
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
+	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(&saddr.addr);
+
+	// sceNetInetSendto already routed peer-bound (port-3658) traffic to sendP2P; a call reaching
+	// this override is a plain/local loopback send, so just hit the host socket. No per-call
+	// non-blocking flip needed - a loopback UDP send doesn't block.
 
 	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
 	const bool restoreBlocking = dontwait && !nonblocking;
 	if (restoreBlocking) changeBlockingMode(sock, 1);
-	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	int ret = ::sendto(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
 		return ret;
-
+	dbg.sent++;
 	return hleLogDebug(Log::sceNet, ret, "sendto::SeqpacketSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int SeqpacketSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	// NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
@@ -2084,101 +2285,152 @@ int SeqpacketSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr*
 	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return hleLogError(Log::sceNet, ret, "recvfrom::SeqpacketSocket: Failed to send to peer");
+		return ret; // Do not report, sceNetInetRecvfrom will handle the error reporting
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
 		memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
 		from->sa_len = fromlen ? *fromlen : 0;
 	}
-	
-	return hleLogDebug(Log::sceNet, ret, "RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
+	dbg.recv++;
+	std::string msg = "recvfrom::SeqpacketSocket " + ip2str(saddr.in.sin_addr) + ":" + std::to_string(ntohs(saddr.in.sin_port));
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
+
+	DEBUG_LOG(Log::sceNet, "PORT %u s(%lld/%lld) r(%lld,%lld)", ntohs(saddr.in.sin_port), dbg.sent, dbg.send, dbg.recv, dbg.read);
+		// Return actual bytes copied (NOT padded to requested size)
+	return hleLogDebug(Log::sceNet, ret, "recvfrom::SeqpacketSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int SeqpacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
-	SockAddrIN4 saddr{};
-	int dstlen = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
-	saddr.addr.sa_family = name->sa_family;
-	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
+	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
+	// Host Order
+	auto _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
+	INFO_LOG(Log::sceNet, "connect::SeqpacketSocket(%s:%u|%u, %d): state=%d", ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), _vport, namelen, (int)tcp_state);
 
-	sockaddr_in* paddr = reinterpret_cast<sockaddr_in*>(&saddr);
-	// If PSP tried to connect to 0.0.0.0, replace with loopback
-	// if (paddr->sin_addr.s_addr == htonl(INADDR_ANY)) {
-	// 	WARN_LOG(Log::sceNet, "Socket attempting to connect to INADDR_ANY! (socket #%d)", socket);
-	// 	sockaddr_in sockAddr{};
-	// 	getLocalIp(&sockAddr);
-	// 	//paddr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	// 	//paddr->sin_addr.s_addr = htonl((ULONG)0xC0A802FE); // hard coded to dev machine
-	// 	paddr->sin_addr.s_addr = sockAddr.sin_addr.s_addr;
+	// The remote branch below validates against the state from BEFORE this call
+	// overwrites it - otherwise the SynSent assignment here makes that check
+	// always fail with EISCONN on the first connect to a non-local peer.
+	TCPState prior_state = tcp_state;
+
+	tcp_state = TCPState::SynSent;
+	rx_seq = 0;
+	tx_seq = 0;
+
+	// Store connected socket
+	dst.host.sin_family = AF_INET;
+	dst.host.sin_addr.s_addr = _dest->sin_addr.s_addr;
+	// Flip PSP port/vports
+	dst.virt.port = _dest->sin_port;
+	dst.virt.vport = htons(_vport);
+
+	INFO_LOG(Log::sceNet, "connect::SeqpacketSocket: Connecting to %s:%u on vport %u",
+		ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port), ntohs(dst.virt.vport));
+
+	// Linux's kernel silently rewrites a connect() target of INADDR_ANY to
+	// loopback (net/ipv4/af_inet.c, inet_stream_connect); Windows has no such
+	// compatibility shim, so connecting to 0.0.0.0 never reaches the listener
+	// and the socket sits in SynSent indefinitely. Do the same rewrite
+	// ourselves so both platforms actually connect.
+	if (dst.host.sin_addr.s_addr == htonl(INADDR_ANY))
+		dst.host.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	int ret = ::connect(sock, reinterpret_cast<struct sockaddr*>(&dst.host), sizeof(sockaddr_in));
+	// g_socketManager.vBroadcast(std::move(send_pkt), dst);
+	// tx_seq++;
+	// if (ret < 0) {
+	// 	return -1; //return hleLogError(Log::sceNet, -1, "SOCK_PACKET connect: Failed to send SYN");
 	// }
 
-	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
-	if (!nonblocking) {
-		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%i)", socket);
-		// changeBlockingMode(sock, 0);
-		// Workaround to avoid blocking for indefinitely
-		setSockTimeout(sock, SO_SNDTIMEO, 5000000);
-		setSockTimeout(sock, SO_RCVTIMEO, 5000000);
-	}
-	INFO_LOG(Log::sceNet, "Connect(%s, %i)", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-	int ret = ::connect(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
-	int hostErrno = socket_errno;
+	if (socket_errno == EAGAIN || socket_errno == EINPROGRESS) {
+		// Cache the socket information
+		SockAddrIN4 saddr{};
+		saddr.addr.sa_family = name->sa_family;
+		int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
+		name->sa_len = len;
+		memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
 
-	if (!nonblocking) {
-		// changeBlockingMode(sock, 1);
-		// Since we're temporarily forcing blocking-mode, we'll need to change errno from ETIMEDOUT to EAGAIN
-		if (hostErrno == ETIMEDOUT)
-			hostErrno = EAGAIN;
+		getsockname(sock, (sockaddr*)&saddr, (socklen_t*)&len);
+		this->src.host.sin_family = saddr.in.sin_family;
+		this->src.virt.addr = saddr.in.sin_addr;
+		this->src.virt.port = saddr.in.sin_port; // Adopt the ephemeral port
+		this->src.virt.vport = htons(_vport); // Adopt the vport as vport
+		// getsockname resets the inet last error, so we need to swap it back
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(EAGAIN);
+#else
+		socket_errno = EINPROGRESS;
+#endif
 	}
-
-	if (saddr.in.sin_port == 53) {
-		WARN_LOG(Log::G3D, "Game connected to DNS server %s (port 53), likely for doing its own DNS lookups!", ip2str(saddr.in.sin_addr, false).c_str());
-		// We should sniff these messages...
-	}
+	return ret;  // Non-blocking: game will check connection status later
+}
+int SeqpacketSocket::listen(int backlog) {
+	// sceNetInetListen sets the virtual Listening state/backlog; this just opens the real backlog.
+	VERBOSE_LOG(Log::sceNet, "listen::SeqpacketSocket(%d): state=%d", backlog, (int)tcp_state);
+	int ret = ::listen(sock, backlog);
+	if (ret >= 0)
+		INFO_LOG(Log::sceNet, "listen::SeqpacketSocket: port %d now accepting %d connections", ntohs(src.virt.port), this->backlog);
 	return ret;
 }
-int SeqpacketSocket::listen(int backlog) { return ::listen(sock, backlog); }
-int SeqpacketSocket::accept(sockaddr* addr, socklen_t* addrlen) { return ::accept(sock, addr, addrlen); }
-int SeqpacketSocket::bind(SceNetInetSockaddr* name, int namelen) { 
+int SeqpacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
+	// sceNetInetAccept promotes a pending virtual (relayed) SYN through Accept_Reliable; a call
+	// reaching this override has no pending virtual connection, so it's a real host accept.
+	INFO_LOG(Log::sceNet, "accept::SeqpacketSocket(%s:%u, %d): state=%d (real)", ip2str(this->src.virt.addr).c_str(), ntohs(this->src.virt.port), addrlen ? static_cast<int>(*addrlen) : 0, (int)tcp_state);
+
+	int new_socket_idx = -1;
+	int ret = ::accept(sock, addr, addrlen);
+	if (ret < 0)
+		return ret;
+
+	InetSocket* new_sock = g_socketManager.AdoptSocket(&new_socket_idx, ret, this);
+	memcpy(&new_sock->src.host, &src.host, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
+
+	// Copy metadata from listening socket to new socket
+	new_sock->src.host = this->src.host;
+
+	new_sock->tcp_state = TCPState::Established;
+	// Store connected peer
+	memcpy(&new_sock->dst.host, addr, std::min((size_t)*addrlen, sizeof(sockaddr_in)));
+	new_sock->dst.virt.vport = src.virt.vport;
+
+	new_sock->state = SocketState::UsedNetInet;
+	INFO_LOG(Log::sceNet, "accept::SeqpacketSocket: Accepted connection on listening socket from %s:%u on %s:%u (vport=%u), created socket %d",
+		ip2str(new_sock->dst.virt.addr.s_addr).c_str(), ntohs(new_sock->dst.virt.port),
+		ip2str(new_sock->src.virt.addr.s_addr).c_str(), ntohs(new_sock->src.virt.port), ntohs(new_sock->src.virt.vport),
+		new_socket_idx);
+	return new_socket_idx;
+}
+int SeqpacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	SockAddrIN4 saddr{};
 	// TODO: Should've created convertSockaddrPSP2Host (and Host2PSP too) function as it's being used pretty often, thus fixing a bug on it will be tedious when scattered all over the places
 	saddr.addr.sa_family = name->sa_family;
 	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
-	if (isLocalServer) {
-		getLocalIp(&saddr.in);
-	}
-	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
-	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
-	//
-	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
-	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-	// 	// Get Local IP Address
-	// 	sockaddr_in sockAddr{};
-	// 	getLocalIp(&sockAddr);
-	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	// }
-	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
-	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
 	src.host = saddr.in;
-	
+	if (src.virt.vport == 0)
+		src.virt.vport = htons(user_id.load());
+	// Re-bind p2p sockets
+	if (src.host.sin_port == htons(SCE_SIGN_PORT))
+		saddr.in.sin_port = 0;
+
 	INFO_LOG(Log::sceNet, "bind::SeqpacketSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
-	if (ret < 0)
-		return hleLogError(Log::sceNet, ret);
 	return ret;
 }
-int SeqpacketSocket::shutdown(int how) { return ::shutdown(sock, how); }
+int SeqpacketSocket::shutdown(int how) {
+	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
+	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
+	INFO_LOG(Log::sceNet, "shutdown::SeqpacketSocket(how=%d): state=%d (real)", how, (int)tcp_state);
+	tcp_state = TCPState::Disconnected;
+	return ::shutdown(sock, how);
+}
 
 // ============================================================================
 // 
 // ============================================================================
 int DccpSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	dbg.send++;
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
 	SockAddrIN4 saddr{};
@@ -2187,18 +2439,24 @@ int DccpSocket::sendto(const char* buf, int len, int flags, const SceNetInetSock
 		saddr.addr.sa_family = to->sa_family;
 		memcpy(saddr.addr.sa_data, to->sa_data, sizeof(to->sa_data));
 	}
+	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(&saddr.addr);
+
+	// sceNetInetSendto already routed peer-bound (port-3658) traffic to sendP2P; a call reaching
+	// this override is a plain/local loopback send, so just hit the host socket. No per-call
+	// non-blocking flip needed - a loopback UDP send doesn't block.
 
 	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
 	const bool restoreBlocking = dontwait && !nonblocking;
 	if (restoreBlocking) changeBlockingMode(sock, 1);
-	int ret = ::sendto(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	int ret = ::sendto(sock, buf, len, flgs, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
 		return ret;
-
+	dbg.sent++;
 	return hleLogDebug(Log::sceNet, ret, "sendto::DccpSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
-int DccpSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) { 
+int DccpSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	// NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
@@ -2211,14 +2469,19 @@ int DccpSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from
 	int ret = ::recvfrom(sock, buf, len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, fromlen);
 	if (restoreBlocking) changeBlockingMode(sock, 0);
 	if (ret < 0)
-		return ret;
+		return ret; // Do not report, sceNetInetRecvfrom will handle the error reporting
 
 	if (from) {
 		from->sa_family = saddr.addr.sa_family;
 		memcpy(from->sa_data, saddr.addr.sa_data, sizeof(from->sa_data));
 		from->sa_len = fromlen ? *fromlen : 0;
 	}
-	
+	dbg.recv++;
+	std::string msg = "recvfrom::DccpSocket " + ip2str(saddr.in.sin_addr) + ":" + std::to_string(ntohs(saddr.in.sin_port));
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, ret, 386);
+
+	DEBUG_LOG(Log::sceNet, "PORT %u s(%lld/%lld) r(%lld,%lld)", ntohs(saddr.in.sin_port), dbg.sent, dbg.send, dbg.recv, dbg.read);
+		// Return actual bytes copied (NOT padded to requested size)
 	return hleLogDebug(Log::sceNet, ret, "recvfrom::DccpSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
@@ -2227,41 +2490,33 @@ int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	saddr.addr.sa_family = name->sa_family;
 	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
-	if (isLocalServer) {
-		getLocalIp(&saddr.in);
-	}
-	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
-	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
-	//
-	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
-	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-	// 	// Get Local IP Address
-	// 	sockaddr_in sockAddr{};
-	// 	getLocalIp(&sockAddr);
-	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	// }
-	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
-	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
 	src.host = saddr.in;
-	
-	INFO_LOG(Log::sceNet, "bind::DccpSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
+	if (src.virt.vport == 0)
+		src.virt.vport = htons(user_id.load());
+	// Re-bind p2p sockets
+	if (src.host.sin_port == htons(SCE_SIGN_PORT))
+		saddr.in.sin_port = 0;
+
+	INFO_LOG(Log::sceNet, "bind::ccpSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
-	if (ret < 0)
-		return hleLogError(Log::sceNet, ret);
 	return ret;
 }
-int DccpSocket::shutdown(int how) { return ::shutdown(sock, how); }
+int DccpSocket::shutdown(int how) {
+	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
+	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
+	INFO_LOG(Log::sceNet, "shutdown::DccpSocket(how=%d): state=%d (real)", how, (int)tcp_state);
+	tcp_state = TCPState::Disconnected;
+	return ::shutdown(sock, how);
+}
 
 // ============================================================================
 // Standard P2P Comm Channel (UDP)
 // ============================================================================
-int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) { 
+int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
 	dbg.send++;
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
@@ -2289,7 +2544,7 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 }
 
 int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
-	NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
+	// NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
 		*fromlen = std::min((*fromlen) > 0 ? *fromlen : 0, static_cast<socklen_t>(sizeof(saddr)));
@@ -2342,7 +2597,7 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 // ============================================================================
 // TCP Virtual Socket with UPnP transmission capabilities
 // ============================================================================
-int PacketSocket::send(const char* buf, int len, int flags) { 
+int PacketSocket::send(const char* buf, int len, int flags) {
 	VERBOSE_LOG(Log::sceNet, "send::PacketSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
@@ -2478,42 +2733,25 @@ int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
 		new_socket_idx);
 	return new_socket_idx;
 }
-int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) { 
+int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	SockAddrIN4 saddr{};
 	// TODO: Should've created convertSockaddrPSP2Host (and Host2PSP too) function as it's being used pretty often, thus fixing a bug on it will be tedious when scattered all over the places
 	saddr.addr.sa_family = name->sa_family;
 	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
 
-	VERBOSE_LOG(Log::sceNet, "bind::PacketSocket(%s:%u, %d): state=%d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port), namelen, (int)tcp_state);
-	auto _vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
-	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
-	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
-	//
-	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
-	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-	// 	// Get Local IP Address
-	// 	sockaddr_in sockAddr{};
-	// 	getLocalIp(&sockAddr);
-	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	// }
-	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
-	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
-
 	// Update socket debug metadata
 	src.host = saddr.in;
-	// Flip ports
-	src.virt.port = saddr.in.sin_port;
-	src.virt.vport = htons(_vport);
+	if (src.virt.vport == 0)
+		src.virt.vport = htons(user_id.load());
+	// Re-bind p2p sockets
+	if (src.host.sin_port == htons(SCE_SIGN_PORT))
+		saddr.in.sin_port = 0;
 
-	INFO_LOG(Log::sceNet, "bind::PacketSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), htons(src.virt.vport));
+	INFO_LOG(Log::sceNet, "bind::PacketSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 
 	// changeBlockingMode(sock, 0);
-	int ret = ::bind(sock, reinterpret_cast<struct sockaddr*>(&saddr.in), sizeof(sockaddr_in));
-	if (ret < 0)
-		return ret;
+	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
 	return ret;
 }
 int PacketSocket::shutdown(int how) {
