@@ -10,6 +10,7 @@
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/ErrorCodes.h"
 #include "Core/HLE/FunctionWrappers.h"
+#include "Core/HLE/KernelWaitHelpers.h"
 #include "Core/HLE/sceNet.h"
 #include "Core/HLE/sceNetAdhoc.h"
 #include "Core/HLE/sceNetInet.h"
@@ -123,12 +124,155 @@ static void __NetInetResume(u64 userdata, int cyclesLate) {
 	// thread with EINTR on the emu thread) - nothing to do.
 }
 
+// ============================================================================
+// Blocking poll support. sceNetInetPoll parks the calling PSP thread in a
+// WAITTYPE_NET wait and this recurring tick - on the emu thread, where both
+// kernel and socket state are safe to touch - re-evaluates each outstanding
+// poll set until an fd becomes ready, the timeout lapses, or a socket dies.
+// Virtual (P2P) sockets report readiness from their queues; real host fds are
+// checked with a zero-timeout select inside the tick, so no worker threads or
+// cross-thread signaling are involved and wakeups can't be lost.
+// ============================================================================
+struct NetInetPollOp {
+	SceUID threadID = -1;
+	u32 fdsPtr = 0;
+	u32 nfds = 0;
+	s64 deadlineUs = -1; // -1 = infinite (firmware treats timeout == -1 as no deadline)
+	bool active = false;
+};
+static std::vector<NetInetPollOp> g_pollOps; // emu-thread only, no locking needed
+static int netInetPollEvent = -1;
+static const int NETINET_POLL_TICK_US = 200;
+
+// Evaluate one poll set: fills revents, returns the number of fds with events.
+// Same hybrid rules as sceNetInetSelect: a P2P-capable socket reports readiness
+// from its virtual queues, not the host fd (which may never signal).
+static int __NetInetPollScan(SceNetInetPollfd *fdarray, u32 nfds) {
+	auto virtRead = [](InetSocket *s) {
+		return (s->recvP2P == &InetSocket::Recv_Reliable && (s->has_pending_data(true) || s->has_pending_connection())) ||
+		       (s->recvP2P == &InetSocket::Recv_Unrealiable && s->has_pending_data());
+	};
+	auto virtWrite = [](InetSocket *s) {
+		return s->recvP2P == &InetSocket::Recv_Reliable && s->tcp_state == TCPState::Established;
+	};
+
+	fd_set readfds{}, writefds{}, exceptfds{};
+	FD_ZERO(&readfds);
+	FD_ZERO(&writefds);
+	FD_ZERO(&exceptfds);
+	int maxHostFd = 0;
+	int realfds = 0;
+	InetSocket *inetSock = nullptr;
+
+	for (u32 i = 0; i < nfds; i++) {
+		fdarray[i].revents = 0;
+		if (fdarray[i].fd < 0)
+			continue;
+		if (!g_socketManager.GetInetSocket(fdarray[i].fd, &inetSock) || inetSock->sock == 0) {
+			// A socket closed mid-poll must wake its waiters so their error paths run.
+			fdarray[i].revents = INET_POLLNVAL;
+			continue;
+		}
+		if (inetSock->abortPending.load()) {
+			fdarray[i].revents = INET_POLLERR | INET_POLLHUP;
+			continue;
+		}
+		// Skip host checks on virtual sockets
+		if ((fdarray[i].events & (INET_POLLRDNORM | INET_POLLIN)) && !virtRead(inetSock)) {
+			FD_SET(inetSock->sock, &readfds);
+			realfds++;
+		}
+		if ((fdarray[i].events & (INET_POLLWRNORM | INET_POLLOUT)) && !virtWrite(inetSock)) {
+			FD_SET(inetSock->sock, &writefds);
+			realfds++;
+		}
+		FD_SET(inetSock->sock, &exceptfds);
+		if (inetSock->sock > maxHostFd)
+			maxHostFd = inetSock->sock;
+	}
+
+	int selReady = 0;
+	if (realfds > 0) { // Windows returns EINVAL when you select with no FDs
+		timeval zero = {0, 0};
+		selReady = select(maxHostFd + 1, &readfds, &writefds, &exceptfds, &zero);
+		if (selReady < 0)
+			selReady = 0;
+	}
+
+	int count = 0;
+	for (u32 i = 0; i < nfds; i++) {
+		if (fdarray[i].fd < 0)
+			continue;
+		if (!fdarray[i].revents) { // not already marked NVAL/ERR above
+			if (!g_socketManager.GetInetSocket(fdarray[i].fd, &inetSock) || inetSock->sock == 0)
+				continue;
+			if ((fdarray[i].events & (INET_POLLRDNORM | INET_POLLIN)) && (virtRead(inetSock) || (selReady > 0 && FD_ISSET(inetSock->sock, &readfds))))
+				fdarray[i].revents |= (INET_POLLRDNORM | INET_POLLIN); // POLLIN_SET
+			if ((fdarray[i].events & (INET_POLLWRNORM | INET_POLLOUT)) && (virtWrite(inetSock) || (selReady > 0 && FD_ISSET(inetSock->sock, &writefds))))
+				fdarray[i].revents |= (INET_POLLWRNORM | INET_POLLOUT); // POLLOUT_SET
+			fdarray[i].revents &= fdarray[i].events;
+			if (selReady > 0 && FD_ISSET(inetSock->sock, &exceptfds))
+				fdarray[i].revents |= (INET_POLLRDBAND | INET_POLLPRI | INET_POLLERR); // POLLEX_SET
+		}
+		if (fdarray[i].revents)
+			count++;
+	}
+	return count;
+}
+
+static void __NetInetPollTick(u64 userdata, int cyclesLate) {
+	bool anyActive = false;
+	const s64 now = (s64)CoreTiming::GetGlobalTimeUs();
+	for (auto &op : g_pollOps) {
+		if (!op.active)
+			continue;
+		if (!HLEKernel::VerifyWait(op.threadID, WAITTYPE_NET, op.threadID)) {
+			// The thread was released some other way (deleted, wait canceled).
+			op.active = false;
+			continue;
+		}
+		SceNetInetPollfd *fdarray = (SceNetInetPollfd *)Memory::GetPointer(op.fdsPtr);
+		if (!fdarray) {
+			op.active = false;
+			_sce_pspnet_set_thread_errno(ERROR_INET_EFAULT, op.threadID);
+			__KernelResumeThreadFromWait(op.threadID, -1);
+			continue;
+		}
+		int count = __NetInetPollScan(fdarray, op.nfds);
+		const bool expired = op.deadlineUs >= 0 && now >= op.deadlineUs;
+		if (count != 0 || expired) {
+			// Timeout expiry is a clean 0-events result with no errno - firmware
+			// swallows the internal EWOULDBLOCK the same way.
+			op.active = false;
+			__KernelResumeThreadFromWait(op.threadID, count);
+			continue;
+		}
+		anyActive = true;
+	}
+	if (anyActive)
+		CoreTiming::ScheduleEvent(usToCycles(NETINET_POLL_TICK_US), netInetPollEvent, 0);
+}
+
+// Called from __NetInetShutdown (emu thread): release any thread still parked in poll.
+static void __NetInetPollShutdown() {
+	for (auto &op : g_pollOps) {
+		if (op.active && HLEKernel::VerifyWait(op.threadID, WAITTYPE_NET, op.threadID)) {
+			_sce_pspnet_set_thread_errno(ERROR_INET_EINTR, op.threadID);
+			__KernelResumeThreadFromWait(op.threadID, -1);
+		}
+		op.active = false;
+	}
+	g_pollOps.clear();
+}
+
 void __NetInetRegisterEvents() {
 	netInetResumeEvent = CoreTiming::RegisterEvent("__NetInetResume", __NetInetResume);
+	netInetPollEvent = CoreTiming::RegisterEvent("__NetInetPollTick", __NetInetPollTick);
 }
 
 void __NetInetRestoreEvents() {
 	CoreTiming::RestoreRegisterEvent(netInetResumeEvent, "__NetInetResume", __NetInetResume);
+	CoreTiming::RestoreRegisterEvent(netInetPollEvent, "__NetInetPollTick", __NetInetPollTick);
 }
 
 bool netInetInited = false;
@@ -141,6 +285,7 @@ void __NetInetShutdown()
 	}
 
 	netInetInited = false;
+	__NetInetPollShutdown();
 	g_socketManager.CloseAll();
 	g_inetLastErrno.clear();
 }
@@ -562,74 +707,62 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 }
 
 int sceNetInetPoll(u32 fdsPtr, u32 nfds, int timeout)
-{ // timeout in miliseconds just like posix poll? or in microseconds as other PSP timeout?
-	DEBUG_LOG(Log::sceNet, "UNTESTED sceNetInetPoll(%08x, %d, %i) at %08x", fdsPtr, nfds, timeout, currentMIPS->pc);
+{ // timeout is in MILLISECONDS - firmware multiplies it by 1000 into its u32 microsecond sleep
+	DEBUG_LOG(Log::sceNet, "sceNetInetPoll(%08x, %d, %i) at %08x", fdsPtr, nfds, timeout, currentMIPS->pc);
 	_sce_pspnet_set_thread_errno(0);
-	int retval = -1;
-	int maxHostFd = 0;
-	SceNetInetPollfd *fdarray = (SceNetInetPollfd *)Memory::GetPointer(fdsPtr); // SceNetInetPollfd/pollfd, sceNetInetPoll() have similarity to BSD poll() but pollfd have different size on 64bit
 
 	if (nfds > FD_SETSIZE)
 		nfds = FD_SETSIZE;
-
-	fd_set readfds{}, writefds{}, exceptfds{};
-	FD_ZERO(&readfds);
-	FD_ZERO(&writefds);
-	FD_ZERO(&exceptfds);
-	for (int i = 0; i < (s32)nfds; i++)
-	{
-		if (fdarray[i].fd < 0)
-		{
-			// In Unix, this is OK and means it the fd should be ignored, except fdarray[i].revents should be zeroed.
-			// UpdateErrnoFromHost(__KernelGetCurThread(), , __FUNCTION__);
+	if (!Memory::IsValidRange(fdsPtr, nfds * sizeof(SceNetInetPollfd))) {
+		_sce_pspnet_set_thread_errno(ERROR_INET_EFAULT);
+		return hleLogError(Log::sceNet, -1, "invalid fd array");
+	}
+	SceNetInetPollfd *fdarray = (SceNetInetPollfd *)Memory::GetPointer(fdsPtr); // SceNetInetPollfd/pollfd, sceNetInetPoll() have similarity to BSD poll() but pollfd have different size on 64bit
+	for (u32 i = 0; i < nfds; i++) {
+		fdarray[i].revents = 0;
+		if (fdarray[i].fd < 0) {
+			// In Unix, this is OK and means the fd should be ignored (revents zeroed), but
+			// keep the established EINVAL behavior here.
 			_sce_pspnet_set_thread_errno(ERROR_INET_EINVAL);
 			return hleLogError(Log::sceNet, -1, "invalid socket id");
 		}
-		SOCKET hostSocket = g_socketManager.GetHostSocketFromInetSocket(fdarray[i].fd);
-		if (hostSocket > maxHostFd)
-		{
-			maxHostFd = hostSocket;
+	}
+	// Firmware rejects any timeout whose microsecond form doesn't fit in u32
+	// (>= 0x418938 ms, ~49.7 days). -1 (and, leniently, other negatives) = infinite.
+	if (timeout >= 0x418938) {
+		_sce_pspnet_set_thread_errno(ERROR_INET_EINVAL);
+		return hleLogError(Log::sceNet, -1, "timeout out of range");
+	}
+
+	int count = __NetInetPollScan(fdarray, nfds);
+	if (count != 0 || timeout == 0) {
+		// Something is already ready (or this is a pure status poll) - no need to park.
+		return hleLogDebug(Log::sceNet, count);
+	}
+
+	// Nothing ready: park the PSP thread. The recurring tick resumes it when an fd
+	// becomes ready, the timeout lapses (result 0, no errno), or a socket dies.
+	NetInetPollOp *op = nullptr;
+	for (auto &candidate : g_pollOps) {
+		if (!candidate.active) {
+			op = &candidate;
+			break;
 		}
-		_dbg_assert_(hostSocket != 0);
-		FD_SET(hostSocket, &readfds);
-		FD_SET(hostSocket, &writefds);
-		FD_SET(hostSocket, &exceptfds);
-		fdarray[i].revents = 0;
 	}
+	if (!op) {
+		g_pollOps.emplace_back();
+		op = &g_pollOps.back();
+	}
+	op->threadID = __KernelGetCurThread();
+	op->fdsPtr = fdsPtr;
+	op->nfds = nfds;
+	op->deadlineUs = timeout < 0 ? -1 : (s64)CoreTiming::GetGlobalTimeUs() + (s64)timeout * 1000;
+	op->active = true;
 
-	timeval tmout = {5, 543210}; // Workaround timeout value when timeout = NULL
-	if (timeout >= 0)
-	{
-		tmout.tv_sec = timeout / 1000000;	 // seconds
-		tmout.tv_usec = (timeout % 1000000); // microseconds
-	}
-	// TODO: Simulate blocking behaviour when timeout is non-zero to prevent PPSSPP from freezing
-	retval = select(maxHostFd + 1, &readfds, &writefds, &exceptfds, /*(timeout<0)? NULL:*/ &tmout);
-	if (retval < 0)
-	{
-		// UpdateErrnoFromHost(__KernelGetCurThread(), , __FUNCTION__);
-		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR);
-		// return hleDelayResult(hleLogError(Log::sceNet, retval), "workaround until blocking-socket", 500); // Using hleDelayResult as a workaround for games that need blocking-socket to be implemented
-		return hleLogError(Log::sceNet, retval);
-	}
-
-	retval = 0;
-	for (int i = 0; i < (s32)nfds; i++)
-	{
-		SOCKET hostSocket = g_socketManager.GetHostSocketFromInetSocket(fdarray[i].fd);
-		if ((fdarray[i].events & (INET_POLLRDNORM | INET_POLLIN)) && FD_ISSET(hostSocket, &readfds))
-			fdarray[i].revents |= (INET_POLLRDNORM | INET_POLLIN); // POLLIN_SET
-		if ((fdarray[i].events & (INET_POLLWRNORM | INET_POLLOUT)) && FD_ISSET(hostSocket, &writefds))
-			fdarray[i].revents |= (INET_POLLWRNORM | INET_POLLOUT); // POLLOUT_SET
-		fdarray[i].revents &= fdarray[i].events;
-		if (FD_ISSET(hostSocket, &exceptfds))
-			fdarray[i].revents |= (INET_POLLRDBAND | INET_POLLPRI | INET_POLLERR); // POLLEX_SET; // Can be raised on revents regardless of events bitmask?
-		if (fdarray[i].revents)
-			retval++;
-		VERBOSE_LOG(Log::sceNet, "Poll Socket#%d Fd: %d, events: %04x, revents: %04x, availToRecv: %d", i, fdarray[i].fd, fdarray[i].events, fdarray[i].revents, (int)getAvailToRecv(fdarray[i].fd));
-	}
-	// hleEatMicro(1000);
-	return hleDelayResult(hleLogDebug(Log::sceNet, retval), "workaround until blocking-socket", 1000); // Using hleDelayResult as a workaround for games that need blocking-socket to be implemented
+	__KernelWaitCurThread(WAITTYPE_NET, op->threadID, 0, 0, false, "sceNetInetPoll");
+	if (!CoreTiming::IsScheduled(netInetPollEvent))
+		CoreTiming::ScheduleEvent(usToCycles(NETINET_POLL_TICK_US), netInetPollEvent, 0);
+	return 0;
 }
 
 static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
