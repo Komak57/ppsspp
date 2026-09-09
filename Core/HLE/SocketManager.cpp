@@ -549,10 +549,17 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 		// A vport-0 ("system") packet carries no ext header, so vpkt.sockType is not real sender
 		// info - print "n/a" rather than a number that looks like a specific (and possibly wrong)
 		// socket type.
-		INFO_LOG(Log::sceNet, "vBroadcast: %s:%u|%u %s sock #%d %s:%u|%u (type=%d)",
-			ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport),
-			got ? "DELIVERED to" : "REJECTED by",
-			i, ip2str(target_sock->src.virt.addr).c_str(), ntohs(target_sock->src.virt.port), ntohs(target_sock->src.virt.vport), target_sock->type);
+		if (got) {
+			INFO_LOG(Log::sceNet, "vBroadcast: %s:%u|%u %s sock #%d %s:%u|%u (type=%d)",
+				ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport),
+				got ? "DELIVERED to" : "REJECTED by",
+				i, ip2str(target_sock->src.virt.addr).c_str(), ntohs(target_sock->src.virt.port), ntohs(target_sock->src.virt.vport), target_sock->type);
+		} else {
+			DEBUG_LOG(Log::sceNet, "vBroadcast: %s:%u|%u %s sock #%d %s:%u|%u (type=%d)",
+				ip2str(dest.virt.addr).c_str(), ntohs(dest.virt.port), ntohs(dest.virt.vport),
+				got ? "DELIVERED to" : "REJECTED by",
+				i, ip2str(target_sock->src.virt.addr).c_str(), ntohs(target_sock->src.virt.port), ntohs(target_sock->src.virt.vport), target_sock->type);
+		}
 	}
 
 	if (delivered_count == 0) {
