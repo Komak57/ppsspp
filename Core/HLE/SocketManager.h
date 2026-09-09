@@ -397,13 +397,18 @@ class StreamSocket : public InetSocket {
 public:
 	StreamSocket(int domain, int protocol) : InetSocket() {
 		this->clear();  // Reset to default.
-		this->tcp_state = TCPState::Disconnected;
 		this->type = PSP_NET_INET_SOCK_STREAM;
+		this->nonblocking = false;
+		this->tcp_state = TCPState::Disconnected;
+		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
+		sendP2P = &InetSocket::Send_Reliable;  // reliable (TCP-over-UDP) p2p handlers
+		recvP2P = &InetSocket::Recv_Reliable;
+		processP2P = &InetSocket::Process_Reliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
-		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_STREAM);
+		int hostType = convertSocketTypePSP2Host(type);
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
@@ -427,6 +432,7 @@ public:
 	DgramSocket(int domain, int protocol) : InetSocket() {
 		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_DGRAM;
+		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
 		sendP2P = &InetSocket::Send_Unreliable;
@@ -434,10 +440,21 @@ public:
 		processP2P = &InetSocket::Process_Unreliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
-		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_DGRAM);
+		int hostType = convertSocketTypePSP2Host(type);
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
+
+		// Real hardware has no actual P2P socket: enabling signaling just redirects all
+		// port-3658 traffic through a kernel-level hijack, so any number of vports can
+		// share the port. Here that means multiple real sockets (one per vport, plus the
+		// signaling PING/PONG listener) all need to bind the same real port, which requires
+		// SO_REUSEADDR set before bind() ever happens.
+		int reuse = 1;
+#if defined(SO_REUSEPORT)
+		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse));
+#endif
+		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
 	}
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
@@ -455,11 +472,17 @@ public:
 	RawSocket(int domain, int protocol) : InetSocket() {
 		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_RAW;
+		this->nonblocking = false;
+		this->tcp_state = TCPState::Disconnected;
+		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
+		sendP2P = &InetSocket::Send_Reliable;  // reliable (TCP-over-UDP) p2p handlers
+		recvP2P = &InetSocket::Recv_Reliable;
+		processP2P = &InetSocket::Process_Reliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
-		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_RAW);
+		int hostType = convertSocketTypePSP2Host(type);
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
@@ -481,11 +504,17 @@ public:
 	RdmSocket(int domain, int protocol) : InetSocket() {
 		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_RDM;
+		this->nonblocking = false;
+		this->tcp_state = TCPState::Disconnected;
+		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
+		sendP2P = &InetSocket::Send_Reliable;  // reliable (TCP-over-UDP) p2p handlers
+		recvP2P = &InetSocket::Recv_Reliable;
+		processP2P = &InetSocket::Process_Reliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
-		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_RDM);
+		int hostType = convertSocketTypePSP2Host(type);
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
@@ -506,16 +535,17 @@ public:
 	SeqpacketSocket(int domain, int protocol) : InetSocket() {
 		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_SEQPACKET;
+		this->nonblocking = false;
+		this->tcp_state = TCPState::Disconnected;
+		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
-		this->tcp_state = TCPState::Disconnected;
-		sendP2P = &InetSocket::Send_Reliable;  // reliable p2p handlers
+		sendP2P = &InetSocket::Send_Reliable;  // reliable (TCP-over-UDP) p2p handlers
 		recvP2P = &InetSocket::Recv_Reliable;
 		processP2P = &InetSocket::Process_Reliable;
 
-
 		int hostDomain = convertSocketDomainPSP2Host(domain);
-		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_SEQPACKET);
+		int hostType = convertSocketTypePSP2Host(type);
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
@@ -542,6 +572,7 @@ public:
 	DccpSocket(int domain, int protocol) : InetSocket() {
 		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_DCCP;
+		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
 		sendP2P = &InetSocket::Send_Unreliable;
@@ -549,15 +580,16 @@ public:
 		processP2P = &InetSocket::Process_Unreliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
-		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_DCCP);
+		int hostType = convertSocketTypePSP2Host(type);
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
 
-		// This is the "kernel P2P socket" that binds port 3658 first; every
-		// ConnDgramSocket that needs to share that port depends on THIS socket
-		// having set SO_REUSEPORT/SO_REUSEADDR too - reuse only works if every
-		// socket sharing the port opts in, not just the later ones.
+		// Real hardware has no actual P2P socket: enabling signaling just redirects all
+		// port-3658 traffic through a kernel-level hijack, so any number of vports can
+		// share the port. Here that means multiple real sockets (one per vport, plus the
+		// signaling PING/PONG listener) all need to bind the same real port, which requires
+		// SO_REUSEADDR set before bind() ever happens.
 		int reuse = 1;
 #if defined(SO_REUSEPORT)
 		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse));
@@ -588,7 +620,7 @@ public:
 		processP2P = &InetSocket::Process_Unreliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
-		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_CONN_DGRAM);
+		int hostType = convertSocketTypePSP2Host(type);
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
@@ -630,7 +662,7 @@ public:
 		processP2P = &InetSocket::Process_Reliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
-		int hostType = convertSocketTypePSP2Host(PSP_NET_INET_SOCK_PACKET);
+		int hostType = convertSocketTypePSP2Host(type);
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
