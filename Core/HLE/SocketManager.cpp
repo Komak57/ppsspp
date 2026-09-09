@@ -1068,7 +1068,15 @@ int InetSocket::Recv_Unrealiable(char* buf, int len, int flags, SceNetInetSockad
 	// MSG_DONTWAIT (games poll their p2p socket this way).
 	const bool dontwait = nonblocking || (flags & PSP_NET_INET_MSG_DONTWAIT) != 0;
 
-	NOTICE_LOG(Log::sceNet, "Recv_Unreliable taking the Virtual route.");
+	if (!has_pending_data()) {
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(EAGAIN);
+#else
+		socket_errno = EAGAIN;
+#endif
+		return -1;
+	}
+	// NOTICE_LOG(Log::sceNet, "Recv_Unreliable taking the Virtual route.");
 	// Dequeue from local packet queue for virtual sockets
 	VirtualPacket pkt;
 	_dbg_assert_msg_(dequeue_packet(pkt), "Impossibly empty virtual queue");
@@ -2354,28 +2362,14 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	saddr.addr.sa_family = name->sa_family;
 	int len = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
 	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
-	// if (isLocalServer) {
-	// 	getLocalIp(&saddr.in);
-	// }
-	// FIXME: On non-Windows broadcast to INADDR_BROADCAST(255.255.255.255) might not be received by the sender itself when binded to specific IP (ie. 192.168.0.2) or INADDR_BROADCAST.
-	//        Meanwhile, it might be received by itself when binded to subnet (ie. 192.168.0.255) or INADDR_ANY(0.0.0.0).
-	//
-	// Replace INADDR_ANY (and INADDR_BROADCAST too) with a specific IP (using AdhocServer IP address as reference) in order not to send data through the wrong interface (especially during broadcast),
-	// But let's do this only when using built-in Adhoc Server, otherwise UNO won't works
-	// if (saddr.in.sin_addr.s_addr == INADDR_ANY || (g_Config.bEnableAdhocServer && saddr.in.sin_addr.s_addr == INADDR_BROADCAST)) {
-	// 	// Get Local IP Address
-	// 	sockaddr_in sockAddr{};
-	// 	getLocalIp(&sockAddr);
-	// 	INFO_LOG(Log::sceNet, "Bind: Address Replacement = %s => %s", ip2str(saddr.in.sin_addr).c_str(), ip2str(sockAddr.sin_addr).c_str());
-	// 	saddr.in.sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	// }
-	// TODO: Make use Port Offset only for PPSSPP to PPSSPP communications (ie. IP addresses available in the group/friendlist), otherwise should be considered as Online Service thus should use the port as is.
-	//saddr.in.sin_port = htons(ntohs(saddr.in.sin_port) + portOffset);
 
 	// Update socket debug metadata
 	src.host = saddr.in;
 	if (src.virt.vport == 0)
 		src.virt.vport = htons(user_id.load());
+	// Re-bind p2p sockets
+	if (src.host.sin_port == htons(SCE_SIGN_PORT))
+		saddr.in.sin_port = 0;
 
 	INFO_LOG(Log::sceNet, "bind::ConnDgramSocket: Family = %s, Address = %s, Port = %d, VPort = %d", inetSocketDomain2str(src.virt.family).c_str(), ip2str(src.virt.addr).c_str(), ntohs(src.virt.port), ntohs(src.virt.vport));
 

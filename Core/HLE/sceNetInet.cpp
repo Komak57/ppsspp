@@ -903,15 +903,12 @@ static int sceNetInetBind(int socket, u32 namePtr, int namelen)
 		// changeBlockingMode(inetSock->sock, 1);
 		return hleLogError(Log::sceNet, retval);
 	}
-	// changeBlockingMode(inetSock->sock, 1);
-	// Update binded port number if it was 0 (any port)
-	// memcpy(name->sa_data, saddr.addr.sa_data, sizeof(name->sa_data));
-	// Enable Port-forwarding
 
 	// FIXME: Not all ports require port forwarding, especially in Infra P2P
 	// Check the socket type/protocol for SOCK_STREAM/SOCK_DGRAM or IPPROTO_TCP/IPPROTO_UDP instead of forwarding both protocols like in ANR2ME's original change.
 	// unsigned short port = ntohs(saddr.in.sin_port);
-	UPnP_Add((inetSock->type == PSP_NET_INET_SOCK_STREAM) ? IP_PROTOCOL_TCP : IP_PROTOCOL_UDP, ntohs(inetSock->src.virt.port), ntohs(inetSock->src.virt.port));
+	if (inetSock->src.host.sin_port != htons(SCE_SIGN_PORT))
+		UPnP_Add((inetSock->recvP2P == &InetSocket::Recv_Reliable) ? IP_PROTOCOL_TCP : IP_PROTOCOL_UDP, ntohs(inetSock->src.virt.port), ntohs(inetSock->src.virt.port));
 
 	// Workaround: Send a dummy 0 size message to AdhocServer IP to make sure the socket actually bound to an address when binded with INADDR_ANY before using getsockname, seems to fix sending DGRAM from incorrect port issue on Android
 	/*saddr.in.sin_addr.s_addr = g_adhocServerIP.in.sin_addr.s_addr;
@@ -1271,8 +1268,8 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 		// host fd inside Recv_*); a plain socket uses the host recvfrom. NOTE: the plain path must
 		// remain reachable while signaling runs - server/DNS sockets have no recvP2P and previously
 		// fell through with no recv at all (retval stuck at -1).
-		const bool routeP2P = inetSock->has_pending_data() && inetSock->recvP2P;
-		NOTICE_LOG(Log::sceNet, "sceNetInetRecvfrom taking the %s route.", (routeP2P? "Hybrid" : "Raw"));
+		const bool routeP2P = (inetSock->src.host.sin_port == htons(SCE_SIGN_PORT)) && inetSock->recvP2P;
+		// NOTICE_LOG(Log::sceNet, "sceNetInetRecvfrom taking the %s route.", (routeP2P? "Hybrid" : "Raw"));
 		if (routeP2P)
 			retval = (inetSock->*(inetSock->recvP2P))((char *)Memory::GetPointer(bufferPtr), len, flags, src, srclen);
 		else
