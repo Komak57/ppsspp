@@ -1858,6 +1858,14 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	// Not actually set in the official firmware
 	netInfo->localAddr = sigServer->GetLocalAddr();	// Local  IP
 
+	INFO_LOG(Log::sceNp2, "NetInfo.size =       %i", netInfo->size);
+	INFO_LOG(Log::sceNp2, "NetInfo.localAddr =  %s", ip2str(netInfo->localAddr).c_str());
+	INFO_LOG(Log::sceNp2, "NetInfo.mappedAddr = %s", ip2str(netInfo->mappedAddr).c_str());
+	INFO_LOG(Log::sceNp2, "NetInfo.natStatus =  %i", netInfo->natStatus);
+	INFO_LOG(Log::sceNp2, "NetInfo.UPnPStatus = %i", netInfo->UPnPStatus);
+	INFO_LOG(Log::sceNp2, "NetInfo.portStatus = %i", netInfo->portStatus);
+	INFO_LOG(Log::sceNp2, "NetInfo.port =       %u", netInfo->port);
+
 	return SCE_NP_MATCHING2_OKAY;
 }
 
