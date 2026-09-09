@@ -2178,8 +2178,6 @@ int SeqpacketSocket::shutdown(int how) { return ::shutdown(sock, how); }
 // ============================================================================
 // 
 // ============================================================================
-int DccpSocket::send(const char* buf, int len, int flags) { return ::send(sock, buf, len, flags); }
-int DccpSocket::recv(char* buf, int len, int flags) { return ::recv(sock, buf, len, flags); }
 int DccpSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
@@ -2223,51 +2221,7 @@ int DccpSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from
 	
 	return hleLogDebug(Log::sceNet, ret, "recvfrom::DccpSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
-int DccpSocket::connect(SceNetInetSockaddr* name, int namelen) {
-	SockAddrIN4 saddr{};
-	int dstlen = std::min(namelen > 0 ? namelen : 0, static_cast<int>(sizeof(saddr)));
-	saddr.addr.sa_family = name->sa_family;
-	memcpy(saddr.addr.sa_data, name->sa_data, sizeof(name->sa_data));
-
-	sockaddr_in* paddr = reinterpret_cast<sockaddr_in*>(&saddr);
-	// If PSP tried to connect to 0.0.0.0, replace with loopback
-	// if (paddr->sin_addr.s_addr == htonl(INADDR_ANY)) {
-	// 	WARN_LOG(Log::sceNet, "Socket attempting to connect to INADDR_ANY! (socket #%d)", socket);
-	// 	sockaddr_in sockAddr{};
-	// 	getLocalIp(&sockAddr);
-	// 	//paddr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	// 	//paddr->sin_addr.s_addr = htonl((ULONG)0xC0A802FE); // hard coded to dev machine
-	// 	paddr->sin_addr.s_addr = sockAddr.sin_addr.s_addr;
-	// }
-
-	// Enforcing real blocking-mode on games that use blocking-mode socket (as a temporary fix for UNO), since we don't simulate blocking-mode yet
-	if (!nonblocking) {
-		WARN_LOG(Log::sceNet, "Enforcing blocking-mode on Connect! (socket #%i)", socket);
-		// changeBlockingMode(sock, 0);
-		// Workaround to avoid blocking for indefinitely
-		setSockTimeout(sock, SO_SNDTIMEO, 5000000);
-		setSockTimeout(sock, SO_RCVTIMEO, 5000000);
-	}
-	INFO_LOG(Log::sceNet, "Connect(%s, %i)", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
-	int ret = ::connect(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
-	int hostErrno = socket_errno;
-
-	if (!nonblocking) {
-		// changeBlockingMode(sock, 1);
-		// Since we're temporarily forcing blocking-mode, we'll need to change errno from ETIMEDOUT to EAGAIN
-		if (hostErrno == ETIMEDOUT)
-			hostErrno = EAGAIN;
-	}
-
-	if (saddr.in.sin_port == 53) {
-		WARN_LOG(Log::G3D, "Game connected to DNS server %s (port 53), likely for doing its own DNS lookups!", ip2str(saddr.in.sin_addr, false).c_str());
-		// We should sniff these messages...
-	}
-	return ret;
-}
-int DccpSocket::listen(int backlog) { return ::listen(sock, backlog); }
-int DccpSocket::accept(sockaddr* addr, socklen_t* addrlen) { return ::accept(sock, addr, addrlen); }
-int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) { 
+int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	SockAddrIN4 saddr{};
 	// TODO: Should've created convertSockaddrPSP2Host (and Host2PSP too) function as it's being used pretty often, thus fixing a bug on it will be tedious when scattered all over the places
 	saddr.addr.sa_family = name->sa_family;

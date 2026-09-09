@@ -564,13 +564,8 @@ public:
 #endif
 		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
 	}
-	int send(const char* buf, int len, int flags) override;
-	int recv(char* buf, int len, int flags) override;
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
-	int connect(SceNetInetSockaddr* name, int namelen) override;
-	int listen(int backlog) override;
-	int accept(sockaddr* addr, socklen_t* addrlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
 };
