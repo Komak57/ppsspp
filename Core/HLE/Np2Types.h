@@ -206,6 +206,9 @@ enum RPCNMatching2RequestEvent
 #define SCE_NP_MATCHING2_SIGNALING_EVENT_Dead							0x5101
 #define SCE_NP_MATCHING2_SIGNALING_EVENT_Established					0x5102
 #define SCE_NP_MATCHING2_SIGNALING_EVENT_NetinfoResult					0x5103
+#define SCE_NP_MATCHING2_SIGNALING_EVENT_PeerActivated					0x5104
+#define SCE_NP_MATCHING2_SIGNALING_EVENT_PeerDeactivated				0x5105
+#define SCE_NP_MATCHING2_SIGNALING_EVENT_MutualActivated				0x5106
 
 enum SceNpError : u32 {
 	// Signaling

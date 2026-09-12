@@ -1160,24 +1160,29 @@ namespace net {
         {
             si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_ACTIVE;
 
-            auto last_sig_status = si->sig_status;
+            notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
+
             if (si->op_activated)
                 si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED;
-            else if (si->sig_status < SCE_NP_SIGNALING_EVENT_ESTABLISHED)
-                si->sig_status = SCE_NP_SIGNALING_EVENT_ESTABLISHED;
 
-            if (last_sig_status != SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED && si->sig_status == SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED) {
-                notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
-            }
+            // auto last_sig_status = si->sig_status;
+            // if (si->op_activated)
+            //     si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED;
+            // else if (si->sig_status < SCE_NP_SIGNALING_EVENT_ESTABLISHED)
+            //     si->sig_status = SCE_NP_SIGNALING_EVENT_ESTABLISHED;
+
+            // if (last_sig_status != SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED && si->sig_status == SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED) {
+            //     notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
+            // }
         }
         else if ((si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_PENDING || si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE) && new_status == SCE_NP_SIGNALING_CONN_STATUS_INACTIVE)
         {
             si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
-            si->sig_status = SCE_NP_SIGNALING_EVENT_DEAD;
+            // si->sig_status = SCE_NP_SIGNALING_EVENT_DEAD;
             // Clear the mutual-activation flag too, otherwise a stale op_activated wedges the
             // next establishment: update_si_status would compute last==now==MUTUAL and never
             // re-fire Established, producing a join/leave loop on rejoin.
-            si->op_activated = false;
+            // si->op_activated = false;
 
             notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, error_code);
             retire_all_packets(si);
@@ -1194,23 +1199,24 @@ namespace net {
         {
             si->op_activated = true;
 
-            auto last_sig_status = si->sig_status;
+            // auto last_sig_status = si->sig_status;
             if (si->conn_status != SCE_NP_SIGNALING_CONN_STATUS_ACTIVE)
-                si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_PEER_ACTIVATED;
+                notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_PeerActivated, SCE_NP_MATCHING2_OKAY);
             else
-                si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED;
+                notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_MutualActivated, SCE_NP_MATCHING2_OKAY);
+            //     si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED;
 
-            if (last_sig_status != SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED && si->sig_status == SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED) {
-                notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
-            }
+            // if (last_sig_status != SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED && si->sig_status == SCE_NP_SIGNALING_EVENT_EXT_MUTUAL_ACTIVATED) {
+            //     notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, SCE_NP_MATCHING2_OKAY);
+            // }
         }
         else if (!op_activated && si->op_activated)
         {
             si->op_activated = false;
-            si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_PEER_DEACTIVATED;
+            // si->sig_status = SCE_NP_SIGNALING_EVENT_EXT_PEER_DEACTIVATED;
 
-            notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Dead, SCE_NP_SIGNALING_ERROR_TERMINATED_BY_PEER);
-            retire_all_packets(si);
+            notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_PeerDeactivated, SCE_NP_MATCHING2_OKAY);
+            // retire_all_packets(si);
         }
     }
 
