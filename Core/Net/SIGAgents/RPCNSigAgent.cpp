@@ -377,7 +377,6 @@ namespace net {
             case SceNpSignalingCommand::Confirm:     handle_confirm(sp, si, sent_packet, op_addr, op_port); break;
             case SceNpSignalingCommand::Finished:    handle_finished(sp, si, sent_packet, op_addr, op_port); break;
             case SceNpSignalingCommand::FinishedAck: handle_finished_ack(sp, si); break;
-            case SceNpSignalingCommand::Info:        handle_info(sp, si, op_addr, op_port); break;
             default: ERROR_LOG(Log::Signaling, "Invalid signaling command received");  break;
             }
         }
@@ -602,7 +601,6 @@ namespace net {
         case SceNpSignalingCommand::Confirm:     handle_confirm(sp, si, sent_packet, op_addr, op_port); break;
         case SceNpSignalingCommand::Finished:    handle_finished(sp, si, sent_packet, op_addr, op_port); break;
         case SceNpSignalingCommand::FinishedAck: handle_finished_ack(sp, si); break;
-        case SceNpSignalingCommand::Info:        handle_info(sp, si, op_addr, op_port); break;
         default: ERROR_LOG(Log::Signaling, "Invalid signaling command received");  break;
         }
     }
@@ -648,16 +646,6 @@ namespace net {
 
         update_rtt(sp->timestamp_sender);
         reschedule_packet(si, SceNpSignalingCommand::Ping, std::chrono::steady_clock::now() + 10s);
-        // Don't Reply
-        // Don't Schedule Repeat
-    }
-
-    void RPCNSigAgent::handle_info(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si, u32 op_addr, u16 op_port) {
-        INFO_LOG(Log::Signaling, "INFO <- %s", sp->npid.ToString().c_str());
-        /*update_si_addr(si, op_addr, op_port);
-        reply = false;
-        schedule_repeat = false;*/
-        update_si_addr(si, op_addr, op_port);
         // Don't Reply
         // Don't Schedule Repeat
     }

@@ -247,7 +247,6 @@ namespace net {
 		}
 		void handle_ping(const SignalingPacket* sp, SignalingPacket& sent_packet, u32 op_addr, u16 op_port);
 		void handle_pong(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si);
-		void handle_info(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si, u32 op_addr, u16 op_port);
 		void handle_connect(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si, SignalingPacket& sent_packet, u32 op_addr, u16 op_port);
 		void handle_connect_ack(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si, SignalingPacket& sent_packet, u32 op_addr, u16 op_port);
 		void handle_confirm(const SignalingPacket* sp, std::shared_ptr<SceSignalingPeer> si, SignalingPacket& sent_packet, u32 op_addr, u16 op_port);
