@@ -1825,8 +1825,11 @@ int StreamSocket::listen(int backlog) {
 	// sceNetInetListen sets the virtual Listening state/backlog; this just opens the real backlog.
 	VERBOSE_LOG(Log::sceNet, "listen::StreamSocket(%d): state=%d", backlog, (int)tcp_state);
 	int ret = ::listen(sock, backlog);
-	if (ret >= 0)
-		INFO_LOG(Log::sceNet, "listen::StreamSocket: port %d now accepting %d connections", ntohs(src.virt.port), this->backlog);
+	if (ret < 0)
+		return ret;
+	this->tcp_state = TCPState::Listening;
+	this->backlog = (backlog == PSP_NET_INET_SOMAXCONN ? SOMAXCONN : backlog);
+	INFO_LOG(Log::sceNet, "listen::StreamSocket: port %d now accepting %d connections", ntohs(src.virt.port), this->backlog);
 	return ret;
 }
 int StreamSocket::accept(sockaddr* addr, socklen_t* addrlen) {
@@ -2372,8 +2375,11 @@ int SeqpacketSocket::listen(int backlog) {
 	// sceNetInetListen sets the virtual Listening state/backlog; this just opens the real backlog.
 	VERBOSE_LOG(Log::sceNet, "listen::SeqpacketSocket(%d): state=%d", backlog, (int)tcp_state);
 	int ret = ::listen(sock, backlog);
-	if (ret >= 0)
-		INFO_LOG(Log::sceNet, "listen::SeqpacketSocket: port %d now accepting %d connections", ntohs(src.virt.port), this->backlog);
+	if (ret < 0)
+		return ret;
+	this->tcp_state = TCPState::Listening;
+	this->backlog = (backlog == PSP_NET_INET_SOMAXCONN ? SOMAXCONN : backlog);
+	INFO_LOG(Log::sceNet, "listen::SeqpacketSocket: port %d now accepting %d connections", ntohs(src.virt.port), this->backlog);
 	return ret;
 }
 int SeqpacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
@@ -2708,8 +2714,11 @@ int PacketSocket::listen(int backlog) {
 	// sceNetInetListen sets the virtual Listening state/backlog; this just opens the real backlog.
 	VERBOSE_LOG(Log::sceNet, "listen::PacketSocket(%d): state=%d", backlog, (int)tcp_state);
 	int ret = ::listen(sock, backlog);
-	if (ret >= 0)
-		INFO_LOG(Log::sceNet, "listen::PacketSocket: port %d now accepting %d connections", ntohs(src.virt.port), this->backlog);
+	if (ret < 0)
+		return ret;
+	this->tcp_state = TCPState::Listening;
+	this->backlog = (backlog == PSP_NET_INET_SOMAXCONN ? SOMAXCONN : backlog);
+	INFO_LOG(Log::sceNet, "listen::PacketSocket: port %d now accepting %d connections", ntohs(src.virt.port), this->backlog);
 	return ret;
 }
 int PacketSocket::accept(sockaddr* addr, socklen_t* addrlen) {
