@@ -1338,13 +1338,20 @@ int InetSocket::Connect_Reliable(SceNetInetSockaddr* name, int namelen) {
 #endif
 		return hleLogError(Log::sceNet, -1, "connect::RELIABLE: P2P_SOCK Not Present");
 	}
-	if (tcp_state != TCPState::Disconnected) {
+	if (tcp_state == TCPState::Established || tcp_state == TCPState::CloseWait) {
 #if PPSSPP_PLATFORM(WINDOWS)
 		SetLastError(EISCONN);
 #else
 		socket_errno = EISCONN;
 #endif
-		return hleLogError(Log::sceNet, -1, "connect::RELIABLE: Socket not Disconnected (state=%d)", (int)tcp_state);
+		return hleLogError(Log::sceNet, -1, "connect::RELIABLE: Socket already Connected (state=%d)", (int)tcp_state);
+	}
+	if (tcp_state == TCPState::SynSent || tcp_state == TCPState::SynReceived) {
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(EALREADY);
+#else
+		socket_errno = EALREADY;
+#endif
 	}
 
 	// Peer (game-space) endpoint.
