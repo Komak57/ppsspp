@@ -886,10 +886,10 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval, routeP2P]() mutable
 	{
 		if (routeP2P) {
-			// sendP2P's `flags` param means MSG socket flags for Send_Unreliable but wire protocol
-			// flags for Send_Reliable - only the latter wants the PSH|TCP constant here.
-			const bool isReliable = inetSock->sendP2P == &InetSocket::Send_Reliable;
-			retval = (inetSock->*(inetSock->sendP2P))((char*)Memory::GetPointer(bufPtr), bufLen, flags, nullptr, 0);
+			// FIXME: We're dropping the socket flags for p2p flags. This should probably
+			//   be a per-socket function to define how to handle sendP2P for compatibility,
+			//   and then push to Send_Reliable with PSH+TCP
+			retval = (inetSock->*(inetSock->sendP2P))((char*)Memory::GetPointer(bufPtr), bufLen, (p2ps_tcp_flags::PSH | p2ps_tcp_flags::TCP), nullptr, 0);
 		} else
 			retval = inetSock->send((char*)Memory::GetPointer(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
 		if (inetSock->abortPending.exchange(false)) {
