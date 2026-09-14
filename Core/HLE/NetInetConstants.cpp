@@ -121,6 +121,12 @@ int convertMSGFlagsPSP2Host(int flags) {
 		flgs |= MSG_MCAST;
 	}
 #endif
+	if (flags & PSP_NET_INET_MSG_CRYPT_TX) {
+		// No host compatible conversion
+	}
+	if (flags & PSP_NET_INET_MSG_CRYPT_RX) {
+		// No host compatible conversion
+	}
 
 	return flgs;
 }

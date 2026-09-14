@@ -275,6 +275,8 @@ enum {
 #define	PSP_NET_INET_MSG_DONTWAIT	0x80		// this message should be nonblocking 
 #define	PSP_NET_INET_MSG_BCAST		0x100		// this message was rcvd using link-level brdcst 
 #define	PSP_NET_INET_MSG_MCAST		0x200		// this message was rcvd using link-level mcast 
+#define PSP_NET_INET_MSG_CRYPT_TX	0x400		// Marks as encrypted send for singular packet
+#define PSP_NET_INET_MSG_CRYPT_RX	0x800		// Marks as encrypted recv for singular packet
 
 // Poll Event Flags (used on events)
 #define INET_POLLIN			0x001		// There is data to read.  
