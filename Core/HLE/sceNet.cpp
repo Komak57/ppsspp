@@ -1854,10 +1854,8 @@ static int sceNetUpnpInit(int size,int offset) {
 
 	WARN_LOG(Log::sceNet, "Creating DCCP Socket");
 	// NOTE: This socket does not register as a virtual socket, but carries all virtual traffic
-	CreateSignalingSocket(SCE_SIGN_PORT, 0, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_DCCP, PSP_NET_INET_IPPROTO_UNSPEC);
-
-	if (g_Config.bEnableUPnP)
-		bool ok = g_PortManager.Add("UDP", SCE_SIGN_PORT, SCE_SIGN_PORT);
+	if (g_socketManager.CreateP2PSocket() == INVALID_SOCKET)
+		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_TOO_MANY_CONN, "P2P Socket could not be created");
 
 	sigServer = InitSigAgent((net::NPAgentType)g_Config.proInfraServerType);
 	if (!sigServer || !sigServer->IsInitialized())

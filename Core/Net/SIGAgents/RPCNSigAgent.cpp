@@ -57,14 +57,14 @@ namespace net {
     }
     
     RPCNSigAgent::RPCNSigAgent() {
-        auto DccpSocket = g_socketManager.GetP2PSocket();
+        auto p2p_sock = g_socketManager.GetP2PSocket();
         // Create the Virtual Socket for p2p handshakes
         WARN_LOG(Log::Signaling, "RPCN: Creating signaling socket for UPnP on vport %d", SCE_INTERNAL_PORT);
         UPNP_SUBSET_SOCK = CreateSignalingSocket(0, 0, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_CONN_DGRAM, PSP_NET_INET_IPPROTO_UNSPEC);
         WARN_LOG(Log::Signaling, "RPCN: Creating signaling socket for P2P on vport %d", SCE_INTERNAL_PORT);
         P2P_SUBSET_SOCK = CreateSignalingSocket(0, 1, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_CONN_DGRAM, PSP_NET_INET_IPPROTO_UNSPEC);
         
-        if (!DccpSocket || !UPNP_SUBSET_SOCK || !P2P_SUBSET_SOCK) {
+        if (p2p_sock == INVALID_SOCKET || !UPNP_SUBSET_SOCK || !P2P_SUBSET_SOCK) {
             ERROR_LOG(Log::Signaling, "Could not initialize Signaling Sockets.");
             _dbg_assert_msg_(false, "Could not initialize Signaling Sockets.");
             return;
@@ -964,12 +964,12 @@ namespace net {
 
         std::string datahex;
         DEBUG_HEXLOG(Log::Signaling, "RPCNSigAgent::sendto", reinterpret_cast<const char*>(data.data()), data.size(), 386);
-        auto dccpSocket = g_socketManager.GetP2PSocket();
-        if (!dccpSocket) {
+        auto p2p_sock = g_socketManager.GetP2PSocket();
+        if (p2p_sock != INVALID_SOCKET) {
             ERROR_LOG(Log::sceNet, "Socket not found");
             return false;
         }
-        int ret = ::sendto(dccpSocket->sock, reinterpret_cast<const char*>(data.data()), data.size(), 0, reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+        int ret = ::sendto(p2p_sock, reinterpret_cast<const char*>(data.data()), data.size(), 0, reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
         if (ret < 0)
         {
             int errorCode = 0;

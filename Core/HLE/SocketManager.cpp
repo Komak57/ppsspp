@@ -200,13 +200,6 @@ InetSocket* SocketManager::CreateSystemSocket(int* index, int* returned_errno, S
 #pragma pop_macro("new")
 	}
 
-	switch (type) {
-	case PSP_NET_INET_SOCK_DCCP: // Parent to all Virtual Sockets
-		p2p_sock = inetSock;
-	default: // Normal Socket
-		break;
-	}
-
 	// Most Wanted creates a socket 2,3,1 for ICMP (Internet Control Message Protocol)
 	// but SOCK_RAW may require elevated permissions
 	if (inetSock->sock <= 0)
@@ -318,7 +311,7 @@ void SocketManager::NetworkDemultiplexer(int* timeout) {
 	// re-injection here; everything goes straight to the peer's real UDP endpoint (the game vport).
 	auto retransmit_buffer = [](InetSocket* owner) -> bool {
 		auto p2p_sock = g_socketManager.GetP2PSocket();
-		if (!p2p_sock)
+		if (p2p_sock == INVALID_SOCKET)
 			return false;
 		// Only the control packet matching the current handshake stage is retransmitted; a
 		// data (PSH) socket sits in Established/CloseWait, where expected_flag stays 0 (any).
@@ -363,7 +356,7 @@ void SocketManager::NetworkDemultiplexer(int* timeout) {
 			// Physical delivery goes to the peer's real UDP endpoint (the game vport).
 			sockaddr_in phys = vpkt.dst.host;
 			phys.sin_port = vpkt.dst.virt.vport;
-			int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
+			int ret = ::sendto(p2p_sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
 			if (ret < 0)
 				ERROR_LOG(Log::sceNet, "NetworkDemultiplexer: retransmit sendto failed");
 			else
@@ -405,7 +398,7 @@ bool SocketManager::P2PRecv() {
 	char data[0x3000]; // Supplied by many psp buffers
 	sockaddr_in _from{};
 	socklen_t _fromlen = sizeof(_from);
-	int ret = ::recvfrom(p2p_sock->sock, data, sizeof(data), 0 | MSG_NOSIGNAL, reinterpret_cast<sockaddr*>(&_from), &_fromlen);
+	int ret = ::recvfrom(p2p_sock, data, sizeof(data), 0 | MSG_NOSIGNAL, reinterpret_cast<sockaddr*>(&_from), &_fromlen);
 	if (ret <= 0) {
 		// This is normal if no packet is available (non-blocking mode)
 		return false;
@@ -1009,7 +1002,7 @@ void InetSocket::mark_ack(InetSocket* inetSock, int seq_id) {
 int InetSocket::Send_Unreliable(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
 	// DCCP must exist for P2P traffic
 	auto p2p_sock = g_socketManager.GetP2PSocket();
-	if (!p2p_sock) {
+	if (p2p_sock == INVALID_SOCKET) {
 #if PPSSPP_PLATFORM(WINDOWS)
 		SetLastError(EINVAL);
 #else
@@ -1054,7 +1047,7 @@ int InetSocket::Send_Unreliable(const char* buf, int len, int flags, const SceNe
 
 	auto [_len, _data] = vpkt.Pack(dest);
 	// Send through DCCP to the peer's real endpoint.
-	int ret = ::sendto(p2p_sock->sock, _data.get(), _len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
+	int ret = ::sendto(p2p_sock, _data.get(), _len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, sizeof(sockaddr));
 	if (ret < 0) {
 		ERROR_LOG(Log::sceNet, "send::UNRELIABLE: Failed to send to peer (%i)", ret);
 		return ret;
@@ -1215,7 +1208,7 @@ int InetSocket::Send_Reliable(const char* buf, int len, int flags, const SceNetI
 
 	// DCCP must exist for P2P traffic
 	auto p2p_sock = g_socketManager.GetP2PSocket();
-	if (!p2p_sock) {
+	if (p2p_sock == INVALID_SOCKET) {
 #if PPSSPP_PLATFORM(WINDOWS)
 		SetLastError(EINVAL);
 #else
@@ -1255,7 +1248,7 @@ int InetSocket::Send_Reliable(const char* buf, int len, int flags, const SceNetI
 	// game port (12000/ephemeral) rides in the vport header + ext header for routing.
 	sockaddr_in phys = dest.host;
 	phys.sin_port = dest.virt.vport;
-	int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (const sockaddr*)&phys, sizeof(sockaddr_in));
+	int ret = ::sendto(p2p_sock, _data.get(), _len, 0, (const sockaddr*)&phys, sizeof(sockaddr_in));
 	if (ret < 0)
 		return hleLogError(Log::sceNet, ret, "send::RELIABLE: Failed to send to peer");
 	tx_seq++;
@@ -1330,7 +1323,7 @@ int InetSocket::Connect_Reliable(SceNetInetSockaddr* name, int namelen) {
 	u16 _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
 
 	auto p2p_sock = g_socketManager.GetP2PSocket();
-	if (!p2p_sock) {
+	if (p2p_sock == INVALID_SOCKET) {
 #if PPSSPP_PLATFORM(WINDOWS)
 		SetLastError(EINVAL);
 #else
@@ -1454,7 +1447,7 @@ int InetSocket::Accept_Reliable(sockaddr* addr, socklen_t* addrlen) {
 }
 int InetSocket::Shutdown_Reliable(int how) {
 	auto p2p_sock = g_socketManager.GetP2PSocket();
-	if (!p2p_sock || (tcp_state != TCPState::Established && tcp_state != TCPState::SynReceived))
+	if (p2p_sock == INVALID_SOCKET || (tcp_state != TCPState::Established && tcp_state != TCPState::SynReceived))
 		return ::shutdown(sock, how); // not a live virtual connection - nothing to tear down
 
 	tcp_state = TCPState::Disconnected;
@@ -1481,7 +1474,7 @@ int InetSocket::Shutdown_Reliable(int how) {
 	// physically listening on. Mirrors Send_Reliable's phys construction.
 	sockaddr_in phys = dst.host;
 	phys.sin_port = dst.virt.vport;
-	int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
+	int ret = ::sendto(p2p_sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
 	if (ret < 0)
 		ERROR_LOG(Log::sceNet, "shutdown::RELIABLE: Failed to send FIN");
 	return ::shutdown(sock, how);
@@ -1584,11 +1577,11 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 				ack.dst.virt.vport = dst.virt.vport;
 				ack.sockType = type;
 				auto p2p_sock = g_socketManager.GetP2PSocket();
-				if (p2p_sock) {
+				if (p2p_sock != INVALID_SOCKET) {
 					auto [_len, _data] = ack.Pack(dst);
 					sockaddr_in phys = dst.host;
 					phys.sin_port = dst.virt.vport;
-					int ret = ::sendto(p2p_sock->sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(phys));
+					int ret = ::sendto(p2p_sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(phys));
 					if (ret < 0) {
 						ERROR_LOG(Log::sceNet, "process::RELIABLE: Failed to send PSH|ACK");
 					}

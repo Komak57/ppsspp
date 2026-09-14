@@ -14,6 +14,9 @@
 #include "Common/Swap.h"
 #include "Core/HLE/NetInetTypes.h"
 #include "Core/HLE/NetInetConstants.h"
+#include "Core/Util/PortManager.h"
+#include "Core/HLE/proAdhoc.h"
+#include "Core/HLE/NpTypes.h"
 #include <thread>
 #include <cstring>
 
@@ -736,7 +739,38 @@ public:
 	const InetSocket *Sockets() {
 		return inetSockets_;
 	}
-	InetSocket* GetP2PSocket() { return p2p_sock; }
+	SOCKET GetP2PSocket() { return p2p_sock; }
+	SOCKET CreateP2PSocket() { 
+		// This is a master socket only available when signaling is set up.
+		// There is no reason any system should call this twice legitimately.
+		_dbg_assert_msg_(p2p_sock == INVALID_SOCKET, "Illegal attempt to recreate the p2p socket.");
+		p2p_sock = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+
+		// Bind socket for listening
+		sockaddr_in src{};
+		getLocalIp(&src);
+		src.sin_family = AF_INET;
+		src.sin_port = htons(SCE_SIGN_PORT);
+
+		int ret = ::bind(p2p_sock, (sockaddr*)&src, sizeof(sockaddr_in));
+		if (ret < 0) {
+			ERROR_LOG(Log::Signaling, "Unable to bind p2p socket for listening");
+			return INVALID_SOCKET;
+		}
+
+		// Ignore SIGPIPE when supported (ie. BSD/MacOS)
+		// setSockNoSIGPIPE(inetSocket->sock, 1);
+		// TODO: We should always use non-blocking mode and simulate blocking mode
+		changeBlockingMode(p2p_sock, 1);
+		// This is a master socket. All p2p traffic MUST arrive here.
+		// setSockReuseAddrPort(p2p_sock);
+		// Disable Connection Reset error on UDP to avoid strange behavior
+		setUDPConnReset(p2p_sock, false);
+
+		if (g_Config.bEnableUPnP)
+			bool ok = g_PortManager.Add("UDP", src.sin_port, src.sin_port);
+		return p2p_sock;
+	}
 private:
 	int NextUnusedSystemSocket();
 	int NextUnusedSocket();
@@ -745,7 +779,7 @@ private:
 	InetSocket inetSockets_[VALID_INET_SOCKET_COUNT];
 	std::unordered_map<u16, u64> exhausted_ports;
 	// SOCK_DCCP should only have 1 instance, ever. Each CONN_DGRAM should point to this for it's sock
-	InetSocket* p2p_sock;
+	SOCKET p2p_sock;
 };
 
 extern SocketManager g_socketManager;
