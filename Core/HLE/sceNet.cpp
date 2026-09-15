@@ -640,11 +640,6 @@ void __NetApctlInit() {
 	apctlHandlers.clear();
 	apctlEvents.clear();
 	memset(&netApctlInfo, 0, sizeof(netApctlInfo));
-
-	apctlUpnpState = NP_SIGNIN_STATUS_NONE;
-	apctlUpnpStateEvent = CoreTiming::RegisterEvent("__UpnpState", __UpnpState);
-	SceNetUpnpThreadHackAddr = __CreateHLELoop(SceNetUpnpThreadCode, "sceNetUpnp", "SceNetUpnpThread", "SceNetUpnpThread");
-
 }
 
 static void __ResetInitNetLib() {
