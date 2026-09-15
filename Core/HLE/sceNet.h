@@ -146,6 +146,25 @@ enum class InfraGameState {
 	NotWorking,
 };
 
+enum NETINTR_BIT : u32
+{
+	NETINTR_BIT_ETH_ATTACH = 0x01,
+	NETINTR_BIT_ETH_DETACH = 0x02,
+	NETINTR_BIT_RX = 0x04,
+	NETINTR_BIT_IF_SERVICE = 0x08,
+	NETINTR_BIT_ALT_ATTACH = 0x20,
+	NETINTR_BIT_ALT_DETACH = 0x40,
+	NETINTR_BIT_SHUTDOWN = 0x80000000, // Emulator-only; Exit the thread loop cleanly
+	NETINTR_BIT_QUIT = 0xFFFFFFFF,
+};
+
+enum CALLOUT_BIT : u32
+{
+	CALLOUT_BIT_KICK = 0x01,
+	CALLOUT_BIT_SHUTDOWN = 0x80000000,
+	CALLOUT_BIT_QUIT = 0xFFFFFFFF,
+};
+
 // Loaded an interpreted for a specific game from the JSON - doesn't represent the entire JSON.
 struct InfraDNSConfig {
 	bool loaded;
