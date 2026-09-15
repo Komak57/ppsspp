@@ -740,11 +740,15 @@ public:
 		return inetSockets_;
 	}
 	SOCKET GetP2PSocket() { return p2p_sock; }
-	SOCKET CreateP2PSocket() { 
+	SOCKET CreateP2PSocket() {
 		// This is a master socket only available when signaling is set up.
 		// There is no reason any system should call this twice legitimately.
 		_dbg_assert_msg_(p2p_sock == INVALID_SOCKET, "Illegal attempt to recreate the p2p socket.");
 		p2p_sock = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+		if (p2p_sock == INVALID_SOCKET) {
+			ERROR_LOG(Log::Signaling, "Unable to create p2p socket");
+			return INVALID_SOCKET;
+		}
 
 		// Bind socket for listening
 		sockaddr_in src{};
@@ -754,7 +758,10 @@ public:
 
 		int ret = ::bind(p2p_sock, (sockaddr*)&src, sizeof(sockaddr_in));
 		if (ret < 0) {
-			ERROR_LOG(Log::Signaling, "Unable to bind p2p socket for listening");
+			// EADDRINUSE here usually means another PPSSPP instance owns 3658.
+			ERROR_LOG(Log::Signaling, "Unable to bind p2p socket for listening (port %d taken?)", SCE_SIGN_PORT);
+			closesocket(p2p_sock);
+			p2p_sock = INVALID_SOCKET;
 			return INVALID_SOCKET;
 		}
 
