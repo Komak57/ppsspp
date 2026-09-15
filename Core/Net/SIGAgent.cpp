@@ -1,7 +1,7 @@
 #include "Core/Net/SIGAgent.h"
 
 namespace net {
-	int SIGAgent::UpnpThreadTick() {
+	int SIGAgent::NATKeepAlive() {
 		return 0;
 	}
 

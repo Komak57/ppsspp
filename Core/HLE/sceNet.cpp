@@ -2003,13 +2003,18 @@ void SceNetUpnpThread()
 	if (uPnPInitialized) {
 		newState = SCE_NP_MATCHING2_STATE_INIT;
 		delayus = 16000;
-		if (STUN_addr) {
-			newState = SCE_NP_MATCHING2_STATE_CONNECTED;
-			// FIXME: Needs to maintain the NAT port with sigServer Ping/Pong
-			//sigServer->UpnpThreadTick();
-			//upnp_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+		// The persistent NAT/UPnP state machine (firmware: SceNetUpnpThread). Drains the
+		// UPnP subset socket - now fed by the netintr thread's demux delivery - and runs
+		// NAT keepalive/message processing. This is the correct home for NATKeepAlive;
+		// it used to run on the signaling Echo thread, which is not where firmware put it.
+		if (sigServer && sigServer->IsInitialized()) {
+			if (STUN_addr) {
+				newState = SCE_NP_MATCHING2_STATE_CONNECTED;
+				upnp_time = sigServer->NATKeepAlive();
+			} else {
+				upnp_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+			}
 		}
-		// g_socketManager.NetworkDemultiplexer(&delayus);
 		net_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count() - upnp_time;
 	}
 

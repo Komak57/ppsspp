@@ -76,7 +76,7 @@ namespace net {
     }
     
     // Process all all of RPCN's messages, and then process NAT messages
-    int RPCNSigAgent::UpnpThreadTick() {
+    int RPCNSigAgent::NATKeepAlive() {
 	    // WARN_LOG(Log::Signaling, "UNTESTED %s()", __FUNCTION__);
         timeval tv{};
         tv.tv_sec = 1;      // timeout 1s

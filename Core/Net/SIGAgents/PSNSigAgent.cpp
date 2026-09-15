@@ -36,7 +36,7 @@ namespace net {
         initialized = true;
     }
     
-    int PSNSigAgent::UpnpThreadTick() {
+    int PSNSigAgent::NATKeepAlive() {
         ProcessUPnPMessages();
         return 0;
     }

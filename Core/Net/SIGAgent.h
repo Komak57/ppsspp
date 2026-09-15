@@ -25,7 +25,7 @@ namespace net {
 	public:
 		virtual ~SIGAgent() = default;
 
-		virtual int UpnpThreadTick();
+		virtual int NATKeepAlive();
 		virtual int MainThreadTick(BlockAllocator* signaling_memory);
 		virtual int EchoThreadTick(BlockAllocator* signaling_memory);
 		virtual int HandleP2PPacket();
@@ -154,7 +154,7 @@ namespace net {
 		~PSNSigAgent();
 		PSNSigAgent();
 
-        int UpnpThreadTick() override;
+        int NATKeepAlive() override;
 		int MainThreadTick(BlockAllocator* signaling_memory) override;
 		int EchoThreadTick(BlockAllocator* signaling_memory) override;
         int HandleP2PPacket() override;
@@ -221,7 +221,7 @@ namespace net {
 		~RPCNSigAgent();
 		RPCNSigAgent();
 
-        int UpnpThreadTick() override;
+        int NATKeepAlive() override;
 		int MainThreadTick(BlockAllocator* signaling_memory) override;
 		int EchoThreadTick(BlockAllocator* signaling_memory) override;
         int HandleP2PPacket() override;
