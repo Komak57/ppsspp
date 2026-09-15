@@ -59,6 +59,8 @@ namespace net {
     RPCNSigAgent::RPCNSigAgent() {
         auto p2p_sock = g_socketManager.GetP2PSocket();
         // Create the Virtual Socket for p2p handshakes
+        // Signaling sockets now bound to vport 0 - no explicit subscription needed
+        // psp_sock will deliver packets based on vport matching
         WARN_LOG(Log::Signaling, "RPCN: Creating signaling socket for UPnP on vport %d", SCE_INTERNAL_PORT);
         UPNP_SUBSET_SOCK = CreateSignalingSocket(0, 0, PSP_NET_INET_AF_INET, PSP_NET_INET_SOCK_CONN_DGRAM, PSP_NET_INET_IPPROTO_UNSPEC);
         WARN_LOG(Log::Signaling, "RPCN: Creating signaling socket for P2P on vport %d", SCE_INTERNAL_PORT);
@@ -69,8 +71,35 @@ namespace net {
             _dbg_assert_msg_(false, "Could not initialize Signaling Sockets.");
             return;
         }
-        // Signaling sockets now bound to vport 0 - no explicit subscription needed
-        // RouteDCCP will deliver packets based on vport matching
+
+        std::string hostDomain = g_Config.proInfraServer.c_str();
+		if (!hostDomain.c_str()) {
+			ERROR_LOG(Log::IO, "Resolve: Unable to resolve %s", hostDomain.c_str());
+			return;
+		}
+
+		char port_str[16];
+		snprintf(port_str, sizeof(port_str), "%d", SCE_RPCN_PORT);
+		std::string err;
+		addrinfo* resolved_;
+        net::DNSType type = DNSType::IPV4;
+		if (!net::DNSResolve(hostDomain.c_str(), port_str, &STUN_addr, err, type)) {
+			switch (type) {
+			case DNSType::IPV4:
+				WARN_LOG(Log::IO, "Failed to resolve host '%s:%s': '%s' (IPV4)", hostDomain.c_str(), port_str, err.c_str());
+				break;
+			case DNSType::IPV6:
+				WARN_LOG(Log::IO, "Failed to resolve host '%s:%s': '%s' (IPV6)", hostDomain.c_str(), port_str, err.c_str());
+				break;
+			case DNSType::ANY:
+				WARN_LOG(Log::IO, "Failed to resolve host '%s:%s': '%s' (ANY)", hostDomain.c_str(), port_str, err.c_str());
+				break;
+			default:
+				WARN_LOG(Log::IO, "Failed to resolve host '%s:%s': '%s' (N/A)", hostDomain.c_str(), port_str, err.c_str());
+				break;
+			}
+			return;
+		}
 
         initialized = true;
     }

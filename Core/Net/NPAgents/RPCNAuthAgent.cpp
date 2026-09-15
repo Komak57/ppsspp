@@ -342,7 +342,7 @@ namespace net {
 
 				INFO_LOG(Log::sceNet, "Connect - Connection Successful. TLS: %s, Cipher: %s", mbedtls_ssl_get_version(&tls.sslCtx), mbedtls_ssl_get_ciphersuite(&tls.sslCtx));
 				connected = true;
-				STUN_addr = std::move(possible);
+				// STUN_addr = std::move(possible);
 
 
 				// Obtain our local IP address related to our connection to the RPCN server
