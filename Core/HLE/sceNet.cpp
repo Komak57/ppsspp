@@ -2064,7 +2064,7 @@ static int sceNetUpnpInit(int size,int offset) {
 	if (uPnPInitialized)
 		return hleLogError(Log::sceNet, ret, "Already Initialized");
 
-	WARN_LOG(Log::sceNet, "Creating DCCP Socket");
+	WARN_LOG(Log::sceNet, "Creating P2P Socket");
 	// NOTE: This socket does not register as a virtual socket, but carries all virtual traffic
 	if (g_socketManager.CreateP2PSocket() == INVALID_SOCKET)
 		return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_TOO_MANY_CONN, "P2P Socket could not be created");
