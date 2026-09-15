@@ -964,8 +964,8 @@ namespace net {
 
         std::string datahex;
         DEBUG_HEXLOG(Log::Signaling, "RPCNSigAgent::sendto", reinterpret_cast<const char*>(data.data()), data.size(), 386);
-        auto p2p_sock = g_socketManager.GetP2PSocket();
-        if (p2p_sock != INVALID_SOCKET) {
+        SOCKET p2p_sock = g_socketManager.GetP2PSocket();
+        if (p2p_sock == INVALID_SOCKET) {
             ERROR_LOG(Log::sceNet, "Socket not found");
             return false;
         }
