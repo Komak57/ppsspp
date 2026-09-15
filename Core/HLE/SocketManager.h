@@ -732,7 +732,7 @@ public:
 	SOCKET GetHostSocketFromInetSocket(int sock);
 	bool Close(InetSocket *inetSocket);
 	void CloseAll();
-	void NetworkDemultiplexer(int* timeout);
+	void RetransmitSweep();
 	bool P2PRecv();
 
 	// For debugger

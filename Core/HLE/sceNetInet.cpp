@@ -290,6 +290,31 @@ void __NetInetShutdown()
 	g_inetLastErrno.clear();
 }
 
+void __NetInetWakeCheck(bool checkDeadlines) {
+	const s64 now = checkDeadlines ? (s64)CoreTiming::GetGlobalTimeUs() : 0;
+	for (auto &op : g_pollOps) {
+		if (!op.active)
+			continue;
+		if (!HLEKernel::VerifyWait(op.threadID, WAITTYPE_NET, op.threadID)) {
+			op.active = false;   // thread released some other way
+			continue;
+		}
+		SceNetInetPollfd *fdarray = (SceNetInetPollfd *)Memory::GetPointer(op.fdsPtr);
+		if (!fdarray) {
+			op.active = false;
+			_sce_pspnet_set_thread_errno(ERROR_INET_EFAULT, op.threadID);
+			__KernelResumeThreadFromWait(op.threadID, -1);
+			continue;
+		}
+		int count = __NetInetPollScan(fdarray, op.nfds);
+		const bool expired = checkDeadlines && op.deadlineUs >= 0 && now >= op.deadlineUs;
+		if (count != 0 || expired) {
+			op.active = false;
+			__KernelResumeThreadFromWait(op.threadID, count);  // 0 on expiry, no errno
+		}
+	}
+}
+
 static int sceNetInetInit()
 {
 	if (netInetInited)

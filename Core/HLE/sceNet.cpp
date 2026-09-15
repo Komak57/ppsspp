@@ -55,6 +55,8 @@
 #include "Core/HLE/sceNetInet.h"
 #include "Core/HLE/sceNetResolver.h"
 #include "Core/HLE/NetAdhocCommon.h"
+#include "Core/HLE/sceKernelEventFlag.h"
+#include "Core/HLE/sceNetInet.h"
 
 #include "Core/MIPS/MIPSCodeUtils.h" // for macros to implement __CreateHLELoop
 #include "Core/Net/SIGAgent.h"
@@ -1043,12 +1045,35 @@ static void __NetintrDriver(u64 userdata, int cyclesLate) {
 }
 
 void __NetintrDrain() {
+	const u32 bits = *SceNetNetintrEventBits;
+	if ((bits & NETINTR_BIT_RX) && g_socketManager.GetP2PSocket() != INVALID_SOCKET) {
+		while (g_socketManager.P2PRecv()) ; // drain all received packets
+	}
+	*SceNetNetintrEventBits = 0; // consumed; don't re-drain on a spurious wake
+
+	// The sowakeup analog: satisfy parked poll/select ops right now instead of
+	// waiting for the next 200us tick (which stays on as the timeout backstop).
+	__NetInetWakeCheck(false);
 }
 
 // Net Interrupt Thread (firmware: "SceNetNetintr", pspnet.prx FUN_000024c8)
 // Woken by the driver event when p2p data arrives; drains the transport socket
 // into the virtual sockets, wakes any parked receivers, then parks again.
 int SceNetNetintrThread() {
+	// Teardown: flag deleted/invalidated (previous wait errored) or shutdown bit set.
+	if (SceNetNetintrEventFlagID <= 0 || (*SceNetNetintrEventBits & NETINTR_BIT_SHUTDOWN))
+		return hleCall(ThreadManForUser, int, sceKernelExitDeleteThread, 0);
+
+	// Empty our p2p socket completely (bits of the wake that got us here)
+	__NetintrDrain();
+
+	// Park until the driver signals again. MUST be the last action - the wait arms
+	// and the switch happens after we return; the stub then re-invokes us on wake.
+	return hleCall(ThreadManForUser, int, sceKernelWaitEventFlag,
+		SceNetNetintrEventFlagID, (NETINTR_BIT_RX | NETINTR_BIT_SHUTDOWN),
+		(PSP_EVENT_WAITOR | PSP_EVENT_WAITCLEARALL), SceNetNetintrEventBits.ptr, 0);
+	// Firmware also services bits 1/2 (ether attach/detach), 8 (per-if hook) and
+	// 0x20/0x40 (secondary family) here - no emulated NIC lifecycle, so unused.
 }
 
 // InetSock re-send transmission thread for lost packets
@@ -1060,6 +1085,36 @@ int __CreateCalloutThread(int priority, int stackSize) {
 }
 
 int __CreateNetintrThread(int priority, int stackSize) {
+	if (!SceNetNetintrEventBits.IsValid()) {
+		ERROR_LOG(Log::sceNet, "__CreateNetintrThread: scratch pointer invalid (bits=%08x) - not starting", SceNetNetintrEventBits.ptr);
+		return -1;
+	}
+	int ret = sceKernelCreateEventFlag("SceNetNetintr", 0, 0, 0);
+	if (ret > 0) {
+		SceNetNetintrEventFlagID = ret;
+		*SceNetNetintrEventBits = 0;
+		ret = sceKernelCreateThread("SceNetNetintr", SceNetNetintrThreadHackAddr, priority, stackSize, 0, 0);
+		if (ret > 0) {
+			SceNetNetintrThreadID = ret;
+			ret = sceKernelStartThread(SceNetNetintrThreadID, 0, 0);
+			if (ret >= 0) {
+				// Arm the "driver": the recurring readability check that sets NETINTR_BIT_RX.
+				CoreTiming::UnscheduleEvent(netintrDriverEvent, 0);
+				CoreTiming::ScheduleEvent(usToCycles(NETINTR_DRIVER_POLL_US), netintrDriverEvent, 0);
+				return 0;
+			}
+		}
+	}
+	// Rollback
+	if (SceNetNetintrThreadID > 0) {
+		sceKernelTerminateThread(SceNetNetintrThreadID);
+		sceKernelDeleteThread(SceNetNetintrThreadID);
+	}
+	SceNetNetintrThreadID = -1;
+	if (SceNetNetintrEventFlagID > 0)
+		sceKernelDeleteEventFlag(SceNetNetintrEventFlagID);
+	SceNetNetintrEventFlagID = -1;
+	return ret;
 }
 
 // Teardown for both net service threads. Order matters: invalidate the IDs first

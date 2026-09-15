@@ -295,19 +295,11 @@ InetSocket *SocketManager::AdoptSocket(int *index, SOCKET hostSocket, const Inet
 	return nullptr;
 }
 
-void SocketManager::NetworkDemultiplexer(int* timeout) {
-	// Process Remote to Local first
-	while (P2PRecv()) {
-		// auto start = std::chrono::steady_clock::now();
-		// bool hadPacket = ;
-		// auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
-		// *timeout = (*timeout > elapsed) ? (*timeout - elapsed) : 0;
-		// if (!hadPacket) return;
-	}
-	// Retransmit any un-acked reliable packets. Every buffered VirtualPacket now carries its own
-	// src and dst (Send_Reliable / Shutdown_Reliable stamp pkt.dst), so delivery reads the packet,
-	// not the owning socket - which also lets a connectionless-reliable socket fan out to different
-	// peers per send. Local traffic no longer rides virtual sockets, so there is no loopback
+// Retransmit any un-acked reliable packets. 
+void SocketManager::RetransmitSweep() {
+	// Every buffered VirtualPacket carries its own src and dst (Send_Reliable / Shutdown_Reliable stamp pkt.dst),
+	// so delivery reads the packet, not the owning socket - which also lets a connectionless-reliable socket
+	// fan out to different peers per send. Local traffic no longer rides virtual sockets, so there is no loopback
 	// re-injection here; everything goes straight to the peer's real UDP endpoint (the game vport).
 	auto retransmit_buffer = [](InetSocket* owner) -> bool {
 		auto p2p_sock = g_socketManager.GetP2PSocket();
