@@ -55,9 +55,9 @@ int SceNpSignalingEchoThread()
 {
 	// WARN_LOG(Log::Signaling, "UNIMPL %s()", __FUNCTION__);
 	int ret = sigServer->EchoThreadTick(&signaling_memory);
-	int delayus = 25000;
-	g_socketManager.NetworkDemultiplexer(&delayus);
-	sigServer->UpnpThreadTick();
+	// NATKeepAlive moved to SceNetUpnpThread (its firmware home) - the persistent
+	// NAT/UPnP state machine, not the signaling Echo thread. Packet input is now the
+	// netintr thread's job; this thread only runs the signaling echo/RTT tick.
 	// hleCall(ThreadManForUser, int, sceKernelDelayThread, 25000);
 	return 0;
 }

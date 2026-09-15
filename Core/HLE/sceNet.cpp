@@ -1091,9 +1091,50 @@ int SceNetNetintrThread() {
 // InetSock re-send transmission thread for lost packets
 // (firmware: "SceNetCallout" - the timer engine; retransmission is timer work)
 int SceNetCalloutThread() {
+	if (SceNetCalloutEventFlagID <= 0 || (*SceNetCalloutEventBits & CALLOUT_BIT_SHUTDOWN))
+		return hleCall(ThreadManForUser, int, sceKernelExitDeleteThread, 0);
+
+	g_socketManager.RetransmitSweep();
+
+	// The timeout arg is IN/OUT (kernel writes remaining time back) - rewrite it
+	// every iteration or the interval decays to zero.
+	*SceNetCalloutEventTimeout = CALLOUT_INTERVAL_US;
+	*SceNetCalloutEventBits = 0;
+	return hleCall(ThreadManForUser, int, sceKernelWaitEventFlag,
+		SceNetCalloutEventFlagID, (CALLOUT_BIT_KICK | CALLOUT_BIT_SHUTDOWN),
+		(PSP_EVENT_WAITOR | PSP_EVENT_WAITCLEARALL), SceNetCalloutEventBits.ptr, SceNetCalloutEventTimeout.ptr);
 }
 
 int __CreateCalloutThread(int priority, int stackSize) {
+	if (!SceNetCalloutEventBits.IsValid() || !SceNetCalloutEventTimeout.IsValid()) {
+		ERROR_LOG(Log::sceNet, "__CreateCalloutThread: scratch pointers invalid (bits=%08x timeout=%08x) - not starting",
+			SceNetCalloutEventBits.ptr, SceNetCalloutEventTimeout.ptr);
+		return -1;
+	}
+	int ret = sceKernelCreateEventFlag("SceNetCallout", 0, 0, 0);
+	if (ret > 0) {
+		SceNetCalloutEventFlagID = ret;
+		// First iteration runs the sweep immediately, then parks with this timeout.
+		*SceNetCalloutEventBits = 0;
+		*SceNetCalloutEventTimeout = CALLOUT_INTERVAL_US;
+		ret = sceKernelCreateThread("SceNetCallout", SceNetCalloutThreadHackAddr, priority, stackSize, 0, 0);
+		if (ret > 0) {
+			SceNetCalloutThreadID = ret;
+			ret = sceKernelStartThread(SceNetCalloutThreadID, 0, 0);
+			if (ret >= 0)
+				return 0;
+		}
+	}
+	// Rollback
+	if (SceNetCalloutThreadID > 0) {
+		sceKernelTerminateThread(SceNetCalloutThreadID);
+		sceKernelDeleteThread(SceNetCalloutThreadID);
+	}
+	SceNetCalloutThreadID = -1;
+	if (SceNetCalloutEventFlagID > 0)
+		sceKernelDeleteEventFlag(SceNetCalloutEventFlagID);
+	SceNetCalloutEventFlagID = -1;
+	return ret;
 }
 
 int __CreateNetintrThread(int priority, int stackSize) {
