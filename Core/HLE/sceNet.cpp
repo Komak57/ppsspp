@@ -1042,6 +1042,18 @@ static u32 sceNetTerm() {
 }
 
 static void __NetintrDriver(u64 userdata, int cyclesLate) {
+	if (SceNetNetintrEventFlagID <= 0)
+		return;                          // torn down - stop rescheduling
+	SOCKET fd = g_socketManager.GetP2PSocket();
+	if (fd != INVALID_SOCKET) {
+		fd_set rd;
+		FD_ZERO(&rd);
+		FD_SET(fd, &rd);
+		timeval zero{0, 0};
+		if (select((int)fd + 1, &rd, nullptr, nullptr, &zero) > 0)
+			__KernelSetEventFlag(SceNetNetintrEventFlagID, NETINTR_BIT_RX);
+	}
+	CoreTiming::ScheduleEvent(usToCycles(NETINTR_DRIVER_POLL_US), netintrDriverEvent, 0);
 }
 
 void __NetintrDrain() {
