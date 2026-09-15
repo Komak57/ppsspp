@@ -90,6 +90,25 @@ static int actionAfterApctlMipsCall;
 static std::recursive_mutex apctlEvtMtx;
 static std::deque<ApctlArgs> apctlEvents;
 
+u32 SceNetNetintrThreadHackAddr = 0;
+u32_le SceNetNetintrThreadCode[3];
+SceUID SceNetNetintrThreadID = -1;
+SceUID SceNetNetintrEventFlagID = -1;
+PSPPointer<u32> SceNetNetintrEventBits;
+static int netintrDriverEvent = -1;
+static const int NETINTR_DRIVER_POLL_US = 200;
+
+u32 SceNetCalloutThreadHackAddr = 0;
+u32_le SceNetCalloutThreadCode[3];
+SceUID SceNetCalloutThreadID = -1;
+SceUID SceNetCalloutEventFlagID = -1;
+PSPPointer<u32> SceNetCalloutEventBits;
+PSPPointer<u32> SceNetCalloutEventTimeout;
+static const u32 CALLOUT_INTERVAL_US = 50000; // retransmit sweep cadence (BASE_RTO/2-ish)
+// PSP-memory scratch backing the PSPPointers above: [0]=netintr bits, [4]=callout bits, [8]=callout timeout
+static u32 netintrScratchAddr = 0;
+static void __NetintrDriver(u64 userdata, int cyclesLate);
+
 // UPnP / P2P Signaling
 bool uPnPInitialized = false;
 
@@ -668,6 +687,10 @@ void __NetInit() {
 	getLocalMac(&mac);
 	INFO_LOG(Log::sceNet, "LocalHost IP will be %s [%s]", ip2str(g_localhostIP.in.sin_addr).c_str(), mac2str(&mac).c_str());
 
+	// Module name must match the HLEFunction table these are registered in ("sceNet"),
+	// or the generated syscall in the stub resolves to nothing.
+	SceNetCalloutThreadHackAddr = __CreateHLELoop(SceNetCalloutThreadCode, "sceNet", "SceNetCalloutThread", "SceNetCalloutThread");
+	SceNetNetintrThreadHackAddr = __CreateHLELoop(SceNetNetintrThreadCode, "sceNet", "SceNetNetintrThread", "SceNetNetintrThread");
 	// For libretro we don't have a better place. On other platforms, we just init/shutdown it with the rest of the emu (NativeInit / NativeShutdown).
 #ifdef __LIBRETRO__
 	__UPnPInit(2000);
@@ -676,6 +699,11 @@ void __NetInit() {
 	__ResetInitNetLib();
 	__NetApctlInit();
 	__NetCallbackInit();
+
+	apctlUpnpState = NP_SIGNIN_STATUS_NONE;
+	apctlUpnpStateEvent = CoreTiming::RegisterEvent("__UpnpState", __UpnpState);
+	netintrDriverEvent = CoreTiming::RegisterEvent("__NetintrDriver", __NetintrDriver);
+	SceNetUpnpThreadHackAddr = __CreateHLELoop(SceNetUpnpThreadCode, "sceNetUpnp", "SceNetUpnpThread", "SceNetUpnpThread");
 }
 
 void __NetApctlShutdown() {
@@ -773,6 +801,11 @@ void __NetDoState(PointerWrap &p) {
 		apctlStateEvent = -1;
 	}
 	CoreTiming::RestoreRegisterEvent(apctlStateEvent, "__ApctlState", __ApctlState);
+	// These are registered in __NetInit (not serialized) and self-reschedule, so they
+	// are almost always queued at save time. DoState blanks every callback to the
+	// anti-crash stub, so each must be restored here or its next firing crashes.
+	CoreTiming::RestoreRegisterEvent(apctlUpnpStateEvent, "__UpnpState", __UpnpState);
+	CoreTiming::RestoreRegisterEvent(netintrDriverEvent, "__NetintrDriver", __NetintrDriver);
 	__NetInetRestoreEvents();
 	if (s >= 6) {
 		Do(p, netApctlInfoId);
@@ -956,9 +989,13 @@ static inline void FreeUser(u32 &addr) {
 	addr = 0;
 }
 
+void __NetThreadsShutdown();
+
 u32 Net_Term() {
 	// May also need to Terminate netAdhocctl and netAdhoc to free some resources & threads, since the game (ie. GTA:VCS, Wipeout Pulse, etc) might not have called
 	// them before calling sceNetTerm and causing them to behave strangely on the next sceNetInit & sceNetAdhocInit
+	// Stop the net service threads (netintr/callout) before their memory goes away.
+	__NetThreadsShutdown();
 	NetAdhocctl_Term();
 	NetAdhocMatching_Term();
 	NetAdhoc_Term();
@@ -1002,6 +1039,35 @@ static u32 sceNetTerm() {
 	return hleLogInfo(Log::sceNet, retval);
 }
 
+static void __NetintrDriver(u64 userdata, int cyclesLate) {
+}
+
+void __NetintrDrain() {
+}
+
+// Net Interrupt Thread (firmware: "SceNetNetintr", pspnet.prx FUN_000024c8)
+// Woken by the driver event when p2p data arrives; drains the transport socket
+// into the virtual sockets, wakes any parked receivers, then parks again.
+int SceNetNetintrThread() {
+}
+
+// InetSock re-send transmission thread for lost packets
+// (firmware: "SceNetCallout" - the timer engine; retransmission is timer work)
+int SceNetCalloutThread() {
+}
+
+int __CreateCalloutThread(int priority, int stackSize) {
+}
+
+int __CreateNetintrThread(int priority, int stackSize) {
+}
+
+// Teardown for both net service threads. Order matters: invalidate the IDs first
+// (stops the driver event and makes the threads self-exit on their next pass),
+// then delete the flags (which releases a parked wait with an error - the thread
+// re-enters, sees the invalid ID, and ExitDeleteThread-s itself).
+void __NetThreadsShutdown() {
+}
 /*
 Parameters:
 	poolsize	- Memory pool size (appears to be for the whole of the networking library).
@@ -1057,6 +1123,26 @@ static int sceNetInit(u32 poolSize, u32 calloutPri, u32 calloutStack, u32 netini
 	// Clear Socket Translator Memory
 	memset(&adhocSockets, 0, sizeof(adhocSockets));
 
+	// PSP-memory scratch for the service threads' wait-bits/timeout words.
+	netintrScratchAddr = AllocUser(16, false, "netintrscratch");
+	if (netintrScratchAddr != 0 && !Memory::IsValidRange(netintrScratchAddr, 16)) {
+		ERROR_LOG(Log::sceNet, "sceNetInit: netintr scratch alloc returned INVALID addr %08x", netintrScratchAddr);
+		netintrScratchAddr = 0;
+	}
+	if (netintrScratchAddr != 0) {
+		INFO_LOG(Log::sceNet, "sceNetInit: netintr scratch at %08x", netintrScratchAddr);
+		Memory::Memset(netintrScratchAddr, 0, 16, "netintrscratch");
+		SceNetNetintrEventBits = PSPPointer<u32>::Create(netintrScratchAddr);
+		SceNetCalloutEventBits = PSPPointer<u32>::Create(netintrScratchAddr + 4);
+		SceNetCalloutEventTimeout = PSPPointer<u32>::Create(netintrScratchAddr + 8);
+
+		// Firmware creates both service threads here with the game's own priorities
+		// and stacks (SceNetCallout = timer engine, SceNetNetintr = packet input).
+		__CreateCalloutThread(calloutPri, calloutStack ? calloutStack : 0x1000);
+		__CreateNetintrThread(netinitPri, netinitStack ? netinitStack : 0x1000);
+	} else {
+		ERROR_LOG(Log::sceNet, "sceNetInit: no memory for netintr scratch - net service threads disabled");
+	}
 	g_netInited = true;
 
 	auto n = GetI18NCategory(I18NCat::NETWORKING);
@@ -1956,6 +2042,9 @@ const HLEFunction sceNet[] = {
 	{0X50647530, &WrapI_I<sceNetFreeThreadinfo>,     "sceNetFreeThreadinfo",            'i', "i"    },
 	{0XCC393E48, &WrapI_U<sceNetGetMallocStat>,      "sceNetGetMallocStat",             'i', "p"    },
 	{0XAD6844C6, &WrapI_I<sceNetThreadAbort>,        "sceNetThreadAbort",               'i', "i"    },
+	// Fake function for PPSSPP's use.
+	{0X756E6F34, &WrapI_V<SceNetNetintrThread>,      "SceNetNetintrThread",             'i', ""     },
+	{0X756E6F40, &WrapI_V<SceNetCalloutThread>,      "SceNetCalloutThread",             'i', ""     },
 };
 
 const HLEFunction sceNetApctl[] = {
