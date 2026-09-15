@@ -42,6 +42,9 @@ int sceKernelCreateEventFlag(const char *name, u32 flag_attr, u32 flag_initPatte
 u32 sceKernelClearEventFlag(SceUID id, u32 bits);
 u32 sceKernelDeleteEventFlag(SceUID uid);
 u32 sceKernelSetEventFlag(SceUID id, u32 bitsToSet);
+// Set bits and wake matching waiters from non-syscall context (CoreTiming events) -
+// same core as sceKernelSetEventFlag without the HLE syscall-frame dressing.
+u32 __KernelSetEventFlag(SceUID id, u32 bitsToSet, bool *wokeThreadsOut = nullptr);
 int sceKernelWaitEventFlag(SceUID id, u32 bits, u32 wait, u32 outBitsPtr, u32 timeoutPtr);
 int sceKernelWaitEventFlagCB(SceUID id, u32 bits, u32 wait, u32 outBitsPtr, u32 timeoutPtr);
 int sceKernelPollEventFlag(SceUID id, u32 bits, u32 wait, u32 outBitsPtr);

@@ -269,23 +269,34 @@ u32 sceKernelDeleteEventFlag(SceUID uid) {
 	}
 }
 
-u32 sceKernelSetEventFlag(SceUID id, u32 bitsToSet) {
+// Set bits and wake matching waiters. Safe from non-syscall context (CoreTiming
+// events) - no syscall-frame dressing (logging/rescheduling/cycle accounting).
+u32 __KernelSetEventFlag(SceUID id, u32 bitsToSet, bool *wokeThreadsOut) {
 	u32 error;
 	EventFlag *e = kernelObjects.Get<EventFlag>(id, error);
-	if (e) {
-		bool wokeThreads = false;
+	if (!e)
+		return error;
 
-		e->nef.currentPattern |= bitsToSet;
+	bool wokeThreads = false;
+	e->nef.currentPattern |= bitsToSet;
 
-		for (size_t i = 0; i < e->waitingThreads.size(); ++i) {
-			EventFlagTh *t = &e->waitingThreads[i];
-			if (__KernelUnlockEventFlagForThread(e, *t, error, 0, wokeThreads)) {
-				e->waitingThreads.erase(e->waitingThreads.begin() + i);
-				// Try the one that used to be in this place next.
-				--i;
-			}
+	for (size_t i = 0; i < e->waitingThreads.size(); ++i) {
+		EventFlagTh *t = &e->waitingThreads[i];
+		if (__KernelUnlockEventFlagForThread(e, *t, error, 0, wokeThreads)) {
+			e->waitingThreads.erase(e->waitingThreads.begin() + i);
+			// Try the one that used to be in this place next.
+			--i;
 		}
+	}
+	if (wokeThreadsOut)
+		*wokeThreadsOut = wokeThreads;
+	return 0;
+}
 
+u32 sceKernelSetEventFlag(SceUID id, u32 bitsToSet) {
+	bool wokeThreads = false;
+	u32 error = __KernelSetEventFlag(id, bitsToSet, &wokeThreads);
+	if (error == 0) {
 		if (wokeThreads)
 			hleReSchedule("event flag set");
 
