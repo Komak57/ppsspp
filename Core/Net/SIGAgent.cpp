@@ -15,7 +15,7 @@ namespace net {
 		return 0;
 	}
 
-    std::chrono::microseconds SIGAgent::ProcessUPnPMessages() {
+    std::chrono::microseconds SIGAgent::ProcessNATResponses() {
 		return std::chrono::duration_cast<std::chrono::microseconds>(5s);
 	}
 

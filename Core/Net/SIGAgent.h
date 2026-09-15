@@ -29,7 +29,7 @@ namespace net {
 		virtual int MainThreadTick(BlockAllocator* signaling_memory);
 		virtual int EchoThreadTick(BlockAllocator* signaling_memory);
 		virtual int HandleP2PPacket();
-		virtual std::chrono::microseconds ProcessUPnPMessages();
+		virtual std::chrono::microseconds ProcessNATResponses();
 		// virtual void ProcessP2PMessages(PSPPointer<PipePacket> packet);
 
 		bool IsRunning();
@@ -158,7 +158,7 @@ namespace net {
 		int MainThreadTick(BlockAllocator* signaling_memory) override;
 		int EchoThreadTick(BlockAllocator* signaling_memory) override;
         int HandleP2PPacket() override;
-		std::chrono::microseconds ProcessUPnPMessages() override;
+		std::chrono::microseconds ProcessNATResponses() override;
 		void ProcessP2PMessages(PSPPointer<PipePacket> packet);
 		// Signaling Helpers
 
@@ -225,7 +225,7 @@ namespace net {
 		int MainThreadTick(BlockAllocator* signaling_memory) override;
 		int EchoThreadTick(BlockAllocator* signaling_memory) override;
         int HandleP2PPacket() override;
-		std::chrono::microseconds ProcessUPnPMessages() override;
+		std::chrono::microseconds ProcessNATResponses() override;
 		void ProcessP2PMessages(SignalingMessage msg);
 
 		std::vector<std::vector<u8>> get_rpcn_msgs() {

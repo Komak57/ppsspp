@@ -37,7 +37,7 @@ namespace net {
     }
     
     int PSNSigAgent::NATKeepAlive() {
-        ProcessUPnPMessages();
+        ProcessNATResponses();
         return 0;
     }
 
@@ -167,7 +167,7 @@ namespace net {
         return 0;
     }
 
-    std::chrono::microseconds PSNSigAgent::ProcessUPnPMessages() {
+    std::chrono::microseconds PSNSigAgent::ProcessNATResponses() {
         return std::chrono::duration_cast<std::chrono::microseconds>(5s);
 	}
 

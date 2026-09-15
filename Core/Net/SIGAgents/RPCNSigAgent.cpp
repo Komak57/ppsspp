@@ -166,7 +166,7 @@ namespace net {
                 // __KernelResumeThreadFromWait(SceNetUpnpThreadID, 0);
         }
         // Process all NAT messages
-        auto wait_us = ProcessUPnPMessages().count();
+        auto wait_us = ProcessNATResponses().count();
         // hleCall(ThreadManForUser, int, sceKernelDelayThread, wait_us);
         return 0;
     }
@@ -419,7 +419,7 @@ namespace net {
         std::memcpy(static_cast<void*>(&array[pos]), &value, sizeof(value));
     }
 
-    std::chrono::microseconds RPCNSigAgent::ProcessUPnPMessages() {
+    std::chrono::microseconds RPCNSigAgent::ProcessNATResponses() {
 	    // WARN_LOG(Log::Signaling, "UNTESTED %s()", __FUNCTION__);
         if (cancelled) {
             WARN_LOG(Log::Signaling, "RPCN Cancelling");
