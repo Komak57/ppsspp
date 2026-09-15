@@ -1170,6 +1170,24 @@ int __CreateNetintrThread(int priority, int stackSize) {
 // then delete the flags (which releases a parked wait with an error - the thread
 // re-enters, sees the invalid ID, and ExitDeleteThread-s itself).
 void __NetThreadsShutdown() {
+	SceUID netintrFlag = SceNetNetintrEventFlagID;
+	SceUID calloutFlag = SceNetCalloutEventFlagID;
+	SceNetNetintrEventFlagID = -1;
+	SceNetCalloutEventFlagID = -1;
+	if (netintrFlag > 0)
+		sceKernelDeleteEventFlag(netintrFlag);
+	if (calloutFlag > 0)
+		sceKernelDeleteEventFlag(calloutFlag);
+	SceNetNetintrThreadID = -1;
+	SceNetCalloutThreadID = -1;
+	if (netintrScratchAddr != 0) {
+		// Threads self-exit before touching the scratch again (ID guard runs first).
+		FreeUser(netintrScratchAddr);
+		netintrScratchAddr = 0;
+		SceNetNetintrEventBits.ptr = 0;
+		SceNetCalloutEventBits.ptr = 0;
+		SceNetCalloutEventTimeout.ptr = 0;
+	}
 }
 /*
 Parameters:

@@ -512,6 +512,12 @@ void SocketManager::CloseAll() {
 		sock.state = SocketState::Unused;
 		sock.sock = 0;
 	}
+	// The p2p master must go too, or the next game boot trips the recreate
+	// assert and inherits a socket bound under the previous session.
+	if (p2p_sock != INVALID_SOCKET) {
+		closesocket(p2p_sock);
+		p2p_sock = INVALID_SOCKET;
+	}
 }
 
 int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
