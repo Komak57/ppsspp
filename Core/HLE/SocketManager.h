@@ -775,7 +775,7 @@ public:
 		setUDPConnReset(p2p_sock, false);
 
 		if (g_Config.bEnableUPnP)
-			bool ok = g_PortManager.Add("UDP", src.sin_port, src.sin_port);
+			bool ok = g_PortManager.Add("UDP", SCE_SIGN_PORT, SCE_SIGN_PORT); // host order - src.sin_port is htons'd
 		return p2p_sock;
 	}
 private:
@@ -786,7 +786,7 @@ private:
 	InetSocket inetSockets_[VALID_INET_SOCKET_COUNT];
 	std::unordered_map<u16, u64> exhausted_ports;
 	// SOCK_DCCP should only have 1 instance, ever. Each CONN_DGRAM should point to this for it's sock
-	SOCKET p2p_sock;
+	SOCKET p2p_sock = INVALID_SOCKET;
 };
 
 extern SocketManager g_socketManager;
