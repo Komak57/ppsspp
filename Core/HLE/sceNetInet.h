@@ -20,6 +20,29 @@
 
 class PointerWrap;
 
+#define SceNetInetUdpCbStatSize 0x18
+// sizeof 0x18
+struct SceNetInetUdpCbStat {
+	u32 sndCc;
+	u32 rcvCc;
+	u32 local_ip;
+	u32 dest_ip;
+	u16 local_port;
+	u16 dest_port;
+};
+#define SceNetInetTcpCbStatSize 0x1C
+// sizeof 0x1C
+struct SceNetInetTcpCbStat {
+	u32 sndCc;
+	u32 rcvCc;
+	u32 local_ip;
+	u32 dest_ip;
+	u16 local_port;
+	u16 dest_port;
+	u16 tcp_state;
+	u8 padding[2];
+};
+
 extern bool g_netInited;
 extern bool netInetInited;
 extern bool g_netApctlInited;
