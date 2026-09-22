@@ -36,13 +36,17 @@ enum class SocketState {
 };
 
 enum class TCPState {
-	Disconnected = 0,
-	SynSent = 1,      // connect() called, SYN sent, waiting for SYN-ACK
-	SynReceived = 2,  // received SYN, queued as pending connection
-	Listening = 3,    // listen() called, waiting for incoming SYN
+	Closed 		= 0,  // Disconnected socket
+	Listening 	= 1,  // listen() called, waiting for incoming SYN
+	SynSent 	= 2,  // connect() called, SYN sent, waiting for SYN-ACK
+	SynReceived = 3,  // received SYN, queued as pending connection
 	Established = 4,  // connection established (handshake complete)
-	FinWait = 5,      // shutdown() called, FIN sent
-	CloseWait = 6,	  // connected socket sent FIN
+	CloseWait 	= 5,  // connected socket sent FIN
+	FinWait 	= 6,  // shutdown() called, FIN sent
+	Closing		= 7,
+	LastAck		= 8,
+	FinWait2	= 9,
+	TimeWait	= 10,
 };
 const char *SocketStateToString(SocketState state);
 
@@ -276,7 +280,7 @@ struct InetSocket {
 		memset(&dbg, 0, sizeof(dbg));
 
 		// Virtual fields
-		tcp_state = TCPState::Disconnected;
+		tcp_state = TCPState::Closed;
 		type = 0;
 		dst.host = sockaddr_in{};
 		threadID = -1;
@@ -316,7 +320,7 @@ struct InetSocket {
 		memset(&dbg, 0, sizeof(dbg));
 
 		// Virtual fields
-		tcp_state = TCPState::Disconnected;
+		tcp_state = TCPState::Closed;
 		type = 0;
 		dst.host = sockaddr_in{};
 		threadID = -1;
@@ -402,7 +406,7 @@ public:
 		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_STREAM;
 		this->nonblocking = false;
-		this->tcp_state = TCPState::Disconnected;
+		this->tcp_state = TCPState::Closed;
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
@@ -476,7 +480,7 @@ public:
 		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_RAW;
 		this->nonblocking = false;
-		this->tcp_state = TCPState::Disconnected;
+		this->tcp_state = TCPState::Closed;
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
@@ -508,7 +512,7 @@ public:
 		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_RDM;
 		this->nonblocking = false;
-		this->tcp_state = TCPState::Disconnected;
+		this->tcp_state = TCPState::Closed;
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
@@ -539,7 +543,7 @@ public:
 		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_SEQPACKET;
 		this->nonblocking = false;
-		this->tcp_state = TCPState::Disconnected;
+		this->tcp_state = TCPState::Closed;
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
@@ -656,7 +660,7 @@ public:
 		this->clear();  // Reset to default.
 		this->type = PSP_NET_INET_SOCK_PACKET;
 		this->nonblocking = false;
-		this->tcp_state = TCPState::Disconnected;
+		this->tcp_state = TCPState::Closed;
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;

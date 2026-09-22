@@ -142,7 +142,7 @@ void InetSocket::clear() {
     memset(&dbg, 0, sizeof(dbg));
 
     // Virtual fields
-    tcp_state = TCPState::Disconnected;
+    tcp_state = TCPState::Closed;
     type = 0;
 	dst.host = sockaddr_in{};
     threadID = -1;
@@ -311,7 +311,7 @@ void SocketManager::RetransmitSweep() {
 		switch (owner->tcp_state) {
 			case TCPState::SynSent:			expected_flag = (p2ps_tcp_flags::SYN | p2ps_tcp_flags::TCP); break;
 			case TCPState::SynReceived:		expected_flag = (p2ps_tcp_flags::SYN | p2ps_tcp_flags::ACK | p2ps_tcp_flags::TCP); break;
-			case TCPState::Disconnected:	expected_flag = (p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP); break;
+			case TCPState::Closed:	expected_flag = (p2ps_tcp_flags::FIN | p2ps_tcp_flags::TCP); break;
 			default: break; // Established/Closed/etc. don't need control retransmit
 		}
 
@@ -1448,7 +1448,7 @@ int InetSocket::Shutdown_Reliable(int how) {
 	if (p2p_sock == INVALID_SOCKET || (tcp_state != TCPState::Established && tcp_state != TCPState::SynReceived))
 		return ::shutdown(sock, how); // not a live virtual connection - nothing to tear down
 
-	tcp_state = TCPState::Disconnected;
+	tcp_state = TCPState::Closed;
 	g_socketManager.exhaustEphemeralPort(ntohs(src.virt.vport));
 
 	VirtualPacket vpkt;
@@ -1876,7 +1876,7 @@ int StreamSocket::shutdown(int how) {
 	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
 	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
 	INFO_LOG(Log::sceNet, "shutdown::StreamSocket(how=%d): state=%d (real)", how, (int)tcp_state);
-	tcp_state = TCPState::Disconnected;
+	tcp_state = TCPState::Closed;
 	return ::shutdown(sock, how);
 }
 
@@ -1963,7 +1963,7 @@ int DgramSocket::shutdown(int how) {
 	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
 	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
 	INFO_LOG(Log::sceNet, "shutdown::DgramSocket(how=%d): state=%d (real)", how, (int)tcp_state);
-	tcp_state = TCPState::Disconnected;
+	tcp_state = TCPState::Closed;
 	return ::shutdown(sock, how);}
 
 // ============================================================================
@@ -2426,7 +2426,7 @@ int SeqpacketSocket::shutdown(int how) {
 	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
 	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
 	INFO_LOG(Log::sceNet, "shutdown::SeqpacketSocket(how=%d): state=%d (real)", how, (int)tcp_state);
-	tcp_state = TCPState::Disconnected;
+	tcp_state = TCPState::Closed;
 	return ::shutdown(sock, how);
 }
 
@@ -2513,7 +2513,7 @@ int DccpSocket::shutdown(int how) {
 	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
 	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
 	INFO_LOG(Log::sceNet, "shutdown::DccpSocket(how=%d): state=%d (real)", how, (int)tcp_state);
-	tcp_state = TCPState::Disconnected;
+	tcp_state = TCPState::Closed;
 	return ::shutdown(sock, how);
 }
 
@@ -2765,6 +2765,6 @@ int PacketSocket::shutdown(int how) {
 	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
 	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
 	INFO_LOG(Log::sceNet, "shutdown::PacketSocket(how=%d): state=%d (real)", how, (int)tcp_state);
-	tcp_state = TCPState::Disconnected;
+	tcp_state = TCPState::Closed;
 	return ::shutdown(sock, how);
 }
