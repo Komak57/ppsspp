@@ -592,6 +592,7 @@ struct PSPPointer
 	}
 };
 
+// Linked List conversion
 // Patapon3 itterates objects with this pointer, indicating a list of items
 // Could just add the pointer to the object, but this method gives greater conversion control
 template<typename T>
