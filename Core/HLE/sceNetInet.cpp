@@ -1841,6 +1841,118 @@ static int sceNetInetRecvmsg(int socket, u32 msghdrPtr, int flags)
 	return hleLogError(Log::sceNet, retval); // returns number of bytes received?
 }
 
+// cbStatLenPtr = NULL causes null-pointer dereference; else inputs an element count, and outputs a byte-length
+// cbStatPtr = NULL generates a count-only probe;
+int sceNetInetGetUdpcbstat(u32 cbStatLenPtr, u32 cbStatPtr) {
+    const int cap = (Memory::IsValidAddress(cbStatLenPtr)? (int)Memory::Read_U32(cbStatLenPtr) : 0);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x[%i], %08x) at %08x", __FUNCTION__, cbStatLenPtr, cap, cbStatPtr, currentMIPS->pc);
+	if (!Memory::IsValidAddress(cbStatLenPtr) && !Memory::IsValidAddress(cbStatPtr))
+		return hleLogError(Log::sceNet, SCE_NET_INET_ERROR_INVALID_ARG, "No request provided");
+	PSPPointer<PSPList<SceNetInetUdpCbStat>> stat_list;
+
+	int count = 0;
+	InetSocket *inetSock = nullptr;
+	PSPPointer<PSPList<SceNetInetUdpCbStat>> lastCbStat;
+	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i <= SocketManager::VALID_INET_SOCKET_COUNT; i++)
+	{
+		if (!g_socketManager.GetInetSocket(i, &inetSock))
+			continue;
+		if (inetSock->type != PSP_NET_INET_SOCK_DGRAM)
+			continue;
+		
+		// Format space as another linked-list UdpCbStat
+		// Only write if the request is asking for data
+        if (cbStatPtr != 0) {
+			// Have we reached the limit of allowed elements?
+			if ((count+1) > cap) break;
+			stat_list = PSPPointer<PSPList<SceNetInetUdpCbStat>>::Create(cbStatPtr + (count * SceNetInetUdpCbStatSize));
+			if (lastCbStat.ptr != 0)
+				lastCbStat->next.ptr = stat_list.ptr;
+            stat_list->next = 0;
+
+			// FIXME: netintr is suppose to be allowed to modify this data? this lock prevents that.
+    		std::lock_guard<std::mutex> buffers(inetSock->buffer_lock);
+			u32 tx_count = 0;
+			// Count all packets that haven't received an ACK (retranmissions still occuring)
+			for (const auto& [seq, pkt] : inetSock->tx_buffer)
+				if (!pkt.seq_ack) tx_count += pkt.len;
+			stat_list->data.sndCc = tx_count;
+			u32 rx_count;
+			// Count all data not yet received
+			for (const auto& [seq, pkt] : inetSock->rx_buffer)
+				rx_count += pkt.len;
+			stat_list->data.rcvCc = rx_count;
+
+			stat_list->data.local_ip = inetSock->src.host.sin_addr.s_addr;
+			stat_list->data.local_port = inetSock->src.host.sin_port;
+			stat_list->data.dest_ip = inetSock->dst.host.sin_addr.s_addr;	// Should naturally default to 0 for UDP/Unreliable sockets
+			stat_list->data.dest_port = inetSock->dst.host.sin_port;		// Should naturally default to 0 for UDP/Unreliable sockets
+        }
+        count++;
+		lastCbStat = stat_list; // Cache shit stat_list for next InetSock
+    }
+	// Only write if the request is asking for size
+	if (cbStatLenPtr)
+	    Memory::Write_U32(cbStatLenPtr, count * SceNetInetUdpCbStatSize);  // OUT: total bytes
+    return hleLogDebug(Log::sceNet, 0);
+}
+
+// cbStatLenPtr = NULL causes null-pointer dereference; else inputs an element count, and outputs a byte-length
+// cbStatPtr = NULL generates a count-only probe;
+int sceNetInetGetTcpcbstat(u32 cbStatLenPtr, u32 cbStatPtr) {
+    const int cap = (Memory::IsValidAddress(cbStatLenPtr)? (int)Memory::Read_U32(cbStatLenPtr) : 0);
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x[%i], %08x) at %08x", __FUNCTION__, cbStatLenPtr, cap, cbStatPtr, currentMIPS->pc);
+	if (!Memory::IsValidAddress(cbStatLenPtr) && !Memory::IsValidAddress(cbStatPtr))
+		return hleLogError(Log::sceNet, SCE_NET_INET_ERROR_INVALID_ARG, "No request provided");
+    const int cap = (Memory::IsValidAddress(cbStatLenPtr)? (int)Memory::Read_U32(cbStatLenPtr) : 0);
+	PSPPointer<PSPList<SceNetInetTcpCbStat>> stat_list;
+
+	int count = 0;
+	InetSocket *inetSock = nullptr;
+	PSPPointer<PSPList<SceNetInetTcpCbStat>> lastCbStat;
+	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i <= SocketManager::VALID_INET_SOCKET_COUNT; i++)
+	{
+		if (!g_socketManager.GetInetSocket(i, &inetSock))
+			continue;
+		if (inetSock->type != PSP_NET_INET_SOCK_STREAM && inetSock->type != PSP_NET_INET_SOCK_PACKET)
+			continue;
+		
+		// Format space as another linked-list TcpCbStat
+        if (cbStatPtr != 0) {
+			// Have we reached the limit of allowed elements?
+			if ((count+1) > cap) break;
+			stat_list = PSPPointer<PSPList<SceNetInetTcpCbStat>>::Create(cbStatPtr + (count * SceNetInetTcpCbStatSize));
+			if (lastCbStat.ptr != 0)
+				lastCbStat->next.ptr = stat_list.ptr;
+            stat_list->next = 0;
+			
+			// FIXME: netintr is suppose to be allowed to modify this data? this lock prevents that.
+    		std::lock_guard<std::mutex> buffers(inetSock->buffer_lock);
+			u32 tx_count = 0;
+			// Count all packets that haven't received an ACK (retranmissions still occuring)
+			for (const auto& [seq, pkt] : inetSock->tx_buffer)
+				if (!pkt.seq_ack) tx_count += pkt.len;
+			stat_list->data.sndCc = tx_count;
+			u32 rx_count = 0;
+			// Count all data not yet received
+			for (const auto& [seq, pkt] : inetSock->rx_buffer)
+				rx_count += pkt.len;
+			stat_list->data.rcvCc = rx_count;
+
+			stat_list->data.local_ip = inetSock->src.host.sin_addr.s_addr;
+			stat_list->data.local_port = inetSock->src.host.sin_port;
+			stat_list->data.dest_ip = inetSock->dst.host.sin_addr.s_addr;	// Should naturally default to 0
+			stat_list->data.dest_port = inetSock->dst.host.sin_port;		// Should naturally default to 0
+			stat_list->data.tcp_state = (u16)inetSock->tcp_state;
+        }
+        count++;
+		lastCbStat = stat_list; // Cache shit stat_list for next InetSock
+    }
+	if (cbStatLenPtr)
+    	Memory::Write_U32(cbStatLenPtr, count * SceNetInetTcpCbStatSize);  // OUT: total bytes
+    return hleLogDebug(Log::sceNet, 0);
+}
+
 // TODO: fix retmasks
 const HLEFunction sceNetInet[] = {
 	{0X17943399, &WrapI_V<sceNetInetInit>,           "sceNetInetInit",                  'i', ""       },
@@ -1872,8 +1984,8 @@ const HLEFunction sceNetInet[] = {
 	{0XE247B6D6, &WrapI_IUU<sceNetInetGetpeername>,  "sceNetInetGetpeername",           'i', "ixx"    },
 	{0X162E6FD5, &WrapI_IUU<sceNetInetGetsockname>,  "sceNetInetGetsockname",           'i', "ixx"    },
 	{0X80A21ABD, &WrapI_I<sceNetInetSocketAbort>,    "sceNetInetSocketAbort",           'i', "i"      },
-	{0X39B0C7D3, nullptr,                            "sceNetInetGetUdpcbstat",          '?', ""       },
-	{0XB3888AD4, nullptr,                            "sceNetInetGetTcpcbstat",          '?', ""       },
+	{0X39B0C7D3, &WrapI_UU<sceNetInetGetUdpcbstat>,  "sceNetInetGetUdpcbstat",          'i', "xx"     },
+	{0XB3888AD4, &WrapI_UU<sceNetInetGetTcpcbstat>,  "sceNetInetGetTcpcbstat",          'i', "xx"     },
 };
 
 void Register_sceNetInet()
