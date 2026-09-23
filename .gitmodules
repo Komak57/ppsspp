@@ -1,6 +1,12 @@
 [submodule "libretro/libretro-common"]
 	path = libretro/libretro-common
 	url = https://github.com/libretro/libretro-common.git
+[submodule "dx9sdk"]
+	path = dx9sdk
+	url = https://github.com/hrydgard/minidx9.git
+[submodule "ext/native/tools/prebuilt"]
+	path = ext/native/tools/prebuilt
+	url = https://github.com/hrydgard/ppsspp-freetype.git
 [submodule "pspautotests"]
 	path = pspautotests
 	url = https://github.com/hrydgard/pspautotests.git
@@ -62,9 +68,6 @@
 [submodule "ext/mbedtls"]
 	path = ext/mbedtls
 	url = https://github.com/Mbed-TLS/mbedtls.git
-[submodule "ext/ext/flatbuffers"]
-	path = ext/ext/flatbuffers
-	url = https://github.com/google/flatbuffers.git
 [submodule "ext/flatbuffers"]
 	path = ext/flatbuffers
 	url = https://github.com/google/flatbuffers.git
