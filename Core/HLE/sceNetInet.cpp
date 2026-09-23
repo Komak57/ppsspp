@@ -1904,7 +1904,6 @@ int sceNetInetGetTcpcbstat(u32 cbStatLenPtr, u32 cbStatPtr) {
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x[%i], %08x) at %08x", __FUNCTION__, cbStatLenPtr, cap, cbStatPtr, currentMIPS->pc);
 	if (!Memory::IsValidAddress(cbStatLenPtr) && !Memory::IsValidAddress(cbStatPtr))
 		return hleLogError(Log::sceNet, SCE_NET_INET_ERROR_INVALID_ARG, "No request provided");
-    const int cap = (Memory::IsValidAddress(cbStatLenPtr)? (int)Memory::Read_U32(cbStatLenPtr) : 0);
 	PSPPointer<PSPList<SceNetInetTcpCbStat>> stat_list;
 
 	int count = 0;
