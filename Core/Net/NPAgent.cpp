@@ -45,18 +45,8 @@ Packet::Packet() {
 Packet::~Packet() {
 
 }
-inline u64 htonll(u64 value) {
-	// Check if the system is little-endian (most common desktop machines)
-	// You could also use a compile-time check for more optimization if your environment supports it
-	static const int one = 1;
-	if (*reinterpret_cast<const char*>(&one) == 1) { // Little-endian system
-		return (static_cast<u64>(htonl(static_cast<u32>(value & 0xFFFFFFFFUL))) << 32) |
-			static_cast<u64>(htonl(static_cast<u32>(value >> 32)));
-	}
-	else { // Big-endian system or unknown
-		return value; // Already in network byte order
-	}
-}
+// NOTE: no local htonll here - it's a macro on macOS (__DARWIN_OSSwapInt64) and
+// an inline function in winsock2.h on Windows; defining our own breaks both.
 bool Packet::Pack(CommandType command, u64 packet_id) {
 	const int packet_size = this->data_length + RPCN_HEADER_SIZE;
 
