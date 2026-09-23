@@ -303,11 +303,12 @@ jobs:
         sudo apt-get install libsdl2-dev libgl1-mesa-dev libglu1-mesa-dev libsdl2-ttf-dev libfontconfig1-dev
         sudo apt-get install cmake
         
-    - name: Build mbedTLS
-      working-directory: ext/mbedtls
-      run: |
-        cmake -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF -DMBEDTLS_CONFIG_FILE='"ppsspp/ext/mbedtls.h"' . -B build -DCMAKE_BUILD_TYPE=Release
-        
+    # mbedTLS is now compiled inside the main build (ext/mbedtls-build) with the
+    # project config applied - no separate configure step. The old step here ran
+    # upstream mbedtls CMake on every job and hard-failed on CMake >= 4 (macOS/iOS
+    # runners) because of its <3.5 subprojects; it also never actually built
+    # anything (configure only), so nothing consumed its output.
+
     - name: Install iOS dependencies
       if: matrix.id == 'ios'
       run: |
