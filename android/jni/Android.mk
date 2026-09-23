@@ -147,7 +147,6 @@ NAETT_FILES := \
   ${SRC}/ext/naett/naett.c
 
 MBEDTLS_FILES := \
-  $(SRC)/ext/mbedtls/library/aes.c \
 	$(SRC)/ext/mbedtls/library/aes.c \
 	$(SRC)/ext/mbedtls/library/asn1parse.c \
 	$(SRC)/ext/mbedtls/library/asn1write.c \
@@ -332,7 +331,6 @@ EXEC_AND_LIB_FILES := \
   $(AT3_STANDALONE_FILES) \
   $(EXT_FILES) \
   $(NATIVE_FILES) \
-  $(MBEDTLS_FILES) \
   $(SRC)/Common/Buffer.cpp \
   $(SRC)/Common/Crypto/md5.cpp \
   $(SRC)/Common/Crypto/sha1.cpp \
