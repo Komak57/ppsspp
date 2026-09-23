@@ -75,19 +75,9 @@ jobs:
           echo "#define PPSSPP_WIN_VERSION_NO_UPDATE 1" >> Windows/win-version.h
         }
         
-    # Uses the runner's CMake. mbedtls 2.28 contains subprojects with
-    # cmake_minimum_required < 3.5; CMake >= 4 hard-errors on those unless
-    # CMAKE_POLICY_VERSION_MINIMUM=3.5 is passed (older CMake ignores the
-    # variable). This replaced a pinned-CMake download that was fragile on
-    # arm64 runners ("not a valid application") and lost the PATH race anyway.
-    - name: Build mbedTLS
-      working-directory: ext/mbedtls
-      run: |
-        cd '${{ github.workspace }}\ext\mbedtls'
-        cmake '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF -DMBEDTLS_CONFIG_FILE='"${{ github.workspace }}\ext\mbedtls.h"' . -B build -DCMAKE_BUILD_TYPE=Release
-        cmake --build build --config Release
-        dir include/mbedtls
-        
+    # No mbedtls pre-build needed: PPSSPP.sln builds ext/mbedtls.vcxproj via
+    # ProjectReference, with MBEDTLS_CONFIG_FILE set in the project itself
+    # (no shell/CMake quoting involved).
     - name: Build Windows
       working-directory: ${{ env.GITHUB_WORKSPACE }}
       run: msbuild /m /p:TrackFileAccess=false /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform=${{ matrix.platform }} Windows/PPSSPP.sln
