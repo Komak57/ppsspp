@@ -635,7 +635,9 @@ include_directories(ext/OpenXR-SDK/include)
 # TODO: Clean up, make optional
 set(ENABLE_TESTING OFF CACHE BOOL "Build Mbed TLS tests." FORCE)
 set(ENABLE_PROGRAMS OFF CACHE BOOL "Build Mbed TLS programs." FORCE)
-add_subdirectory(ext/mbedtls)
+# Build mbedtls from source via our own wrapper (ext/mbedtls-build) instead of
+# upstream's CMake - see the comments there for the CI breakage it avoids.
+add_subdirectory(ext/mbedtls-build)
 include_directories(ext/mbedtls/include)
 
 add_subdirectory(ext/flatbuffers)
