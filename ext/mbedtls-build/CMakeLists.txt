@@ -15,6 +15,10 @@ file(GLOB MBEDTLS_SOURCES ${SRC_DIR}/library/*.c)
 add_library(mbedtls STATIC ${MBEDTLS_SOURCES})
 target_include_directories(mbedtls PUBLIC ${SRC_DIR}/include)
 target_include_directories(mbedtls PRIVATE ${SRC_DIR}/library)
+# PPSSPP's curated config (PSP-era cipher compat). PUBLIC so every consumer
+# that links mbedtls compiles its includes against the SAME config the library
+# was built with - a mismatch changes struct sizes (silent ABI corruption).
+target_compile_definitions(mbedtls PUBLIC "MBEDTLS_CONFIG_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/../mbedtls.h\"")
 
 # Third-party code: not our warnings to fix. Keeps -Werror CI jobs quiet
 # regardless of compiler (gcc/clang/msvc) and their differing warning sets.
