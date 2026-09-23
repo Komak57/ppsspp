@@ -642,7 +642,9 @@ set(ENABLE_PROGRAMS OFF CACHE BOOL "Build Mbed TLS programs." FORCE)
 add_subdirectory(ext/mbedtls-build)
 include_directories(ext/mbedtls/include)
 
-add_subdirectory(ext/flatbuffers)
+# flatbuffers is used header-only (generated-schema runtime API). Building the
+# submodule's own CMake drags in the flatc compiler, whose install() rules fail
+# on iOS (MACOSX_BUNDLE without BUNDLE DESTINATION) - so just take the headers.
 include_directories(ext/flatbuffers/include)
 
 # For ext/sol includes, that are usually included as sol/*.hpp
