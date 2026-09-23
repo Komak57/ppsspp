@@ -146,56 +146,13 @@ SPIRV_CROSS_FILES := \
 NAETT_FILES := \
   ${SRC}/ext/naett/naett.c
 
-MBEDTLS_FILES := \
-	$(SRC)/ext/mbedtls/library/aes.c \
-	$(SRC)/ext/mbedtls/library/asn1parse.c \
-	$(SRC)/ext/mbedtls/library/asn1write.c \
-	$(SRC)/ext/mbedtls/library/base64.c \
-	$(SRC)/ext/mbedtls/library/bignum.c \
-	$(SRC)/ext/mbedtls/library/cipher.c \
-	$(SRC)/ext/mbedtls/library/cipher_wrap.c \
-	$(SRC)/ext/mbedtls/library/constant_time.c \
-	$(SRC)/ext/mbedtls/library/ctr_drbg.c \
-	$(SRC)/ext/mbedtls/library/debug.c \
-	$(SRC)/ext/mbedtls/library/ecdh.c \
-	$(SRC)/ext/mbedtls/library/ecdsa.c \
-	$(SRC)/ext/mbedtls/library/ecp.c \
-	$(SRC)/ext/mbedtls/library/ecp_curves.c \
-	$(SRC)/ext/mbedtls/library/entropy.c \
-	$(SRC)/ext/mbedtls/library/entropy_poll.c \
-	$(SRC)/ext/mbedtls/library/error.c \
-	$(SRC)/ext/mbedtls/library/hmac_drbg.c \
-	$(SRC)/ext/mbedtls/library/md.c \
-	$(SRC)/ext/mbedtls/library/md5.c \
-	$(SRC)/ext/mbedtls/library/mps_reader.c \
-	$(SRC)/ext/mbedtls/library/mps_trace.c \
-	$(SRC)/ext/mbedtls/library/net_sockets.c \
-	$(SRC)/ext/mbedtls/library/oid.c \
-	$(SRC)/ext/mbedtls/library/pem.c \
-	$(SRC)/ext/mbedtls/library/pk.c \
-	$(SRC)/ext/mbedtls/library/pk_wrap.c \
-	$(SRC)/ext/mbedtls/library/pkparse.c \
-	$(SRC)/ext/mbedtls/library/platform.c \
-	$(SRC)/ext/mbedtls/library/platform_util.c \
-	$(SRC)/ext/mbedtls/library/rsa.c \
-	$(SRC)/ext/mbedtls/library/rsa_internal.c \
-	$(SRC)/ext/mbedtls/library/sha1.c \
-	$(SRC)/ext/mbedtls/library/sha256.c \
-	$(SRC)/ext/mbedtls/library/sha512.c \
-	$(SRC)/ext/mbedtls/library/ssl_cache.c \
-	$(SRC)/ext/mbedtls/library/ssl_ciphersuites.c \
-	$(SRC)/ext/mbedtls/library/ssl_cli.c \
-	$(SRC)/ext/mbedtls/library/ssl_cookie.c \
-	$(SRC)/ext/mbedtls/library/ssl_msg.c \
-	$(SRC)/ext/mbedtls/library/ssl_srv.c \
-	$(SRC)/ext/mbedtls/library/ssl_tls.c \
-	$(SRC)/ext/mbedtls/library/ssl_tls13_keys.c \
-	$(SRC)/ext/mbedtls/library/threading.c \
-	$(SRC)/ext/mbedtls/library/timing.c \
-	$(SRC)/ext/mbedtls/library/version.c \
-	$(SRC)/ext/mbedtls/library/x509.c \
-	$(SRC)/ext/mbedtls/library/x509_crt.c \
-	$(SRC)/ext/mbedtls/library/x509_crl.c
+# All library sources, like the CMake side (ext/mbedtls-build GLOBs library/*.c).
+# A curated list breaks whenever the config enables a module it omits (e.g.
+# MBEDTLS_CERTS_C/SELF_TEST reference certs.c symbols from x509.c). Unused
+# objects are dropped from the static lib at link, so the wildcard costs nothing.
+# wildcard resolves against make's CWD, so anchor to LOCAL_PATH then strip back
+# to the LOCAL_PATH-relative form LOCAL_SRC_FILES expects.
+MBEDTLS_FILES := $(patsubst $(LOCAL_PATH)/%,%,$(wildcard $(LOCAL_PATH)/$(SRC)/ext/mbedtls/library/*.c))
 
 MINIMP3_FILES := \
     ${SRC}/ext/minimp3/minimp3.cpp
@@ -959,6 +916,8 @@ include $(LOCAL_PATH)/Locals.mk
 LOCAL_C_INCLUDES := $(SRC)/ext/mbedtls/include $(LOCAL_C_INCLUDES)
 
 LOCAL_MODULE := mbedtls
+# Third-party code: not our warnings to fix (matches ext/mbedtls-build).
+LOCAL_CFLAGS += -w
 LOCAL_SRC_FILES := $(MBEDTLS_FILES)
 include $(BUILD_STATIC_LIBRARY)
 
