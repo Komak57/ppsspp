@@ -355,14 +355,6 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/Net/Resolve.cpp \
   $(SRC)/Common/Net/HTTPRequest.cpp \
   $(SRC)/Common/Net/HTTPNaettRequest.cpp \
-  $(SRC)/Common/Net/Sinks.cpp \
-  $(SRC)/Common/Net/URL.cpp \
-  $(SRC)/Common/Net/WebsocketServer.cpp \
-  $(SRC)/Common/Net/HTTPClient.cpp \
-  $(SRC)/Common/Net/HTTPHeaders.cpp \
-  $(SRC)/Common/Net/Resolve.cpp \
-  $(SRC)/Common/Net/URL.cpp \
-  $(SRC)/Common/Net/WebsocketServer.cpp \
   $(SRC)/Common/Profiler/Profiler.cpp \
   $(SRC)/Common/System/Display.cpp \
   $(SRC)/Common/System/Request.cpp \
