@@ -1877,7 +1877,7 @@ int sceNetInetGetUdpcbstat(u32 cbStatLenPtr, u32 cbStatPtr) {
 			for (const auto& [seq, pkt] : inetSock->tx_buffer)
 				if (!pkt.seq_ack) tx_count += pkt.len;
 			stat_list->data.sndCc = tx_count;
-			u32 rx_count;
+			u32 rx_count = 0;
 			// Count all data not yet received
 			for (const auto& [seq, pkt] : inetSock->rx_buffer)
 				rx_count += pkt.len;
