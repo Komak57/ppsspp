@@ -1,6 +1,13 @@
 #include "Core/Net/HTTPS.h"
 #include "Common/Log.h"
 #include "Core/HLE/HLE.h"
+
+// mbedtls debug callback (moved out of Log.h - as a static in that header it
+// tripped -Werror=unused-function in every TU on Android).
+static void ssl_debug(void* ctx, int level, const char* file, int line, const char* str) {
+	((void)level);
+	VERBOSE_LOG(Log::sceNet, "%s:%04d: %s", file, line, str);
+}
 #if defined(_WIN32)
 #include <windows.h>
 #include <wincrypt.h>

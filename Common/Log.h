@@ -137,14 +137,9 @@ void GenericLog(Log type, LogLevel level, const char *file, int line, const char
 #define DEBUG_LOG(t,...)   do { GENERIC_LOG(t, LogLevel::LDEBUG,   __VA_ARGS__) } while (false)
 #define VERBOSE_LOG(t,...) do { GENERIC_LOG(t, LogLevel::LVERBOSE, __VA_ARGS__) } while (false)
 
-static void ssl_debug(void* ctx, int level,
-	const char* file, int line,
-	const char* str)
-{
-	((void)level);
-	VERBOSE_LOG(Log::sceNet, "%s:%04d: %s", file, line, str);
-	//mbedtls_fprintf((FILE*)ctx, "%s:%04d: %s", file, line, str);
-}
+// NOTE: mbedtls debug callback (ssl_debug) lives in Core/Net/HTTPS.cpp - a
+// static function in this header would be an unused-function warning (-Werror
+// on Android) in every translation unit that includes Log.h.
 
 #define HEX_LOG(t, v, s, d, ln, lmt) \
     if ((int)v <= MAX_LOGLEVEL && GenericLogEnabled(t, v)) { \
