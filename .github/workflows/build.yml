@@ -84,7 +84,7 @@ jobs:
       working-directory: ext/mbedtls
       run: |
         cd '${{ github.workspace }}\ext\mbedtls'
-        cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF -DMBEDTLS_CONFIG_FILE='"${{ github.workspace }}\ext\mbedtls.h"' . -B build -DCMAKE_BUILD_TYPE=Release
+        cmake '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF -DMBEDTLS_CONFIG_FILE='"${{ github.workspace }}\ext\mbedtls.h"' . -B build -DCMAKE_BUILD_TYPE=Release
         cmake --build build --config Release
         dir include/mbedtls
         
