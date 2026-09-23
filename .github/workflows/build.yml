@@ -75,31 +75,16 @@ jobs:
           echo "#define PPSSPP_WIN_VERSION_NO_UPDATE 1" >> Windows/win-version.h
         }
         
-    - name: Install Custom CMAKE
-      working-directory: ext/mbedtls
-      run: |
-        $cmake_version = "3.28"
-        $cmake_subversion = "3"
-        $install_path = "$env:GITHUB_WORKSPACE\cmake-custom"
-          
-        if ("${{ matrix.platform }}" -eq "x64") {
-          $architecture = "windows-x86_64"
-        } else {
-          $architecture = "windows-arm64"
-        }
-
-        $download_url = "https://cmake.org/files/v${cmake_version}/cmake-${cmake_version}.${cmake_subversion}-${architecture}.zip"
-        $download_path = "$env:TEMP\cmake.zip"
-        Invoke-WebRequest -Uri $download_url -OutFile $download_path
-        Expand-Archive -Path $download_path -DestinationPath $install_path
-          
-        "$install_path\cmake-${cmake_version}.${cmake_subversion}-${architecture}\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-        
+    # Uses the runner's CMake. mbedtls 2.28 contains subprojects with
+    # cmake_minimum_required < 3.5; CMake >= 4 hard-errors on those unless
+    # CMAKE_POLICY_VERSION_MINIMUM=3.5 is passed (older CMake ignores the
+    # variable). This replaced a pinned-CMake download that was fragile on
+    # arm64 runners ("not a valid application") and lost the PATH race anyway.
     - name: Build mbedTLS
       working-directory: ext/mbedtls
       run: |
         cd '${{ github.workspace }}\ext\mbedtls'
-        cmake -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF -DMBEDTLS_CONFIG_FILE='"${{ github.workspace }}\ext\mbedtls.h"' . -B build -DCMAKE_BUILD_TYPE=Release
+        cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF -DMBEDTLS_CONFIG_FILE='"${{ github.workspace }}\ext\mbedtls.h"' . -B build -DCMAKE_BUILD_TYPE=Release
         cmake --build build --config Release
         dir include/mbedtls
         
