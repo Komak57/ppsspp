@@ -595,8 +595,8 @@ namespace net {
 		int SearchRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2SearchRoomRequest> req) override;
 		int CreateJoinRoom(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, PSPPointer<SceNpMatching2CreateJoinRoomRequest> req) override;
 
-		void start_read_thread();
-		void stop_read_thread();
+		void start_read_thread() override;
+		void stop_read_thread() override;
 	private:
 		bool running = false;
 	};
@@ -643,8 +643,8 @@ namespace net {
 		int GetRoomDataExternalList(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, SceNpMatching2GetRoomDataExternalListRequest* req) override;
 		int GetRoomDataExternalList_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
 
-		void start_read_thread();
-		void stop_read_thread();
+		void start_read_thread() override;
+		void stop_read_thread() override;
 
 		u64 generate_uid(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId app_req);
 		std::vector<u8> GetCommHeader() {
@@ -743,18 +743,18 @@ namespace net {
 	public:
 		~PSNAuthAgent();
 		PSNAuthAgent(std::string host, int port);
-		std::unique_ptr<NPAgent> CreateAgent();
-		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr);
-		void Disconnect();
+		std::unique_ptr<NPAgent> CreateAgent() override;
+		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr) override;
+		void Disconnect() override;
 		int Login(const char* npid, const char* token, const char* password) override;
 		NPAgentType GetAuthType() const override { return NPAgentType::PSN; }
-		int GetServers(SceNpCommunicationId npTitleId);
+		int GetServers(SceNpCommunicationId npTitleId) override;
 	};
 	class RPCNAuthAgent : public NPAuthAgent {
 	public:
 		~RPCNAuthAgent();
 		RPCNAuthAgent(std::string host, int port);
-		std::unique_ptr<NPAgent> CreateAgent();
+		std::unique_ptr<NPAgent> CreateAgent() override;
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr) override;
 		void Disconnect() override;
 		static std::string generate_npid();
