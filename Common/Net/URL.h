@@ -188,6 +188,5 @@ private:
 	int port_;
 };
 
-
 std::string UriDecode(std::string_view sSrc);
 std::string UriEncode(std::string_view sSrc);

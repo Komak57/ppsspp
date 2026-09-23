@@ -75,6 +75,17 @@ include $(BUILD_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 include $(LOCAL_PATH)/Locals.mk
 
+PUGI_ROOT := $(SRC)/ext/pugixml
+
+LOCAL_MODULE    := pugixml
+LOCAL_SRC_FILES := $(PUGI_ROOT)/pugixml.cpp
+LOCAL_C_INCLUDES := $(PUGI_ROOT)
+
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+include $(LOCAL_PATH)/Locals.mk
+
 LOCAL_CFLAGS += -DSTACK_LINE_READER_BUFFER_SIZE=1024 -DHAVE_DLFCN_H -DRC_DISABLE_LUA -DZ7_ST
 
 # http://software.intel.com/en-us/articles/getting-started-on-optimizing-ndk-project-for-multiple-cpu-architectures
@@ -115,6 +126,7 @@ NATIVE_FILES :=\
   $(SRC)/Common/GPU/OpenGL/GLMemory.cpp \
   $(SRC)/Common/GPU/OpenGL/GLRenderManager.cpp \
   $(SRC)/Common/GPU/OpenGL/GLQueueRunner.cpp \
+  $(SRC)/Common/GPU/OpenGL/GLProfiler.cpp \
   $(SRC)/Common/GPU/OpenGL/DataFormatGL.cpp
 
 VULKAN_FILES := \
@@ -274,7 +286,15 @@ EXT_FILES := \
   $(SRC)/ext/cpu_features/src/impl_x86_macos.c \
   $(SRC)/ext/cpu_features/src/impl_x86_windows.c \
   $(SRC)/ext/cpu_features/src/stack_line_reader.c \
-  $(SRC)/ext/cpu_features/src/string_view.c
+  $(SRC)/ext/cpu_features/src/string_view.c \
+  $(SRC)/ext/lzma-sdk/7zArcIn.c \
+  $(SRC)/ext/lzma-sdk/7zBuf.c \
+  $(SRC)/ext/lzma-sdk/7zCrc.c \
+  $(SRC)/ext/lzma-sdk/7zDec.c \
+  $(SRC)/ext/lzma-sdk/7zFile.c \
+  $(SRC)/ext/lzma-sdk/7zStream.c \
+  $(SRC)/ext/lzma-sdk/Bcj2.c \
+  $(SRC)/ext/lzma-sdk/Lzma2Dec.c
 
 EXEC_AND_LIB_FILES := \
   $(ARCH_FILES) \
@@ -319,6 +339,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/File/VFS/VFS.cpp \
   $(SRC)/Common/File/VFS/ZipFileReader.cpp \
   $(SRC)/Common/File/VFS/DirectoryReader.cpp \
+  $(SRC)/Common/File/VFS/SevenZipFileReader.cpp \
   $(SRC)/Common/File/DiskFree.cpp \
   $(SRC)/Common/File/Path.cpp \
   $(SRC)/Common/File/PathBrowser.cpp \
@@ -338,7 +359,6 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/Render/Text/draw_text_android.cpp \
   $(SRC)/Common/Input/GestureDetector.cpp \
   $(SRC)/Common/Input/InputState.cpp \
-  $(SRC)/Common/Math/fast/fast_matrix.c \
   $(SRC)/Common/Math/math_util.cpp \
   $(SRC)/Common/Math/Statistics.cpp \
   $(SRC)/Common/Math/curves.cpp \
@@ -369,6 +389,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/UI/Context.cpp \
   $(SRC)/Common/UI/UIScreen.cpp \
   $(SRC)/Common/UI/Tween.cpp \
+  $(SRC)/Common/UI/Notice.cpp \
   $(SRC)/Common/UI/IconCache.cpp \
   $(SRC)/Common/UI/View.cpp \
   $(SRC)/Common/UI/ViewGroup.cpp \
@@ -389,7 +410,6 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/MemArenaWin32.cpp \
   $(SRC)/Common/MemArenaPosix.cpp \
   $(SRC)/Common/MemoryUtil.cpp \
-  $(SRC)/Common/MipsCPUDetect.cpp \
   $(SRC)/Common/StringUtils.cpp \
   $(SRC)/Common/SysError.cpp \
   $(SRC)/Common/TimeUtil.cpp
@@ -405,7 +425,7 @@ include $(BUILD_STATIC_LIBRARY)
 # Next up, Core, GPU, and other core parts shared by headless.
 include $(CLEAR_VARS)
 include $(LOCAL_PATH)/Locals.mk
-LOCAL_WHOLE_STATIC_LIBRARIES += ppsspp_common libchdr lua mbedtls flatbuffers
+LOCAL_WHOLE_STATIC_LIBRARIES += ppsspp_common libchdr lua pugixml mbedtls flatbuffers
 
 ifeq ($(TARGET_ARCH_ABI),x86_64)
 ARCH_FILES := \
@@ -439,8 +459,6 @@ ARCH_FILES := \
   $(SRC)/Core/MIPS/ARM/ArmCompFPU.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompLoadStore.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompVFPU.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmCompVFPUNEON.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmCompVFPUNEONUtil.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompReplace.cpp \
   $(SRC)/Core/MIPS/ARM/ArmAsm.cpp \
   $(SRC)/Core/MIPS/ARM/ArmJit.cpp \
@@ -625,6 +643,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/Replay.cpp \
   $(SRC)/Core/RetroAchievements.cpp \
   $(SRC)/Core/SaveState.cpp \
+  $(SRC)/Core/SaveStateRewind.cpp \
   $(SRC)/Core/Screenshot.cpp \
   $(SRC)/Core/System.cpp \
   $(SRC)/Core/TiltEventProcessor.cpp \
@@ -722,6 +741,12 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/HLE/proAdhocServer.cpp \
   $(SRC)/Core/HLE/NetAdhocCommon.cpp \
   $(SRC)/Core/HLE/sceNetAdhoc.cpp \
+  $(SRC)/ext/aemu_postoffice/client/postoffice.c \
+  $(SRC)/ext/aemu_postoffice/client/postoffice_mem_stdc.c \
+  $(SRC)/ext/aemu_postoffice/client/sock_impl_linux.c \
+  $(SRC)/ext/aemu_postoffice/client/mutex_impl_cpp.cpp \
+  $(SRC)/ext/aemu_postoffice/client/delay_impl_cpp.cpp \
+  $(SRC)/ext/aemu_postoffice/client/log_impl_ppsspp.cpp \
   $(SRC)/Core/HLE/sceNetAdhocMatching.cpp \
   $(SRC)/Core/HLE/sceNetApctl.cpp \
   $(SRC)/Core/HLE/sceNetInet.cpp \
@@ -768,6 +793,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/Util/AtracTrack.cpp \
   $(SRC)/Core/Util/AudioFormat.cpp \
   $(SRC)/Core/Util/MemStick.cpp \
+  $(SRC)/Core/Util/PathUtil.cpp \
   $(SRC)/Core/Util/PortManager.cpp \
   $(SRC)/Core/Util/GameDB.cpp \
   $(SRC)/Core/Util/GameManager.cpp \
@@ -787,6 +813,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/Net/SIGAgent.cpp \
   $(SRC)/Core/Net/SIGAgents/PSNSigAgent.cpp \
   $(SRC)/Core/Net/SIGAgents/RPCNSigAgent.cpp \
+  $(SRC)/Core/Util/VideoPlayer.cpp \
   $(SRC)/git-version.cpp
 
 LOCAL_MODULE := ppsspp_core
@@ -958,8 +985,10 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/DriverManagerScreen.cpp \
   $(SRC)/UI/DisplayLayoutScreen.cpp \
   $(SRC)/UI/EmuScreen.cpp \
+  $(SRC)/UI/GameBrowser.cpp \
   $(SRC)/UI/MainScreen.cpp \
   $(SRC)/UI/TabbedDialogScreen.cpp \
+  $(SRC)/UI/AdhocServerScreen.cpp \
   $(SRC)/UI/SimpleDialogScreen.cpp \
   $(SRC)/UI/MemStickScreen.cpp \
   $(SRC)/UI/IAPScreen.cpp \

@@ -24,11 +24,14 @@
 #include "Common/UI/UIScreen.h"
 #include "Common/UI/Context.h"
 #include "UI/BaseScreens.h"
+#include "UI/SimpleDialogScreen.h"
+#include "UI/MiscViews.h"
 
 struct CheatFileInfo;
 class CWCheatEngine;
+class NoticeView;
 
-class CwCheatScreen : public UIBaseDialogScreen {
+class CwCheatScreen : public UITwoPaneBaseDialogScreen {
 public:
 	CwCheatScreen(const Path &gamePath);
 	~CwCheatScreen();
@@ -42,27 +45,39 @@ public:
 	void OnDisableAll(UI::EventParams &params);
 
 	void update() override;
+	bool key(const KeyInput &input) override;
 	void onFinish(DialogResult result) override;
 
 	const char *tag() const override { return "CwCheat"; }
 
+	bool WantsTextInput() const override;
+
 protected:
-	void CreateViews() override;
+	void BeforeCreateViews() override;
+	void CreateSettingsViews(UI::ViewGroup *) override;
+	void CreateContentViews(UI::ViewGroup *) override;
+	std::string_view GetTitle() const override;
 
 private:
 	void OnCheckBox(int index);
-	bool ImportCheats(const Path &cheatFile);
+	bool ImportCheats(const Path &cheatFile, int *cheatsFound);
+
+	void ImportAndReport(const Path &cheatFile);
 
 	enum { INDEX_ALL = -1 };
 	bool HasCheatWithName(const std::string &name);
 	bool RebuildCheatFile(int index);
-
-	UI::ScrollView *rightScroll_ = nullptr;
-	UI::TextView *errorMessageView_ = nullptr;
 
 	CWCheatEngine *engine_ = nullptr;
 	std::vector<CheatFileInfo> fileInfo_;
 	std::string gameID_;
 	int fileCheckCounter_ = 0;
 	uint64_t fileCheckHash_ = 0;
+
+	std::string errorMessage_;
+	NoticeLevel errorLevel_ = NoticeLevel::ERROR;
+	std::string errorDetails_;
+
+	UI::ViewGroup *cheatList_ = nullptr;
+	ViewSearch search_;
 };

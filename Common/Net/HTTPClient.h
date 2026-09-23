@@ -159,4 +159,6 @@ public:
 	bool Failed() const override { return false; }
 };
 
+std::string RemoveHttpsIfNeeded(std::string_view url);
+
 }  // namespace http

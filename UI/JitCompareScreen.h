@@ -1,5 +1,6 @@
 #pragma once
 #include "Common/UI/UIScreen.h"
+#include "Common/UI/PopupScreens.h"
 #include "UI/BaseScreens.h"
 #include "UI/TabbedDialogScreen.h"
 
@@ -17,11 +18,9 @@ private:
 	// Uses the current ListType
 	void FillBlockList();
 
-	UI::LinearLayout *comparisonView_ = nullptr;
 	UI::LinearLayout *leftDisasm_ = nullptr;
 	UI::LinearLayout *rightDisasm_ = nullptr;
 
-	UI::LinearLayout *blockListView_ = nullptr;
 	UI::LinearLayout *blockListContainer_ = nullptr;
 
 	void OnSelectBlock(UI::EventParams &e);
@@ -57,9 +56,9 @@ private:
 	UI::TextView *globalStats_ = nullptr;
 };
 
-class AddressPromptScreen : public PopupScreen {
+class AddressPromptScreen : public UI::PopupScreen {
 public:
-	AddressPromptScreen(std::string_view title) : PopupScreen(title, "OK", "Cancel") {}
+	AddressPromptScreen(std::string_view title) : PopupScreen(title, T(I18NCat::DIALOG, "OK"), T(I18NCat::DIALOG, "Cancel")) {}
 
 	const char *tag() const override { return "AddressPrompt"; }
 

@@ -216,6 +216,9 @@
     <None Include="..\Assets\infra-dns.json">
       <Filter>Content</Filter>
     </None>
+    <None Include="..\Assets\adhoc-servers.json">
+      <Filter>Content</Filter>
+    </None>
     <None Include="..\Assets\redump.csv">
       <Filter>Content</Filter>
     </None>
@@ -290,7 +293,19 @@
     </Text>
   </ItemGroup>
   <ItemGroup>
-    <Font Include="..\Assets\Roboto-Condensed.ttf">
+    <Font Include="..\Assets\Roboto_Condensed-Regular.ttf">
+      <Filter>Content</Filter>
+    </Font>
+    <Font Include="..\Assets\Roboto_Condensed-Bold.ttf">
+      <Filter>Content</Filter>
+    </Font>
+    <Font Include="..\Assets\Roboto_Condensed-Light.ttf">
+      <Filter>Content</Filter>
+    </Font>
+    <Font Include="..\Assets\Roboto_Condensed-Italic.ttf">
+      <Filter>Content</Filter>
+    </Font>
+    <Font Include="..\Assets\Inconsolata-Regular.ttf">
       <Filter>Content</Filter>
     </Font>
   </ItemGroup>

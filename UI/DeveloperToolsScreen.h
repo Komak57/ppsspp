@@ -6,7 +6,7 @@
 
 class DeveloperToolsScreen : public UITabbedBaseDialogScreen {
 public:
-	DeveloperToolsScreen(const Path &gamePath) : UITabbedBaseDialogScreen(gamePath) {}
+	DeveloperToolsScreen(const Path &gamePath);
 
 	void CreateTabs() override;
 	void update() override;
@@ -25,6 +25,7 @@ private:
 	void CreateGraphicsTab(UI::LinearLayout *list);
 	void CreateNetworkTab(UI::LinearLayout *list);
 	void CreateUITab(UI::LinearLayout *list);
+	void CreateCrashHistoryTab(UI::LinearLayout *list);
 
 	void OnLoggingChanged(UI::EventParams &e);
 	void OnOpenTexturesIniFile(UI::EventParams &e);
@@ -38,7 +39,6 @@ private:
 	void OnMIPSTracerClearTracer(UI::EventParams &e);
 	void OnGPUDriverTest(UI::EventParams &e);
 	void OnMemstickTest(UI::EventParams &e);
-	void OnTouchscreenTest(UI::EventParams &e);
 	void OnCopyStatesToRoot(UI::EventParams &e);
 
 	void MemoryMapTest();

@@ -24,6 +24,7 @@
 #include "Common/TimeUtil.h"
 #include "Common/File/FileUtil.h"
 #include "Common/GraphicsContext.h"
+#include "Common/StringUtils.h"
 
 #include "Core/Config.h"
 #include "Core/Reporting.h"
@@ -54,9 +55,9 @@ GPU_Vulkan::GPU_Vulkan(GraphicsContext *gfxCtx, Draw::DrawContext *draw)
 	pipelineManager_ = new PipelineManagerVulkan(vulkan);
 	framebufferManagerVulkan_ = new FramebufferManagerVulkan(draw);
 	framebufferManager_ = framebufferManagerVulkan_;
+	drawEngineCommon_ = &drawEngine_;
 	textureCacheVulkan_ = new TextureCacheVulkan(draw, framebufferManager_->GetDraw2D(), vulkan);
 	textureCache_ = textureCacheVulkan_;
-	drawEngineCommon_ = &drawEngine_;
 	shaderManager_ = shaderManagerVulkan_;
 
 	drawEngine_.SetGPUCommon(this);
@@ -100,6 +101,7 @@ void GPU_Vulkan::FinishInitOnMainThread() {
 }
 
 void GPU_Vulkan::LoadCache(const Path &filename) {
+	_dbg_assert_(draw_);
 	if (!g_Config.bShaderCache) {
 		WARN_LOG(Log::G3D, "Shader cache disabled. Not loading.");
 		return;
@@ -298,8 +300,8 @@ u32 GPU_Vulkan::CheckGPUFeatures() const {
 	return CheckGPUFeaturesLate(features);
 }
 
-void GPU_Vulkan::BeginHostFrame() {
-	GPUCommonHW::BeginHostFrame();
+void GPU_Vulkan::BeginHostFrame(const DisplayLayoutConfig &config) {
+	GPUCommonHW::BeginHostFrame(config);
 
 	drawEngine_.BeginFrame();
 	textureCache_->StartFrame();
@@ -307,7 +309,7 @@ void GPU_Vulkan::BeginHostFrame() {
 	VulkanContext *vulkan = (VulkanContext *)draw_->GetNativeObject(Draw::NativeObject::CONTEXT);
 	int curFrame = vulkan->GetCurFrame();
 
-	framebufferManager_->BeginFrame();
+	framebufferManager_->BeginFrame(config);
 
 	shaderManagerVulkan_->DirtyLastShader();
 	gstate_c.Dirty(DIRTY_ALL);
@@ -384,10 +386,8 @@ void GPU_Vulkan::BuildReportingInfo() {
 		featureNames = featureNames.substr(2);
 	}
 
-	char temp[16384];
-	snprintf(temp, sizeof(temp), "v%08x driver v%08x (%s), vendorID=%d, deviceID=%d (features: %s)", props.apiVersion, props.driverVersion, props.deviceName, props.vendorID, props.deviceID, featureNames.c_str());
 	reportingPrimaryInfo_ = props.deviceName;
-	reportingFullInfo_ = temp;
+	reportingFullInfo_ = StringFromFormat("v%08x driver v%08x (%s), vendorID=%d, deviceID=%d (features: %s)", props.apiVersion, props.driverVersion, props.deviceName, props.vendorID, props.deviceID, featureNames.c_str());
 
 	Reporting::UpdateConfig();
 }
@@ -424,9 +424,9 @@ void GPU_Vulkan::DestroyDeviceObjects() {
 	}
 }
 
-void GPU_Vulkan::CheckRenderResized() {
+void GPU_Vulkan::CheckRenderResized(const DisplayLayoutConfig &config) {
 	if (renderResized_) {
-		GPUCommonHW::CheckRenderResized();
+		GPUCommonHW::CheckRenderResized(config);
 		pipelineManager_->InvalidateMSAAPipelines();
 		framebufferManager_->ReleasePipelines();
 	}

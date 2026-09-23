@@ -37,6 +37,33 @@ static std::vector<ShaderInfo> shaderInfo;
 // Okay, not really "post" shaders, but related.
 static std::vector<TextureShaderInfo> textureShaderInfo;
 
+static Draw::GPUVendor VendorFromString(const std::string &vendor) {
+	Draw::GPUVendor::VENDOR_UNKNOWN;
+	// TODO: This should probably be a function somewhere.
+	if (vendor == "ARM") {
+		return Draw::GPUVendor::VENDOR_ARM;
+	} else if (vendor == "Qualcomm") {
+		return Draw::GPUVendor::VENDOR_QUALCOMM;
+	} else if (vendor == "IMGTEC") {
+		return Draw::GPUVendor::VENDOR_IMGTEC;
+	} else if (vendor == "NVIDIA") {
+		return Draw::GPUVendor::VENDOR_NVIDIA;
+	} else if (vendor == "AMD") {
+		return Draw::GPUVendor::VENDOR_AMD;
+	} else if (vendor == "Broadcom") {
+		return Draw::GPUVendor::VENDOR_BROADCOM;
+	} else if (vendor == "Apple") {
+		return Draw::GPUVendor::VENDOR_APPLE;
+	} else if (vendor == "Intel") {
+		return Draw::GPUVendor::VENDOR_INTEL;
+	} else if (vendor == "Mesa") {
+		return Draw::GPUVendor::VENDOR_MESA;
+	} else if (vendor == "Vivante") {
+		return Draw::GPUVendor::VENDOR_VIVANTE;
+	}
+	return Draw::GPUVendor::VENDOR_UNKNOWN;
+}
+
 // Scans the directories for shader ini files and collects info about all the shaders found.
 
 void LoadPostShaderInfo(Draw::DrawContext *draw, const std::vector<Path> &directories) {
@@ -106,38 +133,17 @@ void LoadPostShaderInfo(Draw::DrawContext *draw, const std::vector<Path> &direct
 				section.Get("VendorBlacklist", &vendorBlacklist);
 				bool skipped = false;
 				for (auto &item : vendorBlacklist) {
-					Draw::GPUVendor blacklistedVendor = Draw::GPUVendor::VENDOR_UNKNOWN;
-					// TODO: This should probably be a function somewhere.
-					if (item == "ARM") {
-						blacklistedVendor = Draw::GPUVendor::VENDOR_ARM;
-					} else if (item == "Qualcomm") {
-						blacklistedVendor = Draw::GPUVendor::VENDOR_QUALCOMM;
-					} else if (item == "IMGTEC") {
-						blacklistedVendor = Draw::GPUVendor::VENDOR_IMGTEC;
-					} else if (item == "NVIDIA") {
-						blacklistedVendor = Draw::GPUVendor::VENDOR_NVIDIA;
-					} else if (item == "AMD") {
-						blacklistedVendor = Draw::GPUVendor::VENDOR_AMD;
-					} else if (item == "Broadcom") {
-						blacklistedVendor = Draw::GPUVendor::VENDOR_BROADCOM;
-					} else if (item == "Apple") {
-						blacklistedVendor = Draw::GPUVendor::VENDOR_APPLE;
-					} else if (item == "Intel") {
-						blacklistedVendor = Draw::GPUVendor::VENDOR_INTEL;
-					} else if (item == "Mesa") {
-						blacklistedVendor = Draw::GPUVendor::VENDOR_MESA;
-					}
+					const Draw::GPUVendor blacklistedVendor = VendorFromString(item);
 					if (blacklistedVendor == gpuVendor && blacklistedVendor != Draw::GPUVendor::VENDOR_UNKNOWN) {
 						skipped = true;
 						break;
 					}
 				}
-
 				if (skipped) {
 					continue;
 				}
 
-				if (section.Exists("Fragment") && section.Exists("Vertex") &&
+				if (section.HasKey("Fragment") && section.HasKey("Vertex") &&
 					(strncasecmp(shaderType.c_str(), "render", shaderType.size()) == 0 ||
 					 strncasecmp(shaderType.c_str(), "StereoToMono", shaderType.size()) == 0)) {
 					// Valid shader!
@@ -197,7 +203,7 @@ void LoadPostShaderInfo(Draw::DrawContext *draw, const std::vector<Path> &direct
 					} else {
 						notVisible.push_back(info);
 					}
-				} else if (section.Exists("Compute") && strncasecmp(shaderType.c_str(), "texture", shaderType.size()) == 0) {
+				} else if (section.HasKey("Compute") && strncasecmp(shaderType.c_str(), "texture", shaderType.size()) == 0) {
 					// This is a texture shader.
 					TextureShaderInfo info{};
 					std::string temp;
@@ -206,8 +212,22 @@ void LoadPostShaderInfo(Draw::DrawContext *draw, const std::vector<Path> &direct
 					info.scaleFactor = 0;
 					section.Get("Name", &info.name);
 					section.Get("Scale", &info.scaleFactor);
+					bool hidden = false;
+					section.Get("Hidden", &info.hidden);
+					std::string cbufferFilename;
+					if (section.Get("ConstantBuffer", &cbufferFilename)) {
+						Path cbufferPath = path / cbufferFilename;
+						info.constantBuffer = cbufferPath;
+					}
 					if (section.Get("Compute", &temp)) {
 						info.computeShaderFile = path / temp;
+						info.computeShaderFiles.push_back(info.computeShaderFile);
+						for (int computeIndex = 2; computeIndex <= 4; ++computeIndex) {
+							temp.clear();
+							if (section.Get(StringFromFormat("Compute%d", computeIndex).c_str(), &temp)) {
+								info.computeShaderFiles.push_back(path / temp);
+							}
+						}
 						if (info.scaleFactor >= 2 && info.scaleFactor < 8) {
 							appendTextureShader(info);
 						}

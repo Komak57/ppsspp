@@ -354,6 +354,7 @@ public:
 		UNIFORM_INDEXING_BROKEN = 13,  // not a properly diagnosed issue, a workaround attempt: #17386
 		PVR_BAD_16BIT_TEXFORMATS = 14,
 		NO_DEPTH_CANNOT_DISCARD_STENCIL_MALI = 15,
+		EMPTY_RENDERPASS_BROKEN_MALI = 16,
 		MAX_BUG,
 	};
 
@@ -592,6 +593,9 @@ inline bool PresentationModeBlocks(PresentMode mode) {
 struct DeviceCaps {
 	GPUVendor vendor;
 	uint32_t deviceID;  // use caution!
+
+	uint32_t maxTextureSize;  // largest side.
+	uint32_t maxClipPlanes;
 
 	CoordConvention coordConvention;
 	DataFormat preferredDepthBufferFormat;

@@ -598,7 +598,7 @@ static void __IoWakeManager(CoreLifecycle stage) {
 	}
 }
 
-static void __IoVblank() {
+void __IoVblank() {
 	// We update memstick status here just to avoid possible thread safety issues.
 	// It doesn't actually need to be on a vblank.
 
@@ -699,7 +699,6 @@ void __IoInit() {
 	MemoryStick_Init();
 	lastMemStickState = MemoryStick_State();
 	lastMemStickFatState = MemoryStick_FatState();
-	__DisplayListenVblank(__IoVblank);
 }
 
 void __IoDoState(PointerWrap &p) {
@@ -836,8 +835,7 @@ static void IoStartAsyncThread(int id, FileNode *f) {
 	f->pendingAsyncResult = true;
 }
 
-static u32 sceIoAssign(u32 alias_addr, u32 physical_addr, u32 filesystem_addr, int mode, u32 arg_addr, int argSize)
-{
+static u32 sceIoAssign(u32 alias_addr, u32 physical_addr, u32 filesystem_addr, int mode, u32 arg_addr, int argSize) {
 	if (!Memory::IsValidNullTerminatedString(alias_addr) ||
 		!Memory::IsValidNullTerminatedString(physical_addr) ||
 		!Memory::IsValidNullTerminatedString(filesystem_addr)) {
@@ -906,18 +904,17 @@ u64 __IoCompleteAsyncIO(FileNode *f) {
 	return 0;
 }
 
-void __IoCopyDate(ScePspDateTime& date_out, const tm& date_in)
-{
-	date_out.year = date_in.tm_year+1900;
-	date_out.month = date_in.tm_mon+1;
+void ConvertTmToPspDateTime(ScePspDateTime& date_out, const tm& date_in, int microSeconds) {
+	date_out.year = date_in.tm_year + 1900;
+	date_out.month = date_in.tm_mon + 1;
 	date_out.day = date_in.tm_mday;
 	date_out.hour = date_in.tm_hour;
 	date_out.minute = date_in.tm_min;
 	date_out.second = date_in.tm_sec;
-	date_out.microsecond = 0;
+	date_out.microsecond = microSeconds;
 }
 
-static void __IoGetStat(SceIoStat *stat, PSPFileInfo &info) {
+static void __IoGetStat(SceIoStat *stat, const PSPFileInfo &info) {
 	memset(stat, 0xfe, sizeof(SceIoStat));
 
 	int type, attr;
@@ -932,9 +929,9 @@ static void __IoGetStat(SceIoStat *stat, PSPFileInfo &info) {
 	stat->st_mode = type | info.access;
 	stat->st_attr = attr;
 	stat->st_size = info.size;
-	__IoCopyDate(stat->st_a_time, info.atime);
-	__IoCopyDate(stat->st_c_time, info.ctime);
-	__IoCopyDate(stat->st_m_time, info.mtime);
+	ConvertTmToPspDateTime(stat->st_a_time, info.atime, info.atimeUs);
+	ConvertTmToPspDateTime(stat->st_c_time, info.ctime, info.ctimeUs);
+	ConvertTmToPspDateTime(stat->st_m_time, info.mtime, info.mtimeUs);
 	stat->st_private[0] = info.startSector;
 }
 
@@ -999,6 +996,11 @@ static u32 sceIoChstat(const char *filename, u32 iostatptr, u32 changebits) {
 
 static u32 npdrmRead(FileNode *f, u8 *data, int size) {
 	PGD_DESC *pgd = f->pgdInfo;
+	if (!pgd) {
+		// When pgdInfo is null, fall back to reading the file in non-encrypted mode
+		WARN_LOG(Log::IO, "npdrmRead: pgdInfo is null for file %s, reading as non-encrypted", f->fullpath.c_str());
+		return (u32)pspFileSystem.ReadFile(f->handle, data, size);
+	}
 	u32 block, offset, blockPos;
 	u32 remain_size, copy_size;
 
@@ -1077,7 +1079,7 @@ static bool __IoRead(int &result, int id, u32 data_addr, int size, int &us) {
 			const std::string tag = "IoRead/" + IODetermineFilename(f);
 			NotifyMemInfo(MemBlockFlags::WRITE, data_addr, size, tag.c_str(), tag.size());
 			u8 *data = (u8 *)Memory::GetPointerUnchecked(data_addr);
-			u32 validSize = Memory::ValidSize(data_addr, size);
+			u32 validSize = Memory::ClampValidSizeAt(data_addr, size);
 			if (f->npdrm) {
 				result = npdrmRead(f, data, validSize);
 				currentMIPS->InvalidateICache(data_addr, validSize);
@@ -1150,7 +1152,7 @@ static u32 sceIoRead(int id, u32 data_addr, int size) {
 		f->waitingSyncThreads.push_back(__KernelGetCurThread());
 		return hleLogDebug(Log::sceIo, 0, "deferring result");
 	} else if (result >= 0) {
-		return hleDelayResult(hleLogDebug(Log::ME, result), "io read", us);
+		return hleDelayResult(hleLogDebug(Log::sceIo, result), "io read", us);
 	} else {
 		return hleLogWarning(Log::ME, result, "error %08x", result);
 	}
@@ -1193,7 +1195,7 @@ static bool __IoWrite(int &result, int id, u32 data_addr, int size, int &us) {
 	}
 
 	const void *data_ptr = Memory::GetPointer(data_addr);
-	const u32 validSize = Memory::ValidSize(data_addr, size);
+	const u32 validSize = Memory::ClampValidSizeAt(data_addr, size);
 	// Let's handle stdout/stderr specially.
 	if (id == PSP_STDOUT || id == PSP_STDERR) {
 		const char *str = (const char *) data_ptr;
@@ -1281,6 +1283,9 @@ static u32 sceIoWrite(int id, u32 data_addr, int size) {
 	int us;
 	bool complete = __IoWrite(result, id, data_addr, size, us);
 	if (!complete) {
+		if (!f) {
+			return hleLogError(Log::sceIo, error, "bad file descriptor");
+		}
 		__IoSchedSync(f, id, us);
 		__KernelWaitCurThread(WAITTYPE_IO, id, 0, 0, false, "io write");
 		f->waitingSyncThreads.push_back(__KernelGetCurThread());
@@ -1360,6 +1365,10 @@ static u32 npdrmLseek(FileNode *f, s32 where, FileMove whence)
 {
 	u32 newPos, blockPos;
 
+	if (!f->pgdInfo) {
+		//WARN_LOG(Log::IO, "npdrmLseek: pgdInfo is null for file %s, seeking as non-encrypted", f->fullpath.c_str());
+		return (u32)pspFileSystem.SeekFile(f->handle, where, whence);
+	}
 	if(whence==FILEMOVE_BEGIN){
 		newPos = where;
 	}else if(whence==FILEMOVE_CURRENT){
@@ -2061,23 +2070,25 @@ static u32 sceIoDevctl(const char *name, int cmd, u32 argAddr, int argLen, u32 o
 				PSP_CoreParameter().fastForward = false;
 			return hleLogDebug(Log::sceIo, 0);
 		case EMULATOR_DEVCTL__GET_ASPECT_RATIO:
+			// NOTE: This currently only works correctly in landscape mode!
 			if (Memory::IsValidAddress(outPtr)) {
 				// TODO: Share code with CalculateDisplayOutputRect to take a few more things into account.
 				// I have a planned further refactoring.
 				float ar;
-				if (g_Config.bDisplayStretch) {
+				if (g_Config.displayLayoutLandscape.bDisplayStretch) {
 					ar = (float)g_display.dp_xres / (float)g_display.dp_yres;
 				} else {
-					ar = g_Config.fDisplayAspectRatio * (480.0f / 272.0f);
+					ar = g_Config.displayLayoutLandscape.fDisplayAspectRatio * (480.0f / 272.0f);
 				}
 				Memory::Write_Float(ar, outPtr);
 			}
 			return hleLogDebug(Log::sceIo, 0);
 		case EMULATOR_DEVCTL__GET_SCALE:
+			// NOTE: This currently only works correctly in landscape mode!
 			if (Memory::IsValidAddress(outPtr)) {
 				// TODO: Maybe do something more sophisticated taking the longest side and screen rotation
 				// into account, etc.
-				float scale = (float)g_display.dp_xres * g_Config.fDisplayScale / 480.0f;
+				float scale = (float)g_display.dp_xres * g_Config.displayLayoutLandscape.fDisplayScale / 480.0f;
 				Memory::Write_Float(scale, outPtr);
 			}
 			return hleLogDebug(Log::sceIo, 0);
@@ -2309,7 +2320,8 @@ static int sceIoWaitAsync(int id, u32 address) {
 
 			return hleLogDebug(Log::sceIo, 0, "complete");
 		} else {
-			return hleLogWarning(Log::sceIo, SCE_KERNEL_ERROR_NOASYNC, "no async pending");
+			// This is normal in some games.
+			return hleLogInfo(Log::sceIo, SCE_KERNEL_ERROR_NOASYNC, "no async pending");
 		}
 		return 0; //completed
 	} else {
@@ -2403,6 +2415,11 @@ public:
 };
 
 static u32 sceIoDopen(const char *path) {
+	if (!path) {
+		// Not tested on the PSP. Matches sceIoOpen.
+		return hleLogError(Log::sceIo, SCE_KERNEL_ERROR_ERRNO_FILE_NOT_FOUND, "nullptr file not found");
+	}
+
 	double startTime = time_now_d();
 
 	bool listingExists = false;
@@ -2579,13 +2596,14 @@ int __IoIoctl(u32 id, u32 cmd, u32 indataPtr, u32 inlen, u32 outdataPtr, u32 out
 			key_ptr = nullptr;
 		}
 
-		DEBUG_LOG(Log::sceIo, "Decrypting PGD DRM files");
+		INFO_LOG(Log::sceIo, "ioctl: Decrypting PGD DRM files from '%s'", f->fullpath.c_str());
 		pspFileSystem.SeekFile(f->handle, (s32)f->pgd_offset, FILEMOVE_BEGIN);
 		pspFileSystem.ReadFile(f->handle, pgd_header, 0x90);
 		KirkState *kirk = __ChnnlsvKirkState();
 		f->pgdInfo = pgd_open(kirk, pgd_header, 2, key_ptr);
 		if (!f->pgdInfo) {
 			f->npdrm = false;
+			f->pgd_offset = 0;  // Reset PGD offset so file can be read as regular file
 			pspFileSystem.SeekFile(f->handle, (s32)0, FILEMOVE_BEGIN);
 			if (memcmp(pgd_header, pgd_magic, 4) == 0) {
 				// File is PGD file, but key mismatch

@@ -28,7 +28,6 @@
 #include "Common/LogReporting.h"
 #include "GPU/ge_constants.h"
 #include "GPU/Common/ShaderCommon.h"
-#include "GPU/GPUCommon.h"
 #include "GPU/GPUState.h"
 
 #if PPSSPP_ARCH(ARM)
@@ -88,7 +87,7 @@ struct DecVtxFormat {
 
 void GetIndexBounds(const void *inds, int count, u32 vertType, u16 *indexLowerBound, u16 *indexUpperBound);
 
-inline int RoundUp4(int x) {
+inline constexpr int RoundUp4(int x) {
 	return (x + 3) & ~3;
 }
 
@@ -367,7 +366,10 @@ public:
 
 	const DecVtxFormat &GetDecVtxFmt() const { return decFmt; }
 
-	void DecodeVerts(u8 *decoded, const void *verts, const UVScale *uvScaleOffset, int indexLowerBound, int indexUpperBound) const;
+	// WARNING: This may write up to a full extra vertex plus 16 bytes (in practice less, but let's define it that way to be future proof) extra bytes after
+	// the end of the buffer, so make sure you have some extra space there (that you can safely overwrite after Decode).
+	// In VulkanPushBuffer / GLPushBuffer, use the slack parameter. Why not 256, that should cover every case.
+	void DecodeVerts(u8 *decoded, const u8 *startPtr, const UVScale *uvScaleOffset, int count) const;
 
 	int VertexSize() const { return size; }  // PSP format size
 

@@ -567,7 +567,7 @@ OpenGLContext::OpenGLContext(bool canChangeSwapInterval) : renderManager_(frameT
 				caps_.fragmentShaderInt32Supported = true;
 			}
 		}
-		caps_.texture3DSupported = gl_extensions.OES_texture_3D;
+		caps_.texture3DSupported = gl_extensions.GLES3 || gl_extensions.OES_texture_3D;
 		caps_.textureDepthSupported = gl_extensions.GLES3 || gl_extensions.OES_depth_texture;
 	} else {
 		if (gl_extensions.VersionGEThan(3, 3, 0)) {
@@ -578,6 +578,8 @@ OpenGLContext::OpenGLContext(bool canChangeSwapInterval) : renderManager_(frameT
 		caps_.textureDepthSupported = true;
 	}
 
+	caps_.maxTextureSize = gl_extensions.maxTextureSize;
+	caps_.maxClipPlanes = gl_extensions.IsGLES ? 0 : gl_extensions.maxClipPlanes;
 	caps_.coordConvention = CoordConvention::OpenGL;
 	caps_.setMaxFrameLatencySupported = true;
 	caps_.dualSourceBlend = gl_extensions.ARB_blend_func_extended || gl_extensions.EXT_blend_func_extended;
@@ -642,7 +644,7 @@ OpenGLContext::OpenGLContext(bool canChangeSwapInterval) : renderManager_(frameT
 	caps_.isTilingGPU = gl_extensions.IsGLES && caps_.vendor != GPUVendor::VENDOR_NVIDIA && caps_.vendor != GPUVendor::VENDOR_INTEL;
 
 	for (int i = 0; i < GLRenderManager::MAX_INFLIGHT_FRAMES; i++) {
-		frameData_[i].push = renderManager_.CreatePushBuffer(i, GL_ARRAY_BUFFER, 64 * 1024, "thin3d_vbuf");
+		frameData_[i].push = renderManager_.CreatePushBuffer(i, GL_ARRAY_BUFFER, 64 * 1024, 32, "thin3d_vbuf");
 	}
 
 	if (!gl_extensions.VersionGEThan(3, 0, 0)) {
@@ -1308,6 +1310,12 @@ bool OpenGLPipeline::LinkShaders(const PipelineDesc &desc) {
 		}
 	}
 
+	if (linkShaders.empty()) {
+		// Can't proceed.
+		ERROR_LOG(Log::G3D, "LinkShaders: No valid shaders to link");
+		return false;
+	}
+
 	std::vector<GLRProgram::Semantic> semantics;
 	semantics.reserve(8);
 	// Bind all the common vertex data points. Mismatching ones will be ignored.
@@ -1490,6 +1498,8 @@ void OpenGLContext::DrawIndexedClippedBatchUP(const void *vdata, int vertexCount
 			renderManager_.BindTexture(0, ((OpenGLTexture *)draw.bindTexture)->GetTex());
 		} else if (draw.bindFramebufferAsTex) {
 			renderManager_.BindFramebufferAsTexture(((OpenGLFramebuffer*)draw.bindFramebufferAsTex)->framebuffer_, 0, GL_COLOR_BUFFER_BIT);
+		} else if (draw.bindNativeTexture) {
+			renderManager_.BindTexture(0, (GLRTexture *)draw.bindNativeTexture);
 		}
 		GLRect2D scissor;
 		scissor.x = draw.clipx;
@@ -1626,6 +1636,8 @@ bool OpenGLContext::BlitFramebuffer(Framebuffer *fbsrc, int srcX1, int srcY1, in
 void OpenGLContext::BindFramebufferAsTexture(Framebuffer *fbo, int binding, Aspect aspects, int layer) {
 	OpenGLFramebuffer *fb = (OpenGLFramebuffer *)fbo;
 	_assert_(binding < MAX_TEXTURE_SLOTS);
+	_assert_(fb);
+	_assert_(fb->framebuffer_);
 
 	GLuint glAspect = 0;
 	if (aspects & Aspect::COLOR_BIT) {

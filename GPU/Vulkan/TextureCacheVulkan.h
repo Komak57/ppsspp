@@ -18,7 +18,6 @@
 #pragma once
 
 #include "Common/Data/Collections/Hashmaps.h"
-#include "GPU/GPUCommon.h"
 #include "GPU/GPUState.h"
 #include "Common/GPU/Vulkan/VulkanContext.h"
 #include "GPU/Common/TextureCacheCommon.h"
@@ -26,6 +25,7 @@
 #include "GPU/Vulkan/VulkanUtil.h"
 
 struct VirtualFramebuffer;
+struct TextureShaderInfo;
 class FramebufferManagerVulkan;
 class DepalShaderCacheVulkan;
 class ShaderManagerVulkan;
@@ -92,6 +92,29 @@ protected:
 	void BoundFramebufferTexture() override;
 
 private:
+	enum class TextureScalePipelineType {
+		NONE,
+		SINGLE_PASS,
+		MULTIPASS,
+	};
+
+	struct MultipassScratchDesc {
+		const char *tag;
+		uint8_t widthScale;
+		uint8_t heightScale;
+	};
+
+	struct MultipassStageDesc {
+		uint8_t shaderIndex;
+		int8_t inputScratch;   // -1 means the original upload buffer.
+		int8_t outputScratch;  // -1 means the final destination image.
+		uint8_t srcWidthScale;
+		uint8_t srcHeightScale;
+		uint8_t dstWidthScale;
+		uint8_t dstHeightScale;
+		bool useFinalOutputSize;
+	};
+
 	void LoadVulkanTextureLevel(TexCacheEntry &entry, uint8_t *writePtr, int rowPitch,  int level, int scaleFactor, VkFormat dstFmt);
 	static VkFormat GetDestFormat(GETextureFormat format, GEPaletteFormat clutFormat) ;
 	void UpdateCurrentClut(GEPaletteFormat clutFormat, u32 clutBase, bool clutIndexIsSimple) override;
@@ -99,6 +122,13 @@ private:
 	void BuildTexture(TexCacheEntry *const entry) override;
 
 	void CompileScalingShader();
+	bool CompileMultipassShader(VulkanContext *vulkan, const TextureShaderInfo &shaderInfo, std::string *error);
+	void ClearScalingShaders(VulkanContext *vulkan);
+	bool HasScalingShader() const;
+	bool RunMultipassCompute(VulkanContext *vulkan, VkCommandBuffer cmdInit, VkImageView dstView, VkBuffer texBuf, uint32_t bufferOffset, int srcSize, int srcWidth, int srcHeight, int dstWidth, int dstHeight);
+	bool ScaleBufferToImage(VulkanContext *vulkan, VkCommandBuffer cmdInit, VkImageView dstView, VkBuffer texBuf, uint32_t bufferOffset, int srcSize, int srcWidth, int srcHeight, int dstWidth, int dstHeight);
+
+	void LoadConstantBuffer(VulkanContext *vulkan, VkCommandBuffer cmdInit);
 
 	VulkanComputeShaderManager computeShaderManager_;
 
@@ -107,13 +137,22 @@ private:
 	DrawEngineVulkan *drawEngine_;
 
 	std::string textureShader_;
-	VkShaderModule uploadCS_ = VK_NULL_HANDLE;
+	TextureScalePipelineType textureScalePipeline_ = TextureScalePipelineType::NONE;
+	VkShaderModule singlePassCS_ = VK_NULL_HANDLE;
+	std::vector<VkShaderModule> multipassCS_;
+	std::vector<MultipassScratchDesc> multipassScratchDescs_;
+	std::vector<MultipassStageDesc> multipassStageDescs_;
 
 	// Bound state to emulate an API similar to the others
 	VkImageView imageView_ = VK_NULL_HANDLE;
 	VkSampler curSampler_ = VK_NULL_HANDLE;
 
 	VkSampler samplerNearest_ = VK_NULL_HANDLE;
+
+	Path cbufferPath_;
+	VulkanBuffer textureScaleCBuffer_;
+	bool cbufferInited_ = true;
+	bool cbufferFailed_ = false;
 };
 
 VkFormat getClutDestFormatVulkan(GEPaletteFormat format);

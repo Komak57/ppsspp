@@ -111,6 +111,7 @@
 #include "Core/Util/PortManager.h"
 #include "Core/Util/AudioFormat.h"
 #include "Core/Util/RecentFiles.h"
+#include "Core/Util/PathUtil.h"
 #include "Core/WebServer.h"
 #include "Core/TiltEventProcessor.h"
 
@@ -134,9 +135,6 @@
 #include "UI/Theme.h"
 #include "UI/UIAtlas.h"
 
-#if defined(USING_QT_UI)
-#include <QFontDatabase>
-#endif
 #if PPSSPP_PLATFORM(UWP)
 #include <dwrite_3.h>
 #include "UWP/UWPHelpers/InputHelpers.h"
@@ -157,9 +155,7 @@
 #include <mach-o/dyld.h>
 #endif
 
-#if PPSSPP_PLATFORM(IOS) || PPSSPP_PLATFORM(MAC)
-#include "UI/DarwinFileSystemServices.h"
-#endif
+#include "Core/Util/DarwinFileSystemServices.h"
 
 #if !defined(__LIBRETRO__)
 #include "Core/Util/GameDB.h"
@@ -244,30 +240,11 @@ void PostLoadConfig() {
 	if (g_Config.currentDirectory.empty()) {
 		g_Config.currentDirectory = g_Config.defaultCurrentDirectory;
 	}
-
-	// Allow the lang directory to be overridden for testing purposes (e.g. Android, where it's hard to
-	// test new languages without recompiling the entire app, which is a hassle).
-	const Path langOverridePath = GetSysDirectory(DIRECTORY_SYSTEM) / "lang";
-
-	// If we run into the unlikely case that "lang" is actually a file, just use the built-in translations.
-	if (!File::Exists(langOverridePath) || !File::IsDirectory(langOverridePath))
-		g_i18nrepo.LoadIni(g_Config.sLanguageIni);
-	else
-		g_i18nrepo.LoadIni(g_Config.sLanguageIni, langOverridePath);
+	g_i18nrepo.LoadIni(g_Config.sLanguageIni);
 
 #if !PPSSPP_PLATFORM(WINDOWS) || PPSSPP_PLATFORM(UWP)
 	CreateSysDirectories();
 #endif
-}
-
-static Path GetFailedBackendsDir() {
-	Path failedBackendsDir;
-	if (System_GetPropertyBool(SYSPROP_SUPPORTS_PERMISSIONS)) {
-		failedBackendsDir = GetSysDirectory(DIRECTORY_APP_CACHE);
-	} else {
-		failedBackendsDir = GetSysDirectory(DIRECTORY_SYSTEM);
-	}
-	return failedBackendsDir;
 }
 
 static void CheckFailedGPUBackends() {
@@ -351,6 +328,8 @@ static void ClearFailedGPUBackends() {
 void NativeInit(int argc, const char *argv[], const char *savegame_dir, const char *external_dir, const char *cache_dir) {
 	net::Init();  // This needs to happen before we load the config. So on Windows we also run it in Main. It's fine to call multiple times.
 
+	g_Config.Init();
+
 	IncrementDebugCounter(DebugCounter::APP_BOOT);
 
 	// Probably an excessive timeout. it only causes delays on shutdown, though.
@@ -411,6 +390,13 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 #endif
 
 #if PPSSPP_PLATFORM(ANDROID)
+#ifdef _DEBUG
+	g_logManager.SetAllLogLevels(LogLevel::LINFO);
+	g_logManager.SetAllLogEnable(true);
+	g_logManager.SetOutputsEnabled(LogOutput::Stdio);
+	INFO_LOG(Log::System, "Logging test");
+#endif
+
 	// In Android 12 with scoped storage, due to the above, the external directory
 	// is no longer the plain root of external storage, but it's an app specific directory
 	// on external storage (g_extFilesDir).
@@ -540,6 +526,8 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 		forceLogLevel = true;
 	};
 
+	// TODO: Need a much better command line argument parser.
+
 	for (int i = 1; i < argc; i++) {
 		if (argv[i][0] == '-') {
 #if defined(__APPLE__)
@@ -588,12 +576,15 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 				if (!strncmp(argv[i], "--pause-menu-exit", strlen("--pause-menu-exit")))
 					g_Config.bPauseMenuExitsEmulator = true;
 				if (!strcmp(argv[i], "--fullscreen")) {
-					g_Config.iForceFullScreen = 1;
-					System_ToggleFullscreenState("1");
+					g_Config.DoNotSaveSetting(&g_Config.bFullScreen);
+					g_Config.bFullScreen = true;
+				}
+				if (!strncmp(argv[i], "--root=", strlen("--root=")) && strlen(argv[i]) > strlen("--root=")) {
+					g_Config.mountRoot = Path(argv[i] + strlen("--root="));
 				}
 				if (!strcmp(argv[i], "--windowed")) {
-					g_Config.iForceFullScreen = 0;
-					System_ToggleFullscreenState("0");
+					g_Config.DoNotSaveSetting(&g_Config.bFullScreen);
+					g_Config.bFullScreen = false;
 				}
 				if (!strcmp(argv[i], "--touchscreentest"))
 					gotoTouchScreenTest = true;
@@ -640,12 +631,14 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 					boot_filename = Path(str);
 					skipLogo = true;
 				}
+				// This is needed on iOS, to fixup the path to match the current app directory, if it's stored in it.
+				TryUpdateSavedPath(&boot_filename);
 				if (okToLoad && okToCheck) {
 					std::unique_ptr<FileLoader> fileLoader(ConstructFileLoader(boot_filename));
 					if (!fileLoader->Exists()) {
 						fprintf(stderr, "File not found: %s\n", boot_filename.c_str());
-#if defined(_WIN32) || defined(__ANDROID__)
-						// Ignore and proceed.
+
+#if defined(_WIN32) || defined(__ANDROID__) || PPSSPP_PLATFORM(IOS)
 						boot_filename.clear();
 #else
 						// Bail.
@@ -655,7 +648,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 				}
 			} else {
 				fprintf(stderr, "Syntax error: Can only boot one file.\nNote: Many command line args need a =, like --appendconfig=FILENAME.ini.\n");
-#if defined(_WIN32) || defined(__ANDROID__)
+#if defined(_WIN32) || defined(__ANDROID__) || PPSSPP_PLATFORM(IOS)
 				// Ignore and proceed.
 #else
 				// Bail.
@@ -666,6 +659,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 	}
 
 	if (fileToLog) {
+		// Start logging immediately.
 		g_logManager.EnableOutput(LogOutput::File);
 		g_logManager.SetFileLogPath(Path(fileToLog));
 	} else {
@@ -695,41 +689,6 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 			System_AskForPermission(SYSTEM_PERMISSION_STORAGE);
 		}
 	}
-
-	auto des = GetI18NCategory(I18NCat::DESKTOPUI);
-	// Note to translators: do not translate this/add this to PPSSPP-lang's files.
-	// It's intended to be custom for every user.
-	// Only add it to your own personal copies of PPSSPP.
-#if PPSSPP_PLATFORM(UWP)
-	// Roboto font is loaded in TextDrawerUWP.
-	g_Config.sFont = des->T("Font", "Roboto");
-#elif defined(USING_WIN_UI) && !PPSSPP_PLATFORM(UWP)
-	// TODO: Could allow a setting to specify a font file to load?
-	// TODO: Make this a constant if we can sanely load the font on other systems?
-	AddFontResourceEx(L"assets/Roboto-Condensed.ttf", FR_PRIVATE, NULL);
-	// The font goes by two names, let's allow either one.
-	if (CheckFontIsUsable(L"Roboto Condensed")) {
-		g_Config.sFont = des->T("Font", "Roboto Condensed");
-	} else {
-		g_Config.sFont = des->T("Font", "Roboto");
-	}
-#elif defined(USING_QT_UI)
-	size_t fontSize = 0;
-	uint8_t *fontData = g_VFS.ReadFile("Roboto-Condensed.ttf", &fontSize);
-	if (fontData) {
-		int fontID = QFontDatabase::addApplicationFontFromData(QByteArray((const char *)fontData, fontSize));
-		delete [] fontData;
-
-		QStringList fontsFound = QFontDatabase::applicationFontFamilies(fontID);
-		if (fontsFound.size() >= 1) {
-			// Might be "Roboto" or "Roboto Condensed".
-			g_Config.sFont = des->T("Font", fontsFound.at(0).toUtf8().constData());
-		}
-	} else {
-		// Let's try for it being a system font.
-		g_Config.sFont = des->T("Font", "Roboto Condensed");
-	}
-#endif
 
 	g_BackgroundAudio.SFX().Init();
 
@@ -811,6 +770,7 @@ static void NativeMixWrapper(float *dest, int framesToWrite, int sampleRateHz, v
 	static int16_t *buffer;
 	static int bufSize;
 	if (bufSize < framesToWrite * 2) {
+		// This one leaks on exit. Oh well.
 		buffer = new int16_t[framesToWrite * 2];
 		bufSize = framesToWrite * 2;
 	}
@@ -852,7 +812,8 @@ bool NativeInitGraphics(GraphicsContext *graphicsContext) {
 
 	uiContext->Init(g_draw, texColorPipeline, colorPipeline, &ui_draw2d);
 	if (uiContext->Text()) {
-		uiContext->Text()->SetFont("Tahoma", 20, 0);
+		// This seems unnecessary.
+		// uiContext->Text()->SetOrCreateFont(FontStyle(FontID::invalid(), FontFamily::SansSerif, 20, FontStyleFlags::Default));
 	}
 
 	g_screenManager->setUIContext(uiContext);
@@ -871,10 +832,8 @@ bool NativeInitGraphics(GraphicsContext *graphicsContext) {
 
 #if defined(_WIN32) && !PPSSPP_PLATFORM(UWP)
 	if (IsWin7OrHigher()) {
-		winCamera = new WindowsCaptureDevice(CAPTUREDEVIDE_TYPE::VIDEO);
-		winCamera->sendMessage({ CAPTUREDEVIDE_COMMAND::INITIALIZE, nullptr });
-		winMic = new WindowsCaptureDevice(CAPTUREDEVIDE_TYPE::Audio);
-		winMic->sendMessage({ CAPTUREDEVIDE_COMMAND::INITIALIZE, nullptr });
+		winCamera = new WindowsCaptureDevice(CAPTUREDEVICE_TYPE::VIDEO);
+		winMic = new WindowsCaptureDevice(CAPTUREDEVICE_TYPE::AUDIO);
 	}
 #endif
 
@@ -885,12 +844,10 @@ bool NativeInitGraphics(GraphicsContext *graphicsContext) {
 		// This is a warning, not an error.
 		auto g = GetI18NCategory(I18NCat::GRAPHICS);
 		g_OSD.Show(OSDType::MESSAGE_WARNING, ApplySafeSubstitutions(g->T("Your display is set to a low refresh rate: %1 Hz. 60 Hz or higher is recommended."), (int)displayHz), 8.0f, "low_refresh");
-		g_OSD.SetClickCallback("low_refresh", [](bool clicked, void *) {
-			if (clicked) {
-				// Open the display settings.
-				System_OpenDisplaySettings();
-			}
-		}, nullptr);
+		g_OSD.SetClickCallback("low_refresh", []() {
+			// Open the display settings.
+			System_OpenDisplaySettings();
+		});
 	}
 #endif
 
@@ -982,6 +939,10 @@ void NativeShutdownGraphics() {
 	}
 #endif
 
+#if PPSSPP_PLATFORM(IOS)
+	DarwinFileSystemServices::terminate();
+#endif
+
 	if (g_audioBackend) {
 		delete g_audioBackend;
 		g_audioBackend = nullptr;
@@ -1009,74 +970,8 @@ void NativeShutdownGraphics() {
 	INFO_LOG(Log::System, "NativeShutdownGraphics end");
 }
 
-static void TakeScreenshot(Draw::DrawContext *draw) {
-	Path path = GetSysDirectory(DIRECTORY_SCREENSHOT);
-	if (!File::Exists(path)) {
-		File::CreateDir(path);
-	}
-
-	// First, find a free filename.
-	//
-	// NOTE: On Android, the old approach of checking filenames one by one doesn't scale.
-	// So let's just grab the full file listing, and then find a name that's not in it.
-	//
-	// TODO: Also, we could do this on a thread too. Not sure if worth it.
-
-	const std::string gameId = g_paramSFO.GetDiscID();
-
-	// TODO: Make something like IterateFileInDir instead.
-	std::vector<File::FileInfo> files;
-	const std::string prefix = gameId + "_";
-	File::GetFilesInDir(path, &files, nullptr, 0, prefix);
-	std::set<std::string> existingNames;
-	for (auto &file : files) {
-		existingNames.insert(file.name);
-	}
-
-	Path filename;
-	int i = 0;
-	for (int i = 0; i < 20000; i++) {
-		const std::string pngName = prefix + StringFromFormat("%05d.png", i);
-		const std::string jpgName = prefix + StringFromFormat("%05d.jpg", i);
-		if (existingNames.find(pngName) == existingNames.end() && existingNames.find(jpgName) == existingNames.end()) {
-			filename = path / (g_Config.bScreenshotsAsPNG ? pngName : jpgName);
-			break;
-		}
-	}
-
-	if (filename.empty()) {
-		// Overwrite this one over and over.
-		filename = path / (prefix + (g_Config.bScreenshotsAsPNG ? "20000.png" : "20000.jpg"));
-	}
-
-	const ScreenshotType type = g_Config.iScreenshotMode == (int)ScreenshotMode::GameImage ? SCREENSHOT_DISPLAY : SCREENSHOT_OUTPUT;
-
-	const ScreenshotResult result = TakeGameScreenshot(draw, filename, g_Config.bScreenshotsAsPNG ? ScreenshotFormat::PNG : ScreenshotFormat::JPG, type, -1, [filename](bool success) {
-		if (success) {
-			g_OSD.Show(OSDType::MESSAGE_FILE_LINK, filename.ToVisualString(), 0.0f, "screenshot_link");
-			if (System_GetPropertyBool(SYSPROP_CAN_SHOW_FILE)) {
-				g_OSD.SetClickCallback("screenshot_link", [](bool clicked, void *data) -> void {
-					Path *path = reinterpret_cast<Path *>(data);
-					if (clicked) {
-						System_ShowFileInFolder(*path);
-					} else {
-						delete path;
-					}
-				}, new Path(filename));
-			}
-		} else {
-			auto err = GetI18NCategory(I18NCat::ERRORS);
-			g_OSD.Show(OSDType::MESSAGE_ERROR, err->T("Could not save screenshot file"));
-			WARN_LOG(Log::System, "Failed to take screenshot.");
-		}
-	});
-}
-
 void CallbackPostRender(UIContext *dc, void *userdata) {
-	if (g_TakeScreenshot) {
-		TakeScreenshot(dc->GetDrawContext());
-		g_TakeScreenshot = false;
-	}
+	ScreenshotNotifyEndOfFrame(dc->GetDrawContext());
 }
 
 static void SendMouseDeltaAxis();
@@ -1132,11 +1027,19 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 
 	g_iconCache.FrameUpdate();
 
-	g_screenManager->update();
-
 	if (g_audioBackend) {
-		g_audioBackend->FrameUpdate(g_Config.bAutoAudioDevice);
+		g_audioBackend->FrameUpdate(g_Config.bAutoSwitchAudioDevice);
 	}
+
+	// NOTE: We must begin the frame before update, so we can do texture size queries and stuff in Measure etc.
+	Draw::DebugFlags debugFlags = Draw::DebugFlags::NONE;
+	if ((DebugOverlay)g_Config.iDebugOverlay == DebugOverlay::GPU_PROFILE)
+		debugFlags |= Draw::DebugFlags::PROFILE_TIMESTAMPS;
+	if (g_Config.bGpuLogProfiler)
+		debugFlags |= Draw::DebugFlags::PROFILE_SCOPES;
+	g_draw->BeginFrame(debugFlags);
+
+	g_screenManager->update();
 
 	// Do this after g_screenManager.update() so we can receive setting changes before rendering.
 	{
@@ -1175,22 +1078,14 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 	// Apply the UIContext bounds as a 2D transformation matrix.
 	Matrix4x4 ortho = ComputeOrthoMatrix(g_display.dp_xres, g_display.dp_yres, graphicsContext->GetDrawContext()->GetDeviceCaps().coordConvention);
 
-	Draw::DebugFlags debugFlags = Draw::DebugFlags::NONE;
-	if ((DebugOverlay)g_Config.iDebugOverlay == DebugOverlay::GPU_PROFILE)
-		debugFlags |= Draw::DebugFlags::PROFILE_TIMESTAMPS;
-	if (g_Config.bGpuLogProfiler)
-		debugFlags |= Draw::DebugFlags::PROFILE_SCOPES;
-
 	// Can be overridden by sceDisplay which may pass true for the second argument.
 	g_frameTiming.ComputePresentMode(g_draw, false);
-
-	g_draw->BeginFrame(debugFlags);
 
 	ui_draw2d.PushDrawMatrix(ortho);
 
 	g_screenManager->getUIContext()->SetTintSaturation(g_Config.fUITint, g_Config.fUISaturation);
 
-	// All actual rendering happen in here.
+	// All actual rendering (and also emulation) happens in here.
 	ScreenRenderFlags renderFlags = g_screenManager->render();
 	if (g_screenManager->getUIContext()->Text()) {
 		g_screenManager->getUIContext()->Text()->OncePerFrame();
@@ -1293,7 +1188,8 @@ bool HandleGlobalMessage(UIMessage message, const std::string &value) {
 	}
 	else if (message == UIMessage::GPU_RENDER_RESIZED) {
 		if (gpu) {
-			gpu->NotifyRenderResized();
+			DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(g_display.GetDeviceOrientation());
+			gpu->NotifyRenderResized(config);
 		}
 		return true;
 	}
@@ -1380,7 +1276,7 @@ static void ProcessWheelRelease(InputKeyCode keyCode, double now, bool keyPress)
 		KeyInput key{};
 		key.deviceId = DEVICE_ID_MOUSE;
 		key.keyCode = keyCode;
-		key.flags = KEY_UP;
+		key.flags = KeyInputFlags::UP;
 		NativeKey(key);
 	}
 
@@ -1399,9 +1295,9 @@ bool NativeKey(const KeyInput &key) {
 	}
 
 #if PPSSPP_PLATFORM(UWP)
-	// Ignore if key sent from OnKeyDown/OnKeyUp/XInput while text edit active 
+	// Ignore if key sent from OnKeyDown/OnKeyUp/XInput while text edit active
 	// it's already handled by `OnCharacterReceived`
-	if (IgnoreInput(key.keyCode) && !(key.flags & KEY_CHAR)) {
+	if (key.deviceId == DEVICE_ID_KEYBOARD && IgnoreInput(key.keyCode) && !(key.flags & KeyInputFlags::CHAR)) {
 		return false;
 	}
 #endif
@@ -1420,16 +1316,36 @@ bool NativeKey(const KeyInput &key) {
 	}
 #endif
 
+#ifdef _DEBUG
+	// Debug hack: Randomize the language with F9!
+	if ((key.keyCode == NKCODE_F9 && (key.flags & KeyInputFlags::DOWN))) {
+		std::vector<File::FileInfo> tempLangs;
+		g_VFS.GetFileListing("lang", &tempLangs, "ini");
+		int x = rand() % tempLangs.size();
+
+		g_Config.DoNotSaveSetting(&g_Config.sLanguageIni);
+		std::string_view code, part2;
+		if (SplitStringOnce(tempLangs[x].name, &code, &part2, '.')) {
+			g_Config.sLanguageIni = code;
+			INFO_LOG(Log::System, "Switching to random language: %s", g_Config.sLanguageIni.c_str());
+			if (g_i18nrepo.LoadIni(g_Config.sLanguageIni)) {
+				g_screenManager->RecreateAllViews();
+				System_Notify(SystemNotification::UI);
+			}
+		}
+	}
+#endif
+
 	if (!g_screenManager) {
 		return false;
 	}
 
 	// Handle releases of mousewheel keys.
-	if ((key.flags & KEY_DOWN) && key.deviceId == DEVICE_ID_MOUSE && (key.keyCode == NKCODE_EXT_MOUSEWHEEL_UP || key.keyCode == NKCODE_EXT_MOUSEWHEEL_DOWN)) {
+	if ((key.flags & KeyInputFlags::DOWN) && key.deviceId == DEVICE_ID_MOUSE && (key.keyCode == NKCODE_EXT_MOUSEWHEEL_UP || key.keyCode == NKCODE_EXT_MOUSEWHEEL_DOWN)) {
 		ProcessWheelRelease(key.keyCode, now, true);
 	}
 
-	HLEPlugins::SetKey(key.keyCode, (key.flags & KEY_DOWN) ? 1 : 0);
+	HLEPlugins::SetKey(key.keyCode, (key.flags & KeyInputFlags::DOWN) ? 1 : 0);
 	// Dispatch the key event.
 	bool retval = g_screenManager->key(key);
 
@@ -1495,6 +1411,7 @@ void NativeMouseDelta(float dx, float dy) {
 	SendMouseDeltaAxis();
 }
 
+// TODO: Should include a device ID here, since accelerometers can be on pads for example (DualSense).
 void NativeAccelerometer(float tiltX, float tiltY, float tiltZ) {
 	if (g_Config.iTiltInputType == TILT_NULL) {
 		// if tilt events are disabled, don't do anything special.
@@ -1644,10 +1561,15 @@ bool Native_IsWindowHidden() {
 }
 
 static bool IsWindowSmall(int pixelWidth, int pixelHeight) {
+	if (!g_Config.bShrinkIfWindowSmall) {
+		return false;
+	}
+
 	// Can't take this from config as it will not be set if windows is maximized.
 	int w = (int)(pixelWidth * g_display.dpi_scale_real_x);
 	int h = (int)(pixelHeight * g_display.dpi_scale_real_y);
-	return g_Config.IsPortrait() ? (h < 480 + 80) : (w < 480 + 80);
+	DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(g_display.GetDeviceOrientation());
+	return config.InternalRotationIsPortrait() ? (h < 480 + 80) : (w < 480 + 80);
 }
 
 bool Native_UpdateScreenScale(int pixel_width, int pixel_height, float customScale) {

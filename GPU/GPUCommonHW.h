@@ -7,15 +7,17 @@
 class GPUCommonHW : public GPUCommon {
 public:
 	GPUCommonHW(GraphicsContext *gfxCtx, Draw::DrawContext *draw);
-	~GPUCommonHW();
+	~GPUCommonHW() override;
 
 	// This can fail, and if so no render pass is active.
-	void CopyDisplayToOutput(bool reallyDirty) override;
+	void SetCurFramebufferDirty(bool dirty) override { curFramebufferDirty_ = dirty; }
+	void PrepareCopyDisplayToOutput(const DisplayLayoutConfig &config) override;
+	void CopyDisplayToOutput(const DisplayLayoutConfig &config) override;
 	void DoState(PointerWrap &p) override;
 	void DeviceLost() override;
 	void DeviceRestore(Draw::DrawContext *draw) override;
 
-	void BeginHostFrame() override;
+	void BeginHostFrame(const DisplayLayoutConfig &config) override;
 
 	u32 CheckGPUFeatures() const override;
 
@@ -97,12 +99,13 @@ protected:
 	void UpdateMSAALevel(Draw::DrawContext *draw) override;
 
 	void CheckDisplayResized() override;
-	void CheckRenderResized() override;
-	void CheckConfigChanged() override;
+	void CheckRenderResized(const DisplayLayoutConfig &config) override;
+	void CheckConfigChanged(const DisplayLayoutConfig &config) override;
 
 	u32 CheckGPUFeaturesLate(u32 features) const;
 
 	int msaaLevel_ = 0;
 	bool sawExactEqualDepth_ = false;
 	ShaderManagerCommon *shaderManager_ = nullptr;
+	bool curFramebufferDirty_ = false;
 };

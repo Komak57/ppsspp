@@ -586,7 +586,7 @@ DepthScaleFactors GetDepthScaleFactors(u32 useFlags) {
 	}
 }
 
-void ConvertViewportAndScissor(bool useBufferedRendering, float renderWidth, float renderHeight, int bufferWidth, int bufferHeight, ViewportAndScissor &out) {
+void ConvertViewportAndScissor(const DisplayLayoutConfig &config, bool useBufferedRendering, float renderWidth, float renderHeight, int bufferWidth, int bufferHeight, ViewportAndScissor &out) {
 	out.throughMode = gstate.isModeThrough();
 
 	float renderWidthFactor, renderHeightFactor;
@@ -600,9 +600,9 @@ void ConvertViewportAndScissor(bool useBufferedRendering, float renderWidth, flo
 	} else {
 		float pixelW = PSP_CoreParameter().pixelWidth;
 		float pixelH = PSP_CoreParameter().pixelHeight;
-		FRect frame = GetScreenFrame(pixelW, pixelH);
+		FRect frame = GetScreenFrame(config.bIgnoreScreenInsets, pixelW, pixelH);
 		FRect rc;
-		CalculateDisplayOutputRect(&rc, 480, 272, frame, ROTATION_LOCKED_HORIZONTAL);
+		CalculateDisplayOutputRect(config, &rc, 480, 272, frame, ROTATION_LOCKED_HORIZONTAL);
 		displayOffsetX = rc.x;
 		displayOffsetY = rc.y;
 		renderWidth = rc.w;
@@ -1153,6 +1153,19 @@ static void ConvertBlendState(GenericBlendState &blendState, FBReadSetting useFB
 	//  * The written output alpha should actually be the stencil value.  Alpha is not written.
 	//
 	// If we can't apply blending, we make a copy of the framebuffer and do it manually.
+
+	if (gstate_c.dstSquared && useFBRead != FBReadSetting::Forced) {
+		blendState.blendEnabled = true;
+		blendState.applyFramebufferRead = false;
+		blendState.dirtyShaderBlendFixValues = false;
+		blendState.useBlendColor = false;
+		blendState.replaceBlend = REPLACE_BLEND_NO;
+		blendState.simulateLogicOpType = SimulateLogicOpShaderTypeIfNeeded();
+		blendState.replaceAlphaWithStencil = REPLACE_ALPHA_NO;
+		blendState.setEquation(BlendEq::ADD, BlendEq::ADD);
+		blendState.setFactors(BlendFactor::ZERO, BlendFactor::DST_COLOR, BlendFactor::ZERO, BlendFactor::ONE);
+		return;
+	}
 
 	blendState.applyFramebufferRead = false;
 	blendState.dirtyShaderBlendFixValues = false;

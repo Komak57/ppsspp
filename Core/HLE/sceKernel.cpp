@@ -785,7 +785,7 @@ const HLEFunction ThreadManForUser[] =
 	{0X94416130, &WrapU_UUUU<sceKernelGetThreadmanIdList>,           "sceKernelGetThreadmanIdList",               'x', "xxxx"    },
 	{0X57CF62DD, &WrapU_U<sceKernelGetThreadmanIdType>,              "sceKernelGetThreadmanIdType",               'x', "x"       },
 	{0XBC80EC7C, &WrapU_UUU<sceKernelExtendThreadStack>,             "sceKernelExtendThreadStack",                'x', "xxx"     },
-	// NOTE: Takes a UID from sceKernelMemory's AllocMemoryBlock and seems thread stack related.
+	// NOTE: Takes a UID from sceKernelMemory's sceKernelAllocMemoryBlock and seems thread stack related.
 	//{0x28BFD974, nullptr,                                           "ThreadManForUser_28BFD974",                  '?', ""        },
 
 	{0X82BC5777, &WrapU64_V<sceKernelGetSystemTimeWide>,             "sceKernelGetSystemTimeWide",                'X', ""        },
@@ -1638,6 +1638,10 @@ const char *KernelErrorToString(u32 err) {
 	case SCE_NET_ADHOCCTL_ERROR_CHANNEL_NOT_MATCH: return "SCE_NET_ADHOCCTL_ERROR_CHANNEL_NOT_MATCH";
 	case SCE_NET_ADHOCCTL_ERROR_TOO_MANY_HANDLERS: return "SCE_NET_ADHOCCTL_ERROR_TOO_MANY_HANDLERS";
 	case SCE_NET_ADHOCCTL_ERROR_STACKSIZE_TOO_SHORT: return "SCE_NET_ADHOCCTL_ERROR_STACKSIZE_TOO_SHORT";
+
+	// NPDRM
+	case SCE_NPDRM_ERROR_NO_K_LICENSEE_SET: return "SCE_NPDRM_ERROR_NO_K_LICENSEE_SET";
+	case SCE_NPDRM_ERROR_INVALID_FILE: return "SCE_NPDRM_ERROR_INVALID_FILE";
 
 	default:
 		return nullptr;

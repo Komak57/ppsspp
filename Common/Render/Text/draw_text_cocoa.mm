@@ -32,8 +32,6 @@ enum {
 	MAX_TEXT_HEIGHT = 512
 };
 
-#define APPLE_FONT "RobotoCondensed-Regular"
-
 // for future OpenEmu support
 #ifndef PPSSPP_FONT_BUNDLE
 #define PPSSPP_FONT_BUNDLE [NSBundle mainBundle]
@@ -41,24 +39,73 @@ enum {
 
 class TextDrawerFontContext {
 public:
+	TextDrawerFontContext(const FontStyle &_style, float _dpiScale) : style(_style), dpiScale(_dpiScale) {
+		FontStyleFlags styleFlags = style.flags;
+		std::string fontName = GetFontNameForFontStyle(style, &styleFlags);
+
+		// Create an attributed string with string and font information
+		CGFloat fontSize = ceilf((style.sizePts / dpiScale) * 1.25f);
+		INFO_LOG(Log::G3D, "Creating cocoa typeface '%s' size %d (effective size %0.1f)", fontName.c_str(), style.sizePts, fontSize);
+
+		CTFontSymbolicTraits traits = 0;
+		if (styleFlags & FontStyleFlags::Bold)   traits |= kCTFontTraitBold;
+		if (styleFlags & FontStyleFlags::Italic) traits |= kCTFontTraitItalic;
+
+		CTFontRef base = CTFontCreateWithName(CFStringCreateWithCString(kCFAllocatorDefault, fontName.c_str(), kCFStringEncodingUTF8), fontSize, nil);
+		CTFontRef font = CTFontCreateCopyWithSymbolicTraits(base, fontSize, NULL, traits, traits); // desired & mask
+		if (!font) {
+			// Skip the traits.
+			font = base;
+		} else {
+			CFRelease(base);
+		}
+
+		_dbg_assert_(font != nil);
+		// CTFontRef font = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, fontSize, nil);
+		attributes = @{
+			(__bridge id)kCTFontAttributeName: (__bridge id)font,
+			(__bridge id)kCTForegroundColorFromContextAttributeName: (__bridge id)kCFBooleanTrue,
+		};
+		CFRelease(font);
+	}
 	~TextDrawerFontContext() {
 		Destroy();
 	}
+	void Destroy() {
+	}
 
-	void Create() {
-		// Register font with CoreText
-		// We only need to do this once.
-		static dispatch_once_t onceToken;
-		dispatch_once(&onceToken, ^{
-			NSURL *fontURL = [PPSSPP_FONT_BUNDLE URLForResource:@"Roboto-Condensed" withExtension:@"ttf" subdirectory:@"assets"];
+	NSDictionary* attributes = nil;
+	std::string fname;
+
+	FontStyle style;
+	float dpiScale;
+};
+
+TextDrawerCocoa::TextDrawerCocoa(Draw::DrawContext *draw) : TextDrawer(draw) {
+	// Register fonts with CoreText
+	// We only need to do this once.
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		std::vector<std::string> allFonts = GetAllFontFilenames();
+
+		for (const auto &fontName : allFonts) {
+			// Convert C++ string to NSString
+			NSString *fontFileName = [NSString stringWithUTF8String:fontName.c_str()];
+
+			// Get the font URL from the bundle
+			NSURL *fontURL = [PPSSPP_FONT_BUNDLE URLForResource:fontFileName
+													withExtension:@"ttf"
+													subdirectory:@"assets"];
 			if (!fontURL) {
-				NSLog(@"Font URL not found!");
-				return;
+				NSLog(@"Font URL not found for %@", fontFileName);
+				continue;
 			}
+
+			// Optional: Print font descriptors for debugging
 			CFArrayRef descs = CTFontManagerCreateFontDescriptorsFromURL((__bridge CFURLRef)fontURL);
 			if (descs) {
 				CFIndex count = CFArrayGetCount(descs);
-				NSLog(@"Found %ld font descriptor(s)", count);
+				NSLog(@"Found %ld font descriptor(s) for %@", count, fontFileName);
 
 				for (CFIndex i = 0; i < count; ++i) {
 					CTFontDescriptorRef desc = (CTFontDescriptorRef)CFArrayGetValueAtIndex(descs, i);
@@ -75,33 +122,13 @@ public:
 
 				CFRelease(descs);
 			} else {
-				NSLog(@"Failed to retrieve font descriptors");
+				NSLog(@"Failed to retrieve font descriptors for %@", fontFileName);
 			}
-			CTFontManagerRegisterFontsForURL((CFURLRef)fontURL, kCTFontManagerScopeProcess, NULL);
-		});
 
-		// Create an attributed string with string and font information
-		CGFloat fontSize = ceilf((height / dpiScale) * 1.25f);
-		INFO_LOG(Log::G3D, "Creating cocoa typeface '%s' size %d (effective size %0.1f)", APPLE_FONT, height, fontSize);
-		CTFontRef font = CTFontCreateWithName(CFSTR(APPLE_FONT), fontSize, nil);
-		// CTFontRef font = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, fontSize, nil);
-		attributes = [NSDictionary dictionaryWithObjectsAndKeys:
-			(__bridge id)font, kCTFontAttributeName,
-			kCFBooleanTrue, kCTForegroundColorFromContextAttributeName,  // Lets us specify the color later.
-			nil];
-		CFRelease(font);
-	}
-	void Destroy() {
-	}
-
-	NSDictionary* attributes = nil;
-	std::string fname;
-	int height;
-	int bold;
-	float dpiScale;
-};
-
-TextDrawerCocoa::TextDrawerCocoa(Draw::DrawContext *draw) : TextDrawer(draw) {
+			// Register the font
+			CTFontManagerRegisterFontsForURL((__bridge CFURLRef)fontURL, kCTFontManagerScopeProcess, NULL);
+		}
+	});
 }
 
 TextDrawerCocoa::~TextDrawerCocoa() {
@@ -110,40 +137,21 @@ TextDrawerCocoa::~TextDrawerCocoa() {
 }
 
 // TODO: Share with other backends.
-uint32_t TextDrawerCocoa::SetFont(const char *fontName, int size, int flags) {
-	uint32_t fontHash = fontName ? hash::Adler32((const uint8_t *)fontName, strlen(fontName)) : 0;
-	fontHash ^= size;
-	fontHash ^= flags << 10;
-
-	auto iter = fontMap_.find(fontHash);
-	if (iter != fontMap_.end()) {
-		fontHash_ = fontHash;
-		return fontHash;
+void TextDrawerCocoa::SetOrCreateFont(const FontStyle &style) {
+	if (style.sizePts <= 0) {
+		return;
 	}
 
-	std::string fname;
-	if (fontName)
-		fname = fontName;
-	else
-		fname = APPLE_FONT;
-
-	TextDrawerFontContext *font = new TextDrawerFontContext();
-	font->bold = false;
-	font->height = size;
-	font->fname = fname;
-	font->dpiScale = dpiScale_;
-	font->Create();
-
-	fontMap_[fontHash] = std::unique_ptr<TextDrawerFontContext>(font);
-	fontHash_ = fontHash;
-	return fontHash;
-}
-
-void TextDrawerCocoa::SetFont(uint32_t fontHandle) {
-	auto iter = fontMap_.find(fontHandle);
+	auto iter = fontMap_.find(style);
 	if (iter != fontMap_.end()) {
-		fontHash_ = fontHandle;
+		fontStyle_ = style;
+		return;
 	}
+
+	TextDrawerFontContext *font = new TextDrawerFontContext(style, dpiScale_);
+
+	fontMap_[style] = std::unique_ptr<TextDrawerFontContext>(font);
+	fontStyle_ = style;
 }
 
 void TextDrawerCocoa::ClearFonts() {
@@ -154,9 +162,9 @@ void TextDrawerCocoa::ClearFonts() {
 	fontMap_.clear();
 }
 
+// AI added some error checks here.
 void TextDrawerCocoa::MeasureStringInternal(std::string_view str, float *w, float *h) {
-	// INFO_LOG(Log::System, "Measuring %.*s", (int)str.length(), str.data());
-	auto iter = fontMap_.find(fontHash_);
+	auto iter = fontMap_.find(fontStyle_);
 	NSDictionary *attributes = nil;
 	if (iter != fontMap_.end()) {
 		attributes = iter->second->attributes;
@@ -165,24 +173,57 @@ void TextDrawerCocoa::MeasureStringInternal(std::string_view str, float *w, floa
 	std::vector<std::string_view> lines;
 	SplitString(str, '\n', lines);
 
-	int extW = 0, extH = 0;
+	float extW = 0, extH = 0;
 	for (auto &line : lines) {
-		NSString *string = [[NSString alloc] initWithBytes:line.data() length:line.size() encoding: NSUTF8StringEncoding];
+		if (line.empty()) {
+			// Handle empty lines by measuring the string "Wg" which typically has a good ascent and descent.
+			NSString *emptyLineString = @"Wg";
+			NSAttributedString* emptyAs = [[NSAttributedString alloc] initWithString:emptyLineString attributes:attributes];
+			CTLineRef emptyCtline = CTLineCreateWithAttributedString((CFAttributedStringRef)emptyAs);
+			CGFloat ascent, descent, leading;
+			CTLineGetTypographicBounds(emptyCtline, &ascent, &descent, &leading);
+			CFRelease(emptyCtline);
+			extH += (float)(ascent + descent + leading); // Use actual line height for empty lines
+			continue;
+		}
+		// Handle potential UTF-8 conversion failure
+		NSString *string = [[NSString alloc] initWithBytes:line.data()
+											 length:line.size()
+											 encoding:NSUTF8StringEncoding];
+
+		// If UTF-8 fails, fallback to Windows-1252 or lossy conversion to prevent nil
+		if (!string) {
+			string = [[NSString alloc] initWithBytes:line.data()
+									   length:line.size()
+									   encoding:NSASCIIStringEncoding];
+		}
+		// Skip empty or failed strings to prevent NSConcreteAttributedString crash
+		if (!string) {
+			continue;
+		}
 		NSAttributedString* as = [[NSAttributedString alloc] initWithString:string attributes:attributes];
+		// Safety check for AttributedString allocation
+		if (!as) {
+			continue;
+		}
+
 		CTLineRef ctline = CTLineCreateWithAttributedString((CFAttributedStringRef)as);
+		// Core Text safety check
+		if (!ctline) {
+			continue;
+		}
+
 		CGFloat ascent, descent, leading;
 		double fWidth = CTLineGetTypographicBounds(ctline, &ascent, &descent, &leading);
 
-		size_t width = (size_t)ceilf(fWidth);
-		size_t height = (size_t)ceilf(ascent + descent);
-	
-		if (width > extW)
-			extW = width;
-		extH += height;
+		if (fWidth > extW)
+			extW = (float)fWidth;
+		extH += (float)(ascent + descent + leading); // Included leading for better vertical spacing
+		CFRelease(ctline);  // Needed to avoid memory leak.
 	}
 
-	*w = extW;
-	*h = extH;
+	*w = ceilf(extW);
+	*h = ceilf(extH);
 }
 
 bool TextDrawerCocoa::DrawStringBitmap(std::vector<uint8_t> &bitmapData, TextStringEntry &entry, Draw::DataFormat texFormat, std::string_view str, int align, bool fullColor) {
@@ -191,7 +232,7 @@ bool TextDrawerCocoa::DrawStringBitmap(std::vector<uint8_t> &bitmapData, TextStr
 		return false;
 	}
 
-	auto iter = fontMap_.find(fontHash_);
+	auto iter = fontMap_.find(fontStyle_);
 	if (iter == fontMap_.end()) {
 		return false;
 	}
@@ -200,8 +241,22 @@ bool TextDrawerCocoa::DrawStringBitmap(std::vector<uint8_t> &bitmapData, TextStr
 
 	NSString* string = [[NSString alloc] initWithBytes:str.data() length:str.length() encoding: NSUTF8StringEncoding];
 
+	// If UTF-8 fails, fallback to ASCII to prevent nil
+	if (!string) {
+		string = [[NSString alloc] initWithBytes:str.data() length:str.length() encoding:NSASCIIStringEncoding];
+	}
+	// Skip if string creation failed
+	if (!string) {
+		return false;
+	}
+
 	NSDictionary* attributes = iter->second->attributes;
 	NSAttributedString* as = [[NSAttributedString alloc] initWithString:string attributes:attributes];
+
+	// Safety check for AttributedString allocation
+	if (!as) {
+		return false;
+	}
 
 	// Figure out how big an image we need.
 	// We re-use MeasureString here.
@@ -230,6 +285,14 @@ bool TextDrawerCocoa::DrawStringBitmap(std::vector<uint8_t> &bitmapData, TextStr
 	CGBitmapInfo bitmapInfo = kCGImageAlphaPremultipliedLast;
 	CGContextRef ctx = CGBitmapContextCreate(bitmap, bmWidth, bmHeight, 8, bmWidth*4, space, bitmapInfo);
 	CGColorSpaceRelease(space);
+
+	// Safety check for CGContext creation
+	if (!ctx) {
+		WARN_LOG(Log::G3D, "Failed to create CGBitmapContext");
+		delete [] bitmap;
+		return false;
+	}
+
 	// CGContextSetRGBStrokeColor(ctx, 1.0, 1.0, 1.0, 1.0); // white background
 	CGContextSetStrokeColorWithColor(ctx, [ColorType whiteColor].CGColor);
 	CGContextSetFillColorWithColor(ctx, [ColorType whiteColor].CGColor);
@@ -240,8 +303,30 @@ bool TextDrawerCocoa::DrawStringBitmap(std::vector<uint8_t> &bitmapData, TextStr
 	float lineY = 0.0;
 	for (std::string_view line : lines) {
 		NSString *string = [[NSString alloc] initWithBytes:line.data() length:line.size() encoding: NSUTF8StringEncoding];
+
+		// If UTF-8 fails, fallback to ASCII to prevent nil
+		if (!string) {
+			string = [[NSString alloc] initWithBytes:line.data() length:line.size() encoding:NSASCIIStringEncoding];
+		}
+		// Skip empty or failed strings to prevent crash
+		if (!string) {
+			continue;
+		}
+
 		NSAttributedString* as = [[NSAttributedString alloc] initWithString:string attributes:attributes];
+
+		// Safety check for AttributedString allocation
+		if (!as) {
+			continue;
+		}
+
 		CTLineRef ctline = CTLineCreateWithAttributedString((CFAttributedStringRef)as);
+
+		// Core Text safety check
+		if (!ctline) {
+			continue;
+		}
+
 		CGFloat ascent, descent, leading;
 		double fWidth = CTLineGetTypographicBounds(ctline, &ascent, &descent, &leading);
 
@@ -311,7 +396,8 @@ bool TextDrawerCocoa::DrawStringBitmap(std::vector<uint8_t> &bitmapData, TextStr
 	} else {
 		_assert_msg_(false, "Bad TextDrawer format");
 	}
-	
+
+	CGContextRelease(ctx);
 	delete [] bitmap;
 	return true;
 }

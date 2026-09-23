@@ -1,32 +1,20 @@
 package org.ppsspp.ppsspp;
 
-import android.annotation.TargetApi;
 import android.content.pm.ActivityInfo;
 import android.graphics.Point;
-import android.os.Build;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Display;
-import android.view.DisplayCutout;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
-import android.view.WindowInsets;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 
 public class SizeManager implements SurfaceHolder.Callback {
 	private static final String TAG = "PPSSPPSizeManager";
 
-	final NativeActivity activity;
+	final PpssppActivity activity;
 	SurfaceView surfaceView = null;
-
-	private int safeInsetLeft = 0;
-	private int safeInsetRight = 0;
-	private int safeInsetTop = 0;
-	private int safeInsetBottom = 0;
 
 	private float densityDpi;
 	private float refreshRate;
@@ -42,7 +30,7 @@ public class SizeManager implements SurfaceHolder.Callback {
 
 	private boolean paused = false;
 
-	public SizeManager(final NativeActivity a) {
+	public SizeManager(final PpssppActivity a) {
 		activity = a;
 	}
 
@@ -67,17 +55,6 @@ public class SizeManager implements SurfaceHolder.Callback {
 			return;
 
 		surfaceView.getHolder().addCallback(this);
-
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-			surfaceView.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
-				@NonNull
-				@Override
-				public WindowInsets onApplyWindowInsets(@NonNull View view, @NonNull WindowInsets windowInsets) {
-					updateInsets(windowInsets);
-					return windowInsets;
-				}
-			});
-		}
 	}
 
 	@Override
@@ -86,10 +63,11 @@ public class SizeManager implements SurfaceHolder.Callback {
 		int pixelHeight = holder.getSurfaceFrame().height();
 
 		// Workaround for terrible bug when locking and unlocking the screen in landscape mode on Nexus 5X.
+		// TODO: Look into removing this.
 		int requestedOr = activity.getRequestedOrientation();
 		boolean requestedPortrait = requestedOr == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT || requestedOr == ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT;
 		boolean detectedPortrait = pixelHeight > pixelWidth;
-		if (badOrientationCount < 3 && requestedPortrait != detectedPortrait && requestedOr != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+		if (badOrientationCount < 3 && requestedPortrait != detectedPortrait && requestedOr != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED && requestedOr != ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE && requestedOr != ActivityInfo.SCREEN_ORIENTATION_SENSOR) {
 			Log.e(TAG, "Bad orientation detected (w=" + pixelWidth + " h=" + pixelHeight + "! Recreating activity.");
 			badOrientationCount++;
 			activity.recreate();
@@ -123,7 +101,7 @@ public class SizeManager implements SurfaceHolder.Callback {
 		Log.v(TAG, "surfaceChanged: isCreating:" + holder.isCreating() + " holder: " + holder);
 		if (holder.isCreating() && desiredSize.x > 0 && desiredSize.y > 0) {
 			// We have called setFixedSize which will trigger another surfaceChanged after the initial
-			// one. This one is the original one and we don't care about it.
+			// one. This one is the original one, and we don't care about it.
 			Log.w(TAG, "holder.isCreating = true, ignoring. width=" + width + " height=" + height + " desWidth=" + desiredSize.x + " desHeight=" + desiredSize.y);
 
 			// TODO: Should we still set earlySurface here, to be sure?
@@ -188,18 +166,15 @@ public class SizeManager implements SurfaceHolder.Callback {
 	}
 
 	public void setupSystemUiCallback(final View view) {
-		view.setOnSystemUiVisibilityChangeListener(new View.OnSystemUiVisibilityChangeListener() {
-			@Override
-			public void onSystemUiVisibilityChange(int visibility) {
-				// Called when the system UI's visibility changes, regardless of
-				// whether it's because of our or system actions.
-				// We will try to force it to follow our preference but will not stupidly
-				// act as if it's visible if it's not.
-				navigationHidden = ((visibility & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) != 0);
-				// TODO: Check here if it's the state we want.
-				Log.i(TAG, "SystemUiVisibilityChange! visibility=" + visibility + " navigationHidden: " + navigationHidden + " decorView: " + view.getWidth() + "x" + view.getHeight());
-				checkDisplayMeasurements();
-			}
+		view.setOnSystemUiVisibilityChangeListener(visibility -> {
+			// Called when the system UI's visibility changes, regardless of
+			// whether it's because of our or system actions.
+			// We will try to force it to follow our preference but will not stupidly
+			// act as if it's visible if it's not.
+			navigationHidden = ((visibility & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) != 0);
+			// TODO: Check here if it's the state we want.
+			Log.i(TAG, "SystemUiVisibilityChange! visibility=" + visibility + " navigationHidden: " + navigationHidden + " decorView: " + view.getWidth() + "x" + view.getHeight());
+			checkDisplayMeasurements();
 		});
 	}
 
@@ -211,27 +186,5 @@ public class SizeManager implements SurfaceHolder.Callback {
 		NativeApp.computeDesiredBackbufferDimensions();
 		sz.x = NativeApp.getDesiredBackbufferWidth();
 		sz.y = NativeApp.getDesiredBackbufferHeight();
-	}
-
-	@RequiresApi(Build.VERSION_CODES.P)
-	private void updateInsets(WindowInsets insets) {
-		if (insets == null) {
-			return;
-		}
-		DisplayCutout cutout = insets.getDisplayCutout();
-		if (cutout != null) {
-			safeInsetLeft = cutout.getSafeInsetLeft();
-			safeInsetRight = cutout.getSafeInsetRight();
-			safeInsetTop = cutout.getSafeInsetTop();
-			safeInsetBottom = cutout.getSafeInsetBottom();
-			// Log.i(TAG, "Safe insets: left: " + safeInsetLeft + " right: " + safeInsetRight + " top: " + safeInsetTop + " bottom: " + safeInsetBottom);
-		} else {
-			// Log.i(TAG, "Safe insets: Cutout was null");
-			safeInsetLeft = 0;
-			safeInsetRight = 0;
-			safeInsetTop = 0;
-			safeInsetBottom = 0;
-		}
-		NativeApp.sendMessageFromJava("safe_insets", safeInsetLeft + ":" + safeInsetRight + ":" + safeInsetTop + ":" + safeInsetBottom);
 	}
 }

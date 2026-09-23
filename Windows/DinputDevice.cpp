@@ -32,10 +32,13 @@
 #include "Common/StringUtils.h"
 #include "Common/System/NativeApp.h"
 #include "Core/KeyMap.h"
+#include "Core/Config.h"
 #include "Windows/DinputDevice.h"
-#include "Windows/HidInputDevice.h"
+#include "Windows/Hid/HidInputDevice.h"
 
 #pragma comment(lib,"dinput8.lib")
+
+using Microsoft::WRL::ComPtr;
 
 // static members of DinputDevice
 unsigned int                  DinputDevice::pInstances = 0;
@@ -108,7 +111,9 @@ void DinputDevice::getDevices(bool refresh) {
 		// We don't want duplicate reporting from XInput devices through DInput.
 		ignoreDevices_ = DetectXInputVIDPIDs();
 		HidInputDevice::AddSupportedDevices(&ignoreDevices_);
-		getPDI()->EnumDevices(DI8DEVCLASS_GAMECTRL, &DinputDevice::DevicesCallback, NULL, DIEDFL_ATTACHEDONLY);
+		if (getPDI()) {
+			getPDI()->EnumDevices(DI8DEVCLASS_GAMECTRL, &DinputDevice::DevicesCallback, NULL, DIEDFL_ATTACHEDONLY);
+		}
 	}
 }
 
@@ -132,8 +137,7 @@ DinputDevice::DinputDevice(int devnum) {
 	}
 
 	getDevices(needsCheck_);
-	if ( (devnum >= (int)devices.size()) || FAILED(getPDI()->CreateDevice(devices.at(devnum).guidInstance, &pJoystick, NULL)))
-	{
+	if ((devnum >= (int)devices.size()) || FAILED(getPDI()->CreateDevice(devices.at(devnum).guidInstance, &pJoystick, NULL))) {
 		return;
 	}
 
@@ -171,6 +175,9 @@ DinputDevice::DinputDevice(int devnum) {
 }
 
 DinputDevice::~DinputDevice() {
+	KeyMap::NotifyPadDisconnected(DEVICE_ID_PAD_0 + pDevNum);
+	ReleaseAllKeys();
+
 	if (pJoystick) {
 		pJoystick = nullptr;
 	}
@@ -186,9 +193,51 @@ DinputDevice::~DinputDevice() {
 	}
 }
 
-void SendNativeAxis(InputDeviceID deviceId, int value, int &lastValue, InputAxis axisId) {
-	if (value != lastValue) {
+void DinputDevice::ReleaseAllKeys() {
+	KeyInput key{};
+	key.deviceId = DEVICE_ID_PAD_0 + pDevNum;
+	key.flags = KeyInputFlags::UP;
+	for (int i = 0; i < ARRAY_SIZE(dinput_buttons); ++i) {
+		if (lastButtons_[i] != 0) {
+			key.keyCode = dinput_buttons[i];
+			NativeKey(key);
+			lastButtons_[i] = 0;
+		}
+	}
+
+	// Release DPad
+	static const InputKeyCode dpadCodes[] = {
+		NKCODE_DPAD_UP,
+		NKCODE_DPAD_DOWN,
+		NKCODE_DPAD_LEFT,
+		NKCODE_DPAD_RIGHT
+	};
+	for (int i = 0; i < ARRAY_SIZE(dpadCodes); ++i) {
+		key.keyCode = dpadCodes[i];
+		NativeKey(key);
+	}
+
+	// Release axes
+	static const InputAxis axes[] = {
+		JOYSTICK_AXIS_X,
+		JOYSTICK_AXIS_Y,
+		JOYSTICK_AXIS_Z,
+		JOYSTICK_AXIS_RX,
+		JOYSTICK_AXIS_RY,
+		JOYSTICK_AXIS_RZ
+	};
+	for (int i = 0; i < ARRAY_SIZE(axes); ++i) {
 		AxisInput axis;
+		axis.deviceId = DEVICE_ID_PAD_0 + pDevNum;
+		axis.axisId = axes[i];
+		axis.value = 0.0f;
+		NativeAxis(&axis, 1);
+	}
+}
+
+void SendNativeAxis(InputDeviceID deviceId, int value, int &lastValue, InputAxis axisId) {
+	if (value != lastValue && g_Config.bAllowDInput) {
+		AxisInput axis{};
 		axis.deviceId = deviceId;
 		axis.axisId = axisId;
 		axis.value = (float)value * (1.0f / 10000.0f); // Convert axis to normalised float
@@ -210,25 +259,22 @@ static LONG *ValueForAxisId(DIJOYSTATE2 &js, int axisId) {
 }
 
 int DinputDevice::UpdateState() {
-	if (!pJoystick) return -1;
+	if (!pJoystick)
+		return -1;
 
-	DIJOYSTATE2 js;
+	DIJOYSTATE2 js{};
 
 	if (FAILED(pJoystick->Poll())) {
-		if(pJoystick->Acquire() == DIERR_INPUTLOST)
+		if (FAILED(pJoystick->Acquire()))
 			return -1;
 	}
 
-	if(FAILED(pJoystick->GetDeviceState(sizeof(DIJOYSTATE2), &js)))
+	if (FAILED(pJoystick->GetDeviceState(sizeof(DIJOYSTATE2), &js)))
 		return -1;
 
 	ApplyButtons(js);
 
 	if (analog)	{
-		// TODO: Use the batched interface.
-		AxisInput axis;
-		axis.deviceId = DEVICE_ID_PAD_0 + pDevNum;
-
 		SendNativeAxis(DEVICE_ID_PAD_0 + pDevNum, js.lX, last_lX_, JOYSTICK_AXIS_X);
 		SendNativeAxis(DEVICE_ID_PAD_0 + pDevNum, js.lY, last_lY_, JOYSTICK_AXIS_Y);
 		SendNativeAxis(DEVICE_ID_PAD_0 + pDevNum, js.lZ, last_lZ_, JOYSTICK_AXIS_Z);
@@ -250,7 +296,8 @@ int DinputDevice::UpdateState() {
 }
 
 void DinputDevice::ApplyButtons(DIJOYSTATE2 &state) {
-	BYTE *buttons = state.rgbButtons;
+	const bool sendInput = g_Config.bAllowDInput;
+
 	u32 downMask = 0x80;
 
 	for (int i = 0; i < ARRAY_SIZE(dinput_buttons); ++i) {
@@ -259,11 +306,13 @@ void DinputDevice::ApplyButtons(DIJOYSTATE2 &state) {
 		}
 
 		bool down = (state.rgbButtons[i] & downMask) == downMask;
-		KeyInput key;
-		key.deviceId = DEVICE_ID_PAD_0 + pDevNum;
-		key.flags = down ? KEY_DOWN : KEY_UP;
-		key.keyCode = dinput_buttons[i];
-		NativeKey(key);
+		if (sendInput) {
+			KeyInput key;
+			key.deviceId = DEVICE_ID_PAD_0 + pDevNum;
+			key.flags = down ? KeyInputFlags::DOWN : KeyInputFlags::UP;
+			key.keyCode = dinput_buttons[i];
+			NativeKey(key);
+		}
 
 		lastButtons_[i] = state.rgbButtons[i];
 	}
@@ -273,7 +322,7 @@ void DinputDevice::ApplyButtons(DIJOYSTATE2 &state) {
 		KeyInput dpad[4]{};
 		for (int i = 0; i < 4; ++i) {
 			dpad[i].deviceId = DEVICE_ID_PAD_0 + pDevNum;
-			dpad[i].flags = KEY_UP;
+			dpad[i].flags = KeyInputFlags::UP;
 		}
 		dpad[0].keyCode = NKCODE_DPAD_UP;
 		dpad[1].keyCode = NKCODE_DPAD_LEFT;
@@ -283,30 +332,31 @@ void DinputDevice::ApplyButtons(DIJOYSTATE2 &state) {
 		if (LOWORD(state.rgdwPOV[0]) != JOY_POVCENTERED) {
 			// These are the edges, so we use or.
 			if (state.rgdwPOV[0] >= JOY_POVLEFT_FORWARD || state.rgdwPOV[0] <= JOY_POVFORWARD_RIGHT) {
-				dpad[0].flags = KEY_DOWN;
+				dpad[0].flags = KeyInputFlags::DOWN;
 			}
 			if (state.rgdwPOV[0] >= JOY_POVBACKWARD_LEFT && state.rgdwPOV[0] <= JOY_POVLEFT_FORWARD) {
-				dpad[1].flags = KEY_DOWN;
+				dpad[1].flags = KeyInputFlags::DOWN;
 			}
 			if (state.rgdwPOV[0] >= JOY_POVRIGHT_BACKWARD && state.rgdwPOV[0] <= JOY_POVBACKWARD_LEFT) {
-				dpad[2].flags = KEY_DOWN;
+				dpad[2].flags = KeyInputFlags::DOWN;
 			}
 			if (state.rgdwPOV[0] >= JOY_POVFORWARD_RIGHT && state.rgdwPOV[0] <= JOY_POVRIGHT_BACKWARD) {
-				dpad[3].flags = KEY_DOWN;
+				dpad[3].flags = KeyInputFlags::DOWN;
 			}
 		}
 
-		NativeKey(dpad[0]);
-		NativeKey(dpad[1]);
-		NativeKey(dpad[2]);
-		NativeKey(dpad[3]);
+		if (sendInput) {
+			NativeKey(dpad[0]);
+			NativeKey(dpad[1]);
+			NativeKey(dpad[2]);
+			NativeKey(dpad[3]);
+		}
 
 		lastPOV_[0] = LOWORD(state.rgdwPOV[0]);
 	}
 }
 
-size_t DinputDevice::getNumPads()
-{
+size_t DinputDevice::getNumPads() {
 	getDevices(needsCheck_);
 	needsCheck_ = false;
 	return devices.size();
@@ -315,37 +365,32 @@ size_t DinputDevice::getNumPads()
 static std::set<u32> DetectXInputVIDPIDs() {
 	std::set<u32> xinputVidPids;
 
-	IWbemLocator* pIWbemLocator = nullptr;
+	ComPtr<IWbemLocator> pIWbemLocator;
 	if (FAILED(CoCreateInstance(__uuidof(WbemLocator), nullptr, CLSCTX_INPROC_SERVER,
-		__uuidof(IWbemLocator), (void**)&pIWbemLocator)))
+		IID_PPV_ARGS(&pIWbemLocator))))
 		return xinputVidPids;
 
-	IWbemServices* pIWbemServices = nullptr;
+	ComPtr<IWbemServices> pIWbemServices;
 	if (FAILED(pIWbemLocator->ConnectServer(_bstr_t(L"root\\cimv2"), nullptr, nullptr, nullptr, 0,
-		nullptr, nullptr, &pIWbemServices))) {
-		pIWbemLocator->Release();
+		nullptr, nullptr, &pIWbemServices)))
 		return xinputVidPids;
-	}
 
-	CoSetProxyBlanket(pIWbemServices, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
+	CoSetProxyBlanket(pIWbemServices.Get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
 		RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
 
-	IEnumWbemClassObject* pEnumDevices = nullptr;
-	if (FAILED(pIWbemServices->CreateInstanceEnum(_bstr_t(L"Win32_PNPEntity"), 0, nullptr, &pEnumDevices))) {
-		pIWbemServices->Release();
-		pIWbemLocator->Release();
+	ComPtr<IEnumWbemClassObject> pEnumDevices;
+	if (FAILED(pIWbemServices->CreateInstanceEnum(_bstr_t(L"Win32_PNPEntity"), 0, nullptr, &pEnumDevices)))
 		return xinputVidPids;
-	}
 
 	IWbemClassObject* pDevices[32] = { 0 };
 	ULONG uReturned = 0;
 
 	while (SUCCEEDED(pEnumDevices->Next(10000, 32, pDevices, &uReturned)) && uReturned > 0) {
 		for (ULONG i = 0; i < uReturned; i++) {
-			VARIANT var;
+			VARIANT var{};
 			if (SUCCEEDED(pDevices[i]->Get(L"DeviceID", 0, &var, nullptr, nullptr)))
 			{
-				if (wcsstr(var.bstrVal, L"IG_"))
+				if (var.vt == VT_BSTR && var.bstrVal != nullptr && wcsstr(var.bstrVal, L"IG_"))
 				{
 					DWORD vid = 0, pid = 0;
 					const WCHAR *strVid = wcsstr(var.bstrVal, L"VID_");
@@ -363,10 +408,6 @@ static std::set<u32> DetectXInputVIDPIDs() {
 		}
 	}
 
-	pEnumDevices->Release();
-	pIWbemServices->Release();
-	pIWbemLocator->Release();
-
 	return xinputVidPids;
 }
 
@@ -379,7 +420,7 @@ DInputMetaDevice::DInputMetaDevice() {
 }
 
 int DInputMetaDevice::UpdateState() {
-	static const int CHECK_FREQUENCY = 71;  // Just an arbitrary prime to try to not collide with other periodic checks.
+	constexpr int CHECK_FREQUENCY = 787;  // Just an arbitrary prime to try to not collide with other periodic checks.
 	if (checkCounter_++ > CHECK_FREQUENCY) {
 		const size_t newCount = DinputDevice::getNumPads();
 		if (newCount > numDinputDevices_) {

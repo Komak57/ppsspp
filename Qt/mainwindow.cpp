@@ -19,6 +19,7 @@
 #include "Core/HLE/sceUmd.h"
 #include "Core/SaveState.h"
 #include "Core/System.h"
+#include "Core/Screenshot.h"
 #include "GPU/GPUCommon.h"
 #include "UI/GamepadEmu.h"
 
@@ -60,16 +61,16 @@ void MainWindow::newFrame()
 {
 	if (lastUIState != GetUIState()) {
 		lastUIState = GetUIState();
-		if (lastUIState == UISTATE_INGAME && g_Config.UseFullScreen() && !QApplication::overrideCursor() && !g_Config.bShowTouchControls)
+		if (lastUIState == UISTATE_INGAME && g_Config.bFullScreen && !QApplication::overrideCursor() && !g_Config.bShowTouchControls)
 			QApplication::setOverrideCursor(QCursor(Qt::BlankCursor));
-		if (lastUIState != UISTATE_INGAME && g_Config.UseFullScreen() && QApplication::overrideCursor())
+		if (lastUIState != UISTATE_INGAME && g_Config.bFullScreen && QApplication::overrideCursor())
 			QApplication::restoreOverrideCursor();
 
 		updateMenus();
 	}
 
-	if (g_Config.UseFullScreen() != isFullScreen())
-		SetFullScreen(g_Config.UseFullScreen());
+	if (g_Config.bFullScreen != isFullScreen())
+		SetFullScreen(g_Config.bFullScreen);
 
 	std::unique_lock<std::mutex> lock(msgMutex_);
 	while (!msgQueue_.empty()) {
@@ -95,20 +96,23 @@ void MainWindow::updateMenuGroupInt(QActionGroup *group, int value) {
 
 void MainWindow::updateMenus()
 {
+	const DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(g_display.GetDeviceOrientation());
+
 	updateMenuGroupInt(saveStateGroup, g_Config.iCurrentStateSlot);
-	updateMenuGroupInt(displayRotationGroup, g_Config.iInternalScreenRotation);
+	updateMenuGroupInt(displayRotationGroup, config.iInternalScreenRotation);
 	updateMenuGroupInt(renderingResolutionGroup, g_Config.iInternalResolution);
 	updateMenuGroupInt(frameSkippingGroup, g_Config.iFrameSkip);
 	updateMenuGroupInt(textureFilteringGroup, g_Config.iTexFiltering);
-	updateMenuGroupInt(screenScalingFilterGroup, g_Config.iDisplayFilter);
+	updateMenuGroupInt(screenScalingFilterGroup, config.iDisplayFilter);
 	updateMenuGroupInt(textureScalingLevelGroup, g_Config.iTexScalingLevel);
 	updateMenuGroupInt(textureScalingTypeGroup, g_Config.iTexScalingType);
 
+	bool internalPortrait = config.InternalRotationIsPortrait();
 	foreach(QAction * action, windowGroup->actions()) {
-		int width = (g_Config.IsPortrait() ? 272 : 480) * action->data().toInt();
-		int height = (g_Config.IsPortrait() ? 480 : 272) * action->data().toInt();
+		int width = (internalPortrait ? 272 : 480) * action->data().toInt();
+		int height = (internalPortrait ? 480 : 272) * action->data().toInt();
 		if (g_Config.iWindowWidth == width && g_Config.iWindowHeight == height) {
-			action->setChecked(true);
+			action->setChecked(true);	
 			break;
 		}
 	}
@@ -165,13 +169,13 @@ static void SaveStateActionFinished(SaveState::Status status, std::string_view m
 void MainWindow::qlstateAct()
 {
 	Path gamePath = PSP_CoreParameter().fileToStart;
-	SaveState::LoadSlot(gamePath, 0, SaveStateActionFinished);
+	SaveState::LoadSlot(SaveState::GetGamePrefix(g_paramSFO), 0, SaveStateActionFinished);
 }
 
 void MainWindow::qsstateAct()
 {
 	Path gamePath = PSP_CoreParameter().fileToStart;
-	SaveState::SaveSlot(gamePath, 0, SaveStateActionFinished);
+	SaveState::SaveSlot(SaveState::GetGamePrefix(g_paramSFO), 0, SaveStateActionFinished);
 }
 
 void MainWindow::lstateAct()
@@ -376,7 +380,6 @@ void MainWindow::SetFullScreen(bool fullscreen) {
 #endif
 
 		showFullScreen();
-		InitPadLayout(g_display.dp_xres, g_display.dp_yres);
 
 		if (GetUIState() == UISTATE_INGAME && !g_Config.bShowTouchControls)
 			QApplication::setOverrideCursor(QCursor(Qt::BlankCursor));
@@ -388,7 +391,6 @@ void MainWindow::SetFullScreen(bool fullscreen) {
 
 		showNormal();
 		SetWindowScale(-1);
-		InitPadLayout(g_display.dp_xres, g_display.dp_yres);
 
 		if (GetUIState() == UISTATE_INGAME && QApplication::overrideCursor())
 			QApplication::restoreOverrideCursor();
@@ -406,7 +408,6 @@ void MainWindow::fullscrAct()
 {
 	// Toggle the current state.
 	g_Config.bFullScreen = !isFullScreen();
-	g_Config.iForceFullScreen = -1;
 	SetFullScreen(g_Config.bFullScreen);
 
 	QTimer::singleShot(1000, this, SLOT(raiseTopMost()));
@@ -457,6 +458,9 @@ void MainWindow::SetWindowScale(int zoom) {
 	if (isFullScreen())
 		fullscrAct();
 
+	const DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(g_display.GetDeviceOrientation());
+	const bool internalPortrait = config.InternalRotationIsPortrait();
+
 	int width, height;
 	if (zoom == -1 && (g_Config.iWindowWidth <= 0 || g_Config.iWindowHeight <= 0)) {
 		// Default to zoom level 2.
@@ -473,8 +477,8 @@ void MainWindow::SetWindowScale(int zoom) {
 		if (zoom > 10)
 			zoom = 10;
 
-		width = (g_Config.IsPortrait() ? 272 : 480) * zoom;
-		height = (g_Config.IsPortrait() ? 480 : 272) * zoom;
+		width = (internalPortrait ? 272 : 480) * zoom;
+		height = (internalPortrait ? 480 : 272) * zoom;
 	}
 
 	g_Config.iWindowWidth = width;
@@ -516,6 +520,10 @@ void MainWindow::loadLanguage(const QString& language, bool translate)
 	}
 }
 
+void MainWindow::takeScreen() {
+	TakeUserScreenshot();
+}
+
 void MainWindow::createMenus()
 {
 	// File
@@ -527,9 +535,17 @@ void MainWindow::createMenus()
 		->addEnableState(UISTATE_MENU);
 	fileMenu->addSeparator();
 	MenuTree* savestateMenu = new MenuTree(this, fileMenu, QT_TR_NOOP("Saves&tate slot"));
+
+	QStringList slotNames;
+	QList<int> slotIndices;
+	for (int i = 0; i < g_Config.iSaveStateSlotCount; ++i) {
+		slotNames << QString::number(i + 1);
+		slotIndices << i;
+	}
 	saveStateGroup = new MenuActionGroup(this, savestateMenu, SLOT(saveStateGroup_triggered(QAction *)),
-		QStringList() << "1" << "2" << "3" << "4" << "5",
-		QList<int>() << 0 << 1 << 2 << 3 << 4);
+		slotNames,
+		slotIndices);
+
 	fileMenu->add(new MenuAction(this, SLOT(qlstateAct()),    QT_TR_NOOP("L&oad state"), Qt::Key_F4))
 		->addDisableState(UISTATE_MENU);
 	fileMenu->add(new MenuAction(this, SLOT(qsstateAct()),    QT_TR_NOOP("S&ave state"), Qt::Key_F2))

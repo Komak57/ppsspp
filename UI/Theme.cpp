@@ -25,7 +25,8 @@
 #include "Common/File/DirListing.h"
 #include "Common/Log/LogManager.h"
 #include "Common/File/VFS/VFS.h"
-
+#include "Common/Data/Text/I18n.h"
+#include "Common/Render/Text/draw_text.h"
 #include "Core/Config.h"
 
 #include "Common/UI/View.h"
@@ -87,29 +88,32 @@ static void LoadThemeInfo(const std::vector<Path> &directories) {
 		themeInfos.push_back(info);
 	};
 
-	for (size_t d = 0; d < directories.size(); d++) {
+	for (const auto &d : directories) {
 		std::vector<File::FileInfo> fileInfo;
-		g_VFS.GetFileListing(directories[d].c_str(), &fileInfo, "ini:");
+		g_VFS.GetFileListing(d.c_str(), &fileInfo, "ini:");
 
 		if (fileInfo.empty()) {
-			File::GetFilesInDir(directories[d], &fileInfo, "ini:");
+			File::GetFilesInDir(d, &fileInfo, "ini:");
 		}
 
-		for (size_t f = 0; f < fileInfo.size(); f++) {
+		for (const auto &f : fileInfo) {
 			IniFile ini;
 			bool success = false;
-			if (fileInfo[f].isDirectory)
+			if (f.isDirectory) {
 				continue;
+			}
 
-			Path name = fileInfo[f].fullName;
-			Path path = directories[d];
+			Path name(f.fullName);
+			Path path = d;
 			// Hack around Android VFS path bug. really need to redesign this.
-			if (name.ToString().substr(0, 7) == "assets/")
+			if (name.ToString().substr(0, 7) == "assets/") {
 				name = Path(name.ToString().substr(7));
-			if (path.ToString().substr(0, 7) == "assets/")
+			}
+			if (path.ToString().substr(0, 7) == "assets/") {
 				path = Path(path.ToString().substr(7));
+			}
 
-			if (ini.LoadFromVFS(g_VFS, name.ToString()) || ini.Load(fileInfo[f].fullName)) {
+			if (ini.LoadFromVFS(g_VFS, name.ToString()) || ini.Load(f.fullName)) {
 				success = true;
 			}
 
@@ -198,15 +202,21 @@ void UpdateTheme() {
 		}
 	}
 
-#if defined(USING_WIN_UI) || PPSSPP_PLATFORM(UWP) || defined(USING_QT_UI)
-	ui_theme.uiFont = UI::FontStyle(FontID("UBUNTU24"), g_Config.sFont.c_str(), 22);
-	ui_theme.uiFontSmall = UI::FontStyle(FontID("UBUNTU24"), g_Config.sFont.c_str(), 17);
-	ui_theme.uiFontBig = UI::FontStyle(FontID("UBUNTU24"), g_Config.sFont.c_str(), 28);
-#else
-	ui_theme.uiFont = UI::FontStyle(FontID("UBUNTU24"), "", 20);
-	ui_theme.uiFontSmall = UI::FontStyle(FontID("UBUNTU24"), "", 15);
-	ui_theme.uiFontBig = UI::FontStyle(FontID("UBUNTU24"), "", 26);
-#endif
+	// Desktop font override support
+	auto des = GetI18NCategory(I18NCat::DESKTOPUI);
+	std::string_view fontOverride = des->T("Font", "");
+	if (fontOverride == "Font") {
+		fontOverride = "";
+	}
+	if (!fontOverride.empty()) {
+		SetFontNameOverride(FontFamily::SansSerif, fontOverride);
+	}
+
+	ui_theme.uiFontTiny = FontStyle(FontFamily::SansSerif, 14, FontStyleFlags::Default);
+	ui_theme.uiFontSmall = FontStyle(FontFamily::SansSerif, 17, FontStyleFlags::Default);
+	ui_theme.uiFont = FontStyle(FontFamily::SansSerif, 22, FontStyleFlags::Default);
+	ui_theme.uiFontBig = FontStyle(FontFamily::SansSerif, 28, FontStyleFlags::Bold);
+	ui_theme.uiFontCode = FontStyle(FontFamily::Fixed, 14, FontStyleFlags::Default);
 
 	ui_theme.checkOn = ImageID("I_CHECKEDBOX");
 	ui_theme.checkOff = ImageID("I_UNCHECKEDBOX");
@@ -238,7 +248,7 @@ void UpdateTheme() {
 	ui_theme.popupSliderFocusedColor = themeInfo.uPopupSliderFocusedColor;
 }
 
-UI::Theme *GetTheme() {
+const UI::Theme *GetTheme() {
 	return &ui_theme;
 }
 

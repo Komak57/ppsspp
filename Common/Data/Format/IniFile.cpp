@@ -14,7 +14,6 @@
 #endif
 
 #include <iostream>
-#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -31,11 +30,11 @@
 // This unescapes # signs.
 // NOTE: These parse functions can make better use of the string_view - the pos argument should not be needed, for example.
 static bool ParseLineKey(std::string_view line, size_t &pos, std::string *keyOut) {
-	std::string key = "";
+	std::string key;
 
 	while (pos < line.size()) {
 		size_t next = line.find_first_of("=#", pos);
-		if (next == line.npos || next == 0) {
+		if (next == std::string::npos || next == 0) {
 			// Key never ended or empty, invalid.
 			return false;
 		} else if (line[next] == '#') {
@@ -69,14 +68,14 @@ static bool ParseLineValue(std::string_view line, size_t &pos, std::string *valu
 	if (strippedLine.size() >= 2 && strippedLine[0] == '"' && strippedLine[strippedLine.size() - 1] == '"') {
 		// Don't remove comment if is surrounded by " "
 		value += line.substr(pos);
-		pos = line.npos; // Won't enter the while below
+		pos = std::string_view::npos; // Won't enter the while below
 	}
 
 	while (pos < line.size()) {
 		size_t next = line.find('#', pos);
-		if (next == line.npos) {
+		if (next == std::string_view::npos) {
 			value += line.substr(pos);
-			pos = line.npos;
+			pos = std::string_view::npos;
 			break;
 		} else if (line[next - 1] != '\\') {
 			// It wasn't escaped, so finish before the #.
@@ -149,9 +148,9 @@ static std::string EscapeHash(std::string_view value) {
 
 	for (size_t pos = 0; pos < value.size(); ) {
 		size_t next = value.find('#', pos);
-		if (next == value.npos) {
+		if (next == std::string_view::npos) {
 			result += value.substr(pos);
-			pos = value.npos;
+			pos = std::string_view::npos;
 		} else {
 			result += value.substr(pos, next - pos);
 			result += "\\#";
@@ -173,7 +172,10 @@ ParsedIniLine::ParsedIniLine(std::string_view line) {
 		value.clear();
 		comment = line;
 	} else {
-		ParseLine(line, &key, &value, &comment);
+		if (!ParseLine(line, &key, &value, &comment)) {
+			// Preserve bogus input but turn it into comments.
+			comment = "# " + std::string(line);
+		}
 	}
 }
 
@@ -189,11 +191,12 @@ void Section::Clear() {
 	lines_.clear();
 }
 
-bool Section::GetKeys(std::vector<std::string> &keys) const {
-	keys.clear();
+bool Section::GetKeys(std::vector<std::string> *keys) const {
+	keys->clear();
+	keys->reserve(lines_.size());
 	for (const auto &line : lines_) {
 		if (!line.Key().empty())
-			keys.emplace_back(line.Key());
+			keys->emplace_back(line.Key());
 	}
 	return true;
 }
@@ -366,7 +369,7 @@ bool Section::Get(std::string_view key, double* value) const {
 	return false;
 }
 
-bool Section::Exists(std::string_view key) const {
+bool Section::HasKey(std::string_view key) const {
 	for (auto &line : lines_) {
 		if (equalsNoCase(key, line.Key()))
 			return true;
@@ -438,35 +441,6 @@ bool IniFile::DeleteSection(std::string_view sectionName) {
 	return false;
 }
 
-bool IniFile::Exists(std::string_view sectionName, std::string_view key) const {
-	const Section* section = GetSection(sectionName);
-	if (!section)
-		return false;
-	return section->Exists(key);
-}
-
-bool IniFile::DeleteKey(std::string_view sectionName, std::string_view key) {
-	Section* section = GetSection(sectionName);
-	if (!section)
-		return false;
-	ParsedIniLine *line = section->GetLine(key);
-	for (auto liter = section->lines_.begin(); liter != section->lines_.end(); ++liter) {
-		if (line == &(*liter)) {
-			section->lines_.erase(liter);
-			return true;
-		}
-	}
-	return false; //shouldn't happen
-}
-
-// Return a list of all keys in a section
-bool IniFile::GetKeys(std::string_view sectionName, std::vector<std::string>& keys) const {
-	const Section *section = GetSection(sectionName);
-	if (!section)
-		return false;
-	return section->GetKeys(keys);
-}
-
 void IniFile::SortSections() {
 	std::sort(sections.begin(), sections.end());
 }
@@ -502,7 +476,7 @@ bool IniFile::Load(std::istream &in) {
 	std::string linebuf;
 
 	while (std::getline(in, linebuf)) {
-		std::string_view line = StripSpaces(std::string_view(linebuf));
+		std::string_view line = std::string_view(linebuf);
 		// Remove UTF-8 byte order marks.
 		if (line.substr(0, 3) == "\xEF\xBB\xBF") {
 			line = line.substr(3);
@@ -565,56 +539,4 @@ bool IniFile::Save(const Path &filename)
 
 	fclose(file);
 	return true;
-}
-
-bool IniFile::Get(std::string_view sectionName, std::string_view key, std::string *value) const {
-	const Section *section = GetSection(sectionName);
-	if (!section) {
-		return false;
-	}
-	return section->Get(key, value);
-}
-
-bool IniFile::Get(std::string_view sectionName, std::string_view key, std::vector<std::string> *values) const {
-	const Section *section = GetSection(sectionName);
-	if (!section) {
-		return false;
-	}
-	return section->Get(key, values);
-}
-
-bool IniFile::Get(std::string_view sectionName, std::string_view key, int *value) const {
-	const Section *section = GetSection(sectionName);
-	if (!section) {
-		return false;
-	} else {
-		return section->Get(key, value);
-	}
-}
-
-bool IniFile::Get(std::string_view sectionName, std::string_view key, uint32_t *value) const {
-	const Section *section = GetSection(sectionName);
-	if (!section) {
-		return false;
-	} else {
-		return section->Get(key, value);
-	}
-}
-
-bool IniFile::Get(std::string_view sectionName, std::string_view key, uint64_t *value) const {
-	const Section *section = GetSection(sectionName);
-	if (!section) {
-		return false;
-	} else {
-		return section->Get(key, value);
-	}
-}
-
-bool IniFile::Get(std::string_view sectionName, std::string_view key, bool *value) const {
-	const Section *section = GetSection(sectionName);
-	if (!section) {
-		return false;
-	} else {
-		return section->Get(key, value);
-	}
 }

@@ -20,11 +20,20 @@
 #include <cstdint>
 #include <cmath>
 #include <string>
+#include <string_view>
 #ifndef _MSC_VER
 #include <strings.h>
 #endif
 #include "Common/Common.h"
 #include "Common/CommonFuncs.h"
+
+struct ConfigBlock {
+	virtual ~ConfigBlock() = default;
+	virtual bool CanResetToDefault() const { return false; }
+	// If a block returns false here (like Config itself does), resetting to default will happen by the old per-setting mechanism.
+	virtual bool ResetToDefault(std::string_view blockName) { return false; }
+	virtual size_t Size() const { return sizeof(ConfigBlock); }  // For sanity checks
+};
 
 constexpr int PSP_MODEL_FAT = 0;
 constexpr int PSP_MODEL_SLIM = 1;
@@ -34,6 +43,8 @@ constexpr int VOLUME_FULL = 10;
 constexpr int VOLUMEHI_FULL = 100;  // for newer volume params. will convert them all later
 constexpr int AUDIOSAMPLES_MIN = 0;
 constexpr int AUDIOSAMPLES_MAX = 2048;
+constexpr float NO_DEFAULT_FLOAT = -1000000.0f;
+constexpr int NO_DEFAULT_INT = -1000000;
 
 // This matches exactly the old shift-based curve.
 float Volume10ToMultiplier(int volume);
@@ -48,11 +59,11 @@ int MultiplierToVolume100(float multiplier);
 float UIScaleFactorToMultiplier(int factor);
 
 struct ConfigTouchPos {
-	float x;
-	float y;
-	float scale;
+	float x = -1.0f;
+	float y = -1.0f;
+	float scale = 1.0f;
 	// Note: Show is not used for all settings.
-	bool show;
+	bool show = true;
 };
 
 struct ConfigCustomButton {
@@ -70,13 +81,19 @@ enum class CPUCore {
 	JIT_IR = 3,
 };
 
+enum class AdhocServerRelayMode {
+	Auto = 0,
+	AlwaysOn = 1,
+	AlwaysOff = 2,
+};
+
 enum {
 	ROTATION_AUTO = 0,
 	ROTATION_LOCKED_HORIZONTAL = 1,
 	ROTATION_LOCKED_VERTICAL = 2,
 	ROTATION_LOCKED_HORIZONTAL180 = 3,
-	ROTATION_LOCKED_VERTICAL180 = 4,
-	ROTATION_AUTO_HORIZONTAL = 5,
+	ROTATION_LOCKED_VERTICAL180 = 4,  // Deprecated
+	ROTATION_AUTO_HORIZONTAL = 5,     // Un-deprecated again
 };
 
 enum TextureFiltering {
@@ -84,6 +101,13 @@ enum TextureFiltering {
 	TEX_FILTER_FORCE_NEAREST = 2,
 	TEX_FILTER_FORCE_LINEAR = 3,
 	TEX_FILTER_AUTO_MAX_QUALITY = 4,
+};
+
+// Can't be named WindowState due to collision with SDL.
+enum class WindowSizeState {
+	Normal = 0,
+	Minimized = 1,
+	Maximized = 2,
 };
 
 enum ReplacementTextureLoadSpeed {
@@ -122,6 +146,7 @@ enum class AudioSyncMode {
 	CLASSIC_PITCH = 1,
 };
 
+// TODO: We can make this more fine-grained.
 enum class RestoreSettingsBits : int {
 	SETTINGS = 1,
 	CONTROLS = 2,
@@ -199,6 +224,7 @@ enum class DumpFileType {
 	EBOOT = (1 << 0),
 	PRX = (1 << 1),
 	Atrac3 = (1 << 2),
+	PBP_ISO = (1 << 3),
 };
 ENUM_CLASS_BITOPS(DumpFileType);
 

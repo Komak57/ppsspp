@@ -24,20 +24,22 @@
 
 namespace UI {
 
-void ApplyGravity(const Bounds &outer, const Margins &margins, float w, float h, int gravity, Bounds &inner) {
+void ApplyGravity(const Bounds &outer, const Margins &margins, float w, float h, Gravity gravity, Bounds &inner) {
 	inner.w = w;
 	inner.h = h;
 
-	switch (gravity & G_HORIZMASK) {
-	case G_LEFT: inner.x = outer.x + margins.left; break;
-	case G_RIGHT: inner.x = outer.x + outer.w - w - margins.right; break;
-	case G_HCENTER: inner.x = outer.x + (outer.w - w) * 0.5f; break;
+	switch ((Gravity)((int)gravity & (int)Gravity::G_HORIZMASK)) {
+	case Gravity::G_LEFT: inner.x = outer.x + margins.left; break;
+	case Gravity::G_RIGHT: inner.x = outer.x + outer.w - w - margins.right; break;
+	case Gravity::G_HCENTER: inner.x = outer.x + (outer.w - w) * 0.5f; break;
+	default: break;
 	}
 
-	switch (gravity & G_VERTMASK) {
-	case G_TOP: inner.y = outer.y + margins.top; break;
-	case G_BOTTOM: inner.y = outer.y + outer.h - h - margins.bottom; break;
-	case G_VCENTER: inner.y = outer.y + (outer.h - h) * 0.5f; break;
+	switch ((Gravity)((int)gravity & (int)Gravity::G_VERTMASK)) {
+	case Gravity::G_TOP: inner.y = outer.y + margins.top; break;
+	case Gravity::G_BOTTOM: inner.y = outer.y + outer.h - h - margins.bottom; break;
+	case Gravity::G_VCENTER: inner.y = outer.y + (outer.h - h) * 0.5f; break;
+	default: break;
 	}
 }
 
@@ -46,7 +48,7 @@ ViewGroup::~ViewGroup() {
 	Clear();
 }
 
-void ViewGroup::Recurse(void (*func)(View *view)) {
+void ViewGroup::Recurse(std::function<void(View *)> func) {
 	for (View *view : views_) {
 		func(view);
 		view->Recurse(func);
@@ -107,7 +109,7 @@ bool ViewGroup::Touch(const TouchInput &input) {
 		if (view->GetVisibility() == V_VISIBLE) {
 			bool touch = view->Touch(input);
 			any = any || touch;
-			if (exclusiveTouch_ && touch && (input.flags & TOUCH_DOWN)) {
+			if (exclusiveTouch_ && touch && (input.flags & TouchInputFlags::DOWN)) {
 				break;
 			}
 		}
@@ -158,6 +160,18 @@ void ViewGroup::DeviceRestored(Draw::DrawContext *draw) {
 	}
 }
 
+bool ViewGroup::ReplaceSubview(View *view, View *newView) {
+	for (int i = 0; i < (int)views_.size(); i++) {
+		if (views_[i] == view) {
+			views_[i] = newView;
+			delete view;
+			return true;
+		}
+	}
+	delete newView;
+	return false;
+}
+
 void ViewGroup::Draw(UIContext &dc) {
 	if (hasDropShadow_) {
 		// Darken things behind.
@@ -201,7 +215,8 @@ std::string ViewGroup::DescribeText() const {
 		ss << s;
 		needNewline = s[s.length() - 1] != '\n';
 	}
-	return ss.str();
+	const std::string desc = ss.str();
+	return desc.empty() ? "empty viewgroup" : desc;
 }
 
 std::string ViewGroup::DescribeListUnordered(std::string_view heading) const {
@@ -251,10 +266,10 @@ void ViewGroup::Update() {
 	}
 }
 
-bool ViewGroup::SetFocus() {
+bool ViewGroup::SetFocus(FocusFlags cause) {
 	if (!CanBeFocused() && !views_.empty()) {
 		for (View *view : views_) {
-			if (view->SetFocus())
+			if (view->SetFocus(cause))
 				return true;
 		}
 	}
@@ -299,7 +314,7 @@ static float VerticalOverlap(const Bounds &a, const Bounds &b) {
 		return std::min(1.0f, overlap / minH);
 }
 
-float GetTargetScore(const Point2D &originPos, int originIndex, const View *origin, const View *destination, FocusDirection direction) {
+float GetTargetScore(const Point2D &originPos, int originIndex, const View *origin, const View *destination, FocusMove direction) {
 	// Skip labels and things like that.
 	if (!destination->CanBeFocused())
 		return 0.0f;
@@ -313,34 +328,31 @@ float GetTargetScore(const Point2D &originPos, int originIndex, const View *orig
 	float dx = destPos.x - originPos.x;
 	float dy = destPos.y - originPos.y;
 
-	float distance = sqrtf(dx*dx + dy*dy);
-	if (distance == 0.0f) {
-		distance = 0.001f;
-	}
+	const float distance = std::max(sqrtf(dx*dx + dy*dy), 0.001f);
 	float overlap = 0.0f;
-	float dirX = dx / distance;
-	float dirY = dy / distance;
+	const float dirX = dx / distance;
+	const float dirY = dy / distance;
 
 	bool wrongDirection = false;
 	bool vertical = false;
-	float horizOverlap = HorizontalOverlap(origin->GetBounds(), destination->GetBounds());
-	float vertOverlap = VerticalOverlap(origin->GetBounds(), destination->GetBounds());
+	const float horizOverlap = HorizontalOverlap(origin->GetBounds(), destination->GetBounds());
+	const float vertOverlap = VerticalOverlap(origin->GetBounds(), destination->GetBounds());
 	if (horizOverlap == 1.0f && vertOverlap == 1.0f) {
-		if (direction != FOCUS_PREV_PAGE && direction != FOCUS_NEXT_PAGE) {
-			INFO_LOG(Log::UI, "Contain overlap");
-			return 0.0;
+		if (direction != FocusMove::PREV_PAGE && direction != FocusMove::NEXT_PAGE) {
+			INFO_LOG(Log::UI, "Contain overlap: %s, %s", origin->Tag().c_str(), destination->Tag().c_str());
+			return 0.0f;
 		}
 	}
 	float originSize = 0.0f;
 	switch (direction) {
-	case FOCUS_LEFT:
+	case FocusMove::LEFT:
 		overlap = vertOverlap;
 		originSize = origin->GetBounds().w;
 		if (dirX > 0.0f) {
 			wrongDirection = true;
 		}
 		break;
-	case FOCUS_UP:
+	case FocusMove::UP:
 		overlap = horizOverlap;
 		originSize = origin->GetBounds().h;
 		if (dirY > 0.0f) {
@@ -348,14 +360,14 @@ float GetTargetScore(const Point2D &originPos, int originIndex, const View *orig
 		}
 		vertical = true;
 		break;
-	case FOCUS_RIGHT:
+	case FocusMove::RIGHT:
 		overlap = vertOverlap;
 		originSize = origin->GetBounds().w;
 		if (dirX < 0.0f) {
 			wrongDirection = true;
 		}
 		break;
-	case FOCUS_DOWN:
+	case FocusMove::DOWN:
 		overlap = horizOverlap;
 		originSize = origin->GetBounds().h;
 		if (dirY < 0.0f) {
@@ -363,27 +375,27 @@ float GetTargetScore(const Point2D &originPos, int originIndex, const View *orig
 		}
 		vertical = true;
 		break;
-	case FOCUS_FIRST:
+	case FocusMove::FIRST:
 		if (originIndex == -1)
 			return 0.0f;
 		if (dirX > 0.0f || dirY > 0.0f)
 			return 0.0f;
 		// More distance is good.
 		return distance;
-	case FOCUS_LAST:
+	case FocusMove::LAST:
 		if (originIndex == -1)
 			return 0.0f;
 		if (dirX < 0.0f || dirY < 0.0f)
 			return 0.0f;
 		// More distance is good.
 		return distance;
-	case FOCUS_PREV_PAGE:
-	case FOCUS_NEXT_PAGE:
+	case FocusMove::PREV_PAGE:
+	case FocusMove::NEXT_PAGE:
 		// Not always, but let's go with the bonus on height.
 		vertical = true;
 		break;
-	case FOCUS_PREV:
-	case FOCUS_NEXT:
+	case FocusMove::PREV:
+	case FocusMove::NEXT:
 		ERROR_LOG(Log::UI, "Invalid focus direction");
 		break;
 	}
@@ -399,12 +411,12 @@ float GetTargetScore(const Point2D &originPos, int originIndex, const View *orig
 	}
 }
 
-static float GetDirectionScore(int originIndex, const View *origin, View *destination, FocusDirection direction) {
+static float GetDirectionScore(int originIndex, const View *origin, View *destination, FocusMove direction) {
 	Point2D originPos = origin->GetFocusPosition(direction);
 	return GetTargetScore(originPos, originIndex, origin, destination, direction);
 }
 
-NeighborResult ViewGroup::FindNeighbor(View *view, FocusDirection direction, NeighborResult result) {
+NeighborResult ViewGroup::FindNeighbor(View *view, FocusMove direction, NeighborResult result) {
 	if (!IsEnabled()) {
 		INFO_LOG(Log::UI, "Not enabled");
 		return result;
@@ -423,12 +435,12 @@ NeighborResult ViewGroup::FindNeighbor(View *view, FocusDirection direction, Nei
 	}
 
 	switch (direction) {
-	case FOCUS_UP:
-	case FOCUS_LEFT:
-	case FOCUS_RIGHT:
-	case FOCUS_DOWN:
-	case FOCUS_FIRST:
-	case FOCUS_LAST:
+	case FocusMove::UP:
+	case FocusMove::LEFT:
+	case FocusMove::RIGHT:
+	case FocusMove::DOWN:
+	case FocusMove::FIRST:
+	case FocusMove::LAST:
 		{
 			// First, try the child views themselves as candidates
 			for (size_t i = 0; i < views_.size(); i++) {
@@ -457,15 +469,15 @@ NeighborResult ViewGroup::FindNeighbor(View *view, FocusDirection direction, Nei
 			}
 			return result;
 		}
-	case FOCUS_PREV_PAGE:
-	case FOCUS_NEXT_PAGE:
+	case FocusMove::PREV_PAGE:
+	case FocusMove::NEXT_PAGE:
 		return FindScrollNeighbor(view, Point2D(INFINITY, INFINITY), direction, result);
-	case FOCUS_PREV:
+	case FocusMove::PREV:
 		// If view not found, no neighbor to find.
 		if (num == -1)
 			return NeighborResult(nullptr, 0.0f);
 		return NeighborResult(views_[(num + views_.size() - 1) % views_.size()], 0.0f);
-	case FOCUS_NEXT:
+	case FocusMove::NEXT:
 		// If view not found, no neighbor to find.
 		if (num == -1)
 			return NeighborResult(0, 0.0f);
@@ -477,7 +489,7 @@ NeighborResult ViewGroup::FindNeighbor(View *view, FocusDirection direction, Nei
 	}
 }
 
-NeighborResult ViewGroup::FindScrollNeighbor(View *view, const Point2D &target, FocusDirection direction, NeighborResult best) {
+NeighborResult ViewGroup::FindScrollNeighbor(View *view, const Point2D &target, FocusMove direction, NeighborResult best) {
 	if (!IsEnabled())
 		return best;
 	if (GetVisibility() != V_VISIBLE)
@@ -701,7 +713,7 @@ void LinearLayout::Layout() {
 
 		const LinearLayoutParams *linLayoutParams = views_[i]->GetLayoutParams()->As<LinearLayoutParams>();
 
-		Gravity gravity = G_TOPLEFT;
+		Gravity gravity = Gravity::G_TOPLEFT;
 		Margins margins = defaultMargins_;
 		if (linLayoutParams) {
 			if (linLayoutParams->HasMargins())
@@ -803,10 +815,12 @@ void AnchorLayout::MeasureViews(const UIContext &dc, MeasureSpec horiz, MeasureS
 			width = params->width;
 			height = params->height;
 
-			if (!params->center) {
+			if (!(params->centering & Centering::Horizontal)) {
 				if (params->left > NONE && params->right > NONE) {
 					width = measuredWidth_ - params->left - params->right;
 				}
+			}
+			if (!(params->centering & Centering::Vertical)) {
 				if (params->top > NONE && params->bottom > NONE) {
 					height = measuredHeight_ - params->top - params->bottom;
 				}
@@ -837,22 +851,22 @@ static void ApplyAnchorLayoutParams(float measuredWidth, float measuredHeight, c
 	if (vBounds->h > container.h) vBounds->h = container.h;
 
 	float left = 0, top = 0, right = 0, bottom = 0;
-	bool center = false;
+	Centering centering = Centering::None;
 	if (params) {
 		left = params->left;
 		top = params->top;
 		right = params->right;
 		bottom = params->bottom;
-		center = params->center;
+		centering = params->centering;
 	}
 
 	if (left > NONE) {
 		vBounds->x = container.x + left;
-		if (center)
+		if (centering & Centering::Horizontal)
 			vBounds->x -= vBounds->w * 0.5f;
 	} else if (right > NONE) {
 		vBounds->x = container.x2() - right - vBounds->w;
-		if (center) {
+		if (centering & Centering::Horizontal) {
 			vBounds->x += vBounds->w * 0.5f;
 		}
 	} else {
@@ -862,11 +876,11 @@ static void ApplyAnchorLayoutParams(float measuredWidth, float measuredHeight, c
 
 	if (top > NONE) {
 		vBounds->y = container.y + top;
-		if (center)
+		if (centering & Centering::Vertical)
 			vBounds->y -= vBounds->h * 0.5f;
 	} else if (bottom > NONE) {
 		vBounds->y = container.y2() - bottom - vBounds->h;
-		if (center)
+		if (centering & Centering::Vertical)
 			vBounds->y += vBounds->h * 0.5f;
 	} else {
 		// Both top and bottom are NONE. Center.
@@ -906,7 +920,7 @@ void GridLayout::Measure(const UIContext &dc, MeasureSpec horiz, MeasureSpec ver
 	MeasureBySpec(layoutParams_->width, maxWidth, horiz, &measuredWidth_);
 
 	// Okay, got the width we are supposed to adjust to. Now we can calculate the number of columns.
-	numColumns_ = (measuredWidth_ - settings_.spacing) / (settings_.columnWidth + settings_.spacing);
+	numColumns_ = (measuredWidth_ + settings_.spacing) / (settings_.columnWidth + settings_.spacing);
 	if (!numColumns_) numColumns_ = 1;
 	int numRows = (numItems + (numColumns_ - 1)) / numColumns_;
 
@@ -925,7 +939,7 @@ void GridLayout::Layout() {
 
 		const GridLayoutParams *lp = views_[i]->GetLayoutParams()->As<GridLayoutParams>();
 		Bounds itemBounds, innerBounds;
-		Gravity grav = lp ? lp->gravity : G_CENTER;
+		Gravity grav = lp ? lp->gravity : Gravity::G_CENTER;
 
 		itemBounds.x = bounds_.x + x;
 		itemBounds.y = bounds_.y + y;

@@ -30,6 +30,7 @@ inline const char* DNSTypeAsString(net::DNSType type) {
 		return "N/A";
 	}
 }
+bool HostPortExists(const std::string &host, int port, int timeout_ms);
 
 bool DNSResolve(const std::string &host, const std::string &service, addrinfo **res, std::string &error, DNSType type = DNSType::ANY);
 void DNSResolveFree(addrinfo *res);

@@ -28,6 +28,8 @@
 #include "Common/GPU/Vulkan/VulkanContext.h"
 #include "Common/Log.h"
 #include "Common/TimeUtil.h"
+#include "Common/GPU/Vulkan/VulkanMemory.h"
+
 #include "GPU/GPUState.h"
 #include "GPU/Common/FragmentShaderGenerator.h"
 #include "GPU/Common/VertexShaderGenerator.h"
@@ -246,6 +248,9 @@ void ShaderManagerVulkan::Clear() {
 	lastFSID_.set_invalid();
 	lastVSID_.set_invalid();
 	lastGSID_.set_invalid();
+	lastVShader_ = nullptr;
+	lastFShader_ = nullptr;
+	lastGShader_ = nullptr;
 	gstate_c.Dirty(DIRTY_VERTEXSHADER_STATE | DIRTY_FRAGMENTSHADER_STATE | DIRTY_GEOMETRYSHADER_STATE);
 }
 
@@ -506,10 +511,10 @@ struct VulkanCacheHeader {
 
 bool ShaderManagerVulkan::LoadCacheFlags(FILE *f, DrawEngineVulkan *drawEngine) {
 	VulkanCacheHeader header{};
-	long pos = ftell(f);
+	int64_t pos = File::Ftell(f);
 	bool success = fread(&header, sizeof(header), 1, f) == 1;
 	// We'll read it again later, this is just to check the flags.
-	success = success && fseek(f, pos, SEEK_SET) == 0;
+	success = success && File::Fseek(f, pos, SEEK_SET) == 0;
 	if (!success || header.magic != CACHE_HEADER_MAGIC) {
 		WARN_LOG(Log::G3D, "Shader cache magic mismatch");
 		return false;

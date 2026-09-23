@@ -298,6 +298,26 @@ D3D11DrawContext::D3D11DrawContext(ComPtr<ID3D11Device> device, ComPtr<ID3D11Dev
 
 	caps_.coordConvention = CoordConvention::Direct3D11;
 
+	switch (featureLevel_) {
+	case D3D_FEATURE_LEVEL_11_1:
+	case D3D_FEATURE_LEVEL_11_0:
+		caps_.maxTextureSize = 16384;
+		break;
+	case D3D_FEATURE_LEVEL_10_1:
+	case D3D_FEATURE_LEVEL_10_0:
+		caps_.maxTextureSize = 8192;
+		break;
+	case D3D_FEATURE_LEVEL_9_3:
+		caps_.maxTextureSize = 4096;
+		break;
+	case D3D_FEATURE_LEVEL_9_2:
+	case D3D_FEATURE_LEVEL_9_1:
+	default:
+		caps_.maxTextureSize = 2048;
+		break;
+	}
+	caps_.maxClipPlanes = 8;
+
 	// Seems like a fair approximation...
 	caps_.dualSourceBlend = featureLevel_ >= D3D_FEATURE_LEVEL_10_0;
 	caps_.depthClampSupported = featureLevel_ >= D3D_FEATURE_LEVEL_10_0;
@@ -1432,6 +1452,9 @@ void D3D11DrawContext::DrawIndexedClippedBatchUP(const void *vdata, int vertexCo
 				break;
 			}
 			context_->PSSetShaderResources(0, 1, view.GetAddressOf());
+		} else if (draws[i].bindNativeTexture) {
+			ID3D11ShaderResourceView *view = (ID3D11ShaderResourceView *)draws[i].bindNativeTexture;
+			context_->PSSetShaderResources(0, 1, &view);
 		}
 		ComPtr<ID3D11SamplerState> sstate = ((D3D11SamplerState *)draws[i].samplerState)->ss;
 		context_->PSSetSamplers(0, 1, sstate.GetAddressOf());
@@ -1751,6 +1774,7 @@ bool D3D11DrawContext::CopyFramebufferToMemory(Framebuffer *src, Aspect channelB
 		case Aspect::STENCIL_BIT:
 			if (!fb)
 				return false;
+			break;
 		default:
 			break;
 		}

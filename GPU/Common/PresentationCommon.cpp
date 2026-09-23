@@ -54,7 +54,7 @@ void SetOverrideScreenFrame(const Bounds *bounds) {
 	}
 }
 
-FRect GetScreenFrame(float pixelWidth, float pixelHeight) {
+FRect GetScreenFrame(bool ignoreScreenInsets, float pixelWidth, float pixelHeight) {
 	FRect rc = FRect{
 		0.0f,
 		0.0f,
@@ -62,14 +62,25 @@ FRect GetScreenFrame(float pixelWidth, float pixelHeight) {
 		pixelHeight,
 	};
 
-	bool applyInset = !g_Config.bIgnoreScreenInsets;
+	const bool applyInset = !ignoreScreenInsets;
 
-	if (applyInset) {
+	if (g_overrideScreenBounds) {
+		// Set rectangle to match central node. Here we ignore bIgnoreScreenInsets.
+		rc.x = g_screenBounds.x;
+		rc.y = g_screenBounds.y;
+		rc.w = g_screenBounds.w;
+		rc.h = g_screenBounds.h;
+	} else if (applyInset) {
 		// Remove the DPI scale to get back to pixels.
 		float left = System_GetPropertyFloat(SYSPROP_DISPLAY_SAFE_INSET_LEFT) / g_display.dpi_scale_x;
 		float right = System_GetPropertyFloat(SYSPROP_DISPLAY_SAFE_INSET_RIGHT) / g_display.dpi_scale_x;
 		float top = System_GetPropertyFloat(SYSPROP_DISPLAY_SAFE_INSET_TOP) / g_display.dpi_scale_y;
 		float bottom = System_GetPropertyFloat(SYSPROP_DISPLAY_SAFE_INSET_BOTTOM) / g_display.dpi_scale_y;
+
+		// NOTE: Similarly to what we do in UI, we disregard any bottom inset when in landscape mode.
+		if (g_display.GetDeviceOrientation() == DeviceOrientation::Landscape) {
+			bottom = 0.0f;
+		}
 
 		// Adjust left edge to compensate for cutouts (notches) if any.
 		rc.x += left;
@@ -78,39 +89,30 @@ FRect GetScreenFrame(float pixelWidth, float pixelHeight) {
 		rc.h -= (top + bottom);
 	}
 
-	if (g_overrideScreenBounds) {
-		// Set rectangle to match central node. Here we ignore bIgnoreScreenInsets.
-		rc.x = g_screenBounds.x;
-		rc.y = g_screenBounds.y;
-		rc.w = g_screenBounds.w;
-		rc.h = g_screenBounds.h;
-	}
-
 	return rc;
 }
 
-void CalculateDisplayOutputRect(FRect *rc, float origW, float origH, const FRect &frame, int rotation) {
+void CalculateDisplayOutputRect(const DisplayLayoutConfig &config, FRect *rc, float origW, float origH, const FRect &frame, int rotation) {
 	float outW;
 	float outH;
 
 	bool rotated = rotation == ROTATION_LOCKED_VERTICAL || rotation == ROTATION_LOCKED_VERTICAL180;
 
-	bool stretch = g_Config.bDisplayStretch && !g_Config.bDisplayIntegerScale;
+	bool stretch = config.bDisplayStretch && !config.bDisplayIntegerScale;
 
-	float offsetX = g_Config.fDisplayOffsetX;
-	float offsetY = g_Config.fDisplayOffsetY;
+	float offsetX = config.fDisplayOffsetX;
+	float offsetY = config.fDisplayOffsetY;
 
-	float scale = g_Config.fDisplayScale;
-	float aspectRatioAdjust = g_Config.fDisplayAspectRatio;
+	float scale = config.fDisplayScale;
+	float aspectRatioAdjust = config.fDisplayAspectRatio;
 
 	float origRatio = !rotated ? origW / origH : origH / origW;
 	float frameRatio = frame.w / frame.h;
 
 	if (stretch) {
 		// Automatically set aspect ratio to match the display, IF the rotation matches the output display ratio! Otherwise, just
-		// sets standard aspect ratio because actually stretching will just look silly.
-		bool globalRotated = g_display.rotation == DisplayRotation::ROTATE_90 || g_display.rotation == DisplayRotation::ROTATE_270;
-		if (rotated == (g_display.dp_yres > g_display.dp_xres)) {
+		// ignore it because actually stretching will just look silly.
+		if (rotated == (g_display.GetDeviceOrientation() == DeviceOrientation::Portrait)) {
 			origRatio = frameRatio;
 		} else {
 			origRatio *= aspectRatioAdjust;
@@ -141,7 +143,7 @@ void CalculateDisplayOutputRect(FRect *rc, float origW, float origH, const FRect
 		}
 	}
 
-	if (g_Config.bDisplayIntegerScale) {
+	if (config.bDisplayIntegerScale) {
 		float wDim = 480.0f;
 		if (rotated) {
 			wDim = 272.0f;
@@ -151,7 +153,7 @@ void CalculateDisplayOutputRect(FRect *rc, float origW, float origH, const FRect
 		if (zoom == 0) {
 			// Auto (1:1) mode, not super meaningful with integer scaling, but let's do something that makes
 			// some sense. use the longest dimension, just to have something. round down.
-			if (!g_Config.IsPortrait()) {
+			if (!config.InternalRotationIsPortrait()) {
 				zoom = (PSP_CoreParameter().pixelWidth) / 480;
 			} else {
 				zoom = (PSP_CoreParameter().pixelHeight) / 480;
@@ -187,22 +189,22 @@ PresentationCommon::~PresentationCommon() {
 	DestroyDeviceObjects();
 }
 
-void PresentationCommon::GetCardboardSettings(CardboardSettings *cardboardSettings) const {
-	if (!g_Config.bEnableCardboardVR) {
+void PresentationCommon::GetCardboardSettings(const DisplayLayoutConfig &config, CardboardSettings *cardboardSettings) const {
+	if (!config.bEnableCardboardVR) {
 		cardboardSettings->enabled = false;
 		return;
 	}
 
 	// Calculate Cardboard Settings
-	float cardboardScreenScale = g_Config.iCardboardScreenSize / 100.0f;
+	float cardboardScreenScale = config.iCardboardScreenSize / 100.0f;
 	float cardboardScreenWidth = pixelWidth_ / 2.0f * cardboardScreenScale;
 	float cardboardScreenHeight = pixelHeight_ * cardboardScreenScale;
 	float cardboardMaxXShift = (pixelWidth_ / 2.0f - cardboardScreenWidth) / 2.0f;
-	float cardboardUserXShift = g_Config.iCardboardXShift / 100.0f * cardboardMaxXShift;
+	float cardboardUserXShift = config.iCardboardXShift / 100.0f * cardboardMaxXShift;
 	float cardboardLeftEyeX = cardboardMaxXShift + cardboardUserXShift;
 	float cardboardRightEyeX = pixelWidth_ / 2.0f + cardboardMaxXShift - cardboardUserXShift;
 	float cardboardMaxYShift = pixelHeight_ / 2.0f - cardboardScreenHeight / 2.0f;
-	float cardboardUserYShift = g_Config.iCardboardYShift / 100.0f * cardboardMaxYShift;
+	float cardboardUserYShift = config.iCardboardYShift / 100.0f * cardboardMaxYShift;
 	float cardboardScreenY = cardboardMaxYShift + cardboardUserYShift;
 
 	cardboardSettings->enabled = true;
@@ -266,7 +268,7 @@ static std::string ReadShaderSrc(const Path &filename) {
 
 // Note: called on resize and settings changes.
 // Also takes care of making sure the appropriate stereo shader is compiled.
-bool PresentationCommon::UpdatePostShader() {
+bool PresentationCommon::UpdatePostShader(const DisplayLayoutConfig &config) {
 	DestroyStereoShader();
 
 	if (gstate_c.Use(GPU_USE_SIMPLE_STEREO_PERSPECTIVE)) {
@@ -298,7 +300,7 @@ bool PresentationCommon::UpdatePostShader() {
 	for (size_t i = 0; i < shaderInfo.size(); ++i) {
 		const ShaderInfo *next = i + 1 < shaderInfo.size() ? shaderInfo[i + 1] : nullptr;
 		Draw::Pipeline *postPipeline = nullptr;
-		if (!BuildPostShader(shaderInfo[i], next, &postPipeline)) {
+		if (!BuildPostShader(config, shaderInfo[i], next, &postPipeline)) {
 			DestroyPostShader();
 			return false;
 		}
@@ -383,7 +385,7 @@ bool PresentationCommon::CompilePostShader(const ShaderInfo *shaderInfo, Draw::P
 	return true;
 }
 
-bool PresentationCommon::BuildPostShader(const ShaderInfo * shaderInfo, const ShaderInfo * next, Draw::Pipeline **outPipeline) {
+bool PresentationCommon::BuildPostShader(const DisplayLayoutConfig &config, const ShaderInfo *shaderInfo, const ShaderInfo * next, Draw::Pipeline **outPipeline) {
 	if (!CompilePostShader(shaderInfo, outPipeline)) {
 		return false;
 	}
@@ -398,7 +400,7 @@ bool PresentationCommon::BuildPostShader(const ShaderInfo * shaderInfo, const Sh
 
 		if (next && next->isUpscalingFilter) {
 			// Force 1x for this shader, so the next can upscale.
-			const bool isPortrait = g_Config.IsPortrait();
+			const bool isPortrait = config.InternalRotationIsPortrait();
 			nextWidth = isPortrait ? 272 : 480;
 			nextHeight = isPortrait ? 480 : 272;
 		} else if (next && next->SSAAFilterLevel >= 2) {
@@ -408,8 +410,8 @@ bool PresentationCommon::BuildPostShader(const ShaderInfo * shaderInfo, const Sh
 		} else if (shaderInfo->outputResolution) {
 			// If the current shader uses output res (not next), we will use output res for it.
 			FRect rc;
-			FRect frame = GetScreenFrame((float)pixelWidth_, (float)pixelHeight_);
-			CalculateDisplayOutputRect(&rc, 480.0f, 272.0f, frame, g_Config.iInternalScreenRotation);
+			FRect frame = GetScreenFrame(config.bIgnoreScreenInsets, (float)pixelWidth_, (float)pixelHeight_);
+			CalculateDisplayOutputRect(config, &rc, 480.0f, 272.0f, frame, config.iInternalScreenRotation);
 			nextWidth = (int)rc.w;
 			nextHeight = (int)rc.h;
 		}
@@ -541,8 +543,6 @@ void PresentationCommon::CreateDeviceObjects() {
 	texColor_ = CreatePipeline({ draw_->GetVshaderPreset(VS_TEXTURE_COLOR_2D), draw_->GetFshaderPreset(FS_TEXTURE_COLOR_2D) }, false, &vsTexColBufDesc);
 	texColorRBSwizzle_ = CreatePipeline({ draw_->GetVshaderPreset(VS_TEXTURE_COLOR_2D), draw_->GetFshaderPreset(FS_TEXTURE_COLOR_2D_RB_SWIZZLE) }, false, &vsTexColBufDesc);
 
-	if (restorePostShader_)
-		UpdatePostShader();
 	restorePostShader_ = false;
 }
 
@@ -599,10 +599,18 @@ Draw::ShaderModule *PresentationCommon::CompileShaderModule(ShaderStage stage, S
 			return nullptr;
 		}
 	}
-	Draw::ShaderModule *shader = draw_->CreateShaderModule(stage, lang_, (const uint8_t *)translated.c_str(), translated.size(), "postshader");
-	return shader;
+	return draw_->CreateShaderModule(stage, lang_, (const uint8_t *)translated.c_str(), translated.size(), "postshader");
 }
 
+void PresentationCommon::SourceBlank() {
+	DoRelease(srcTexture_);
+	DoRelease(srcFramebuffer_);
+
+	srcWidth_ = 0;
+	srcHeight_ = 0;
+}
+
+// If texture == null, that means there's nothing to display, so we should show a black screen in CopyToOutput.
 void PresentationCommon::SourceTexture(Draw::Texture *texture, int bufferWidth, int bufferHeight) {
 	// AddRef before release and assign in case it's the same.
 	texture->AddRef();
@@ -655,8 +663,11 @@ void PresentationCommon::UpdateUniforms(bool hasVideo) {
 	hasVideo_ = hasVideo;
 }
 
-void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u0, float v0, float u1, float v1) {
+void PresentationCommon::RunPostshaderPasses(const DisplayLayoutConfig &config, OutputFlags flags, int uvRotation, float u0, float v0, float u1, float v1) {
 	draw_->Invalidate(InvalidationFlags::CACHED_RENDER_STATE);
+
+	postShaderOutput_ = nullptr;
+	outputFlags_ = flags;
 
 	// TODO: If shader objects have been created by now, we might have received errors.
 	// GLES can have the shader fail later, shader->failed / shader->error.
@@ -667,7 +678,6 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 
 	const bool usePostShader = usePostShader_ && !useStereo && !(flags & OutputFlags::RB_SWIZZLE);
 	const bool isFinalAtOutputResolution = usePostShader && postShaderFramebuffers_.size() < postShaderPipelines_.size();
-	Draw::Framebuffer *postShaderOutput = nullptr;
 	int lastWidth = srcWidth_;
 	int lastHeight = srcHeight_;
 
@@ -675,15 +685,19 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 	int pixelHeight = pixelHeight_;
 
 	// These are the output coordinates.
-	FRect frame = GetScreenFrame((float)pixelWidth, (float)pixelHeight);
+	FRect frame = GetScreenFrame(config.bIgnoreScreenInsets, (float)pixelWidth, (float)pixelHeight);
 	// Note: In cardboard mode, we halve the width here to compensate
 	// for splitting the window in half, while still reusing normal centering.
-	if (g_Config.bEnableCardboardVR) {
+	if (config.bEnableCardboardVR) {
 		frame.w /= 2.0;
 		pixelWidth /= 2;
 	}
-	FRect rc;
-	CalculateDisplayOutputRect(&rc, 480.0f, 272.0f, frame, uvRotation);
+	CalculateDisplayOutputRect(config, &rc_, 480.0f, 272.0f, frame, uvRotation);
+
+	if (!srcTexture_ && !srcFramebuffer_) {
+		// Presenting blank, no need to run post shaders. But we did compute the output rect.
+		return;
+	}
 
 	// To make buffer updates easier, we use one array of verts.
 	int postVertsOffset = (int)sizeof(Vertex) * 4;
@@ -703,10 +717,10 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 	// 4-7: Post-processing, other passes
 	// 8-11: Post-processing, first pass (needs to handle cropping the input image, if wrong dimensions)
 	Vertex verts[12] = {
-		{ rc.x, rc.y, 0, finalU0, finalV0, 0xFFFFFFFF }, // TL
-		{ rc.x + rc.w, rc.y, 0, finalU1, finalV0, 0xFFFFFFFF }, // TR
-		{ rc.x, rc.y + rc.h, 0, finalU0, finalV1, 0xFFFFFFFF }, // BL
-		{ rc.x + rc.w, rc.y + rc.h, 0, finalU1, finalV1, 0xFFFFFFFF }, // BR
+		{ rc_.x, rc_.y, 0, finalU0, finalV0, 0xFFFFFFFF }, // TL
+		{ rc_.x + rc_.w, rc_.y, 0, finalU1, finalV0, 0xFFFFFFFF }, // TR
+		{ rc_.x, rc_.y + rc_.h, 0, finalU0, finalV1, 0xFFFFFFFF }, // BL
+		{ rc_.x + rc_.w, rc_.y + rc_.h, 0, finalU1, finalV1, 0xFFFFFFFF }, // BR
 	};
 
 	// Rescale X, Y to normalized coordinate system.
@@ -736,7 +750,7 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 				rotation ^= 2;
 		}
 
-		static int rotLookup[4] = { 0, 1, 3, 2 };
+		static int rotLookup[4] = {0, 1, 3, 2};
 
 		for (int i = 0; i < 4; i++) {
 			int otherI = rotLookup[(rotLookup[i] + rotation) & 3];
@@ -779,10 +793,9 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 	// Grab the previous framebuffer early so we can change previousIndex_ when we want.
 	Draw::Framebuffer *previousFramebuffer = previousFramebuffers_.empty() ? nullptr : previousFramebuffers_[previousIndex_];
 
-	PostShaderUniforms uniforms;
 	const auto performShaderPass = [&](const ShaderInfo *shaderInfo, Draw::Framebuffer *postShaderFramebuffer, Draw::Pipeline *postShaderPipeline, int vertsOffset) {
-		if (postShaderOutput) {
-			draw_->BindFramebufferAsTexture(postShaderOutput, 0, Draw::Aspect::COLOR_BIT, 0);
+		if (postShaderOutput_) {
+			draw_->BindFramebufferAsTexture(postShaderOutput_, 0, Draw::Aspect::COLOR_BIT, 0);
 		} else {
 			BindSource(0, false);
 		}
@@ -792,10 +805,11 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 
 		int nextWidth, nextHeight;
 		draw_->GetFramebufferDimensions(postShaderFramebuffer, &nextWidth, &nextHeight);
-		Draw::Viewport viewport{ 0, 0, (float)nextWidth, (float)nextHeight, 0.0f, 1.0f };
+		Draw::Viewport viewport{0, 0, (float)nextWidth, (float)nextHeight, 0.0f, 1.0f};
 		draw_->SetViewport(viewport);
 		draw_->SetScissorRect(0, 0, nextWidth, nextHeight);
 
+		PostShaderUniforms uniforms;
 		CalculatePostShaderUniforms(lastWidth, lastHeight, nextWidth, nextHeight, shaderInfo, &uniforms);
 
 		draw_->BindPipeline(postShaderPipeline);
@@ -810,7 +824,7 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 		draw_->BindVertexBuffer(vdata_, vertsOffset);
 		draw_->Draw(4, 0);
 
-		postShaderOutput = postShaderFramebuffer;
+		postShaderOutput_ = postShaderFramebuffer;
 		lastWidth = nextWidth;
 		lastHeight = nextHeight;
 	};
@@ -822,16 +836,16 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 		bool flipped = flags & OutputFlags::POSITION_FLIPPED;
 		float y0 = flipped ? 1.0f : -1.0f;
 		float y1 = flipped ? -1.0f : 1.0f;
-		verts[4] = { -1.0f, y0, 0.0f, 0.0f, 0.0f, 0xFFFFFFFF }; // TL
-		verts[5] = {  1.0f, y0, 0.0f, 1.0f, 0.0f, 0xFFFFFFFF }; // TR
-		verts[6] = { -1.0f, y1, 0.0f, 0.0f, 1.0f, 0xFFFFFFFF }; // BL
-		verts[7] = {  1.0f, y1, 0.0f, 1.0f, 1.0f, 0xFFFFFFFF }; // BR
+		verts[4] = {-1.0f, y0, 0.0f, 0.0f, 0.0f, 0xFFFFFFFF}; // TL
+		verts[5] = {1.0f, y0, 0.0f, 1.0f, 0.0f, 0xFFFFFFFF}; // TR
+		verts[6] = {-1.0f, y1, 0.0f, 0.0f, 1.0f, 0xFFFFFFFF}; // BL
+		verts[7] = {1.0f, y1, 0.0f, 1.0f, 1.0f, 0xFFFFFFFF}; // BR
 
 		// Now, adjust for the desired input rectangle.
-		verts[8]  = { -1.0f, y0, 0.0f, u0, v0, 0xFFFFFFFF }; // TL
-		verts[9]  = {  1.0f, y0, 0.0f, u1, v0, 0xFFFFFFFF }; // TR
-		verts[10] = { -1.0f, y1, 0.0f, u0, v1, 0xFFFFFFFF }; // BL
-		verts[11] = {  1.0f, y1, 0.0f, u1, v1, 0xFFFFFFFF }; // BR
+		verts[8] = {-1.0f, y0, 0.0f, u0, v0, 0xFFFFFFFF}; // TL
+		verts[9] = {1.0f, y0, 0.0f, u1, v0, 0xFFFFFFFF}; // TR
+		verts[10] = {-1.0f, y1, 0.0f, u0, v1, 0xFFFFFFFF}; // BL
+		verts[11] = {1.0f, y1, 0.0f, u1, v1, 0xFFFFFFFF}; // BR
 
 		draw_->UpdateBuffer(vdata_, (const uint8_t *)verts, 0, sizeof(verts), Draw::UPDATE_DISCARD);
 
@@ -848,7 +862,7 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 				postShaderFramebuffer = previousFramebuffers_[previousIndex_];
 			}
 
-			draw_->BindFramebufferAsRenderTarget(postShaderFramebuffer, { Draw::RPAction::DONT_CARE, Draw::RPAction::DONT_CARE, Draw::RPAction::DONT_CARE }, "PostShader");
+			draw_->BindFramebufferAsRenderTarget(postShaderFramebuffer, {Draw::RPAction::DONT_CARE, Draw::RPAction::DONT_CARE, Draw::RPAction::DONT_CARE}, "PostShader");
 
 			// Pick vertices 8-11 for the first pass.
 			int vertOffset = i == 0 ? (int)sizeof(Vertex) * 8 : (int)sizeof(Vertex) * 4;
@@ -873,14 +887,29 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 			previousIndex_ = 0;
 		Draw::Framebuffer *postShaderFramebuffer = previousFramebuffers_[previousIndex_];
 
-		draw_->BindFramebufferAsRenderTarget(postShaderFramebuffer, { Draw::RPAction::CLEAR, Draw::RPAction::DONT_CARE, Draw::RPAction::DONT_CARE }, "InterFrameBlit");
+		draw_->BindFramebufferAsRenderTarget(postShaderFramebuffer, {Draw::RPAction::CLEAR, Draw::RPAction::DONT_CARE, Draw::RPAction::DONT_CARE}, "InterFrameBlit");
 		performShaderPass(shaderInfo, postShaderFramebuffer, postShaderPipeline, postVertsOffset);
 	}
+}
 
-	draw_->BindFramebufferAsRenderTarget(nullptr, { Draw::RPAction::CLEAR, Draw::RPAction::DONT_CARE, Draw::RPAction::DONT_CARE }, "FinalBlit");
+void PresentationCommon::CopyToOutput(const DisplayLayoutConfig &config) {
+	bool useNearest = outputFlags_ & OutputFlags::NEAREST;
+	bool useStereo = gstate_c.Use(GPU_USE_SIMPLE_STEREO_PERSPECTIVE) && stereoPipeline_ != nullptr;  // TODO: Also check that the backend has support for it.
+
+	const bool usePostShader = usePostShader_ && !useStereo && !(outputFlags_ & OutputFlags::RB_SWIZZLE);
+	const bool isFinalAtOutputResolution = usePostShader && postShaderFramebuffers_.size() < postShaderPipelines_.size();
+	int lastWidth = srcWidth_;
+	int lastHeight = srcHeight_;
+
 	draw_->SetScissorRect(0, 0, pixelWidth_, pixelHeight_);
 
-	Draw::Pipeline *pipeline = (flags & OutputFlags::RB_SWIZZLE) ? texColorRBSwizzle_ : texColor_;
+	if (!srcFramebuffer_ && !srcTexture_) {
+		// Bound blank. We're done (although we could draw a black rectangle here).
+		presentedThisFrame_ = true;
+		return;
+	}
+
+	Draw::Pipeline *pipeline = (outputFlags_ & OutputFlags::RB_SWIZZLE) ? texColorRBSwizzle_ : texColor_;
 
 	if (useStereo) {
 		draw_->BindPipeline(stereoPipeline_);
@@ -895,20 +924,23 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 		}
 
 		draw_->BindPipeline(pipeline);
-		if (postShaderOutput) {
-			draw_->BindFramebufferAsTexture(postShaderOutput, 0, Draw::Aspect::COLOR_BIT, 0);
+		if (postShaderOutput_) {
+			draw_->BindFramebufferAsTexture(postShaderOutput_, 0, Draw::Aspect::COLOR_BIT, 0);
 		} else {
 			BindSource(0, false);
 		}
 	}
 	BindSource(1, false);
 
+	PostShaderUniforms uniforms;
 	if (isFinalAtOutputResolution && previousFramebuffers_.empty()) {
-		CalculatePostShaderUniforms(lastWidth, lastHeight, (int)rc.w, (int)rc.h, &postShaderInfo_.back(), &uniforms);
+		CalculatePostShaderUniforms(lastWidth, lastHeight, (int)rc_.w, (int)rc_.h, &postShaderInfo_.back(), &uniforms);
 		draw_->UpdateDynamicUniformBuffer(&uniforms, sizeof(uniforms));
+		previousUniforms_ = uniforms;
 	} else if (useStereo) {
-		CalculatePostShaderUniforms(lastWidth, lastHeight, (int)rc.w, (int)rc.h, stereoShaderInfo_, &uniforms);
+		CalculatePostShaderUniforms(lastWidth, lastHeight, (int)rc_.w, (int)rc_.h, stereoShaderInfo_, &uniforms);
 		draw_->UpdateDynamicUniformBuffer(&uniforms, sizeof(uniforms));
+		previousUniforms_ = uniforms;
 	} else {
 		Draw::VsTexColUB ub{};
 		memcpy(ub.WorldViewProj, g_display.rot_matrix.m, sizeof(float) * 16);
@@ -927,7 +959,7 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 	};
 
 	CardboardSettings cardboardSettings;
-	GetCardboardSettings(&cardboardSettings);
+	GetCardboardSettings(config, &cardboardSettings);
 	if (cardboardSettings.enabled) {
 		// TODO: This could actually support stereo now, with an appropriate shader.
 
@@ -949,11 +981,10 @@ void PresentationCommon::CopyToOutput(OutputFlags flags, int uvRotation, float u
 	// Unbinds all textures and samplers too, needed since sometimes a MakePixelTexture is deleted etc.
 	draw_->Invalidate(InvalidationFlags::CACHED_RENDER_STATE);
 
-	previousUniforms_ = uniforms;
 	presentedThisFrame_ = true;
 }
 
-void PresentationCommon::CalculateRenderResolution(int *width, int *height, int *scaleFactor, bool *upscaling, bool *ssaa) const {
+void PresentationCommon::CalculateRenderResolution(const DisplayLayoutConfig &config, int *width, int *height, int *scaleFactor, bool *upscaling, bool *ssaa) const {
 	// Check if postprocessing shader is doing upscaling as it requires native resolution
 	std::vector<const ShaderInfo *> shaderInfo;
 	if (!g_Config.vPostShaderNames.empty()) {
@@ -970,7 +1001,7 @@ void PresentationCommon::CalculateRenderResolution(int *width, int *height, int 
 	int zoom = g_Config.iInternalResolution;
 	if (zoom == 0 || firstSSAAFilterLevel >= 2) {
 		// auto mode, use the longest dimension
-		if (!g_Config.IsPortrait()) {
+		if (!config.InternalRotationIsPortrait()) {
 			zoom = (PSP_CoreParameter().pixelWidth + 479) / 480;
 		} else {
 			zoom = (PSP_CoreParameter().pixelHeight + 479) / 480;

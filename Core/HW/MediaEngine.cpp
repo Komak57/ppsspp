@@ -332,6 +332,8 @@ bool MediaEngine::openContext(bool keepReadPos) {
 			return false;
 	}
 
+	// Here it shouldn't be possible for m_videoStream to be invalid.
+
 	if (!setVideoStream(m_videoStream, true))
 		return false;
 
@@ -369,7 +371,11 @@ void MediaEngine::closeContext() {
 	m_pCodecCtxs.clear();
 	// These are streams allocated from avformat_new_stream.
 	for (auto &it : m_codecsToClose) {
+#if LIBAVCODEC_VERSION_MAJOR >= 62
+		avcodec_free_context(&it);
+#else
 		avcodec_close(it);
+#endif
 	}
 	m_codecsToClose.clear();
 	if (m_pFormatCtx)
@@ -690,7 +696,7 @@ bool MediaEngine::stepVideo(int videoPixelMode, bool skipFrame) {
 				avcodec_send_packet(m_pCodecCtx, &packet);
 			int result = avcodec_receive_frame(m_pCodecCtx, m_pFrame);
 			if (result == 0) {
-				result = m_pFrame->pkt_size;
+				result = 1;
 				frameFinished = 1;
 			} else if (result == AVERROR(EAGAIN)) {
 				result = 0;
@@ -1121,4 +1127,20 @@ s64 MediaEngine::getLastTimeStamp() {
 	if (!m_pdata)
 		return 0;
 	return m_lastTimeStamp - m_firstTimeStamp;
+}
+
+std::string GetFFMPEGVersion() {
+#ifdef USE_FFMPEG
+	std::string comment = "";
+	if (LIBAVFORMAT_VERSION_MAJOR == 57 && LIBAVFORMAT_VERSION_MINOR == 25 && LIBAVFORMAT_VERSION_MICRO == 100) {
+		// This is the bundled version.
+		comment = " (bundled)";
+	} else {
+		comment = " (system)";
+	}
+	return StringFromFormat("%d.%d.%d (%s)%s",
+		LIBAVFORMAT_VERSION_MAJOR, LIBAVFORMAT_VERSION_MINOR, LIBAVFORMAT_VERSION_MICRO, av_version_info(), comment.c_str());
+#else
+	return "N/A";
+#endif
 }

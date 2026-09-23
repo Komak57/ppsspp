@@ -15,8 +15,22 @@
 void Screen::focusChanged(ScreenFocusChange focusChange) {
 	const char *eventName = "";
 	switch (focusChange) {
-	case ScreenFocusChange::FOCUS_LOST_TOP: eventName = "FOCUS_LOST_TOP"; break;
-	case ScreenFocusChange::FOCUS_BECAME_TOP: eventName = "FOCUS_BECAME_TOP"; break;
+	case ScreenFocusChange::FOCUS_LOST_TOP:
+	#if !defined(MOBILE_DEVICE)
+		if (WantsTextInput()) {
+			System_NotifyUIEvent(UIEventNotification::TEXT_LOSTFOCUS);
+		}
+	#endif
+		eventName = "FOCUS_LOST_TOP";
+		break;
+	case ScreenFocusChange::FOCUS_BECAME_TOP:
+	#if !defined(MOBILE_DEVICE)
+		if (WantsTextInput()) {
+			System_NotifyUIEvent(UIEventNotification::TEXT_GOTFOCUS);
+		}
+	#endif
+		eventName = "FOCUS_BECAME_TOP";
+		break;
 	}
 	DEBUG_LOG(Log::UI, "Screen %s got %s", this->tag(), eventName);
 }
@@ -136,7 +150,7 @@ void ScreenManager::switchToNext() {
 	stack_.push_back(nextStack_.front());
 	nextStack_.front().screen->focusChanged(ScreenFocusChange::FOCUS_BECAME_TOP);
 	delete temp.screen;
-	UI::SetFocusedView(nullptr);
+	UI::SetFocusedView(nullptr, UI::FocusFlags::CAUSE_SCREEN_CHANGE);
 
 	// When will this ever happen? Should handle focus here too?
 	for (size_t i = 1; i < nextStack_.size(); ++i) {
@@ -148,7 +162,7 @@ void ScreenManager::switchToNext() {
 void ScreenManager::touch(const TouchInput &touch) {
 	std::lock_guard<std::recursive_mutex> guard(inputLock_);
 	// Send release all events to every screen layer.
-	if (touch.flags & TOUCH_RELEASE_ALL) {
+	if (touch.flags & TouchInputFlags::RELEASE_ALL) {
 		for (auto &layer : stack_) {
 			Screen *screen = layer.screen;
 			layer.screen->UnsyncTouch(screen->transformTouch(touch));
@@ -156,7 +170,7 @@ void ScreenManager::touch(const TouchInput &touch) {
 	} else if (!stack_.empty()) {
 		// Let the overlay know about touch-downs, to be able to dismiss popups.
 		bool skip = false;
-		if (overlayScreen_ && (touch.flags & TOUCH_DOWN)) {
+		if (overlayScreen_ && (touch.flags & TouchInputFlags::DOWN)) {
 			skip = overlayScreen_->UnsyncTouch(overlayScreen_->transformTouch(touch));
 		}
 		if (!skip) {
@@ -170,7 +184,7 @@ bool ScreenManager::key(const KeyInput &key) {
 	std::lock_guard<std::recursive_mutex> guard(inputLock_);
 	bool result = false;
 	// Send key up to every screen layer, to avoid stuck keys.
-	if (key.flags & KEY_UP) {
+	if (key.flags & KeyInputFlags::UP) {
 		for (auto &layer : stack_) {
 			result = layer.screen->UnsyncKey(key);
 		}
@@ -209,7 +223,30 @@ void ScreenManager::resized() {
 }
 
 ScreenRenderFlags ScreenManager::render() {
+	using namespace Draw;
+
 	ScreenRenderFlags flags = ScreenRenderFlags::NONE;
+
+	// First, go through the whole stack and have every screen render any non-backbuffer render passes.
+	// In EmuScreen, this might result in running emulation.
+	for (size_t i = 0; i < stack_.size(); i++) {
+		const auto &layer = stack_[i];
+		ScreenRenderMode mode = ScreenRenderMode::DEFAULT;
+		if (i == stack_.size() - 1) {
+			mode |= ScreenRenderMode::TOP;
+		}
+		flags |= layer.screen->PreRender(mode);
+	}
+
+	// Now, start the final render pass. This is now the ONLY place where binding the null fb is allowed.
+	draw_->BindFramebufferAsRenderTarget(nullptr, {RPAction::CLEAR, RPAction::CLEAR, RPAction::CLEAR}, "BackBuffer");
+	getUIContext()->BeginFrame();
+
+	const Draw::Viewport viewport{0.0f, 0.0f, (float)g_display.pixel_xres, (float)g_display.pixel_yres, 0.0f, 1.0f};
+	draw_->SetViewport(viewport);
+	draw_->SetScissorRect(0, 0, g_display.pixel_xres, g_display.pixel_yres);
+	draw_->SetTargetSize(g_display.pixel_xres, g_display.pixel_yres);
+
 	if (!stack_.empty()) {
 		// Collect the screens to render
 		TinySet<Screen *, 6> layers;
@@ -300,7 +337,7 @@ void ScreenManager::sendMessage(UIMessage message, const char *value) {
 		TouchInput input{};
 		input.x = -50000.0f;
 		input.y = -50000.0f;
-		input.flags = TOUCH_RELEASE_ALL;
+		input.flags = TouchInputFlags::RELEASE_ALL;
 		input.timestamp = time_now_d();
 		input.id = 0;
 		touch(input);
@@ -341,11 +378,11 @@ void ScreenManager::push(Screen *screen, int layerFlags) {
 	}
 
 	// Release touches and unfocus.
-	UI::SetFocusedView(nullptr);
+	UI::SetFocusedView(nullptr, UI::FocusFlags::CAUSE_SCREEN_CHANGE);
 	TouchInput input{};
 	input.x = -50000.0f;
 	input.y = -50000.0f;
-	input.flags = TOUCH_RELEASE_ALL;
+	input.flags = TouchInputFlags::RELEASE_ALL;
 	input.timestamp = time_now_d();
 	input.id = 0;
 	touch(input);

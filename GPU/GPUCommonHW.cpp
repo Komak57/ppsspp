@@ -405,7 +405,7 @@ GPUCommonHW::~GPUCommonHW() {
 
 // Called once per frame. Might also get called during the pause screen
 // if "transparent".
-void GPUCommonHW::CheckConfigChanged() {
+void GPUCommonHW::CheckConfigChanged(const DisplayLayoutConfig &config) {
 	if (configChanged_) {
 		ClearCacheNextFrame();
 		gstate_c.SetUseFlags(CheckGPUFeatures());
@@ -418,7 +418,7 @@ void GPUCommonHW::CheckConfigChanged() {
 
 	// Check needed when running tests.
 	if (framebufferManager_) {
-		framebufferManager_->CheckPostShaders();
+		framebufferManager_->CheckPostShaders(config);
 	}
 }
 
@@ -429,9 +429,9 @@ void GPUCommonHW::CheckDisplayResized() {
 	}
 }
 
-void GPUCommonHW::CheckRenderResized() {
+void GPUCommonHW::CheckRenderResized(const DisplayLayoutConfig &config) {
 	if (renderResized_) {
-		framebufferManager_->NotifyRenderResized(msaaLevel_);
+		framebufferManager_->NotifyRenderResized(config, msaaLevel_);
 		renderResized_ = false;
 	}
 }
@@ -503,8 +503,8 @@ void GPUCommonHW::UpdateCmdInfo() {
 	}
 }
 
-void GPUCommonHW::BeginHostFrame() {
-	GPUCommon::BeginHostFrame();
+void GPUCommonHW::BeginHostFrame(const DisplayLayoutConfig &config) {
+	GPUCommon::BeginHostFrame(config);
 	if (drawEngineCommon_->EverUsedExactEqualDepth() && !sawExactEqualDepth_) {
 		sawExactEqualDepth_ = true;
 		gstate_c.SetUseFlags(CheckGPUFeatures());
@@ -530,7 +530,7 @@ void GPUCommonHW::PreExecuteOp(u32 op, u32 diff) {
 	CheckFlushOp(op >> 24, diff);
 }
 
-void GPUCommonHW::CopyDisplayToOutput(bool reallyDirty) {
+void GPUCommonHW::PrepareCopyDisplayToOutput(const DisplayLayoutConfig &config) {
 	drawEngineCommon_->FlushQueuedDepth();
 	// Flush anything left over.
 	drawEngineCommon_->Flush();
@@ -538,9 +538,12 @@ void GPUCommonHW::CopyDisplayToOutput(bool reallyDirty) {
 	shaderManager_->DirtyLastShader();
 
 	// after this, render pass is active.
-	framebufferManager_->CopyDisplayToOutput(reallyDirty);
+	framebufferManager_->PrepareCopyDisplayToOutput(config, curFramebufferDirty_);
+}
 
-	gstate_c.Dirty(DIRTY_TEXTURE_IMAGE);
+void GPUCommonHW::CopyDisplayToOutput(const DisplayLayoutConfig &config) {
+	framebufferManager_->CopyDisplayToOutput(config);
+	curFramebufferDirty_ = false;
 }
 
 bool GPUCommonHW::PresentedThisFrame() const {
@@ -795,6 +798,8 @@ void GPUCommonHW::InvalidateCache(u32 addr, int size, GPUInvalidationType type) 
 }
 
 bool GPUCommonHW::FramebufferDirty() {
+	if (!framebufferManager_)
+		return true;
 	VirtualFramebuffer *vfb = framebufferManager_->GetDisplayVFB();
 	if (vfb) {
 		bool dirty = vfb->dirtyAfterDisplay;
@@ -805,6 +810,8 @@ bool GPUCommonHW::FramebufferDirty() {
 }
 
 bool GPUCommonHW::FramebufferReallyDirty() {
+	if (!framebufferManager_)
+		return true;
 	VirtualFramebuffer *vfb = framebufferManager_->GetDisplayVFB();
 	if (vfb) {
 		bool dirty = vfb->reallyDirtyAfterDisplay;
@@ -1252,6 +1259,7 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 			break;
 		}
 
+		// Keep going if these commands don't change state.
 		case GE_CMD_TEXBUFWIDTH0:
 		case GE_CMD_TEXADDR0:
 			if (data != gstate.cmdmem[data >> 24])
@@ -1286,7 +1294,10 @@ bail:
 
 	int cycles = vertexCost_ * totalVertCount;
 	gpuStats.vertexGPUCycles += cycles;
-	cyclesExecuted += cycles;
+
+	if (!PSP_CoreParameter().compat.flags().FastEmulatedGPU) {
+		cyclesExecuted += cycles;
+	}
 }
 
 void GPUCommonHW::Execute_Bezier(u32 op, u32 diff) {
@@ -1491,7 +1502,6 @@ void GPUCommonHW::Execute_LoadClut(u32 op, u32 diff) {
 	gstate_c.Dirty(DIRTY_TEXTURE_PARAMS);
 	textureCache_->LoadClut(gstate.getClutAddress(), gstate.getClutLoadBytes(), &recorder_);
 }
-
 
 void GPUCommonHW::Execute_WorldMtxNum(u32 op, u32 diff) {
 	if (!currentList) {

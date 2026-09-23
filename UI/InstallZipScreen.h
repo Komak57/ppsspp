@@ -17,27 +17,31 @@
 
 #pragma once
 
-#include <functional>
-
 #include "Common/File/Path.h"
 
 #include "Common/UI/View.h"
 #include "Common/UI/UIScreen.h"
 
 #include "UI/BaseScreens.h"
+#include "UI/SimpleDialogScreen.h"
+#include "Common/UI/Notice.h"
 
 class SavedataView;
 
-class InstallZipScreen : public UIBaseDialogScreen {
+class InstallZipScreen : public UITwoPaneBaseDialogScreen {
 public:
 	InstallZipScreen(const Path &zipPath);
+
 	void update() override;
 	bool key(const KeyInput &key) override;
 
 	const char *tag() const override { return "InstallZip"; }
 
 protected:
-	void CreateViews() override;
+	void BeforeCreateViews() override;
+	void CreateSettingsViews(UI::ViewGroup *parent) override;
+	void CreateContentViews(UI::ViewGroup *parent) override;
+	std::string_view GetTitle() const override;
 
 private:
 	void OnInstall(UI::EventParams &params);
@@ -46,12 +50,14 @@ private:
 	UI::Choice *installChoice_ = nullptr;
 	UI::Choice *playChoice_ = nullptr;
 	UI::Choice *backChoice_ = nullptr;
-	UI::TextView *doneView_ = nullptr;
+	NoticeView *doneView_ = nullptr;
+	NoticeView *overwriteWarning_ = nullptr;
 	SavedataView *existingSaveView_ = nullptr;
 	Path savedataToOverwrite_;
 	Path zipPath_;
 	std::vector<Path> destFolders_;
 	int destFolderChoice_ = 0;
+
 	ZipFileInfo zipFileInfo_{};
 	bool returnToHomebrew_ = true;
 	bool installStarted_ = false;

@@ -6,10 +6,11 @@
 #include "Common/Data/Text/Parsers.h"
 #include "Common/Data/Text/I18n.h"
 #include "Core/WebServer.h"
+#include "Core/Util/PathUtil.h"
 #include "UI/UploadScreen.h"
 #include "UI/MiscViews.h"
 
-UploadScreen::UploadScreen(const Path &targetFolder) : targetFolder_(targetFolder) {
+UploadScreen::UploadScreen(const Path &targetFolder) : UISimpleBaseDialogScreen(Path(), SimpleDialogFlags::Default), targetFolder_(targetFolder) {
 	std::vector<std::string> ips;
 	net::GetLocalIP4List(ips);
 	localIPs_.clear();
@@ -33,13 +34,13 @@ void UploadScreen::CreateDialogViews(UI::ViewGroup *root) {
 	LinearLayout *container = new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(500, FILL_PARENT, 0.0f, UI::Gravity::G_HCENTER, Margins(10)));
 	root->Add(container);
 
-	container->Add(new TextWithImage(ImageID("I_FOLDER_UPLOAD"), targetFolder_.ToVisualString()));
+	container->Add(new TextWithImage(ImageID("I_FOLDER_UPLOAD"), GetFriendlyPath(targetFolder_)));
 	container->Add(new Spacer(20.0f));
 
 	if (prevRunning_) {
 		container->Add(new TextWithImage(ImageID("I_WIFI"), n->T("With a web browser on the same network, go to:")));
 		for (const auto &ip : localIPs_) {
-			std::string url = StringFromFormat("http://%s:%d/upload", ip.c_str(), WebServerPort());
+			std::string url = StringFromFormat("%s:%d/upload", ip.c_str(), WebServerPort());
 			container->Add(new CopyableText(ImageID("I_WEB_BROWSER"), url));
 		}
 	}
@@ -64,6 +65,11 @@ void UploadScreen::RecreateStatus() {
 			NiceSizeFormat(upload.uploadedBytes).c_str(), NiceSizeFormat(upload.totalBytes).c_str(), percent);
 		statusContainer_->Add(new TextWithImage(ImageID("I_FILE"), uploadText));
 	}
+}
+
+std::string_view UploadScreen::GetTitle() const {
+	auto n = GetI18NCategory(I18NCat::NETWORKING);
+	return n->T("Upload files");
 }
 
 void UploadScreen::update() {

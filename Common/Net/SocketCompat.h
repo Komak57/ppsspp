@@ -152,3 +152,6 @@ inline void FormatAddr(char* addrbuf, size_t bufsize, const addrinfo* info) {
 		break;
 	}
 }
+#ifdef ERROR
+#undef ERROR
+#endif

@@ -301,12 +301,14 @@ void GPUDriverTestScreen::CreateViews() {
 	AnchorLayout *anchor = new AnchorLayout();
 	root_ = anchor;
 
-	tabHolder_ = new TabHolder(ORIENT_HORIZONTAL, 30.0f, TabHolderFlags::Default, nullptr, new AnchorLayoutParams(FILL_PARENT, FILL_PARENT, false));
+	tabHolder_ = new TabHolder(ORIENT_HORIZONTAL, 30.0f, TabHolderFlags::Default, nullptr, nullptr, new AnchorLayoutParams(FILL_PARENT, FILL_PARENT, Centering::None));
 	anchor->Add(tabHolder_);
-	tabHolder_->AddTab("Discard", new LinearLayout(ORIENT_VERTICAL));
-	tabHolder_->AddTab("Shader", new LinearLayout(ORIENT_VERTICAL));
+	tabHolder_->AddTabDeferred("Discard", ImageID::invalid(), []() { return new LinearLayout(ORIENT_VERTICAL); });
+	tabHolder_->AddTabDeferred("Shader", ImageID::invalid(), []() { return new LinearLayout(ORIENT_VERTICAL); });
 
-	Choice *back = new Choice(di->T("Back"), "", false, new AnchorLayoutParams(190, WRAP_CONTENT, 10, NONE, NONE, 10));
+	tabHolder_->SetInitialTab(0);
+
+	Choice *back = new Choice(di->T("Back"), ImageID("I_NAVIGATE_BACK"), new AnchorLayoutParams(190, WRAP_CONTENT, 10, NONE, NONE, 10));
 	back->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
 	anchor->Add(back);
 }
@@ -466,7 +468,7 @@ void GPUDriverTestScreen::DiscardTest(UIContext &dc) {
 
 	// If everything is OK, both the background and the text should be OK.
 
-	Bounds layoutBounds = dc.GetLayoutBounds();
+	Bounds layoutBounds = GetLayoutBounds(dc);
 
 	dc.Begin();
 	dc.SetFontScale(1.0f, 1.0f);
@@ -572,7 +574,7 @@ void GPUDriverTestScreen::ShaderTest(UIContext &dc) {
 		rasterNoCull->Release();
 	}
 
-	Bounds layoutBounds = dc.GetLayoutBounds();
+	Bounds layoutBounds = GetLayoutBounds(dc);
 
 	dc.Begin();
 	dc.SetFontScale(1.0f, 1.0f);

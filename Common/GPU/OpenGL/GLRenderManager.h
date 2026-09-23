@@ -6,6 +6,7 @@
 #include <functional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <mutex>
 #include <queue>
 #include <condition_variable>
@@ -83,6 +84,7 @@ private:
 
 class GLRShader {
 public:
+	explicit GLRShader(std::string_view _desc) : desc(_desc) {}
 	~GLRShader() {
 		if (shader) {
 			glDeleteShader(shader);
@@ -275,11 +277,10 @@ public:
 		return step.create_buffer.buffer;
 	}
 
-	GLRShader *CreateShader(GLuint stage, const std::string &code, const std::string &desc) {
+	GLRShader *CreateShader(GLuint stage, const std::string &code, std::string_view desc) {
 		GLRInitStep &step = initSteps_.push_uninitialized();
 		step.stepType = GLRInitStepType::CREATE_SHADER;
-		step.create_shader.shader = new GLRShader();
-		step.create_shader.shader->desc = desc;
+		step.create_shader.shader = new GLRShader(desc);
 		step.create_shader.stage = stage;
 		step.create_shader.code = new char[code.size() + 1];
 		memcpy(step.create_shader.code, code.data(), code.size() + 1);
@@ -340,8 +341,8 @@ public:
 		return step.create_input_layout.inputLayout;
 	}
 
-	GLPushBuffer *CreatePushBuffer(int frame, GLuint target, size_t size, const char *tag) {
-		GLPushBuffer *push = new GLPushBuffer(this, target, size, tag);
+	GLPushBuffer *CreatePushBuffer(int frame, GLuint target, size_t size, int slack, const char *tag) {
+		GLPushBuffer *push = new GLPushBuffer(this, target, size, slack, tag);
 		RegisterPushBuffer(frame, push);
 		return push;
 	}
