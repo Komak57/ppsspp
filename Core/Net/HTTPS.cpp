@@ -12,6 +12,21 @@ static void ssl_debug(void* ctx, int level, const char* file, int line, const ch
 #include <windows.h>
 #include <wincrypt.h>
 #pragma comment(lib, "crypt32.lib")
+#include <winapifamily.h>
+#if !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
+// UWP: no wincrypt entropy - mbedtls is configured with
+// MBEDTLS_ENTROPY_HARDWARE_ALT (see ext/mbedtls.h), backed by BCryptGenRandom.
+#include <bcrypt.h>
+#include "mbedtls/entropy.h"
+#include "mbedtls/entropy_poll.h"
+extern "C" int mbedtls_hardware_poll(void *data, unsigned char *output, size_t len, size_t *olen) {
+	(void)data;
+	if (BCryptGenRandom(NULL, output, (ULONG)len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0)
+		return MBEDTLS_ERR_ENTROPY_SOURCE_FAILED;
+	*olen = len;
+	return 0;
+}
+#endif
 #elif defined(__APPLE__)
 #include <TargetConditionals.h>
 #if TARGET_OS_OSX

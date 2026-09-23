@@ -4314,6 +4314,21 @@
 #include "mbedtls/include/mbedtls/config_psa.h"
 #endif
 
+/* UWP/appcontainer builds: the built-in Windows entropy source uses
+ * CryptAcquireContext/CryptGenRandom (wincrypt), which is not in the approved
+ * UWP API surface and fails to link against WindowsApp.lib. Disable it and
+ * use the BCryptGenRandom-backed mbedtls_hardware_poll() we provide in
+ * Core/Net/HTTPS.cpp (BCrypt is UWP-approved). Desktop Windows is unaffected:
+ * without WINAPI_FAMILY defined, winapifamily.h reports the DESKTOP partition.
+ */
+#if defined(_WIN32)
+#include <winapifamily.h>
+#if defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
+#define MBEDTLS_NO_PLATFORM_ENTROPY
+#define MBEDTLS_ENTROPY_HARDWARE_ALT
+#endif
+#endif
+
 #include "mbedtls/include/mbedtls/check_config.h"
 
 #endif /* MBEDTLS_CONFIG_H */
