@@ -13,7 +13,12 @@ static void ssl_debug(void* ctx, int level, const char* file, int line, const ch
 #include <wincrypt.h>
 #pragma comment(lib, "crypt32.lib")
 #elif defined(__APPLE__)
+#include <TargetConditionals.h>
+#if TARGET_OS_OSX
+// Security.framework anchor enumeration is macOS-only (SecTrustCopyAnchorCertificates
+// is marked __IPHONE_NA); on iOS there is no API to walk the system trust store.
 #include <Security/Security.h>
+#endif
 #elif defined(__linux__)
 #include <unistd.h>
 #endif
@@ -59,7 +64,7 @@ int HTTPS::LoadDefaultCerts() {
 	if (certsLoaded == 0) {
 		ERROR_LOG(Log::sceNet, "InitializeSSL: No trusted CA certs found on Linux");
 	}
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) && TARGET_OS_OSX
 	CFArrayRef certs = NULL;
 	OSStatus status = SecTrustCopyAnchorCertificates(&certs);
 	if (status == errSecSuccess && certs) {
