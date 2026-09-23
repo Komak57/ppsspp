@@ -159,6 +159,8 @@
     <ClInclude Include="..\..\Core\HLE\sceNetInet.h" />
     <ClInclude Include="..\..\Core\HLE\sceNetResolver.h" />
     <ClInclude Include="..\..\Core\HLE\sceNp2.h" />
+    <ClInclude Include="..\..\Core\HLE\sceNpSignaling.h" />
+    <ClInclude Include="..\..\Core\Debugger\Np2Printer.h" />
     <ClInclude Include="..\..\Core\Net\Buffer.h" />
     <ClInclude Include="..\..\Core\Net\HTTPConnection.h" />
     <ClInclude Include="..\..\Core\Net\HTTPS.h" />
@@ -435,6 +437,8 @@
     <ClCompile Include="..\..\Core\HLE\sceNetInet.cpp" />
     <ClCompile Include="..\..\Core\HLE\sceNetResolver.cpp" />
     <ClCompile Include="..\..\Core\HLE\sceNp2.cpp" />
+    <ClCompile Include="..\..\Core\HLE\sceNpSignaling.cpp" />
+    <ClCompile Include="..\..\Core\Debugger\Np2Printer.cpp" />
     <ClCompile Include="..\..\Core\Net\Buffer.cpp" />
     <ClCompile Include="..\..\Core\Net\HTTPConnection.cpp" />
     <ClCompile Include="..\..\Core\Net\HTTPS.cpp" />
