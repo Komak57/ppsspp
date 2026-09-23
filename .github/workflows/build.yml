@@ -302,7 +302,12 @@ jobs:
         xcodebuild -version
         # List available Xcode versions
         ls /Applications | grep Xcode
-        sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+        # Select the newest Xcode present on the runner image - hardcoded
+        # versions (e.g. Xcode_16.4.app) rotate out of the images and break.
+        XCODE_APP=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+        if [ -z "$XCODE_APP" ]; then XCODE_APP=/Applications/Xcode.app; fi
+        echo "Selecting $XCODE_APP"
+        sudo xcode-select -s "$XCODE_APP/Contents/Developer"
 
     - name: Create iOS Version.txt file
       if: matrix.id == 'ios'
