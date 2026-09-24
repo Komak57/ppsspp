@@ -663,8 +663,8 @@ bool DirectDNSLookupIPV4(const char *dns_server_ip, const char *domain, uint32_t
 	}
 #else
 	// Windows version
-	DWORD timeout = 5000; // 5 seconds
-	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout)) < 0) {
+	DWORD _timeout = 5000; // 5 seconds
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&_timeout, sizeof(_timeout)) < 0) {
 		WARN_LOG(Log::Net, "Failed to set socket timeout for DNS query");
 	}
 #endif
