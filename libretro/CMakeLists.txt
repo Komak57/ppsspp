@@ -42,4 +42,11 @@ if(NOT MSVC)
    	target_link_libraries(ppsspp_libretro "-Wl,-Bsymbolic")
    endif()
 endif()
+if(APPLE AND NOT IOS)
+   # HTTPS::LoadDefaultCerts() walks the macOS trust store (Security + CF).
+   # The app targets get these via nativeExtraLibs; the libretro dylib links
+   # Core directly, so it needs them itself. macOS-only - the cert code is
+   # compiled out on iOS (TARGET_OS_OSX guard in Core/Net/HTTPS.cpp).
+   target_link_libraries(ppsspp_libretro "-framework Security" "-framework CoreFoundation")
+endif()
 target_link_libraries(ppsspp_libretro ${LinkCommon})
