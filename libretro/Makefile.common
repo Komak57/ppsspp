@@ -1016,6 +1016,7 @@ SOURCES_CXX += \
 		   $(COREDIR)/Net/NpMatching2Cache.cpp \
 		   $(COREDIR)/Net/Buffer.cpp \
 		   $(COREDIR)/Net/NPAgent.cpp \
+		   $(COREDIR)/Net/InfraServerList.cpp \
 		   $(COREDIR)/Net/NPAgents/PSNAuthAgent.cpp \
 		   $(COREDIR)/Net/NPAgents/PSNAgent.cpp \
 		   $(COREDIR)/Net/NPAgents/RPCNAgent.cpp \
