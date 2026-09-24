@@ -55,7 +55,6 @@
 static EShLanguage GetShLanguageFromStage(const ShaderStage stage) {
 	switch (stage) {
 	case ShaderStage::Vertex: return EShLangVertex;
-	case ShaderStage::Geometry: return EShLangGeometry;
 	case ShaderStage::Fragment: return EShLangFragment;
 	case ShaderStage::Compute: return EShLangCompute;
 	default: return EShLangVertex;
@@ -275,6 +274,7 @@ bool TranslateShader(std::string *dest, ShaderLanguage destLang, const ShaderLan
 		spirv_cross::CompilerHLSL::Options options{};
 		options.shader_model = 50;
 		spirv_cross::CompilerGLSL::Options options_common{};
+		options_common.vertex.flip_vert_y = true;
 		options_common.vertex.fixup_clipspace = true;
 		hlsl.set_hlsl_options(options);
 		hlsl.set_common_options(options_common);

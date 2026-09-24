@@ -57,12 +57,11 @@
 
 namespace MIPSComp {
 	JitInterface *jit;
-	std::recursive_mutex jitLock;
 
-	void JitAt() {
+	void JitAt(MIPSState *mips) {
 		// TODO: We could probably check for a bad pc here, and fire an exception. Could spare us from some crashes.
 		// Although, we just tried to load from this address to check for a JIT block, and if we're here, that succeeded..
-		jit->Compile(currentMIPS->pc);
+		jit->Compile(mips->pc);
 	}
 
 	void DoDummyJitState(PointerWrap &p) {
@@ -185,7 +184,6 @@ std::string AddAddress(const std::string &buf, uint64_t addr) {
 #if PPSSPP_ARCH(ARM64) || defined(DISASM_ALL)
 
 static bool Arm64SymbolCallback(char *buffer, int bufsize, uint8_t *address) {
-	std::lock_guard<std::recursive_mutex> guard(MIPSComp::jitLock);
 	if (MIPSComp::jit) {
 		std::string name;
 		if (MIPSComp::jit->DescribeCodePtr(address, name)) {
@@ -275,11 +273,10 @@ const char *ppsspp_resolver(struct ud*,
 
 	// But these do.
 
-	// UGLY HACK because the API is terrible
+	// UGLY HACK because the disassembler API is terrible
 	static char buf[128];
 	std::string str;
 
-	std::lock_guard<std::recursive_mutex> guard(MIPSComp::jitLock);
 	if (MIPSComp::jit && MIPSComp::jit->DescribeCodePtr((u8 *)(uintptr_t)addr, str)) {
 		*offset = 0;
 		truncate_cpy(buf, sizeof(buf), str);

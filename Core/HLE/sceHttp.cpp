@@ -379,13 +379,13 @@ static int sceHttpsInit(int ctxId, int certPtr, int unknown3, int unknown4) {
 
 	if (certPtr != 0) {
 
-		u32 memPtr = Memory::Read_U32(certPtr);
+		u32 memPtr = Memory::ReadUnchecked_U32(certPtr);
 		if (!Memory::IsValidRange(memPtr, 1)) {
 			ERROR_LOG(Log::sceNet, "sceHttpsInit: certPtr points to invalid address: %08x", certPtr);
 			return -1;
 		}
 
-		u32 certAddr = Memory::Read_U32(memPtr);
+		u32 certAddr = Memory::ReadUnchecked_U32(memPtr);
 		if (!Memory::IsValidRange(certAddr, 1)) {
 			ERROR_LOG(Log::sceNet, "sceHttpsInit: certAddrPtr points to invalid address: %08x", memPtr);
 			return -1;
@@ -399,7 +399,7 @@ static int sceHttpsInit(int ctxId, int certPtr, int unknown3, int unknown4) {
 				return -1;
 			}
 
-			u8 ch = Memory::Read_U8(certAddr + i);
+			u8 ch = Memory::ReadUnchecked_U8(certAddr + i);
 			if (ch == 0)
 				break;
 
@@ -732,8 +732,8 @@ static int sceHttpGetContentLength(int requestID, u32 contentLengthPtr) {
 	if (len < 0)
 		return hleLogError(Log::HTTP, SCE_HTTP_ERROR_NO_CONTENT_LENGTH, "no content length");
 
-	DEBUG_LOG(Log::HTTP, "ContentLength = %lld (in) => %lld (out)", Memory::Read_U64(contentLengthPtr), (u64)len);
-	Memory::Write_U64((u64)len, contentLengthPtr);
+	DEBUG_LOG(Log::HTTP, "ContentLength = %lld (in) => %lld (out)", Memory::ReadUnchecked_U64(contentLengthPtr), (u64)len);
+	Memory::WriteUnchecked_U64((u64)len, contentLengthPtr);
 	NotifyMemInfo(MemBlockFlags::WRITE, contentLengthPtr, 8, "HttpGetContentLength");
 	return hleLogDebug(Log::HTTP, 0, ": ContentLength => %d", len);
 }
@@ -798,9 +798,10 @@ const HLEFunction sceHttp[] = {
 	{0X267618F4, &WrapI_IUU<sceHttpSetAuthInfoCallback>,     "sceHttpSetAuthInfoCallback",     'i', "ixx"   },
 	{0X569A1481, &WrapI_IUU<sceHttpsSetSslCallback>,         "sceHttpsSetSslCallback",         'i', "ixx"   },
 	{0XBAC31BF1, &WrapI_I<sceHttpsEnableOption>,             "sceHttpsEnableOption",           'i', "i"     },
-};				
+	{0xCC920C12, nullptr,                                    "sceHttpEnableNagle",             '?', ""      },
+	{0xD29163DA, nullptr,                                    "sceHttpDisableNagle",            '?', ""      }
+};
 
-void Register_sceHttp()
-{
+void Register_sceHttp() {
 	RegisterHLEModule("sceHttp",ARRAY_SIZE(sceHttp),sceHttp);
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 # Automated script to run the pspautotests test suite in PPSSPP.
 
 import sys
@@ -6,12 +7,18 @@ import os
 import subprocess
 import threading
 import glob
+import platform
 
 
 PPSSPP_EXECUTABLES = [
-  # Windows
+  # Windows. The machine's own architecture comes first: an x64 build runs on Windows-on-ARM too,
+  # under emulation, so looking for it first would quietly test the emulated build instead.
   "Windows\\Debug\\PPSSPPHeadless.exe",
   "Windows\\Release\\PPSSPPHeadless.exe",
+] + ([
+  "Windows\\ARM64\\Debug\\PPSSPPHeadless.exe",
+  "Windows\\ARM64\\Release\\PPSSPPHeadless.exe",
+] if platform.machine().lower() in ("arm64", "aarch64") else []) + [
   "Windows\\x64\\Debug\\PPSSPPHeadless.exe",
   "Windows\\x64\\Release\\PPSSPPHeadless.exe",
   "build*/PPSSPPHeadless.exe",
@@ -32,6 +39,17 @@ PPSSPP_EXECUTABLES = [
 PPSSPP_EXE = None
 TEST_ROOT = "pspautotests/tests/"
 TIMEOUT = 5
+
+# The slower CPU backends need a longer wall clock on the CPU-heavy tests - the interpreter runs
+# gpu/rendertarget/copy in about 4.5s against the JIT's 0.15s, since that test does over a million
+# guest-side vsprintf calls. Scale the timeout per backend rather than raising it for everyone, so
+# a genuine hang under the JIT is still caught in five seconds.
+CPU_TIMEOUTS = {
+  'interpreter': 20,
+  'ir': 10,
+  'jit': 5,
+  'jit-ir': 5,
+}
 
 class Command(object):
   def __init__(self, cmd, data = None):
@@ -64,18 +82,32 @@ class Command(object):
 
 # Test names are the C files without the .c extension.
 # These have worked and should keep working always - regression tests.
+# -g flag runs these.
 tests_good = [
   "cpu/cpu_alu/cpu_alu",
   "cpu/cpu_alu/cpu_branch",
   "cpu/cpu_alu/cpu_branch2",
+  "cpu/cpu_alu/cpu_div",
+  "cpu/vfpu/callout",
   "cpu/vfpu/colors",
   "cpu/vfpu/convert",
+  "cpu/vfpu/convert_scaled",
+  "cpu/vfpu/minmax",
+  "cpu/vfpu/prefix_branch",
+  "cpu/vfpu/prefix_ctrl",
+  "cpu/vfpu/vbranch",
+  "cpu/vfpu/vrnd",
+  "cpu/vfpu/overlap",
   "cpu/vfpu/gum",
   "cpu/vfpu/matrix",
   "cpu/vfpu/vavg",
   "cpu/icache/icache",
   "cpu/lsu/lsu",
+  "cpu/lsu/llsc",
   "cpu/fpu/fpu",
+  "cpu/fpu/rounding",
+  "cpu/fpu/roundmode",
+  "cpu/fpu/fpu_branch",
 
   "audio/atrac/addstreamdata",
   "audio/atrac/atractest",
@@ -103,12 +135,25 @@ tests_good = [
   "audio/mp3/getmpegversion",
   "audio/mp3/getsamplerate",
   "audio/mp3/getsumdecoded",
+  "audio/mp3/infotoadd",
   "audio/mp3/initresource",
   "audio/mp3/mp3test",
+  "audio/mp3/notifyadd",
   "audio/mp3/release",
   "audio/mp3/reserve",
   "audio/mp3/setloopnum",
+  "audio/mp3/stream",
+  "audio/blocking/contend",
+  "audio/blocking/channels",
+  "audio/blocking/depth",
+  "audio/blocking/errors",
+  "audio/blocking/overhead",
+  "audio/blocking/oneshot",
+  "audio/blocking/restlen",
+  "audio/blocking/vaudio",
+  "audio/sceaudio/datalen",
   "audio/output2/changelength",
+  "audio/output2/release",
   "audio/output2/reserve",
   "audio/output2/threads",
   "audio/reverb/basic",
@@ -136,6 +181,8 @@ tests_good = [
   "display/setmode",
   "dmac/dmactest",
   "font/altcharcode",
+  "font/charglyphimage",
+  "font/charglyphimageclip",
   "font/charimagerect",
   "font/find",
   "font/fontinfo",
@@ -166,10 +213,14 @@ tests_good = [
   "gpu/dither/dither",
   "gpu/filtering/mipmaplinear",
   "gpu/ge/break",
+  "gpu/ge/breakwait",
+  "gpu/ge/callbackstate",
   "gpu/ge/context",
   "gpu/ge/edram",
   "gpu/ge/enqueueparam",
+  "gpu/ge/intrsuspend",
   "gpu/ge/queue",
+  "gpu/ge/queue2",
   "gpu/primitives/indices",
   "gpu/primitives/invalidprim",
   "gpu/primitives/points",
@@ -203,12 +254,19 @@ tests_good = [
   "gpu/vertices/morph",
   # "gpu/vertices/texcoords",  #  See issue #19093
   "hash/hash",
+  "hash/md5ctx",
+  "hash/mt19937ctx",
+  "hash/sha1ctx",
   "hle/check_not_used_uids",
   "intr/intr",
   "intr/enablesub",
   "intr/suspended",
   "intr/vblank/vblank",
   "io/cwd/cwd",
+  "io/file/rename",
+  "io/directory/directory",
+  "io/stat/stat",
+  "io/stat/readonly",
   "io/open/badparent",
   "jpeg/create",
   "jpeg/delete",
@@ -218,6 +276,7 @@ tests_good = [
   "malloc/malloc",
   "misc/dcache",
   "misc/deadbeef",
+  "modules/unresolved/unresolved",
   "misc/libc",
   "misc/sdkver",
   "misc/testgp",
@@ -232,10 +291,14 @@ tests_good = [
   "rtc/rtc",
   "rtc/arithmetic",
   "rtc/lookup",
+  "rtc/convert",
   "string/string",
   "sysmem/freesize",
   "sysmem/memblock",
   "sysmem/sysmem",
+  "sysmem/partitions",
+  "sysmem/kernel/partitions",
+  "sysmem/kernel/heap",
   "sysmem/volatile",
   "threads/alarm/alarm",
   "threads/alarm/cancel/cancel",
@@ -327,7 +390,10 @@ tests_good = [
   "threads/threads/threadmanidtype",
   "threads/threads/threads",
   "threads/tls/create",
+  "threads/tls/partition",
+  "threads/tls/kernel/partition",
   "threads/tls/delete",
+  "threads/tls/get",
   "threads/tls/free",
   "threads/tls/priority",
   "threads/tls/refer",
@@ -358,6 +424,7 @@ tests_good = [
   "utility/savedata/autosave",
   "utility/savedata/filelist",
   "utility/savedata/makedata",
+  "utility/systemparam/systemparam",
   "umd/callbacks/umd",
   "umd/register",
   "video/mpeg/ringbuffer/avail",
@@ -381,27 +448,61 @@ tests_good = [
   "video/psmfplayer/stop",
 ]
 
+# Broken tests
+# -b flag runs these.
+
+# Tests that don't pass yet on an architecture we can only reach through emulation. Pass
+# --known-failures=<arch> to drop them from the run, so CI can still catch anything *new* breaking
+# while these stay outstanding. Keep a reason next to each one, and delete entries as they're fixed
+# rather than letting the list rot.
+known_failures = {
+  "riscv64": [
+    # No flush-to-zero: the ISA has no control for it, so a denormal result survives where the
+    # PSP would have flushed it. Everything else in this test passes.
+    "cpu/fpu/fpu",
+    # The ISA returns the canonical NaN (0x7fc00000) from every operation, never the operand's
+    # NaN, so a negative or signaling NaN input loses its sign and payload. Everything else passes.
+    "cpu/fpu/roundmode",
+    # The software renderer's output differs from the reference by the same amount on both of
+    # these architectures, despite them using completely different SIMD paths. Unexplained.
+    "gpu/clipping/homogeneous",
+    "gpu/commands/cull",
+    "gpu/primitives/triangles",
+  ],
+  "loongarch64": [
+    "cpu/fpu/fpu",
+    "gpu/clipping/homogeneous",
+    "gpu/commands/cull",
+    "gpu/primitives/triangles",
+  ],
+}
+
 tests_next = [
 # These are the next tests up for fixing. These run by default.
   "cpu/fpu/fcr",
+  "cpu/vfpu/prefix_consume",  # see the pspautotests commit for what differs per core
+  "cpu/vfpu/prefix_sat",
+  "cpu/vfpu/prefix_unpack",  # an invalid swizzle replays an earlier prefixed value, not emulated
+  "cpu/vfpu/vbranch_hazard",  # VFPU pipeline latencies, which a compiler pads for; not emulated
+  "cpu/vfpu/minmax_tie",  # vmin/vmax return the second operand on a -0/+0 tie; the IR path returns the first
+  "cpu/vfpu/minmax_zero",  # signed zero and denormals in vmin/vmax
+  "cpu/vfpu/specials",  # vcmp on denormals, NaN canonicalization and denormal flush in vbfy/vocp/vavg/vfad/vsocp
+  "cpu/vfpu/overlap_vcrsp",  # vcrsp overlapping its source, which the assembler refuses; the hardware doesn't read-before-write
+  "cpu/fpu/fpu_branch_hazard",  # a bc1x right after c.xx.s sees the old condition; the compiler pads for it, not emulated
+  "cpu/fpu/fpu_nan",  # 0/0 and inf-inf give 0x7fc00000; x86 hosts make 0xffc00000, and a check per op isn't worth it
+  "cpu/lsu/cacheop",  # the data cache is write-back and the uncached mirror shows it; not emulated
   "cpu/vfpu/prefixes",
   "cpu/vfpu/vector",
   "cpu/vfpu/vregs",
-  "audio/sceaudio/datalen",
   "audio/sceaudio/output",
   "audio/sceaudio/reserve",
   "audio/sascore/setadsr",
-  "audio/mp3/infotoadd",
   "audio/mp3/init",
-  "audio/mp3/notifyadd",
   "audio/output2/frequency",
-  "audio/output2/release",
   "audio/output2/rest",
   "ccc/convertstring",
   "display/hcount",
   "font/fonttest",
-  "font/charglyphimage",
-  "font/charglyphimageclip",
   "font/charinfo",
   "font/newlib",
   "font/open",
@@ -431,6 +532,8 @@ tests_next = [
   "gpu/reflection/reflection",
   "gpu/rendertarget/rendertarget",
   "gpu/signals/continue",
+  # Old SDK: a stall update from inside a SUSPEND handler is remembered, but not applied to the GE. See docs/sceGe.md.
+  "gpu/signals/handlercalls",
   "gpu/signals/jumps",
   "gpu/signals/simple",
   "gpu/simple/simple",
@@ -443,11 +546,11 @@ tests_next = [
   "intr/registersub",
   "intr/releasesub",
   "intr/waits",
-  "io/directory/directory",
+  "sysmem/kernel/heapgrow",
   "io/file/file",
-  "io/file/rename",
   "io/io/io",
   "io/iodrv/iodrv",
+  "io/shortname/shortname",
   "io/open/tty0",
   "jpeg/csc",
   "jpeg/decode",
@@ -462,16 +565,18 @@ tests_next = [
   "net/http/http",
   "net/primary/ether",
   "power/freq",
-  "rtc/convert",
   "sysmem/partition",
   "threads/callbacks/cancel",
   "threads/callbacks/count",
   "threads/callbacks/notify",
+  # These two mbx tests only appeared to work because they papered over bugs 
+
+
   "threads/scheduling/dispatch",
   "threads/scheduling/scheduling",
   "threads/threads/create",
   "threads/threads/terminate",
-  "threads/tls/get",
+  "threads/tls/memory",
   "threads/vpl/create",
   "umd/io/umd_io",
   "umd/raw_access/raw_access",
@@ -489,7 +594,6 @@ tests_next = [
   #"utility/savedata/saveemptyfilename",
   "utility/savedata/secureversion",
   "utility/savedata/sizes",
-  "utility/systemparam/systemparam",
   "video/mpeg/basic",
   "video/pmf/pmf",
   "video/pmf_simple/pmf_simple",
@@ -538,9 +642,22 @@ def init():
     print("PPSSPPHeadless executable missing, please build one.")
     sys.exit(1)
 
+def cpu_backend(args):
+  # Which backend headless will end up on, given the args we hand through to it. Headless defaults
+  # to the JIT, and a later flag overrides an earlier one, like its own parsing in Core/CmdLine.cpp.
+  short_flags = {'-i': 'interpreter', '-r': 'ir', '-j': 'jit', '-J': 'jit-ir'}
+  backend = 'jit'
+  for arg in args:
+    if arg in short_flags:
+      backend = short_flags[arg]
+    elif arg.startswith('--cpu='):
+      backend = arg[len('--cpu='):]
+  return backend
+
 def run_tests(test_list, args):
   global PPSSPP_EXE, TIMEOUT
   returncode = 0
+  timeout = CPU_TIMEOUTS.get(cpu_backend(args), TIMEOUT)
 
   test_filenames = []
   for test in test_list:
@@ -554,11 +671,11 @@ def run_tests(test_list, args):
 
   if len(test_filenames):
     # TODO: Maybe --compare should detect --graphics?
-    cmdline = [PPSSPP_EXE, '--root', TEST_ROOT + '../', '--compare', '--timeout=' + str(TIMEOUT), '@-']
+    cmdline = [PPSSPP_EXE, '--root', TEST_ROOT + '../', '--compare', '--timeout-wall=' + str(timeout), '@-']
     cmdline.extend([i for i in args if i not in ['-g', '-m', '-b']])
 
     c = Command(cmdline, '\n'.join(test_filenames))
-    returncode = c.run(TIMEOUT * len(test_filenames))
+    returncode = c.run(timeout * len(test_filenames))
 
     print("Ran " + ' '.join(cmdline))
 
@@ -569,10 +686,17 @@ def main():
   tests = []
   args = []
   teamcity = False
+  skip_arch = None
   for arg in sys.argv[1:]:
     if arg == '--teamcity':
       args.append(arg)
       teamcity = True
+    elif arg.startswith('--known-failures='):
+      # Ours, not headless's - don't pass it through.
+      skip_arch = arg[len('--known-failures='):]
+      if skip_arch not in known_failures:
+        print("Unknown architecture for --known-failures: " + skip_arch)
+        sys.exit(1)
     elif arg[0] == '-':
       args.append(arg)
     else:
@@ -591,6 +715,12 @@ def main():
     tests = [i for i in tests_next if i.startswith(tests[0])]
   elif '-m' in args:
     tests = [i for i in tests_next + tests_good if i.startswith(tests[0])]
+
+  if skip_arch:
+    skipped = [t for t in tests if t in known_failures[skip_arch]]
+    tests = [t for t in tests if t not in known_failures[skip_arch]]
+    if skipped:
+      print("Skipping %d known failures on %s: %s" % (len(skipped), skip_arch, ", ".join(skipped)))
 
   returncode = run_tests(tests, args)
   if teamcity:

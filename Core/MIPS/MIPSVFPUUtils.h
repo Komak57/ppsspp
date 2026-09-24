@@ -60,6 +60,8 @@ inline float vfpu_clamp(float v, float min, float max) {
 }
 
 float vfpu_dot(const float a[4], const float b[4]);
+// The portable version vfpu_dot is checked against.
+float vfpu_dot_reference(const float a[4], const float b[4]);
 float vfpu_sqrt(float a);
 float vfpu_rsqrt(float a);
 
@@ -167,13 +169,13 @@ inline u32 VFPU_MAKE_CONSTANTS(VFPUConst x, VFPUConst y, VFPUConst z, VFPUConst 
 	return result;
 }
 
-u32 VFPURewritePrefix(int ctrl, u32 remove, u32 add);
+u32 VFPURewritePrefix(MIPSState *mips, int ctrl, u32 remove, u32 add);
 
-void ReadMatrix(float *rd, MatrixSize size, int reg);
-void WriteMatrix(const float *rs, MatrixSize size, int reg);
+void ReadMatrix(const MIPSState *mips, float *rd, MatrixSize size, int reg);
+void WriteMatrix(MIPSState *mips,const float *rs, MatrixSize size, int reg);
 
-void WriteVector(const float *rs, VectorSize N, int reg);
-void ReadVector(float *rd, VectorSize N, int reg);
+void ReadVector(const MIPSState *mips, float *rd, VectorSize N, int reg);
+void WriteVector(MIPSState *mips, const float *rs, VectorSize N, int reg);
 
 void GetVectorRegs(u8 regs[4], VectorSize N, int vectorReg);
 void GetMatrixRegs(u8 regs[16], MatrixSize N, int matrixReg);
@@ -219,8 +221,12 @@ static inline MatrixSize GetMtxSize(MIPSOpcode op) {
 	return (MatrixSize)(a + b + 1);  // Safe, there are no other possibilities
 }
 
+VectorSize GetQuarterVectorSizeSafe(VectorSize sz);
+VectorSize GetQuarterVectorSize(VectorSize sz);
 VectorSize GetHalfVectorSizeSafe(VectorSize sz);
 VectorSize GetHalfVectorSize(VectorSize sz);
+VectorSize GetQuadrupleVectorSizeSafe(VectorSize sz);
+VectorSize GetQuadrupleVectorSize(VectorSize sz);
 VectorSize GetDoubleVectorSizeSafe(VectorSize sz);
 VectorSize GetDoubleVectorSize(VectorSize sz);
 VectorSize MatrixVectorSizeSafe(MatrixSize sz);
@@ -252,6 +258,15 @@ static inline int TransposeMatrixReg(int matrixReg) {
 int GetVectorOverlap(int reg1, VectorSize size1, int reg2, VectorSize size2);
 
 bool GetVFPUCtrlMask(int reg, u32 *mask);
+// Bits a write to the register always sets, on top of the mask: the RNG state registers keep
+// 0x3F800000 in their top bits whatever is written (cpu/vfpu/vrnd).
+u32 GetVFPUCtrlSetBits(int reg);
 
 float Float16ToFloat32(unsigned short l);
+
+// vh2f and vf2h, bit-exact to the hardware (cpu/vfpu/specials). vf2h truncates the mantissa,
+// flushes below 2^-14 to zero and keeps the low ten mantissa bits of a NaN; vh2f flushes
+// subnormal halves and keeps inf/NaN mantissa bits unshifted.
+u32 vfpu_h2f(u16 h);
+u16 vfpu_f2h(u32 f);
 void InitVFPU();

@@ -779,7 +779,7 @@ public:
 		setUDPConnReset(p2p_sock, false);
 
 		if (g_Config.bEnableUPnP)
-			bool ok = g_PortManager.Add("UDP", SCE_SIGN_PORT, SCE_SIGN_PORT); // host order - src.sin_port is htons'd
+			bool ok = g_PortManager.Add("UDP", SCE_SIGN_PORT, SCE_SIGN_PORT, "P2P Infra Socket"); // host order - src.sin_port is htons'd
 		return p2p_sock;
 	}
 private:

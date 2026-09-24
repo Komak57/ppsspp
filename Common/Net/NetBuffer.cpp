@@ -80,7 +80,7 @@ int Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress
 		// After this, we'll block on reading so we do this while first if we have a cancel pointer.
 		while (!ready && progress && progress->cancelled) {
 			if (*progress->cancelled)
-				return false;
+				return -1;
 			if (fd < 0) {
 				ERROR_LOG(Log::HTTP, "HTTP Connection lost");
 				return -1;
@@ -89,7 +89,7 @@ int Buffer::ReadAllWithProgress(int fd, int knownSize, RequestProgress *progress
 		}
 		int retval = retval = recv(fd, &buf[0], buf.size(), MSG_NOSIGNAL);
 		if (retval == 0) {
-			return true;
+			return 0;
 		} else if (retval < 0) {
 			if (socket_errno != EWOULDBLOCK) {
 				ERROR_LOG(Log::IO, "ReadAllWithProgress - Error reading from buffer: %i", retval);

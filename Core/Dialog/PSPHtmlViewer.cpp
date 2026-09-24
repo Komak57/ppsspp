@@ -45,7 +45,7 @@ int PSPHtmlViewer::Init(u32 paramAddr) {
 		return SCE_ERROR_UTILITY_INVALID_STATUS;
 
 	requestAddr = paramAddr;
-	int size = Memory::Read_U32(paramAddr);
+	int size = Memory::ReadUnchecked_U32(paramAddr);
 	memset(&request, 0, sizeof(request));
 	// Only copy the right size to support different request format
 	Memory::Memcpy(&request, paramAddr, size);

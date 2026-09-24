@@ -30,7 +30,6 @@
     <ClInclude Include="ArmCommon.h" />
     <ClInclude Include="BitSet.h" />
     <ClInclude Include="CodeBlock.h" />
-    <ClInclude Include="GraphicsContext.h" />
     <ClInclude Include="DbgNew.h" />
     <ClInclude Include="OSVersion.h" />
     <ClInclude Include="BitScan.h" />
@@ -92,6 +91,9 @@
     </ClInclude>
     <ClInclude Include="Data\Random\Rng.h">
       <Filter>Data\Random</Filter>
+    </ClInclude>
+    <ClInclude Include="Data\Text\Demangle.h">
+      <Filter>Data\Text</Filter>
     </ClInclude>
     <ClInclude Include="Data\Text\I18n.h">
       <Filter>Data\Text</Filter>
@@ -315,13 +317,13 @@
     <ClInclude Include="GPU\Vulkan\VulkanMemory.h">
       <Filter>GPU\Vulkan</Filter>
     </ClInclude>
+    <ClInclude Include="GPU\Vulkan\VulkanPresentation.h">
+      <Filter>GPU\Vulkan</Filter>
+    </ClInclude>
     <ClInclude Include="Render\Text\draw_text.h">
       <Filter>Render\Text</Filter>
     </ClInclude>
     <ClInclude Include="Render\Text\draw_text_android.h">
-      <Filter>Render\Text</Filter>
-    </ClInclude>
-    <ClInclude Include="Render\Text\draw_text_qt.h">
       <Filter>Render\Text</Filter>
     </ClInclude>
     <ClInclude Include="Render\Text\draw_text_uwp.h">
@@ -334,9 +336,6 @@
       <Filter>Data\Collections</Filter>
     </ClInclude>
     <ClInclude Include="Data\Collections\Hashmaps.h">
-      <Filter>Data\Collections</Filter>
-    </ClInclude>
-    <ClInclude Include="Data\Collections\ThreadSafeList.h">
       <Filter>Data\Collections</Filter>
     </ClInclude>
     <ClInclude Include="GPU\Shader.h">
@@ -498,8 +497,11 @@
     <ClInclude Include="Net\HTTPRequest.h">
       <Filter>Net</Filter>
     </ClInclude>
-    <ClInclude Include="..\ext\naett\naett.h">
-      <Filter>ext\naett</Filter>
+    <ClInclude Include="..\ext\naett-lib\src\naett_internal.h">
+      <Filter>ext\naett-lib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ext\naett-lib\naett.h">
+      <Filter>ext\naett-lib</Filter>
     </ClInclude>
     <ClInclude Include="Net\HTTPNaettRequest.h">
       <Filter>Net</Filter>
@@ -783,6 +785,24 @@
     <ClInclude Include="..\ext\pugixml\pugixml.hpp">
       <Filter>ext\pugixml</Filter>
     </ClInclude>
+    <ClInclude Include="Data\Text\StringWriter.h">
+      <Filter>Data\Text</Filter>
+    </ClInclude>
+    <ClInclude Include="System\Application.h">
+      <Filter>System</Filter>
+    </ClInclude>
+    <ClInclude Include="GPU\GraphicsContext.h">
+      <Filter>GPU</Filter>
+    </ClInclude>
+    <ClInclude Include="GPU\Vulkan\VulkanGraphicsContext.h">
+      <Filter>GPU\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="GPU\OpenGL\OpenGLGraphicsContext.h">
+      <Filter>GPU\OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ScreenManager.h">
+      <Filter>UI</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ABI.cpp" />
@@ -874,6 +894,9 @@
     </ClCompile>
     <ClCompile Include="Input\InputState.cpp">
       <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Data\Text\Demangle.cpp">
+      <Filter>Data\Text</Filter>
     </ClCompile>
     <ClCompile Include="Data\Text\I18n.cpp">
       <Filter>Data\Text</Filter>
@@ -1079,9 +1102,6 @@
     <ClCompile Include="Render\Text\draw_text_android.cpp">
       <Filter>Render\Text</Filter>
     </ClCompile>
-    <ClCompile Include="Render\Text\draw_text_qt.cpp">
-      <Filter>Render\Text</Filter>
-    </ClCompile>
     <ClCompile Include="Render\Text\draw_text_uwp.cpp">
       <Filter>Render\Text</Filter>
     </ClCompile>
@@ -1213,8 +1233,11 @@
     <ClCompile Include="Net\HTTPRequest.cpp">
       <Filter>Net</Filter>
     </ClCompile>
-    <ClCompile Include="..\ext\naett\naett.c">
-      <Filter>ext\naett</Filter>
+    <ClCompile Include="..\ext\naett-lib\src\naett_core.c">
+      <Filter>ext\naett-lib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\naett-lib\src\naett_win.c">
+      <Filter>ext\naett-lib</Filter>
     </ClCompile>
     <ClCompile Include="Net\HTTPNaettRequest.cpp">
       <Filter>Net</Filter>
@@ -1451,6 +1474,15 @@
     <ClCompile Include="..\ext\pugixml\pugixml.cpp">
       <Filter>ext\pugixml</Filter>
     </ClCompile>
+    <ClCompile Include="GPU\Vulkan\VulkanGraphicsContext.cpp">
+      <Filter>GPU\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="GPU\OpenGL\OpenGLGraphicsContext.cpp">
+      <Filter>GPU\OpenGL</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ScreenManager.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Crypto">
@@ -1552,7 +1584,7 @@
     <Filter Include="ext\basis_universal">
       <UniqueIdentifier>{d6d5f6e0-1c72-496b-af11-6d52d5123033}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ext\naett">
+    <Filter Include="ext\naett-lib">
       <UniqueIdentifier>{34f45db9-5c08-49cb-b349-b9e760ce3213}</UniqueIdentifier>
     </Filter>
     <Filter Include="ext\libchdr">
@@ -1610,6 +1642,7 @@
     <Text Include="..\ext\imgui\CMakeLists.txt">
       <Filter>ext\imgui</Filter>
     </Text>
+    <Text Include="CMakeLists.txt" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\ext\basis_universal\basisu_transcoder_tables_astc.inc">

@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <cstdio>
 #include <string>
 #include <vector>
 #include <map>
@@ -24,6 +25,7 @@
 
 #include "Common/CommonTypes.h"
 #include "Core/HLE/sceKernel.h"
+#include "Core/HLE/ErrorCodes.h"
 #include "Core/HLE/PSPThreadContext.h"
 #include "Core/HLE/KernelThreadDebugInterface.h"
 
@@ -58,6 +60,8 @@ int __KernelGetThreadExitStatus(SceUID threadID);
 int sceKernelStartThread(SceUID threadToStartID, int argSize, u32 argBlockPtr);
 u32 sceKernelSuspendDispatchThread();
 u32 sceKernelResumeDispatchThread(u32 suspended);
+int sceKernelGetUserLevel();
+int sceKernelIsUserModeThread();
 int sceKernelWaitThreadEnd(SceUID threadID, u32 timeoutPtr);
 u32 sceKernelReferThreadStatus(u32 uid, u32 statusPtr);
 u32 sceKernelReferThreadRunStatus(u32 uid, u32 statusPtr);
@@ -174,6 +178,46 @@ struct NativeThread {
 	s32_le numInterruptPreempts;
 	s32_le numThreadPreempts;
 	s32_le numReleases;
+};
+
+struct NativeCallback {
+	SceUInt_le size;
+	char name[32];
+	SceUID_le threadId;
+	u32_le entrypoint;
+	u32_le commonArgument;
+
+	s32_le notifyCount;
+	s32_le notifyArg;
+};
+
+// Exposed here (rather than kept private to sceKernelThread.cpp) so the WebSocket debugger can
+// read a live object's state directly via kernelObjects.Get<PSPCallback>()/Iterate<PSPCallback>()
+// - see HLEKernelObjectSubscriber.cpp. That's a read-only use: nothing outside this file should
+// call DoState() or otherwise mutate a PSPCallback - it's public here for this file's own use as
+// before, not an invitation to write to it from elsewhere.
+class PSPCallback : public KernelObject {
+public:
+	const char *GetName() override { return nc.name; }
+	const char *GetTypeName() override { return GetStaticTypeName(); }
+	static const char *GetStaticTypeName() { return "CallBack"; }
+
+	void GetQuickInfo(char *ptr, int size) override {
+		snprintf(ptr, size, "thread=%i, argument= %08x",
+			nc.threadId,
+			nc.commonArgument);
+	}
+
+	~PSPCallback() {
+	}
+
+	static u32 GetMissingErrorCode() { return SCE_KERNEL_ERROR_UNKNOWN_CBID; }
+	static int GetStaticIDType() { return SCE_KERNEL_TMID_Callback; }
+	int GetIDType() const override { return SCE_KERNEL_TMID_Callback; }
+
+	void DoState(PointerWrap &p) override;
+
+	NativeCallback nc;
 };
 
 struct ThreadWaitInfo {
@@ -298,6 +342,10 @@ KernelObject *__KernelCallbackObject();
 SceUID __KernelGetCurThread();
 int KernelCurThreadPriority();
 bool KernelChangeThreadPriority(SceUID threadID, int priority);
+// Whether the running thread belongs to a kernel module. Privilege on the PSP is a property of
+// the caller, not of the syscall - hleIsKernelMode() only says the entry point itself is a
+// kernel-only export, which is a different question.
+bool __KernelCurThreadIsKernelMode();
 u32 __KernelGetCurThreadStack();
 u32 __KernelGetCurThreadStackStart();
 const char *__KernelGetThreadName(SceUID threadID);
@@ -451,6 +499,15 @@ void __KernelChangeThreadState(SceUID threadId, ThreadStatus newStatus);
 
 int LoadExecForUser_362A956B();
 int sceKernelRegisterExitCallback(SceUID cbId);
+
+// Dispatch the exit callback registered via sceKernelRegisterExitCallback on its registering thread,
+// so the game has a chance to clean up before we shut down. Returns false if no callback can be
+// dispatched (none registered, the thread is gone, etc.) - in that case, the host should proceed
+// to power down immediately.
+bool __KernelInvokeRegisteredExitCallback();
+// True while a previously-invoked exit callback hasn't yet returned. The host should keep running
+// emulation while this is true, and only tear down after it goes false (or after a timeout).
+bool __KernelIsExitCallbackPending();
 
 KernelObject *__KernelThreadEventHandlerObject();
 SceUID sceKernelRegisterThreadEventHandler(const char *name, SceUID threadID, u32 mask, u32 handlerPtr, u32 commonArg);

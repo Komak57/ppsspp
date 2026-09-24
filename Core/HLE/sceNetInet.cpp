@@ -231,7 +231,7 @@ static void __NetInetPollTick(u64 userdata, int cyclesLate) {
 			op.active = false;
 			continue;
 		}
-		SceNetInetPollfd *fdarray = (SceNetInetPollfd *)Memory::GetPointer(op.fdsPtr);
+		SceNetInetPollfd *fdarray = (SceNetInetPollfd *)Memory::GetPointerUnchecked(op.fdsPtr);
 		if (!fdarray) {
 			op.active = false;
 			_sce_pspnet_set_thread_errno(ERROR_INET_EFAULT, op.threadID);
@@ -299,7 +299,7 @@ void __NetInetWakeCheck(bool checkDeadlines) {
 			op.active = false;   // thread released some other way
 			continue;
 		}
-		SceNetInetPollfd *fdarray = (SceNetInetPollfd *)Memory::GetPointer(op.fdsPtr);
+		SceNetInetPollfd *fdarray = (SceNetInetPollfd *)Memory::GetPointerUnchecked(op.fdsPtr);
 		if (!fdarray) {
 			op.active = false;
 			_sce_pspnet_set_thread_errno(ERROR_INET_EFAULT, op.threadID);
@@ -371,7 +371,7 @@ static int sceNetInetInetPton(int af, const char *hostname, u32 inAddrPtr)
 		return hleLogError(Log::sceNet, 0, "invalid arg"); //-1
 	}
 
-	int retval = inet_pton(convertSocketDomainPSP2Host(af), hostname, (void *)Memory::GetPointer(inAddrPtr));
+	int retval = inet_pton(convertSocketDomainPSP2Host(af), hostname, (void*)Memory::GetPointerOrException(inAddrPtr));
 	// Note that inet_pton can set errno!
 	if (retval < 0)
 	{
@@ -391,7 +391,7 @@ static int sceNetInetInetAton(const char *hostname, u32 inAddrPtr)
 	}
 
 	// TODO: Wait what, we're calling pton in aton?
-	int retval = inet_pton(AF_INET, hostname, (void *)Memory::GetPointer(inAddrPtr));
+	int retval = inet_pton(AF_INET, hostname, (void*)Memory::GetPointerOrException(inAddrPtr));
 	// inet_aton() returns nonzero if the address is valid, zero if not.
 	return hleLogDebug(Log::sceNet, retval);
 }
@@ -458,8 +458,8 @@ static int sceNetInetGetpeername(int socket, u32 namePtr, u32 namelenPtr)
 		return hleLogError(Log::sceNet, ERROR_INET_EBADF, "Bad socket #%d", socket);
 	}
 
-	SceNetInetSockaddr *name = (SceNetInetSockaddr *)Memory::GetPointer(namePtr);
-	int *namelen = (int *)Memory::GetPointer(namelenPtr);
+	SceNetInetSockaddr* name = (SceNetInetSockaddr*)Memory::GetPointerOrException(namePtr);
+	int* namelen = (int*)Memory::GetPointerOrException(namelenPtr);
 	SockAddrIN4 saddr{};
 	// TODO: Should've created convertSockaddrPSP2Host (and Host2PSP too) function as it's being used pretty often, thus fixing a bug on it will be tedious when scattered all over the places
 	saddr.addr.sa_family = name->sa_family;
@@ -500,8 +500,8 @@ static int sceNetInetGetsockname(int socket, u32 namePtr, u32 namelenPtr)
 		return hleLogError(Log::sceNet, ERROR_INET_EBADF, "Bad socket #%d", socket);
 	}
 
-	SceNetInetSockaddr *name = (SceNetInetSockaddr *)Memory::GetPointer(namePtr);
-	int *namelen = (int *)Memory::GetPointer(namelenPtr);
+	SceNetInetSockaddr* name = (SceNetInetSockaddr*)Memory::GetPointerOrException(namePtr);
+	int* namelen = (int*)Memory::GetPointerOrException(namelenPtr);
 	SockAddrIN4 saddr{};
 	saddr.addr.sa_family = name->sa_family;
 	int len = std::min(*namelen > 0 ? *namelen : 0, static_cast<int>(sizeof(saddr)));
@@ -534,13 +534,11 @@ public:
 };
 // FIXME: select is being used here without an inetSocket pointer
 // FIXME: nfds is number of fd(s) as in posix poll, or was it maximum fd value as in posix select? Star Wars Battlefront Renegade seems to set the nfds to 64, while Coded Arms Contagion is using 256
-int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr, u32 timeoutPtr)
-{
-	_sce_pspnet_set_thread_errno(0);
-	SceNetInetFdSet *readfds = readfdsPtr ? (SceNetInetFdSet *)Memory::GetPointerWrite(readfdsPtr) : nullptr;
-	SceNetInetFdSet *writefds = writefdsPtr ? (SceNetInetFdSet *)Memory::GetPointerWrite(writefdsPtr) : nullptr;
-	SceNetInetFdSet *exceptfds = exceptfdsPtr ? (SceNetInetFdSet *)Memory::GetPointerWrite(exceptfdsPtr) : nullptr;
-	SceNetInetTimeval *timeout = timeoutPtr ? (SceNetInetTimeval *)Memory::GetPointerWrite(timeoutPtr) : nullptr;
+int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr, u32 timeoutPtr) {
+	SceNetInetFdSet	*readfds = readfdsPtr ? (SceNetInetFdSet*)Memory::GetPointerWriteOrException(readfdsPtr) : nullptr;
+	SceNetInetFdSet	*writefds = writefdsPtr ? (SceNetInetFdSet*)Memory::GetPointerWriteOrException(writefdsPtr) : nullptr;
+	SceNetInetFdSet	*exceptfds = exceptfdsPtr ? (SceNetInetFdSet*)Memory::GetPointerWriteOrException(exceptfdsPtr) : nullptr;
+	SceNetInetTimeval *timeout = timeoutPtr ? (SceNetInetTimeval*)Memory::GetPointerWriteOrException(timeoutPtr) : nullptr;
 
 	timeval tmout = {5, 543210}; // Workaround timeout value when timeout = NULL
 	if (timeout)
@@ -742,7 +740,7 @@ int sceNetInetPoll(u32 fdsPtr, u32 nfds, int timeout)
 		_sce_pspnet_set_thread_errno(ERROR_INET_EFAULT);
 		return hleLogError(Log::sceNet, -1, "invalid fd array");
 	}
-	SceNetInetPollfd *fdarray = (SceNetInetPollfd *)Memory::GetPointer(fdsPtr); // SceNetInetPollfd/pollfd, sceNetInetPoll() have similarity to BSD poll() but pollfd have different size on 64bit
+	SceNetInetPollfd *fdarray = (SceNetInetPollfd *)Memory::GetPointerOrException(fdsPtr); // SceNetInetPollfd/pollfd, sceNetInetPoll() have similarity to BSD poll() but pollfd have different size on 64bit
 	for (u32 i = 0; i < nfds; i++) {
 		fdarray[i].revents = 0;
 		if (fdarray[i].fd < 0) {
@@ -834,9 +832,9 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 		const bool routeP2P = inetSock->recvP2P
 			&& sceNpSignalingIsPeerAddress(inetSock->dst.virt.addr.s_addr);
 		if (routeP2P)
-			retval = (inetSock->*(inetSock->recvP2P))((char*)Memory::GetPointer(bufPtr), bufLen, flags, nullptr, nullptr);
+			retval = (inetSock->*(inetSock->recvP2P))((char*)Memory::GetPointerOrException(bufPtr), bufLen, flags, nullptr, nullptr);
 		else
-			retval = inetSock->recv((char*)Memory::GetPointer(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
+			retval = inetSock->recv((char*)Memory::GetPointerOrException(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
 			return;
@@ -850,7 +848,7 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 				ERROR_LOG(Log::sceNet, "%d=sceNetInetRecv(%i, %08x, %i, %i): Error: %d", retval, socket, bufPtr, bufLen, flags, socket_errno);
 		} else {
 			std::string datahex;
-			DataToHexString(10, 0, Memory::GetPointer(bufPtr), retval, &datahex);
+			DataToHexString(10, 0, Memory::GetPointerOrException(bufPtr), retval, &datahex);
 			VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", retval, datahex.c_str());
 		}
 
@@ -875,7 +873,7 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	}
 
 	std::string datahex;
-	DataToHexString(10, 0, Memory::GetPointer(bufPtr), bufLen, &datahex);
+	DataToHexString(10, 0, Memory::GetPointerOrException(bufPtr), bufLen, &datahex);
 	VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", bufLen, datahex.c_str());
 
     // Check if a previous send is still pending.
@@ -914,14 +912,14 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 			// FIXME: We're dropping the socket flags for p2p flags. This should probably
 			//   be a per-socket function to define how to handle sendP2P for compatibility,
 			//   and then push to Send_Reliable with PSH+TCP
-			retval = (inetSock->*(inetSock->sendP2P))((char*)Memory::GetPointer(bufPtr), bufLen, (p2ps_tcp_flags::PSH | p2ps_tcp_flags::TCP), nullptr, 0);
+			retval = (inetSock->*(inetSock->sendP2P))((char*)Memory::GetPointerOrException(bufPtr), bufLen, (p2ps_tcp_flags::PSH | p2ps_tcp_flags::TCP), nullptr, 0);
 		} else
-			retval = inetSock->send((char*)Memory::GetPointer(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
+			retval = inetSock->send((char*)Memory::GetPointerOrException(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
 			return;
 		}
-		//int retval = send(inetSock->sock, (char*)Memory::GetPointer(bufPtr), bufLen, flgs | MSG_NOSIGNAL);
+		//int retval = send(inetSock->sock, (char*)Memory::GetPointerOrException(bufPtr), bufLen, flgs | MSG_NOSIGNAL);
 		int pspErrno = 0;
 		if (retval < 0) {
 			pspErrno = convertInetErrnoHost2PSP(socket_errno);
@@ -975,7 +973,7 @@ static int sceNetInetSetsockopt(int socket, int level, int optname, u32 optvalPt
 		return hleLogError(Log::sceNet, -1, "Bad socket #%d", socket);
 	}
 
-	u32 optval = optvalPtr ? Memory::Read_U32(optvalPtr) : 0;
+	const u32 optval = Memory::IsValid4AlignedAddress(optvalPtr) ? Memory::ReadUnchecked_U32(optvalPtr) : 0;
 	INFO_LOG(Log::sceNet, "sceNetInetSetsockopt(%i, %i, %i, %08x, %i) at %08x: Level = %s, OptName = %s, OptValue = %d",
 			 socket, level, optname, optvalPtr, optlen, currentMIPS->pc,
 			 inetSockoptLevel2str(level).c_str(), inetSockoptName2str(optname, level).c_str(), optval);
@@ -1004,8 +1002,8 @@ static int sceNetInetGetsockopt(int socket, int level, int optname, u32 optvalPt
 		return hleLogError(Log::sceNet, -1, "Bad socket #%d", socket);
 	}
 
-	u32_le *optval = (u32_le *)Memory::GetPointer(optvalPtr);
-	socklen_t *optlen = (socklen_t *)Memory::GetPointer(optlenPtr);
+	u32_le* optval = (u32_le*)Memory::GetPointerOrException(optvalPtr);
+	socklen_t* optlen = (socklen_t*)Memory::GetPointerOrException(optlenPtr);
 	DEBUG_LOG(Log::sceNet, "SockOpt: Level = %s, OptName = %s", inetSockoptLevel2str(level).c_str(), inetSockoptName2str(optname, level).c_str());
 	timeval tval{};
 
@@ -1032,7 +1030,7 @@ static int sceNetInetBind(int socket, u32 namePtr, int namelen)
 		return hleLogError(Log::sceNet, -1, "Bad socket #%d", socket);
 	}
 
-	SceNetInetSockaddr *name = (SceNetInetSockaddr *)Memory::GetPointer(namePtr);
+	SceNetInetSockaddr *name = (SceNetInetSockaddr *)Memory::GetPointerOrException(namePtr);
 
 	// Port 3658 (SCE_SIGN_PORT) is the P2P/signaling convention port. On real hardware it's a
 	// kernel-level hijack that any number of sockets share via vports; here that means multiple
@@ -1089,7 +1087,7 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen)
 
 	// Still using warn log here so it stands out in the log
 
-	SceNetInetSockaddr *dst = (SceNetInetSockaddr *)Memory::GetPointer(sockAddrPtr);
+	SceNetInetSockaddr *dst = (SceNetInetSockaddr *)Memory::GetPointerOrException(sockAddrPtr);
 
     // Check if a previous send is still pending.
 	if (inetSock->thread.joinable()) {
@@ -1429,14 +1427,14 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 		const bool routeP2P = (inetSock->src.host.sin_port == htons(SCE_SIGN_PORT)) && inetSock->recvP2P;
 		// NOTICE_LOG(Log::sceNet, "sceNetInetRecvfrom taking the %s route.", (routeP2P? "Hybrid" : "Raw"));
 		if (routeP2P)
-			retval = (inetSock->*(inetSock->recvP2P))((char *)Memory::GetPointer(bufferPtr), len, flags, src, srclen);
+			retval = (inetSock->*(inetSock->recvP2P))((char *)Memory::GetPointerOrException(bufferPtr), len, flags, src, srclen);
 		else
-			retval = inetSock->recvfrom((char *)Memory::GetPointer(bufferPtr), len, flags, src, srclen);
+			retval = inetSock->recvfrom((char *)Memory::GetPointerOrException(bufferPtr), len, flags, src, srclen);
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
 			return;
 		}
-		// retval = recvfrom(inetSock->sock, (char*)Memory::GetPointer(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, srclen);
+		// retval = recvfrom(inetSock->sock, (char*)Memory::GetPointerOrException(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, srclen);
 		int pspErrno = 0;
 		if (retval < 0)
 		{
@@ -1447,7 +1445,7 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 				DEBUG_LOG(Log::sceNet, "%d=sceNetInetRecvfrom(%i, %08x, %i, %i, %08x, %i): Error: %08x", retval, socket, bufferPtr, len, flags, fromPtr, (int)*srclen, socket_errno);
 		} else {
 			std::string datahex;
-			DataToHexString(0, 0, Memory::GetPointer(bufferPtr), retval, &datahex);
+			DataToHexString(0, 0, Memory::GetPointerOrException(bufferPtr), retval, &datahex);
 			VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", retval, datahex.c_str());
 		}
 
@@ -1523,15 +1521,15 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 		INFO_LOG(Log::sceNet, "sendto(%i, %s:%u|%u) at %08x", len, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), dest_vport, currentMIPS->pc);
 		
 		std::string datahex;
-		DataToHexString(0, 0, Memory::GetPointer(bufferPtr), len, &datahex);
+		DataToHexString(0, 0, Memory::GetPointerOrException(bufferPtr), len, &datahex);
 		VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", len, datahex.c_str());
 
 		const bool routeP2P = inetSock->sendP2P && (dst && (sceNpSignalingIsPeerAddress(_dest->sin_addr.s_addr) || _dest->sin_port == htons(SCE_SIGN_PORT)));
 		int retval;
 		if (routeP2P) {
-			retval = (inetSock->*(inetSock->sendP2P))((char *)Memory::GetPointer(bufferPtr), len, flags, dst, tolen);
+			retval = (inetSock->*(inetSock->sendP2P))((char *)Memory::GetPointerOrException(bufferPtr), len, flags, dst, tolen);
 		} else
-			retval = inetSock->sendto((char *)Memory::GetPointer(bufferPtr), len, flags, dst, tolen);
+			retval = inetSock->sendto((char *)Memory::GetPointerOrException(bufferPtr), len, flags, dst, tolen);
 
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
@@ -1578,7 +1576,7 @@ static int sceNetInetSendmsg(int socket, u32 msghdrPtr, int flags)
 		return hleLogError(Log::sceNet, -1, "Bad socket #%d", socket);
 	}
 
-	InetMsghdr *pspMsghdr = (InetMsghdr *)Memory::GetPointer(msghdrPtr);
+	InetMsghdr *pspMsghdr = (InetMsghdr *)Memory::GetPointerUnchecked(msghdrPtr);
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
 	SockAddrIN4 saddr{};
@@ -1601,9 +1599,8 @@ static int sceNetInetSendmsg(int socket, u32 msghdrPtr, int flags)
 	}
 	memset(iov, 0, pspMsghdr->msg_iovlen * iovecsize);
 	memset(&hdr, 0, sizeof(hdr));
-	if (pspMsghdr->msg_name != 0)
-	{
-		SceNetInetSockaddr *pspSaddr = (SceNetInetSockaddr *)Memory::GetPointer(pspMsghdr->msg_name);
+	if (pspMsghdr->msg_name != 0) {
+		SceNetInetSockaddr* pspSaddr = (SceNetInetSockaddr*)Memory::GetPointerOrException(pspMsghdr->msg_name);
 		saddr.addr.sa_family = pspSaddr->sa_family;
 		size_t datalen = std::min(pspMsghdr->msg_namelen - (sizeof(pspSaddr->sa_len) + sizeof(pspSaddr->sa_family)), sizeof(saddr.addr.sa_data));
 		memcpy(saddr.addr.sa_data, pspSaddr->sa_data, datalen);
@@ -1623,18 +1620,15 @@ static int sceNetInetSendmsg(int socket, u32 msghdrPtr, int flags)
 	hdr.msg_iov = iov;
 	hdr.msg_iovlen = pspMsghdr->msg_iovlen;
 #endif
-	if (pspMsghdr->msg_iov != 0)
-	{
-		SceNetIovec *pspIov = (SceNetIovec *)Memory::GetPointer(pspMsghdr->msg_iov);
-		for (int i = 0; i < pspMsghdr->msg_iovlen; i++)
-		{
-			if (pspIov[i].iov_base != 0)
-			{
+	if (pspMsghdr->msg_iov != 0) {
+		SceNetIovec* pspIov = (SceNetIovec*)Memory::GetPointerOrException(pspMsghdr->msg_iov);
+		for (int i = 0; i < pspMsghdr->msg_iovlen; i++) {
+			if (pspIov[i].iov_base != 0) {
 #if defined(_WIN32)
-				iov[i].buf = (char *)Memory::GetPointer(pspIov[i].iov_base);
+				iov[i].buf = (char*)Memory::GetPointerOrException(pspIov[i].iov_base);
 				iov[i].len = pspIov[i].iov_len;
 #else
-				iov[i].iov_base = (char *)Memory::GetPointer(pspIov[i].iov_base);
+				iov[i].iov_base = (char*)Memory::GetPointerOrException(pspIov[i].iov_base);
 				iov[i].iov_len = pspIov[i].iov_len;
 #endif
 			}
@@ -1655,7 +1649,7 @@ static int sceNetInetSendmsg(int socket, u32 msghdrPtr, int flags)
 			free(iov);
 			return hleLogError(Log::sceNet, retval);
 		}
-		InetCmsghdr *pspCmsghdr = (InetCmsghdr *)Memory::GetPointer(pspMsghdr->msg_control);
+		InetCmsghdr* pspCmsghdr = (InetCmsghdr*)Memory::GetPointerOrException(pspMsghdr->msg_control);
 		// TODO: Convert InetCmsghdr into platform-specific struct as they're affected by 32/64bit
 		memcpy(chdr, pspCmsghdr, pspMsghdr->msg_controllen);
 #if defined(_WIN32)
@@ -1808,7 +1802,7 @@ static int sceNetInetRecvmsg(int socket, u32 msghdrPtr, int flags)
 		_sce_pspnet_set_thread_errno(ERROR_INET_EFAULT);
 		return hleLogError(Log::sceNet, retval);
 	}
-	InetMsghdr *pspMsghdr = (InetMsghdr *)Memory::GetPointer(msghdrPtr);
+	InetMsghdr* pspMsghdr = (InetMsghdr*)Memory::GetPointerOrException(msghdrPtr);
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
 	SockAddrIN4 saddr{};
@@ -1844,7 +1838,7 @@ static int sceNetInetRecvmsg(int socket, u32 msghdrPtr, int flags)
 // cbStatLenPtr = NULL causes null-pointer dereference; else inputs an element count, and outputs a byte-length
 // cbStatPtr = NULL generates a count-only probe;
 int sceNetInetGetUdpcbstat(u32 cbStatLenPtr, u32 cbStatPtr) {
-    const int cap = (Memory::IsValidAddress(cbStatLenPtr)? (int)Memory::Read_U32(cbStatLenPtr) : 0);
+    const int cap = (Memory::IsValidAddress(cbStatLenPtr)? (int)Memory::ReadUnchecked_U32(cbStatLenPtr) : 0);
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x[%i], %08x) at %08x", __FUNCTION__, cbStatLenPtr, cap, cbStatPtr, currentMIPS->pc);
 	if (!Memory::IsValidAddress(cbStatLenPtr) && !Memory::IsValidAddress(cbStatPtr))
 		return hleLogError(Log::sceNet, SCE_NET_INET_ERROR_INVALID_ARG, "No request provided");
@@ -1893,14 +1887,14 @@ int sceNetInetGetUdpcbstat(u32 cbStatLenPtr, u32 cbStatPtr) {
     }
 	// Only write if the request is asking for size
 	if (cbStatLenPtr)
-	    Memory::Write_U32(cbStatLenPtr, count * SceNetInetUdpCbStatSize);  // OUT: total bytes
+	    Memory::WriteUnchecked_U32(cbStatLenPtr, count * SceNetInetUdpCbStatSize);  // OUT: total bytes
     return hleLogDebug(Log::sceNet, 0);
 }
 
 // cbStatLenPtr = NULL causes null-pointer dereference; else inputs an element count, and outputs a byte-length
 // cbStatPtr = NULL generates a count-only probe;
 int sceNetInetGetTcpcbstat(u32 cbStatLenPtr, u32 cbStatPtr) {
-    const int cap = (Memory::IsValidAddress(cbStatLenPtr)? (int)Memory::Read_U32(cbStatLenPtr) : 0);
+    const int cap = (Memory::IsValidAddress(cbStatLenPtr)? (int)Memory::ReadUnchecked_U32(cbStatLenPtr) : 0);
 	WARN_LOG(Log::sceNet, "UNTESTED %s(%08x[%i], %08x) at %08x", __FUNCTION__, cbStatLenPtr, cap, cbStatPtr, currentMIPS->pc);
 	if (!Memory::IsValidAddress(cbStatLenPtr) && !Memory::IsValidAddress(cbStatPtr))
 		return hleLogError(Log::sceNet, SCE_NET_INET_ERROR_INVALID_ARG, "No request provided");
@@ -1948,7 +1942,7 @@ int sceNetInetGetTcpcbstat(u32 cbStatLenPtr, u32 cbStatPtr) {
 		lastCbStat = stat_list; // Cache shit stat_list for next InetSock
     }
 	if (cbStatLenPtr)
-    	Memory::Write_U32(cbStatLenPtr, count * SceNetInetTcpCbStatSize);  // OUT: total bytes
+    	Memory::WriteUnchecked_U32(cbStatLenPtr, count * SceNetInetTcpCbStatSize);  // OUT: total bytes
     return hleLogDebug(Log::sceNet, 0);
 }
 
@@ -1985,6 +1979,8 @@ const HLEFunction sceNetInet[] = {
 	{0X80A21ABD, &WrapI_I<sceNetInetSocketAbort>,    "sceNetInetSocketAbort",           'i', "i"      },
 	{0X39B0C7D3, &WrapI_UU<sceNetInetGetUdpcbstat>,  "sceNetInetGetUdpcbstat",          'i', "xx"     },
 	{0XB3888AD4, &WrapI_UU<sceNetInetGetTcpcbstat>,  "sceNetInetGetTcpcbstat",          'i', "xx"     },
+	{0X2D5868C0, nullptr,                            "sceNetInetDelArp",                '?', ""       },
+	{0XCCC18C45, nullptr,                            "sceNetInetAddArp",                '?', ""       }
 };
 
 void Register_sceNetInet()

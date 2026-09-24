@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <utility>
 
 #include "Common/Net/HTTPClient.h"
 
@@ -45,13 +46,11 @@ std::string Connection::GetLocalIpAsString() const {
 
 bool Connection::Resolve(const char *host, int port, DNSType type) {
 	if ((intptr_t)sock_ != -1) {
-		ERROR_LOG(Log::IO, "Resolve: Already have a socket");
-		lastError = SCE_HTTP_ERROR_ALREADY_INITED;
+		ERROR_LOG(Log::Net, "Resolve: Already have a socket");
 		return false;
 	}
 	if (!host || port < 1 || port > 65535) {
-		ERROR_LOG(Log::IO, "Resolve: Invalid host or port (%d)", port);
-		lastError = SCE_HTTP_ERROR_NETWORK;
+		ERROR_LOG(Log::Net, "Resolve: Invalid host or port (%d)", port);
 		return false;
 	}
 
@@ -68,8 +67,8 @@ bool Connection::Resolve(const char *host, int port, DNSType type) {
 	}
 	
 	std::string err;
-	if (!net::DNSResolve(processedHostname.c_str(), port_str, &resolved_, err, type)) {
-		WARN_LOG(Log::IO, "Failed to resolve host '%s': '%s' (%s)", host, err.c_str(), DNSTypeAsString(type));
+	if (!net::DNSResolve(processedHostname, port_str, &resolved_, err, type)) {
+		WARN_LOG(Log::Net, "Failed to resolve host '%s': '%s' (%s)", host, err.c_str(), DNSTypeAsString(type));
 		// Zero port so that future calls fail.
 		port_ = 0;
 		lastError = SCE_HTTP_ERROR_PARSE_HTTP_NOT_FOUND;
@@ -82,8 +81,7 @@ bool Connection::Resolve(const char *host, int port, DNSType type) {
 bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 	NOTICE_LOG(Log::sceNet, "Connection::Connect(%i, %d, 0x%08x)", maxTries, timeout, cancelConnect);
 	if (port_ <= 0) {
-		ERROR_LOG(Log::IO, "Bad port");
-		lastError = SCE_HTTP_ERROR_NETWORK;
+		ERROR_LOG(Log::Net, "Bad port");
 		return false;
 	}
 	sock_ = -1;
@@ -99,13 +97,13 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 
 			int sock = socket(possible->ai_family, SOCK_STREAM, IPPROTO_TCP);
 			if ((intptr_t)sock == -1) {
-				ERROR_LOG(Log::IO, "Bad socket");
+				ERROR_LOG(Log::Net, "Bad socket");
 				continue;
 			}
 			// Windows sockets aren't limited by socket number, just by count, so checking FD_SETSIZE there is wrong.
 #if !PPSSPP_PLATFORM(WINDOWS)
 			if (sock >= FD_SETSIZE) {
-				ERROR_LOG(Log::IO, "Socket doesn't fit in FD_SET: %d   We probably have a leak.", sock);
+				ERROR_LOG(Log::Net, "Socket doesn't fit in FD_SET: %d   We probably have a leak.", sock);
 				closesocket(sock);
 				continue;
 			}
@@ -125,7 +123,7 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 					if (!unreachable) {
 						ERROR_LOG(Log::HTTP, "connect(%d) call to %s failed (%d: %s)", sock, addrStr, errorCode, errorString.c_str());
 					} else {
-						INFO_LOG(Log::HTTP, "connect(%d): Ignoring unreachable resolved address %s", sock, addrStr);
+						VERBOSE_LOG(Log::HTTP, "connect(%d): Ignoring unreachable resolved address %s", sock, addrStr);
 					}
 					closesocket(sock);
 					continue;
@@ -137,6 +135,17 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 				maxfd = sock + 1;
 			}
 		}
+
+		if (sockets.empty()) {
+			// No need to call 'select' if we don't have any plausible sockets.
+			if (cancelConnect && *cancelConnect) {
+				WARN_LOG(Log::Net, "connect: cancelled (2): %s:%d", host_.c_str(), port_);
+				break;
+			}
+			sleep_ms(1, "connect");
+			continue;
+		}
+		// There is at least 1 socket candidate.
 
 		int selectResult = 0;
 		long timeoutHalfSeconds = floor(2 * timeout);
@@ -178,7 +187,7 @@ bool Connection::Connect(int maxTries, double timeout, bool *cancelConnect) {
 		}
 
 		if (cancelConnect && *cancelConnect) {
-			WARN_LOG(Log::HTTP, "connect: cancelled (2): %s:%d", host_.c_str(), port_);
+			WARN_LOG(Log::Net, "connect: cancelled (2): %s:%d", host_.c_str(), port_);
 			break;
 		}
 
@@ -210,7 +219,7 @@ namespace http {
 constexpr const char *DEFAULT_USERAGENT = "PPSSPP";
 constexpr const char *HTTP_VERSION = "1.1";
 
-Client::Client(net::ResolveFunc func) : Connection(func) {
+Client::Client(net::ResolveFunc func) : Connection(std::move(func)) {
 	userAgent_ = DEFAULT_USERAGENT;
 	httpVersion_ = HTTP_VERSION;
 	// TODO: Initialize SSH
@@ -223,8 +232,6 @@ Client::~Client() {
 	Disconnect();
 }
 
-// Ignores line folding (deprecated), but respects field combining.
-// Don't use for Set-Cookie, which is a special header per RFC 7230.
 bool GetHeaderValue(const std::vector<std::string> &responseHeaders, std::string_view header, std::string *value) {
 	std::string search(header);
 	search.push_back(':');
@@ -257,7 +264,7 @@ static bool DeChunk(Buffer *inbuffer, Buffer *outbuffer, int contentLength) {
 	while (true) {
 		std::string line;
 		inbuffer->TakeLineCRLF(&line);
-		if (!line.size())
+		if (line.empty())
 			return false;
 		unsigned int chunkSize = 0;
 		if (sscanf(line.c_str(), "%x", &chunkSize) != 1) {
@@ -322,7 +329,7 @@ int Client::POST(const RequestParams &req, std::string_view data, std::string_vi
 	if (mime.empty()) {
 		snprintf(otherHeaders, sizeof(otherHeaders), "Content-Length: %lld\r\n", (long long)data.size());
 	} else {
-		snprintf(otherHeaders, sizeof(otherHeaders), "Content-Length: %lld\r\nContent-Type: %.*s\r\n", (long long)data.size(), (int)mime.size(), mime.data());
+		snprintf(otherHeaders, sizeof(otherHeaders), "Content-Length: %lld\r\nContent-Type: %.*s\r\n", (long long)data.size(), STR_VIEW(mime));
 	}
 
 	int err = SendRequestWithData("POST", req, data, otherHeaders, progress);
@@ -355,8 +362,9 @@ int Client::SendRequest(const char *method, const RequestParams &req, const char
 }
 
 int Client::SendRequestWithData(const char *method, const RequestParams &req, std::string_view data, const char *otherHeaders, net::RequestProgress *progress) {
-	DEBUG_LOG(Log::HTTP, "SendRequestWithData()");
-	progress->Update(0, 0, false);
+	if (progress) {
+		progress->Update(0, 0, false);
+	}
 
 	net::Buffer buffer;
 	const char *tpl =
@@ -376,7 +384,7 @@ int Client::SendRequestWithData(const char *method, const RequestParams &req, st
 		otherHeaders ? otherHeaders : "");
 
 	buffer.Append(data);
-	bool flushed = buffer.FlushSocket(sock(), dataTimeout_, progress->cancelled);
+	bool flushed = buffer.FlushSocket(sock(), headerTimeout_, progress ? progress->cancelled : nullptr);
 	if (!flushed) {
 		return -1;  // TODO error code.
 	}
@@ -392,10 +400,15 @@ int Client::ReadResponseHeaders(net::Buffer *readbuf, std::vector<std::string> &
 	int code = 404;
 	int content_length = 0;
 	int eoh;
+	double endTimeout = time_now_d() + headerTimeout_;
 	while (true) {
 		int retval = readbuf->Read(sock(), toRead);
 		if (*progress->cancelled)
 			return SCE_HTTP_ERROR_ABORTED;
+		if (time_now_d() > endTimeout) {
+			ERROR_LOG(Log::HTTP, "HTTP headers timed out");
+			return -1;
+		}
 		if (retval < 0)
 			return retval;
 		// Check for header marker
@@ -562,7 +575,9 @@ int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::stri
 		if (chunked) {
 			if (!DeChunk(readbuf, output, contentLength)) {
 				ERROR_LOG(Log::HTTP, "Bad chunked data, couldn't read chunk size");
-				progress->Update(0, 0, true);
+				if (progress) {
+					progress->Update(0, 0, true);
+				}
 				return -1;
 			}
 		} else {
@@ -576,20 +591,23 @@ int Client::ReadResponseEntity(net::Buffer *readbuf, const std::vector<std::stri
 			bool result = decompress_string(compressed, &decompressed);
 			if (!result) {
 				ERROR_LOG(Log::HTTP, "Error decompressing using zlib");
-				progress->Update(0, 0, true);
+				if (progress) {
+					progress->Update(0, 0, true);
+				}
 				return -1;
 			}
 			output->Append(decompressed);
 		}
 	}
 
-	progress->Update(contentLength - progress->bytes_read, contentLength, true);
+	if (progress) {
+		progress->Update(contentLength, contentLength, true);
+	}
 	return 0;
 }
 
 HTTPRequest::HTTPRequest(RequestMethod method, std::string_view url, std::string_view postData, std::string_view postMime, const Path &outfile, RequestFlags flags, net::ResolveFunc customResolve, std::string_view name)
-	: Request(method, url, name, &cancelled_, flags), postData_(postData), postMime_(postMime), customResolve_(customResolve) {
-	outfile_ = outfile;
+	: Request(method, url, name, outfile, &cancelled_, flags), postData_(postData), postMime_(postMime), customResolve_(std::move(customResolve)) {
 }
 
 HTTPRequest::~HTTPRequest() {
@@ -613,6 +631,8 @@ void HTTPRequest::Join() {
 }
 
 void HTTPRequest::SetFailed(int code) {
+	// TODO: Why are we not using code here?
+
 	failed_ = true;
 	progress_.Update(0, 0, true);
 	completed_ = true;

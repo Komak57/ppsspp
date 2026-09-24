@@ -271,7 +271,7 @@ InetSocket* CreateSignalingSocket(u16 port, u16 vport, int domain, int type, int
 
 	if (type == PSP_NET_INET_SOCK_DCCP) {
 		if (g_Config.bEnableUPnP)
-			bool ok = g_PortManager.Add("UDP", port, port);
+			bool ok = g_PortManager.Add("UDP", port, port, "Infra Signaling Socket");
 	}
 	return inetSocket;
 }

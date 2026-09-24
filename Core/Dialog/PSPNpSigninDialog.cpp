@@ -25,6 +25,9 @@
 #include "Core/HLE/sceKernelMemory.h"
 #include "Core/HLE/sceCtrl.h"
 #include "Core/HLE/sceUtility.h"
+#include "Core/HLE/sceNp.h"
+#include "Core/HLE/HLEUtil.h"
+#include "Core/HLE/HLE.h"
 #include "Core/HLE/ErrorCodes.h"
 #include "Core/Dialog/PSPNpSigninDialog.h"
 #include "Common/Data/Encoding/Utf8.h"
@@ -69,12 +72,11 @@ int PSPNpSigninDialog::Init(u32 paramAddr) {
 		return SCE_ERROR_UTILITY_INVALID_STATUS;
 
 	requestAddr = paramAddr;
-	int size = Memory::Read_U32(paramAddr);
-	memset(&request, 0, sizeof(request));
-	// Only copy the right size to support different request format
-	Memory::Memcpy(&request, paramAddr, size);
-	
-	WARN_LOG_REPORT_ONCE(PSPNpSigninDialogInit, Log::sceNet, "NpSignin Init Params: %08x, %08x, %08x, %08x", request.npSigninStatus, request.unknown1, request.unknown2, request.unknown3);
+	if (!ReadVariableSizedStruct(paramAddr, &request)) {
+		return SCE_KERNEL_ERROR_BAD_ARGUMENT;  // untested
+	}
+
+	WARN_LOG_REPORT_ONCE(PSPNpSigninDialogInit, Log::sceNet, "NpSignin Init Params: %08x, %08x, %08x, %08x", request.npSigninStatus, request.unknown[0], request.unknown[1], request.unknown[2]);
 
 	ChangeStatusInit(NP_INIT_DELAY_US);
 
@@ -503,7 +505,7 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 			if (server->GetAuthType() == net::NPAgentType::PSN)
 				LoginType = "E-mail Address";
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, LoginType, g_Config.sInfraNpId, false,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 				// TODO: Alert the user that some characters are not allowed
 				g_Config.sInfraNpId = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 				g_Config.sInfraToken = "";
@@ -522,7 +524,7 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 			tmp.selected[(u8)stage] = (u8)SigninSelected::AUTOLOGIN;
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", g_Config.sInfraPassword, true,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 				// Success callback
 				g_Config.sInfraPassword = value;
 				g_Config.sInfraToken = "";
@@ -569,7 +571,7 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 				break;
 			if (g_Config.sInfraToken.empty()) {
 				System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Token", g_Config.sInfraToken, true,
-					[&](const std::string& value, int) {
+					[&](std::string_view value, int rval) {
 					// Success callback
 					g_Config.sInfraToken = value;
 					startTime = now;
@@ -650,7 +652,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 			tmp.selected[(u8)stage] = (u8)RegisterSelected::EMAIL;
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Login ID", tmp.npid, false,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.npid = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 			},
@@ -673,13 +675,13 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 		}
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "E-mail Address", tmp.email, false,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 					tmp.validEmail = true;
 					// TODO: Alert the user that some characters are not allowed
 					if (value != SanitizeString(value, StringRestriction::EmailSanity, 5, (64 + 1 + 255)))
 						tmp.validEmail = false;
 					// TODO: Alert the user that the email is invalid
-					if (!IsValidEmail(value))
+					if (!IsValidEmail(value.data()))
 						tmp.validEmail = false;
 					tmp.email = value;
 				},
@@ -772,7 +774,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 			tmp.selected[(u8)stage] = (u8)PasswordTokenSelected::PASSWORD;
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "TOKEN", tmp.token, false,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.token = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 1, 20);
 			},
@@ -790,7 +792,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 			tmp.selected[(u8)stage] = (u8)PasswordTokenSelected::PASSCONFIRM;
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", tmp.password, false,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.password = value;
 			},
@@ -813,7 +815,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 		}
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Confirm Password", tmp.password_confirm, false,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.password_confirm = value;
 			},
@@ -890,7 +892,7 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 			tmp.selected[(u8)stage] = (u8)RegisterSelected::EMAIL;
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Login ID", tmp.npid, false,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.npid = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 			},
@@ -908,13 +910,13 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 			tmp.selected[(u8)stage] = (u8)RegisterSelected::PASSWORD;
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "E-mail Address", tmp.email, false,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 					tmp.validEmail = true;
 					// TODO: Alert the user that some characters are not allowed
 					if (value != SanitizeString(value, StringRestriction::EmailSanity, 5, (64 + 1 + 255)))
 						tmp.validEmail = false;
 					// TODO: Alert the user that the email is invalid
-					if (!IsValidEmail(value))
+					if (!IsValidEmail(value.data()))
 						tmp.validEmail = false;
 					tmp.email = value;
 				},
@@ -932,7 +934,7 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 			tmp.selected[(u8)stage] = (u8)RegisterSelected::PASSCONFIRM;
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Password", tmp.password, false,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.password = value;
 			},
@@ -954,7 +956,7 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 		}
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Confirm Password", tmp.password_confirm, false,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.password_confirm = value;
 			},
@@ -1033,7 +1035,7 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 			tmp.selected[(u8)stage] = (u8)RegisterInfoSelected::AVATAR_URL;
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Online Nickname", tmp.online_name, false,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.online_name = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 			},
@@ -1055,7 +1057,7 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 		}
 		if (IsButtonPressed(okButtonFlag)) {
 			System_InputBoxGetString(NON_EPHEMERAL_TOKEN, "Avatar URL", tmp.avatar_url, false,
-				[&](const std::string& value, int) {
+				[&](std::string_view value, int rval) {
 					tmp.avatar_url = value;
 			},
 				[&](int) {

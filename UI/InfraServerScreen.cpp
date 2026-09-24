@@ -6,6 +6,7 @@
 #include "Common/System/System.h"
 #include "Common/UI/Context.h"
 #include "Common/UI/PopupScreens.h"
+#include "Common/UI/ScreenManager.h"
 #include "Common/UI/Root.h"
 #include "Core/Config.h"
 #include "Core/Net/InfraServerList.h"
@@ -92,7 +93,18 @@ static UI::View *CreateInfraLinkButton(std::string url, std::string_view title =
 }
 
 InfraServerInfoScreen::InfraServerInfoScreen(const InfraServerListEntry &entry)
-	: UI::PopupScreen(entry.name, T(I18NCat::DIALOG, "OK"), ""), entry_(entry) {
+	: UI::PopupScreen("", T(I18NCat::DIALOG, "Back")), entry_(entry) {
+
+	// std::string dataUrl;
+	// if (!entry.dataJsonUrl.empty()) {
+	// 	dataUrl = http::RemoveHttpsIfNeeded(entry.dataJsonUrl);
+	// } else if (!entry.statusXmlUrl.empty()) {
+	// 	dataUrl = http::RemoveHttpsIfNeeded(entry.statusXmlUrl);
+	// }
+
+	// if (!dataUrl.empty()) {
+	// 	statusRequest_ = g_DownloadManager.StartDownload(dataUrl, Path(), http::RequestFlags::KeepInMemory, nullptr, "status");
+	// }
 }
 
 void InfraServerInfoScreen::CreatePopupContents(UI::ViewGroup *parent) {
@@ -282,7 +294,8 @@ void InfraServerScreen::CreatePopupContents(UI::ViewGroup *parent) {
 
 	Choice *addServer = parent->Add(new Choice(n->T("Add server"), ImageID("I_PLUS")));
 	addServer->OnClick.Add([this](UI::EventParams &e) {
-		screenManager()->push(new InfraAddServerPopupScreen(&editValue_));
+		InfraAddServerPopupScreen *addScreen = new InfraAddServerPopupScreen(&editValue_);
+		screenManager()->push(addScreen);
 	});
 
 	parent->Add(new Spacer(5.0f));

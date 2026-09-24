@@ -5,7 +5,7 @@ set(LIBRETRO_SRCS
 	LibretroGLContext.cpp
 	LibretroGLCoreContext.cpp
 	LibretroVulkanContext.cpp
-	libretro_vulkan.cpp)
+	LibretroVulkanPresentation.cpp)
 
 if(WIN32)
 	set(LIBRETRO_SRCS ${LIBRETRO_SRCS}
@@ -49,4 +49,7 @@ if(APPLE AND NOT IOS)
    # compiled out on iOS (TARGET_OS_OSX guard in Core/Net/HTTPS.cpp).
    target_link_libraries(ppsspp_libretro "-framework Security" "-framework CoreFoundation")
 endif()
-target_link_libraries(ppsspp_libretro ${LinkCommon})
+target_link_libraries(ppsspp_libretro Core ${CMAKE_THREAD_LIBS_INIT})
+if(ANDROID)
+	target_link_libraries(ppsspp_libretro log)
+endif()

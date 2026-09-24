@@ -61,6 +61,34 @@ namespace MIPSComp {
 
 	// Vector regs can overlap in all sorts of swizzled ways.
 	// This does allow a single overlap in sregs[i].
+	// True if the prefix only touches lanes the op has. A position past the size may only be the
+	// identity, and a position within it may not name a lane past it (which zeroes the result lane
+	// on hardware, see cpu/vfpu/prefix_ctrl - the interpreter handles that).
+	static bool IsPrefixWithinSize(u32 prefix, VectorSize sz) {
+		int n = GetNumVectorElements(sz);
+		for (int i = 0; i < 4; i++) {
+			int regnum = (prefix >> (i * 2)) & 3;
+			int abs = (prefix >> (8 + i)) & 1;
+			int negate = (prefix >> (16 + i)) & 1;
+			int constants = (prefix >> (12 + i)) & 1;
+			if (constants) {
+				continue;
+			}
+			if (i >= n) {
+				if (abs || negate || regnum != i)
+					return false;
+			} else if (regnum >= n) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	static bool IsPrefixWithinSize(u32 prefix, MIPSOpcode op) {
+		return IsPrefixWithinSize(prefix, GetVecSize(op));
+	}
+
 	static bool IsOverlapSafeAllowS(int dreg, int di, int sn, u8 sregs[], int tn = 0, u8 tregs[] = NULL)
 	{
 		for (int i = 0; i < sn; ++i) {
@@ -206,13 +234,21 @@ namespace MIPSComp {
 		CONDITIONAL_DISABLE(LSU_VFPU);
 		CheckMemoryBreakpoint();
 
+		if (js.kernelMode) {
+			// Send all memory accesses to the interpreter in kernel mode.
+			// TODO: Do something faster - but it hardly matters, currently this is VSH-only.
+			// NOTE: This should be done before the $zr check in case there are reads with side effects.
+			DISABLE;
+			return;
+		}
+
 		s32 offset = (signed short)(op & 0xFFFC);
 		int vt = ((op >> 16) & 0x1f) | ((op & 3) << 5);
 		MIPSGPReg rs = _RS;
 
 		std::vector<FixupBranch> skips;
 		switch (op >> 26) {
-		case 50: //lv.s  // VI(vt) = Memory::Read_U32(addr);
+		case 50: // lv.s
 		{
 			if (!gpr.IsImm(rs) && jo.cachePointers && g_Config.bFastMemory && (offset & 3) == 0 && offset >= 0 && offset < 16384) {
 				gpr.MapRegAsPointer(rs);
@@ -245,7 +281,7 @@ namespace MIPSComp {
 		}
 			break;
 
-		case 58: //sv.s   // Memory::Write_U32(VI(vt), addr);
+		case 58: // sv.s
 		{
 			if (!gpr.IsImm(rs) && jo.cachePointers && g_Config.bFastMemory && (offset & 3) == 0 && offset >= 0 && offset < 16384) {
 				gpr.MapRegAsPointer(rs);
@@ -287,6 +323,13 @@ namespace MIPSComp {
 	void Arm64Jit::Comp_SVQ(MIPSOpcode op) {
 		CONDITIONAL_DISABLE(LSU_VFPU);
 		CheckMemoryBreakpoint();
+
+		if (js.kernelMode) {
+			// Send all memory accesses to the interpreter in kernel mode.
+			// TODO: Do something faster - but it hardly matters, currently this is VSH-only.
+			DISABLE;
+			return;
+		}
 
 		int imm = (signed short)(op&0xFFFC);
 		int vt = (((op >> 16) & 0x1f)) | ((op&1) << 5);
@@ -377,8 +420,8 @@ namespace MIPSComp {
 
 	void Arm64Jit::Comp_VVectorInit(MIPSOpcode op) {
 		CONDITIONAL_DISABLE(VFPU_XFER);
-		// WARNING: No prefix support!
-		if (js.HasUnknownPrefix()) {
+		// vzero/vone are vmov with a constant forced into the S prefix, so a pending one changes them.
+		if (js.HasUnknownPrefix() || js.HasSPrefix()) {
 			DISABLE;
 		}
 
@@ -411,7 +454,8 @@ namespace MIPSComp {
 
 	void Arm64Jit::Comp_VIdt(MIPSOpcode op) {
 		CONDITIONAL_DISABLE(VFPU_XFER);
-		if (js.HasUnknownPrefix()) {
+		// Like vone, a pending S prefix changes the result.
+		if (js.HasUnknownPrefix() || js.HasSPrefix()) {
 			DISABLE;
 		}
 
@@ -535,7 +579,7 @@ namespace MIPSComp {
 
 	void Arm64Jit::Comp_Vhoriz(MIPSOpcode op) {
 		CONDITIONAL_DISABLE(VFPU_VEC);
-		if (js.HasUnknownPrefix()) {
+		if (js.HasUnknownPrefix() || !IsPrefixWithinSize(js.prefixS, op) || js.HasTPrefix()) {
 			DISABLE;
 		}
 
@@ -613,7 +657,11 @@ namespace MIPSComp {
 
 	void Arm64Jit::Comp_VecDo3(MIPSOpcode op) {
 		CONDITIONAL_DISABLE(VFPU_VEC);
-		if (js.HasUnknownPrefix()) {
+		if (js.HasUnknownPrefix() || !IsPrefixWithinSize(js.prefixS, op) || !IsPrefixWithinSize(js.prefixT, op)) {
+			DISABLE;
+		}
+		// vdiv applies the prefixes to its last lane only, from position 0.
+		if (((op >> 23) & 7) == 7 && GetVecSize(op) != V_Single && !js.HasNoPrefix()) {
 			DISABLE;
 		}
 
@@ -766,8 +814,35 @@ namespace MIPSComp {
 			DISABLE;
 		}
 
+		// The prefix rules here follow the IR frontend, which follows the interpreter and the
+		// prefix tests in pspautotests. What's not handled goes to the interpreter.
+		int optype = (op >> 16) & 0x1f;
+		if (optype == 0) {
+			if (!IsPrefixWithinSize(js.prefixS, op))
+				DISABLE;
+		} else if (optype == 1 || optype == 2) {
+			// vabs and vneg are vmov with the abs/negate bit forced on, so a negate in the S prefix
+			// doesn't negate twice. D prefix is fine for these, and used sometimes.
+			if (js.HasSPrefix())
+				DISABLE;
+		} else if (optype == 5 && js.HasDPrefix()) {
+			// vsat1 doesn't apply the D saturation.
+			DISABLE;
+		}
+		if (optype >= 16 && !js.HasNoPrefix()) {
+			// These apply the S and D prefixes to their last lane only, from prefix position 0.
+			// That's the whole vector for a single, so only that case is handled here.
+			if (GetVecSize(op) != V_Single)
+				DISABLE;
+			if (!IsPrefixWithinSize(js.prefixS, op))
+				DISABLE;
+			// The negative ones seem to use negate flags as a prefix hack.
+			if (optype >= 24 && (js.prefixS & 0x000F0000) != 0)
+				DISABLE;
+		}
+
 		// Pre-processing: Eliminate silly no-op VMOVs, common in Wipeout Pure
-		if (((op >> 16) & 0x1f) == 0 && _VS == _VD && js.HasNoPrefix()) {
+		if (optype == 0 && _VS == _VD && js.HasNoPrefix()) {
 			return;
 		}
 
@@ -1053,15 +1128,29 @@ namespace MIPSComp {
 				}
 			} else if (imm < 128 + VFPU_CTRL_MAX) { //mtvc //currentMIPS->vfpuCtrl[imm - 128] = R(rt);
 				if (imm - 128 == VFPU_CTRL_CC) {
+					// Six condition bits, the rest don't stick (cpu/vfpu/vbranch).
 					if (gpr.IsImm(rt)) {
-						gpr.SetImm(MIPS_REG_VFPUCC, gpr.GetImm(rt));
+						gpr.SetImm(MIPS_REG_VFPUCC, gpr.GetImm(rt) & 0x3F);
 					} else {
 						gpr.MapDirtyIn(MIPS_REG_VFPUCC, rt);
-						MOV(gpr.R(MIPS_REG_VFPUCC), gpr.R(rt));
+						ANDI2R(gpr.R(MIPS_REG_VFPUCC), gpr.R(rt), 0x3F, SCRATCH1);
 					}
 				} else {
-					gpr.MapReg(rt);
-					STR(INDEX_UNSIGNED, gpr.R(rt), CTXREG, offsetof(MIPSState, vfpuCtrl) + 4 * (imm - 128));
+					// Only some of the bits stick (the low 20 of a prefix, say), same as the IR does it.
+					u32 mask;
+					u32 setBits = GetVFPUCtrlSetBits(imm - 128);
+					if (!GetVFPUCtrlMask(imm - 128, &mask)) {
+						// Read-only or unknown register: nothing is written.
+					} else if (mask != 0xFFFFFFFF || setBits != 0) {
+						gpr.MapReg(rt);
+						ANDI2R(SCRATCH1, gpr.R(rt), mask, SCRATCH2);
+						if (setBits != 0)
+							ORRI2R(SCRATCH1, SCRATCH1, setBits, SCRATCH2);
+						STR(INDEX_UNSIGNED, SCRATCH1, CTXREG, offsetof(MIPSState, vfpuCtrl) + 4 * (imm - 128));
+					} else {
+						gpr.MapReg(rt);
+						STR(INDEX_UNSIGNED, gpr.R(rt), CTXREG, offsetof(MIPSState, vfpuCtrl) + 4 * (imm - 128));
+					}
 				}
 
 				// TODO: Optimization if rt is Imm?
@@ -1095,11 +1184,13 @@ namespace MIPSComp {
 		int vd = _VD;
 		int imm = (op >> 8) & 0x7F;
 		if (imm < VFPU_CTRL_MAX) {
-			fpr.MapRegV(vd);
+			fpr.MapRegV(vd, MAP_DIRTY | MAP_NOINIT);
 			if (imm == VFPU_CTRL_CC) {
 				gpr.MapReg(MIPS_REG_VFPUCC, 0);
 				fp.FMOV(fpr.V(vd), gpr.R(MIPS_REG_VFPUCC));
 			} else {
+				// In case we have a saved prefix.
+				FlushPrefixV();
 				ADDI2R(SCRATCH1_64, CTXREG, offsetof(MIPSState, vfpuCtrl[0]) + imm * 4, SCRATCH2);
 				fp.LDR(32, INDEX_UNSIGNED, fpr.V(vd), SCRATCH1_64, 0);
 			}
@@ -1179,7 +1270,8 @@ namespace MIPSComp {
 
 	void Arm64Jit::Comp_VScl(MIPSOpcode op) {
 		CONDITIONAL_DISABLE(VFPU_VEC);
-		if (js.HasUnknownPrefix()) {
+		// The T prefix is applied oddly here, the interpreter knows how.
+		if (js.HasUnknownPrefix() || !IsPrefixWithinSize(js.prefixS, op) || js.HasTPrefix()) {
 			DISABLE;
 		}
 
@@ -1415,7 +1507,7 @@ namespace MIPSComp {
 
 	void Arm64Jit::Comp_Vx2i(MIPSOpcode op) {
 		CONDITIONAL_DISABLE(VFPU_VEC);
-		if (js.HasUnknownPrefix())
+		if (js.HasUnknownPrefix() || js.HasSPrefix())
 			DISABLE;
 
 		int bits = ((op >> 16) & 2) == 0 ? 8 : 16; // vuc2i/vc2i (0/1), vus2i/vs2i (2/3)
@@ -1927,7 +2019,8 @@ namespace MIPSComp {
 	void Arm64Jit::Comp_VRot(MIPSOpcode op) {
 		// VRot probably doesn't accept prefixes anyway.
 		CONDITIONAL_DISABLE(VFPU_VEC);
-		if (js.HasUnknownPrefix()) {
+		// The prefixes apply to the sine but never to the cosine; leave that to the interpreter.
+		if (!js.HasNoPrefix()) {
 			DISABLE;
 		}
 

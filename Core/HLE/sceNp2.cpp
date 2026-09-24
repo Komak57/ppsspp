@@ -798,7 +798,7 @@ static int sceNpMatching2Term()
  */
 static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr, u32 ctxIdPtr, s32 optionFlags)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%08x[%s], %08x[%08x], %08x[%hu], %08x) at %08x", __FUNCTION__, communicationIdPtr, safe_string(Memory::GetCharPointer(communicationIdPtr)), passPhrasePtr, Memory::Read_U32(passPhrasePtr), ctxIdPtr, Memory::Read_U16(ctxIdPtr), optionFlags, currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%08x[%s], %08x[%08x], %08x[%hu], %08x) at %08x", __FUNCTION__, communicationIdPtr, safe_string(Memory::GetCharPointer(communicationIdPtr)), passPhrasePtr, Memory::ReadUnchecked_U32(passPhrasePtr), ctxIdPtr, Memory::ReadUnchecked_U16(ctxIdPtr), optionFlags, currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfaf >= v)
@@ -807,8 +807,8 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
-	if (!Memory::IsValidAddress(communicationIdPtr) || !Memory::IsValidAddress(passPhrasePtr) || !Memory::IsValidAddress(ctxIdPtr))
-		return hleLogError(Log::sceNp2, 0x80550c08, "Invalid Argument");
+	if (!Memory::IsValidAddress(communicationIdPtr) || !Memory::IsValidAddress(passPhrasePtr) || !Memory::IsValidRange(ctxIdPtr, 2))
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_MAX);
 
 	// FIXME: It seems Context are mapped to TitleID? may return 0x80550C05 or 0x80550C06 when finding an existing context
 	SceNpCommunicationId* titleid = (SceNpCommunicationId*)Memory::GetCharPointer(communicationIdPtr);
@@ -842,7 +842,7 @@ static int sceNpMatching2CreateContext(u32 communicationIdPtr, u32 passPhrasePtr
 		DataToHexString(10, 0, passph->data, sizeof(passph->data), &datahex);
 		INFO_LOG(Log::sceNp2, "%s - Passphrase: \n%s", __FUNCTION__, datahex.c_str());
 
-		Memory::Write_U16(ctxId, ctxIdPtr);
+		Memory::WriteUnchecked_U16(ctxId, ctxIdPtr);
 		last_ctx = ctxId;
 		// TODO: Allocate & zeroed a memory of 68 bytes where npId (36 bytes) is copied to offset 8, offset 44 = 0x00026808, offset 48 = 0
 		return SCE_NP_MATCHING2_OKAY;
@@ -1034,8 +1034,8 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, u32 m
 	if (_context == ctx.end())
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND);
 
-	if (!Memory::IsValidAddress(serverIdsPtr))
-		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
+	if (!Memory::IsValidRange(serverIdsPtr, maxServerIds * sizeof(u16)))
+		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
 	if (!npServer || npServer->servers.size() == 0)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND);
@@ -1066,7 +1066,7 @@ static int sceNpMatching2GetServerIdListLocal(int ctxId, u32 serverIdsPtr, u32 m
  * @note PSP2i calls this once witha reqId 0, and then once for each server allocated in sceNpMatching2GetServerIdListLocal
  */
 static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamPtr, u32 assignedReqIdPtr) {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::ReadUnchecked_U16(serverIdPtr), optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
@@ -1080,9 +1080,9 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamP
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT);
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetServerInfo, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -1128,7 +1128,7 @@ static int sceNpMatching2GetServerInfo(int ctxId, u32 serverIdPtr, u32 optParamP
  * @note This function occurs immediately after a server has been selected
  */
 static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optParamPtr, u32 assignedReqIdPtr) {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::Read_U16(serverIdPtr), optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x[%d], %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, serverIdPtr, Memory::ReadUnchecked_U16(serverIdPtr), optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
@@ -1139,9 +1139,9 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND);
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -1150,7 +1150,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
 
 	// Server ID is a 16-bit variable according to JPCSP
-	SceNpMatching2ServerId serverId = Memory::Read_U16(serverIdPtr);
+	SceNpMatching2ServerId serverId = Memory::ReadUnchecked_U16(serverIdPtr);
 	if (serverId == 0 || !npServer->SelectServer(serverId))
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetWorldInfoList, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_SERVER_ID), 0);
 
@@ -1168,7 +1168,7 @@ static int sceNpMatching2GetWorldInfoList(int ctxId, u32 serverIdPtr, u32 optPar
  */
 static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
@@ -1179,9 +1179,9 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND);
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SearchRoom, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -1217,7 +1217,7 @@ static int sceNpMatching2SearchRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr,
  */
 static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 roomEventCbPtr, u32 roomMessageCbPtr, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, roomEventCbPtr, roomMessageCbPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, roomEventCbPtr, roomMessageCbPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
@@ -1228,9 +1228,9 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED, "Not Initialized");
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!Memory::IsValidAddress(reqParamPtr) || !Memory::IsValidAddress(assignedReqIdPtr))
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_CreateJoinRoom, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT), 0);
@@ -1279,16 +1279,16 @@ static int sceNpMatching2CreateJoinRoom(int ctxId, u32 reqParamPtr, u32 optParam
  */
 static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 roomEventCbPtr, u32 roomMessageCbPtr, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, roomEventCbPtr, roomMessageCbPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, roomEventCbPtr, roomMessageCbPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
 		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_JoinRoom, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -1330,16 +1330,16 @@ static int sceNpMatching2JoinRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u
  */
 static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
 		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_LeaveRoom, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -1373,16 +1373,16 @@ static int sceNpMatching2LeaveRoom(int ctxId, u32 reqParamPtr, u32 optParamPtr, 
  */
 static int sceNpMatching2GetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
 		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataInternal, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -1435,16 +1435,16 @@ static int sceNpMatching2GetRoomDataInternalLocal(int ctxId) {
  * @note Performs the operations in an async lambda function
  */
 static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr) {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
 		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataExternal, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -1476,16 +1476,16 @@ static int sceNpMatching2SetRoomDataExternal(int ctxId, u32 reqParamPtr, u32 opt
  */
 static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
 		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomDataInternal, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -1520,16 +1520,16 @@ static int sceNpMatching2SetRoomDataInternal(int ctxId, u32 reqParamPtr, u32 opt
  */
 static int sceNpMatching2SendRoomChatMessage(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
 		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomChatMessage, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -1589,16 +1589,16 @@ static int sceNpMatching2SetDefaultRequestOptParam(int ctxId, u32 optParamPtr)
  */
 static int sceNpMatching2SetUserInfo(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
 		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetUserInfo, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -1630,16 +1630,16 @@ static int sceNpMatching2SetUserInfo(int ctxId, u32 reqParamPtr, u32 optParamPtr
  */
 static int sceNpMatching2GetUserInfoList(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
 		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetUserInfoList, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -1880,7 +1880,7 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 conn_id, u32 room_id_lower, u32 room_id_upper, u32 peer_id, u32 assignedReqIdPtr)
 {
 	SceNpMatching2RoomId room_id = (u64)room_id_lower | ((u64)room_id_upper << 32);
-	ERROR_LOG(Log::sceNp2, "UNTESTED %s(%i, %d, %llu, %d, %08x[%d]) at %08x", __FUNCTION__, ctxId, conn_id, room_id, peer_id, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNp2, "UNTESTED %s(%i, %d, %llu, %d, %08x[%d]) at %08x", __FUNCTION__, ctxId, conn_id, room_id, peer_id, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
 		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
@@ -1915,7 +1915,7 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 conn_id, u32 roo
 	// NetinfoResult signaling event, prompting the game to call GetPeerNetInfoResult.
 	npServer->RequestSignalingInfo(npid.ToString(), connId, true);
 
-	Memory::Write_U32(connId, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(connId, assignedReqIdPtr);
 	return SCE_NP_MATCHING2_OKAY;
 }
 
@@ -1926,7 +1926,7 @@ static int sceNpMatching2SignalingGetPeerNetInfo(int ctxId, u32 conn_id, u32 roo
  */
 static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingReqIdPtr, u32 netInfoPtr)
 {
-	DEBUG_LOG(Log::sceNp2, "%s(%d, %08x[%08x], %08x) at %08x", __FUNCTION__, ctxId, signalingReqIdPtr, Memory::Read_U32(signalingReqIdPtr), netInfoPtr, currentMIPS->pc);
+	DEBUG_LOG(Log::sceNp2, "%s(%d, %08x[%08x], %08x) at %08x", __FUNCTION__, ctxId, signalingReqIdPtr, Memory::ReadUnchecked_U32(signalingReqIdPtr), netInfoPtr, currentMIPS->pc);
 
 	// ThreadStart
 	if (!npMatching2Inited)
@@ -1945,7 +1945,7 @@ static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingR
 	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
 
 	// The request id handed back by GetPeerNetInfo is the peer's internal conn_id.
-	u32 conn_id = Memory::Read_U32(signalingReqIdPtr);
+	u32 conn_id = Memory::ReadUnchecked_U32(signalingReqIdPtr);
 
 	auto si = sigServer->get_sig_infos(conn_id);
 	if (!si)
@@ -1974,7 +1974,7 @@ static int sceNpMatching2SignalingGetPeerNetInfoResult(int ctxId, u32 signalingR
  */
 static int sceNpMatching2SignalingCancelPeerNetInfo(int ctxId, u32 signalingReqIdPtr)
 {
-	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x[%08x]) at %08x", __FUNCTION__, ctxId, signalingReqIdPtr, Memory::Read_U32(signalingReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x[%08x]) at %08x", __FUNCTION__, ctxId, signalingReqIdPtr, Memory::ReadUnchecked_U32(signalingReqIdPtr), currentMIPS->pc);
 
 	// ThreadStart
 	if (!npMatching2Inited)
@@ -2020,7 +2020,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 self, u32 r
 
 	//auto connStatus = PSPPointer<SceNpMatching2ServerStatus>::Create(connInfoPtr);
 	//connStatus = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
-	Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connInfoPtr);
+	Memory::WriteUnchecked_U32(SCE_NP_SIGNALING_CONN_STATUS_INACTIVE, connInfoPtr);
 
 	std::optional<u32> conn_id = std::nullopt;
 	// if (connId != 0) {
@@ -2049,7 +2049,7 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 self, u32 r
 	}
 
 	// Write Connection Status
-	Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_PENDING, connInfoPtr);
+	Memory::WriteUnchecked_U32(SCE_NP_SIGNALING_CONN_STATUS_PENDING, connInfoPtr);
 
 	switch (si->conn_status) {
 	case SCE_NP_SIGNALING_CONN_STATUS_INACTIVE:
@@ -2058,10 +2058,10 @@ static int sceNpMatching2SignalingGetConnectionStatus(int ctxId, u32 self, u32 r
 		NOTICE_LOG(Log::sceNp2, " - PENDING"); break;
 	case SCE_NP_SIGNALING_CONN_STATUS_ACTIVE:
 		NOTICE_LOG(Log::sceNp2, " - ACTIVE");
-		Memory::Write_U32(SCE_NP_SIGNALING_CONN_STATUS_ACTIVE, connInfoPtr);
-		Memory::Write_U32(si->addr, ipAddrPtr);
+		Memory::WriteUnchecked_U32(SCE_NP_SIGNALING_CONN_STATUS_ACTIVE, connInfoPtr);
+		Memory::WriteUnchecked_U32(si->addr, ipAddrPtr);
 		NOTICE_LOG(Log::sceNp2, " - IP Addr: %s", ip2str(si->addr).c_str());
-		Memory::Write_U16(htons(si->port), portPtr);
+		Memory::WriteUnchecked_U16(htons(si->port), portPtr);
 		NOTICE_LOG(Log::sceNp2, " - Port: %d", si->port);
 		break;
 	}
@@ -2173,16 +2173,16 @@ static int sceNpMatching2SignalingGetConnectionInfo(int ctxId, u32 connId, u32 r
  */
 static int sceNpMatching2GetRoomDataExternalList(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
 		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomDataExternalList, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -2265,14 +2265,14 @@ static int sceNpMatching2GetRoomPasswordLocal(int ctxId, u32 roomIdPtr, u32 with
  */
 static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%d]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
 	if (!Memory::IsValidAddress(optParam->cbFunc.ptr))
 		request_id = 0;
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SendRoomMessage, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -2311,12 +2311,12 @@ static int sceNpMatching2SendRoomMessage(int ctxId, u32 reqParamPtr, u32 optPara
  */
 static int sceNpMatching2GrantRoomOwner(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GrantRoomOwner, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -2374,12 +2374,12 @@ static int sceNpMatching2GetRoomMemberIdListLocal(int ctxId, u32 room_id_lower, 
  */
 static int sceNpMatching2SetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_SetRoomMemberDataInternal, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -2431,12 +2431,12 @@ static int sceNpMatching2GetRoomMemberDataInternalLocal(int ctxId, u32 room_id_l
  */
 static int sceNpMatching2GetRoomMemberDataInternal(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	WARN_LOG(Log::sceNp2, "UNTESTED %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataInternal, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -2482,16 +2482,16 @@ static int sceNpMatching2GetRoomMemberDataInternalList(int ctxId)
  */
 static int sceNpMatching2GetRoomMemberDataExternalList(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	int v = sceKernelCheckThreadStack();
 	if (0xfdf >= v)
 		return hleLogError(Log::sceNp2, SCE_NP_ERROR_INVALID_THREAD, "Invalid Thread Stack?");
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_GetRoomMemberDataExternalList, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);
@@ -2519,12 +2519,12 @@ static int sceNpMatching2GetRoomMemberDataExternalList(int ctxId, u32 reqParamPt
  */
 static int sceNpMatching2KickoutRoomMember(int ctxId, u32 reqParamPtr, u32 optParamPtr, u32 assignedReqIdPtr)
 {
-	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::Read_U32(assignedReqIdPtr), currentMIPS->pc);
+	ERROR_LOG(Log::sceNp2, "UNIMPL %s(%d, %08x, %08x, %08x[%08x]) at %08x", __FUNCTION__, ctxId, reqParamPtr, optParamPtr, assignedReqIdPtr, Memory::ReadUnchecked_U32(assignedReqIdPtr), currentMIPS->pc);
 
 	auto optParam = PSPPointer<SceNpMatching2RequestOptParam>::Create(optParamPtr);
-	SceNpMatching2RequestId assignedReqId = Memory::Read_U32(assignedReqIdPtr);
+	SceNpMatching2RequestId assignedReqId = Memory::ReadUnchecked_U32(assignedReqIdPtr);
 	SceNpMatching2RequestId request_id = RegisterNpMatching2Handler(ctxId, *optParam, assignedReqId, SCE_NP_MATCHING2_REQUEST_EVENT);
-	Memory::Write_U32(request_id, assignedReqIdPtr);
+	Memory::WriteUnchecked_U32(request_id, assignedReqIdPtr);
 
 	if (!npMatching2Inited)
 		return notifyRequestHandler(ctxId, request_id, SCE_NP_MATCHING2_REQUEST_EVENT_KickoutRoomMember, hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED), 0);

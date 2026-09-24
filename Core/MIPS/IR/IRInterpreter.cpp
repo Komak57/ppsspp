@@ -3,10 +3,6 @@
 
 #include "ppsspp_config.h"
 
-#if PPSSPP_PLATFORM(WINDOWS) && PPSSPP_ARCH(ARM64)
-#include <arm64intr.h>
-#endif
-
 #include "Common/BitSet.h"
 #include "Common/BitScan.h"
 #include "Common/Common.h"
@@ -27,32 +23,6 @@
 #include "Core/MIPS/IR/IRInterpreter.h"
 #include "Core/System.h"
 #include "Core/MIPS/MIPSTracer.h"
-
-#if PPSSPP_ARCH(ARM64)
-
-// TODO: This should be put in some common header.
-static inline u64 ARM64ReadFPCR() {
-#if PPSSPP_PLATFORM(WINDOWS)
-	return _ReadStatusReg(ARM64_FPCR);
-#else
-	// TODO: Try __builtin_arm_get_fpcr()
-	u64 fpcr;  // not really 64-bit, just to match the register size.
-	asm volatile ("mrs %0, fpcr" : "=r" (fpcr));
-	return fpcr;
-#endif
-}
-
-static inline void ARM64WriteFPCR(u64 fpcr) {
-#if PPSSPP_PLATFORM(WINDOWS)
-	_WriteStatusReg(ARM64_FPCR, fpcr);
-#else
-	// TODO: Try __builtin_arm_set_fpcr()
-	// Write back the modified FPCR
-	asm volatile ("msr fpcr, %0" : : "r" (fpcr));
-#endif
-}
-
-#endif
 
 #ifdef mips
 // Why do MIPS compilers define something so generic?  Try to keep defined, at least...
@@ -108,57 +78,6 @@ u32 IRRunMemCheck(u32 pc, u32 addr) {
 
 	g_breakpoints.ExecOpMemCheck(addr, pc);
 	return coreState != CORE_RUNNING_CPU ? 1 : 0;
-}
-
-void IRApplyRounding(MIPSState *mips) {
-	u32 fcr1Bits = mips->fcr31 & 0x01000003;
-	// If these are 0, we just leave things as they are.
-	if (fcr1Bits) {
-		int rmode = fcr1Bits & 3;
-		bool ftz = (fcr1Bits & 0x01000000) != 0;
-#if PPSSPP_ARCH(SSE2)
-		u32 csr = _mm_getcsr() & ~0x6000;
-		// Translate the rounding mode bits to X86, the same way as in Asm.cpp.
-		if (rmode & 1) {
-			rmode ^= 2;
-		}
-		csr |= rmode << 13;
-
-		if (ftz) {
-			// Flush to zero
-			csr |= 0x8000;
-		}
-		_mm_setcsr(csr);
-#elif PPSSPP_ARCH(ARM64)
-		u64 fpcr = ARM64ReadFPCR();
-		// Translate MIPS to ARM rounding mode
-		static const u8 lookup[4] = {0, 3, 1, 2};
-
-		fpcr &= ~(3 << 22);    // Clear bits [23:22]
-		fpcr |= ((u64)lookup[rmode] << 22);
-
-		if (ftz) {
-			fpcr |= 1 << 24;
-		}
-
-		ARM64WriteFPCR(fpcr);
-#endif
-	}
-}
-
-void IRRestoreRounding() {
-#if PPSSPP_ARCH(SSE2)
-	// TODO: We should avoid this if we didn't apply rounding in the first place.
-	// In the meantime, clear out FTZ and rounding mode bits.
-	u32 csr = _mm_getcsr();
-	csr &= ~(7 << 13);
-	_mm_setcsr(csr);
-#elif PPSSPP_ARCH(ARM64)
-	u64 fpcr = ARM64ReadFPCR();  // not really 64-bit, just to match the regsiter size.
-	fpcr &= ~(7 << 22);    // Clear bits [23:22] for rounding, 24 for FTZ
-	// Write back the modified FPCR
-	ARM64WriteFPCR(fpcr);
-#endif
 }
 
 u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
@@ -567,8 +486,9 @@ u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
 
 #if PPSSPP_ARCH(SSE2)
 			__m128i src = _mm_loadu_si128((__m128i *) & mips->fi[inst->src1]);
-			// Shift each 32-bit lane right by 24 bits. Then left by 1. This matches the rather weird behavior.
-			src = _mm_slli_epi32(_mm_srli_epi32(src, 24), 1);
+			// Shift each 32-bit lane left by 1, then take the top byte - that is, (v >> 23) & 0xFF.
+			// Shifting right by 24 first would drop bit 23.
+			src = _mm_srli_epi32(_mm_slli_epi32(src, 1), 24);
 			// Pack 32-bit lanes to 16-bit, then 16-bit to 8-bit
 			// This moves our target bytes to the bottom of the XMM register
 			src = _mm_packs_epi32(src, src);
@@ -853,8 +773,9 @@ u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
 			s32 numerator = (s32)mips->r[inst->src1];
 			s32 denominator = (s32)mips->r[inst->src2];
 			if (numerator == (s32)0x80000000 && denominator == -1) {
+				// The one overflow. Hardware leaves the remainder at zero (cpu/cpu_alu/cpu_div).
 				mips->lo = 0x80000000;
-				mips->hi = -1;
+				mips->hi = 0;
 			} else if (denominator != 0) {
 				mips->lo = (u32)(numerator / denominator);
 				mips->hi = (u32)(numerator % denominator);
@@ -958,8 +879,15 @@ u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
 			mips->f[inst->dest] = fabsf(mips->f[inst->src1]);
 			break;
 		case IROp::FSqrt:
-			mips->f[inst->dest] = sqrtf(mips->f[inst->src1]);
+		{
+			float src = mips->f[inst->src1];
+			mips->f[inst->dest] = sqrtf(src);
+			// A negative input gives a positive NaN, not the host's (cpu/fpu/roundmode).
+			if (src < 0.0f) {
+				mips->fi[inst->dest] = 0x7FC00000;
+			}
 			break;
+		}
 		case IROp::FNeg:
 			mips->f[inst->dest] = -mips->f[inst->src1];
 			break;
@@ -973,10 +901,10 @@ u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
 
 		case IROp::FSign:
 		{
-			// Bitwise trickery
+			// Bitwise trickery. Denormals give zero, as on the hardware.
 			u32 val;
 			memcpy(&val, &mips->f[inst->src1], sizeof(u32));
-			if (val == 0 || val == 0x80000000)
+			if ((val & 0x7F800000) == 0)
 				mips->f[inst->dest] = 0.0f;
 			else if ((val >> 31) == 0)
 				mips->f[inst->dest] = 1.0f;
@@ -986,7 +914,8 @@ u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
 		}
 
 		case IROp::FpCondFromReg:
-			mips->fpcond = mips->r[inst->dest];
+			// Note: the register is in src1, see the "_G" meta - the native backends read it there.
+			mips->fpcond = mips->r[inst->src1];
 			break;
 		case IROp::FpCondToReg:
 			mips->r[inst->dest] = mips->fpcond;
@@ -1006,58 +935,17 @@ u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
 			mips->r[inst->dest] = mips->vfpuCtrl[inst->src1];
 			break;
 		case IROp::FRound:
-		{
-			float value = mips->f[inst->src1];
-			if (my_isnanorinf(value)) {
-				mips->fi[inst->dest] = my_isinf(value) && value < 0.0f ? -2147483648LL : 2147483647LL;
-				break;
-			} else {
-				mips->fs[inst->dest] = (int)round_ieee_754(value);
-			}
+			mips->fs[inst->dest] = SaturatedFloatToInt(round_ieee_754(mips->f[inst->src1]));
 			break;
-		}
 		case IROp::FTrunc:
-		{
-			float value = mips->f[inst->src1];
-			if (my_isnanorinf(value)) {
-				mips->fi[inst->dest] = my_isinf(value) && value < 0.0f ? -2147483648LL : 2147483647LL;
-				break;
-			} else {
-				if (value >= 0.0f) {
-					mips->fs[inst->dest] = (int)floorf(value);
-					// Overflow, but it was positive.
-					if (mips->fs[inst->dest] == -2147483648LL) {
-						mips->fs[inst->dest] = 2147483647LL;
-					}
-				} else {
-					// Overflow happens to be the right value anyway.
-					mips->fs[inst->dest] = (int)ceilf(value);
-				}
-				break;
-			}
-		}
+			mips->fs[inst->dest] = SaturatedFloatToInt(truncf(mips->f[inst->src1]));
+			break;
 		case IROp::FCeil:
-		{
-			float value = mips->f[inst->src1];
-			if (my_isnanorinf(value)) {
-				mips->fi[inst->dest] = my_isinf(value) && value < 0.0f ? -2147483648LL : 2147483647LL;
-				break;
-			} else {
-				mips->fs[inst->dest] = (int)ceilf(value);
-			}
+			mips->fs[inst->dest] = SaturatedFloatToInt(ceilf(mips->f[inst->src1]));
 			break;
-		}
 		case IROp::FFloor:
-		{
-			float value = mips->f[inst->src1];
-			if (my_isnanorinf(value)) {
-				mips->fi[inst->dest] = my_isinf(value) && value < 0.0f ? -2147483648LL : 2147483647LL;
-				break;
-			} else {
-				mips->fs[inst->dest] = (int)floorf(value);
-			}
+			mips->fs[inst->dest] = SaturatedFloatToInt(floorf(mips->f[inst->src1]));
 			break;
-		}
 		case IROp::FCmp:
 			switch (inst->dest) {
 			case IRFpCompareMode::False:
@@ -1097,16 +985,12 @@ u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
 		case IROp::FCvtWS:
 		{
 			float src = mips->f[inst->src1];
-			if (my_isnanorinf(src)) {
-				mips->fs[inst->dest] = my_isinf(src) && src < 0.0f ? -2147483648LL : 2147483647LL;
-				break;
-			}
 			// TODO: Inline assembly to use here would be better.
 			switch (IRRoundMode(mips->fcr31 & 3)) {
-			case IRRoundMode::RINT_0: mips->fs[inst->dest] = (int)round_ieee_754(src); break;
-			case IRRoundMode::CAST_1: mips->fs[inst->dest] = (int)src; break;
-			case IRRoundMode::CEIL_2: mips->fs[inst->dest] = (int)ceilf(src); break;
-			case IRRoundMode::FLOOR_3: mips->fs[inst->dest] = (int)floorf(src); break;
+			case IRRoundMode::RINT_0: mips->fs[inst->dest] = SaturatedFloatToInt(round_ieee_754(src)); break;
+			case IRRoundMode::CAST_1: mips->fs[inst->dest] = SaturatedFloatToInt(truncf(src)); break;
+			case IRRoundMode::CEIL_2: mips->fs[inst->dest] = SaturatedFloatToInt(ceilf(src)); break;
+			case IRRoundMode::FLOOR_3: mips->fs[inst->dest] = SaturatedFloatToInt(floorf(src)); break;
 			}
 			break; //cvt.w.s
 		}
@@ -1203,10 +1087,24 @@ u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
 		case IROp::Syscall:
 			// IROp::SetPC was (hopefully) executed before.
 		{
+			// If we get here, the syscall is valid.
 			MIPSOpcode op(inst->constant);
 			CallSyscall(op);
-			if (coreState != CORE_RUNNING_CPU)
-				CoreTiming::ForceCheck();
+			if (coreState != CORE_RUNNING_CPU) {
+				CoreTiming::ForceCheck(mips);
+			}
+			break;
+		}
+
+		case IROp::SyscallUnresolved:
+		{
+			// If we get here, the syscall is invalid.
+			u32 pc = inst->constant;
+			CallSyscallUnresolvedAtPC(pc);
+			if (coreState != CORE_RUNNING_CPU) {
+				// hm, what's this for?
+				CoreTiming::ForceCheck(mips);
+			}
 			break;
 		}
 
@@ -1216,7 +1114,7 @@ u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
 		case IROp::Interpret:  // SLOW fallback. Can be made faster. Ideally should be removed but may be useful for debugging.
 		{
 			MIPSOpcode op(inst->constant);
-			MIPSInterpret(op);
+			MIPSInterpret(mips, op);
 			break;
 		}
 
@@ -1243,10 +1141,10 @@ u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
 			break;
 
 		case IROp::ApplyRoundingMode:
-			IRApplyRounding(mips);
+			ApplyHostRoundingMode(mips);
 			break;
 		case IROp::RestoreRoundingMode:
-			IRRestoreRounding();
+			RestoreHostRoundingMode();
 			break;
 		case IROp::UpdateRoundingMode:
 			// TODO: Implement
@@ -1258,39 +1156,39 @@ u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
 
 		case IROp::Breakpoint:
 			if (IRRunBreakpoint(inst->constant)) {
-				CoreTiming::ForceCheck();
+				CoreTiming::ForceCheck(mips);
 				return mips->pc;
 			}
 			break;
 
 		case IROp::MemoryCheck:
 			if (IRRunMemCheck(mips->pc + inst->dest, mips->r[inst->src1] + inst->constant)) {
-				CoreTiming::ForceCheck();
+				CoreTiming::ForceCheck(mips);
 				return mips->pc;
 			}
 			break;
 
 		case IROp::ValidateAddress8:
 			if (RunValidateAddress<1>(mips->pc, mips->r[inst->src1] + inst->constant, inst->src2)) {
-				CoreTiming::ForceCheck();
+				CoreTiming::ForceCheck(mips);
 				return mips->pc;
 			}
 			break;
 		case IROp::ValidateAddress16:
 			if (RunValidateAddress<2>(mips->pc, mips->r[inst->src1] + inst->constant, inst->src2)) {
-				CoreTiming::ForceCheck();
+				CoreTiming::ForceCheck(mips);
 				return mips->pc;
 			}
 			break;
 		case IROp::ValidateAddress32:
 			if (RunValidateAddress<4>(mips->pc, mips->r[inst->src1] + inst->constant, inst->src2)) {
-				CoreTiming::ForceCheck();
+				CoreTiming::ForceCheck(mips);
 				return mips->pc;
 			}
 			break;
 		case IROp::ValidateAddress128:
 			if (RunValidateAddress<16>(mips->pc, mips->r[inst->src1] + inst->constant, inst->src2)) {
-				CoreTiming::ForceCheck();
+				CoreTiming::ForceCheck(mips);
 				return mips->pc;
 			}
 			break;
@@ -1300,7 +1198,7 @@ u32 IRInterpret(MIPSState *mips, const IRInst *inst) {
 			}
 			break;
 
-		case IROp::Nop: // TODO: This shouldn't crash, but for now we should not emit nops, so...
+		case IROp::Nop:  // Unused, add a break if we start using it to avoid UNREACHABLE.
 		case IROp::Bad:
 		default:
 			// Unimplemented IR op. Bad. We define it as unreachable so the compiler can optimize better (remove the range check).

@@ -25,9 +25,7 @@ struct SceUtilityNpSigninParam {
 	pspUtilityDialogCommon common;
 	// Initially all zero? Or is there a possibility for one of these unknown to be a buffer to a packet data if it wasn't null?
 	int npSigninStatus;
-	int unknown1; // Pointer to struct
-	int unknown2; // flags? 0x00300000
-	int unknown3;
+	int unknown[7]; // 1: Pointer to struct 2: flags? 0x00300000
 };
 
 enum class SigninStage {

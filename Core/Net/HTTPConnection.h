@@ -1,6 +1,7 @@
 #pragma once
 #include "Core/Net/HTTPS.h"
 #include "Core/HLE/HttpTypes.h"
+#include "Common/Net/HTTPClient.h"
 #include "Core/Net/Buffer.h"
 #include <Common/CommonTypes.h>
 #include <Common/Net/Resolve.h>

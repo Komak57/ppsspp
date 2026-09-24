@@ -159,11 +159,11 @@ void GetMatrixRows(int matrixReg, MatrixSize msize, u8 vecs[4]) {
 	}
 }
 
-void ReadVector(float *rd, VectorSize size, int reg) {
+void ReadVector(const MIPSState *mips, float *rd, VectorSize size, int reg) {
 	int row;
 	int length;
 	switch (size) {
-	case V_Single: rd[0] = currentMIPS->v[voffset[reg]]; return; // transpose = 0; row=(reg>>5)&3; length = 1; break;
+	case V_Single: rd[0] = mips->v[voffset[reg]]; return; // transpose = 0; row=(reg>>5)&3; length = 1; break;
 	case V_Pair:   row=(reg>>5)&2; length = 2; break;
 	case V_Triple: row=(reg>>6)&1; length = 3; break;
 	case V_Quad:   row=(reg>>5)&2; length = 4; break;
@@ -176,20 +176,20 @@ void ReadVector(float *rd, VectorSize size, int reg) {
 	if (transpose) {
 		const int base = mtx + col;
 		for (int i = 0; i < length; i++)
-			rd[i] = currentMIPS->v[base + ((row + i) & 3) * 4];
+			rd[i] = mips->v[base + ((row + i) & 3) * 4];
 	} else {
 		const int base = mtx + col * 4;
 		for (int i = 0; i < length; i++)
-			rd[i] = currentMIPS->v[base + ((row + i) & 3)];
+			rd[i] = mips->v[base + ((row + i) & 3)];
 	}
 }
 
-void WriteVector(const float *rd, VectorSize size, int reg) {
+void WriteVector(MIPSState *mips, const float *rd, VectorSize size, int reg) {
 	int row;
 	int length;
 
 	switch (size) {
-	case V_Single: if (!currentMIPS->VfpuWriteMask(0)) currentMIPS->v[voffset[reg]] = rd[0]; return; // transpose = 0; row=(reg>>5)&3; length = 1; break;
+	case V_Single: if (!mips->VfpuWriteMask(0)) mips->v[voffset[reg]] = rd[0]; return; // transpose = 0; row=(reg>>5)&3; length = 1; break;
 	case V_Pair:   row=(reg>>5)&2; length = 2; break;
 	case V_Triple: row=(reg>>6)&1; length = 3; break;
 	case V_Quad:   row=(reg>>5)&2; length = 4; break;
@@ -202,37 +202,37 @@ void WriteVector(const float *rd, VectorSize size, int reg) {
 	// NOTE: We now skip the voffset lookups.
 	if (transpose) {
 		const int base = mtx + col;
-		if (currentMIPS->VfpuWriteMask() == 0) {
+		if (mips->VfpuWriteMask() == 0) {
 			for (int i = 0; i < length; i++)
-				currentMIPS->v[base + ((row+i) & 3) * 4] = rd[i];
+				mips->v[base + ((row+i) & 3) * 4] = rd[i];
 		} else {
 			for (int i = 0; i < length; i++) {
-				if (!currentMIPS->VfpuWriteMask(i)) {
-					currentMIPS->v[base + ((row+i) & 3) * 4] = rd[i];
+				if (!mips->VfpuWriteMask(i)) {
+					mips->v[base + ((row+i) & 3) * 4] = rd[i];
 				}
 			}
 		}
 	} else {
 		const int base = mtx + col * 4;
-		if (currentMIPS->VfpuWriteMask() == 0) {
+		if (mips->VfpuWriteMask() == 0) {
 			for (int i = 0; i < length; i++)
-				currentMIPS->v[base + ((row + i) & 3)] = rd[i];
+				mips->v[base + ((row + i) & 3)] = rd[i];
 		} else {
 			for (int i = 0; i < length; i++) {
-				if (!currentMIPS->VfpuWriteMask(i)) {
-					currentMIPS->v[base + ((row + i) & 3)] = rd[i];
+				if (!mips->VfpuWriteMask(i)) {
+					mips->v[base + ((row + i) & 3)] = rd[i];
 				}
 			}
 		}
 	}
 }
 
-u32 VFPURewritePrefix(int ctrl, u32 remove, u32 add) {
-	u32 prefix = currentMIPS->vfpuCtrl[ctrl];
+u32 VFPURewritePrefix(MIPSState *mips, int ctrl, u32 remove, u32 add) {
+	u32 prefix = mips->vfpuCtrl[ctrl];
 	return (prefix & ~remove) | add;
 }
 
-void ReadMatrix(float *rd, MatrixSize size, int reg) {
+void ReadMatrix(const MIPSState *mips, float *rd, MatrixSize size, int reg) {
 	int row = 0;
 	int side = 0;
 	int transpose = (reg >> 5) & 1;
@@ -250,7 +250,7 @@ void ReadMatrix(float *rd, MatrixSize size, int reg) {
 
 	// The voffset ordering is now integrated in these formulas,
 	// eliminating a table lookup.
-	const float *v = currentMIPS->v + (size_t)mtx * 16;
+	const float *v = mips->v + (size_t)mtx * 16;
 	if (transpose) {
 		if (side == 4 && col == 0 && row == 0) {
 			// Fast path: Simple 4x4 transpose. TODO: Optimize.
@@ -282,7 +282,7 @@ void ReadMatrix(float *rd, MatrixSize size, int reg) {
 	}
 }
 
-void WriteMatrix(const float *rd, MatrixSize size, int reg) {
+void WriteMatrix(MIPSState *mips, const float *rd, MatrixSize size, int reg) {
 	int mtx = (reg>>2)&7;
 	int col = reg&3;
 
@@ -304,9 +304,9 @@ void WriteMatrix(const float *rd, MatrixSize size, int reg) {
 
 	// The voffset ordering is now integrated in these formulas,
 	// eliminating a table lookup.
-	float *v = currentMIPS->v + (size_t)mtx * 16;
+	float *v = mips->v + (size_t)mtx * 16;
 	if (transpose) {
-		if (side == 4 && row == 0 && col == 0 && currentMIPS->VfpuWriteMask() == 0x0) {
+		if (side == 4 && row == 0 && col == 0 && mips->VfpuWriteMask() == 0x0) {
 			// Fast path: Simple 4x4 transpose. TODO: Optimize.
 			for (int j = 0; j < side; j++) {
 				for (int i = 0; i < side; i++) {
@@ -316,7 +316,7 @@ void WriteMatrix(const float *rd, MatrixSize size, int reg) {
 		} else {
 			for (int j = 0; j < side; j++) {
 				for (int i = 0; i < side; i++) {
-					if (j != side - 1 || !currentMIPS->VfpuWriteMask(i)) {
+					if (j != side - 1 || !mips->VfpuWriteMask(i)) {
 						int index = ((row + i) & 3) * 4 + ((col + j) & 3);
 						v[index] = rd[j * 4 + i];
 					}
@@ -324,12 +324,12 @@ void WriteMatrix(const float *rd, MatrixSize size, int reg) {
 			}
 		}
 	} else {
-		if (side == 4 && row == 0 && col == 0 && currentMIPS->VfpuWriteMask() == 0x0) {
+		if (side == 4 && row == 0 && col == 0 && mips->VfpuWriteMask() == 0x0) {
 			memcpy(v, rd, sizeof(float) * 16);  // v[j * 4 + i] = rd[j * 4 + i];
 		} else {
 			for (int j = 0; j < side; j++) {
 				for (int i = 0; i < side; i++) {
-					if (j != side - 1 || !currentMIPS->VfpuWriteMask(i)) {
+					if (j != side - 1 || !mips->VfpuWriteMask(i)) {
 						int index = ((col + j) & 3) * 4 + ((row + i) & 3);
 						v[index] = rd[j * 4 + i];
 					}
@@ -349,7 +349,7 @@ int GetVectorOverlap(int vec1, VectorSize size1, int vec2, VectorSize size2) {
 	u8 regs1[4];
 	u8 regs2[4];
 	GetVectorRegs(regs1, size1, vec1);
-	GetVectorRegs(regs2, size1, vec2);
+	GetVectorRegs(regs2, size2, vec2);
 	int count = 0;
 	for (int i = 0; i < n1; i++) {
 		for (int j = 0; j < n2; j++) {
@@ -358,6 +358,19 @@ int GetVectorOverlap(int vec1, VectorSize size1, int vec2, VectorSize size2) {
 		}
 	}
 	return count;
+}
+
+VectorSize GetQuarterVectorSizeSafe(VectorSize sz) {
+	switch (sz) {
+	case V_Quad: return V_Single;
+	default: return V_Invalid;
+	}
+}
+
+VectorSize GetQuarterVectorSize(VectorSize sz) {
+	VectorSize res = GetQuarterVectorSizeSafe(sz);
+	_assert_msg_(res != V_Invalid, "%s: Bad vector size", __FUNCTION__);
+	return res;
 }
 
 VectorSize GetHalfVectorSizeSafe(VectorSize sz) {
@@ -370,6 +383,19 @@ VectorSize GetHalfVectorSizeSafe(VectorSize sz) {
 
 VectorSize GetHalfVectorSize(VectorSize sz) {
 	VectorSize res = GetHalfVectorSizeSafe(sz);
+	_assert_msg_(res != V_Invalid, "%s: Bad vector size", __FUNCTION__);
+	return res;
+}
+
+VectorSize GetQuadrupleVectorSizeSafe(VectorSize sz) {
+	switch (sz) {
+	case V_Single: return V_Quad;
+	default: return V_Invalid;
+	}
+}
+
+VectorSize GetQuadrupleVectorSize(VectorSize sz) {
+	VectorSize res = GetQuadrupleVectorSizeSafe(sz);
 	_assert_msg_(res != V_Invalid, "%s: Bad vector size", __FUNCTION__);
 	return res;
 }
@@ -547,10 +573,26 @@ bool GetVFPUCtrlMask(int reg, u32 *mask) {
 	case VFPU_CTRL_RCX5:
 	case VFPU_CTRL_RCX6:
 	case VFPU_CTRL_RCX7:
-		*mask = 0x3FFFFFFF;
+		*mask = 0x000FFFFF;
 		return true;
 	default:
 		return false;
+	}
+}
+
+u32 GetVFPUCtrlSetBits(int reg) {
+	switch (reg) {
+	case VFPU_CTRL_RCX0:
+	case VFPU_CTRL_RCX1:
+	case VFPU_CTRL_RCX2:
+	case VFPU_CTRL_RCX3:
+	case VFPU_CTRL_RCX4:
+	case VFPU_CTRL_RCX5:
+	case VFPU_CTRL_RCX6:
+	case VFPU_CTRL_RCX7:
+		return 0x3F800000;
+	default:
+		return 0;
 	}
 }
 
@@ -598,287 +640,321 @@ float Float16ToFloat32(unsigned short l)
 	return f;
 }
 
+u32 vfpu_h2f(u16 h) {
+	u32 sign = (u32)(h & 0x8000) << 16;
+	u32 exp = (h >> 10) & 0x1F;
+	u32 mant = h & 0x3FF;
+	if (exp == 0) {
+		// Zero and subnormal halves both give a signed zero.
+		return sign;
+	}
+	if (exp == 31) {
+		// Inf/NaN: the mantissa bits stay where they are, not shifted into place.
+		return sign | 0x7F800000 | mant;
+	}
+	return sign | ((exp + 112) << 23) | (mant << 13);
+}
+
+u16 vfpu_f2h(u32 f) {
+	u16 sign = (u16)((f >> 16) & 0x8000);
+	u32 exp = (f >> 23) & 0xFF;
+	u32 mant = f & 0x7FFFFF;
+	if (exp == 255) {
+		// Inf/NaN: the low ten mantissa bits carry over, so a NaN with those clear becomes inf.
+		return sign | 0x7C00 | (u16)(mant & 0x3FF);
+	}
+	if (exp < 113) {
+		// Below 2^-14: no subnormal halves, signed zero.
+		return sign;
+	}
+	if (exp >= 143) {
+		// 65536 and up: inf. Nothing rounds up to it, since the mantissa is truncated.
+		return sign | 0x7C00;
+	}
+	return sign | (u16)((exp - 112) << 10) | (u16)(mant >> 13);
+}
+
+// Implementations of vmul and vdiv, assumed to
+// be bitwise-exact to PSP, see
+// https://github.com/hrydgard/ppsspp/issues/21070#issuecomment-4618120525
+// for details. These functions behave the same as
+// IEEE-755 multiplication/division with both
+// denoramls-are-zero (DAZ) and flush-to-zero (FTZ) enabled,
+// and specific bitpatterns used for NaN (which
+// would be sNaN on x86).
+// The threshold for FTZ is FLT_MIN-FLT_TRUE_MIN/4
+// (which seems to be the same as x86 FTZ threshold
+// on the machine tested; but may not be same elsewhere,
+// e.g. ARM).
+// Not currently used anywhere, just for reference purposes.
+
+static inline float vfpu_mul(float a, float b) {
+	uint32_t x, y, z;
+	memcpy(&x, &a, sizeof(x));
+	memcpy(&y, &b, sizeof(y));
+	// Subnormal inputs -> zero.
+	if (((x >> 23) & 255) == 0) x &= 0x80000000u;
+	if (((y >> 23) & 255) == 0) y &= 0x80000000u;
+	memcpy(&a, &x, sizeof(a));
+	memcpy(&b, &y, sizeof(b));
+	// IEEE-754 float32 round-to-nearest-ties-to-even multiplication.
+	float c = a * b;
+	memcpy(&z, &c, sizeof(z));
+	// Subnormal outputs -> zero.
+	if ((z & 0x7FFFFFFFu) <= 0x00800000u) {
+		double r = double(a) * double(b);
+		if (fabs(r) < 1.1754943157898259e-38) // double(FLT_MIN-0.25*FLT_TRUE_MIN)
+			z &= 0x80000000u;
+	}
+	// NaN bitpattern.
+	if ((z & 0x7FFFFFFFu) > 0x7F800000u)
+		z = ((x^y) & 0x80000000u) | 0x7F800001u;
+	memcpy(&c, &z, sizeof(c));
+	return c;
+}
+
+static inline float vfpu_div(float a, float b) {
+	uint32_t x, y, z;
+	memcpy(&x, &a, sizeof(x));
+	memcpy(&y, &b, sizeof(y));
+	// Subnormal inputs -> zero.
+	if (((x >> 23) & 255) == 0) x &= 0x80000000u;
+	if (((y >> 23) & 255) == 0) y &= 0x80000000u;
+	memcpy(&a, &x, sizeof(a));
+	memcpy(&b, &y, sizeof(b));
+	// IEEE-754 float32 round-to-nearest-ties-to-even division.
+	float c = a / b;
+	memcpy(&z, &c, sizeof(z));
+	// Subnormal outputs -> zero.
+	if ((z & 0x7FFFFFFFu) <= 0x00800000u) {
+		double r = double(a) / double(b);
+		if (fabs(r) < 1.1754943157898259e-38) // double(FLT_MIN-0.25*FLT_TRUE_MIN)
+			z &= 0x80000000u;
+	}
+	// NaN bitpattern.
+	if ((z & 0x7FFFFFFFu) > 0x7F800000u)
+		z = ((x^y) & 0x80000000u) | 0x7F800001u;
+	memcpy(&c, &z, sizeof(c));
+	return c;
+}
+
+// Implementation of vdot instruction. Assumed bitwise-exact
+// to PSP output on all inputs. For details see
+// https://github.com/hrydgard/ppsspp/issues/21070#issuecomment-4640382516
 // Reference C++ version.
-static float vfpu_dot_cpp(const float a[4], const float b[4]) {
-	static const int EXTRA_BITS = 2;
-	float2int result;
-	float2int src[2];
-
-	int32_t exps[4];
-	int32_t mants[4];
-	int32_t signs[4];
-	int32_t max_exp = 0;
-	int32_t last_inf = -1;
-
+float vfpu_dot_reference(const float a[4], const float b[4]) {
+	int EXTRA_BITS = 2;
+	uint32_t I = uint32_t(1) << 23, J = uint32_t(1) << (23 - EXTRA_BITS);
+	int32_t s[4], e[4], ehi = -2*127;
+	uint32_t p[4];
+	int32_t val = 0;
+	int has_inf = 0;
 	for (int i = 0; i < 4; i++) {
-		src[0].f = a[i];
-		src[1].f = b[i];
-
-		int32_t aexp = get_uexp(src[0].i);
-		int32_t bexp = get_uexp(src[1].i);
-		int32_t amant = get_mant(src[0].i) << EXTRA_BITS;
-		int32_t bmant = get_mant(src[1].i) << EXTRA_BITS;
-
-		exps[i] = aexp + bexp - 127;
-		if (aexp == 255) {
-			// INF * 0 = NAN
-			if ((src[0].i & 0x007FFFFF) != 0 || bexp == 0) {
-				result.i = 0x7F800001;
-				return result.f;
-			}
-			mants[i] = get_mant(0) << EXTRA_BITS;
-			exps[i] = 255;
-		} else if (bexp == 255) {
-			if ((src[1].i & 0x007FFFFF) != 0 || aexp == 0) {
-				result.i = 0x7F800001;
-				return result.f;
-			}
-			mants[i] = get_mant(0) << EXTRA_BITS;
-			exps[i] = 255;
-		} else {
-			// TODO: Adjust precision?
-			uint64_t adjust = (uint64_t)amant * (uint64_t)bmant;
-			mants[i] = (adjust >> (23 + EXTRA_BITS)) & 0x7FFFFFFF;
+		uint32_t x, y;
+		memcpy(&x, a + i, sizeof(x));
+		memcpy(&y, b + i, sizeof(y));
+		int32_t ex = int32_t((x >> 23) & 255), ey = int32_t((y >> 23) & 255);
+		uint32_t mx = x & (I - 1), my = y & (I - 1);
+		if(ex == 255 || ey == 255) {
+			// Handle inf/nan.
+			float ret;
+			uint32_t bits = 0x7F800001;
+			memcpy(&ret, &bits, sizeof(ret));
+			int sgn=((x ^ y) >> 31 ? -1 : +1);
+			if(ex == 255 && mx != 0) return ret;      // x=nan
+			if(ey == 255 && my != 0) return ret;      // y=nan
+			if(ex == 255 && ey == 0) return ret;      // inf*0=nan
+			if(ey == 255 && ex == 0) return ret;      // 0*inf=nan
+			if(has_inf && has_inf != sgn) return ret; // inf-inf=nan
+			has_inf=sgn;
 		}
-		signs[i] = get_sign(src[0].i) ^ get_sign(src[1].i);
-
-		if (exps[i] > max_exp) {
-			max_exp = exps[i];
-		}
-		if (exps[i] >= 255) {
-			// Infinity minus infinity is not a real number.
-			if (last_inf != -1 && signs[i] != last_inf) {
-				result.i = 0x7F800001;
-				return result.f;
-			}
-			last_inf = signs[i];
-		}
+		// Compute sign/exponent and intermediate product.
+		// Note that "exponent" here is basically ex+ey,
+		// even though IEEE-754 exponent of the product
+		// may be 1 higher (product of 2 numbers in [1;2)
+		// range is in [1;4) range).
+		// Note that product is computed in extra precision,
+		// and using round-to-odd mode (for details see
+		// https://github.com/hrydgard/ppsspp/issues/21070#issuecomment-4640372343).
+		s[i] = int32_t((x ^ y) >> 31);
+		e[i] = int32_t(ex + ey) - 2 * 127;
+		uint64_t v = uint64_t(I + mx) * uint64_t(I + my);
+		p[i] = uint32_t(v >> (23 - EXTRA_BITS));
+		if(v & (J - 1)) p[i] |= 1; // round-to-odd
+		if(!(ex && ey)) {e[i] = -2*127; p[i] = 0;} // subnormals -> zero
+		if(e[i] > ehi) ehi = e[i];
 	}
-
-	int32_t mant_sum = 0;
+	if (has_inf) {
+		uint32_t bits = (has_inf < 0 ? 0xFF800000 : 0x7F800000);
+		float ret;
+		memcpy(&ret, &bits, sizeof(bits));
+		return ret;
+	}
+	// Align the terms according to max. exponent and compute
+	// the intermediate sum.
+	// Uses round-to-zero (i.e. truncation) to align; the
+	// sum afterwards is integer (and therefore exact).
 	for (int i = 0; i < 4; i++) {
-		int exp = max_exp - exps[i];
-		if (exp >= 32) {
-			mants[i] = 0;
-		} else {
-			mants[i] >>= exp;
+		int32_t d = ehi - e[i];
+		if(d > 28) d = 28;
+		uint32_t v = (p[i] >> d);
+		val += (s[i] ? -1 : +1) * int32_t(v);
+	}
+	uint32_t m = uint32_t(val < 0 ? -val : +val);
+	// Remove the extra precision (using round-to-zero).
+	m >>= EXTRA_BITS;
+	// Adjust significand to 1.xxxxxxxxxxxxxxxxxxxxxxx
+	// (i.e. 2^23 <= m < 2^24), unless 0. Rounding, if any,
+	// is done via round-to-nearest-ties-to-even.
+	if (m != 0) {
+		int shift = 8 - int(clz32_nonzero(m));
+		ehi += shift;
+		if(shift > 0) {
+			uint32_t r = uint32_t(1) << (shift - 1); // next-after-lsb bit
+			m = (m >> shift) + ((m & (2 * r - 1)) + ((m >> shift) & 1) > r);
+			// After rounding, the value may have been
+			// bumped up into the next exponent range.
+			if (m >= 2 * I) {m >>= 1; ehi += 1;}
 		}
-		if (signs[i]) {
-			mants[i] = -mants[i];
-		}
-		mant_sum += mants[i];
+		if(shift < 0) m = m << -shift;
+		_dbg_assert_msg_(m >= I && m < 2 * I, "Significand wrong: %08X", m);
 	}
-
-	uint32_t sign_sum = 0;
-	if (mant_sum < 0) {
-		sign_sum = 0x80000000;
-		mant_sum = -mant_sum;
-	}
-
-	// Truncate off the extra bits now.  We want to zero them for rounding purposes.
-	mant_sum >>= EXTRA_BITS;
-
-	if (mant_sum == 0 || max_exp <= 0) {
-		return 0.0f;
-	}
-
-	int8_t shift = (int8_t)clz32_nonzero(mant_sum) - 8;
-	if (shift < 0) {
-		// Round to even if we'd shift away a 0.5.
-		const uint32_t round_bit = 1 << (-shift - 1);
-		if ((mant_sum & round_bit) && (mant_sum & (round_bit << 1))) {
-			mant_sum += round_bit;
-			shift = (int8_t)clz32_nonzero(mant_sum) - 8;
-		} else if ((mant_sum & round_bit) && (mant_sum & (round_bit - 1))) {
-			mant_sum += round_bit;
-			shift = (int8_t)clz32_nonzero(mant_sum) - 8;
-		}
-		mant_sum >>= -shift;
-		max_exp += -shift;
-	} else {
-		mant_sum <<= shift;
-		max_exp -= shift;
-	}
-	_dbg_assert_msg_((mant_sum & 0x00800000) != 0, "Mantissa wrong: %08x", mant_sum);
-
-	if (max_exp >= 255) {
-		max_exp = 255;
-		mant_sum = 0;
-	} else if (max_exp <= 0) {
-		return 0.0f;
-	}
-
-	result.i = sign_sum | (max_exp << 23) | (mant_sum & 0x007FFFFF);
-	return result.f;
+	else ehi = -128;
+	if (ehi <= -127) {ehi = -127; m = 0;} // subnormals -> zero
+	if (ehi >= +128) {ehi = +128; m = 0;} // inf
+	uint32_t bits = (uint32_t(val < 0) << 31) |
+		(uint32_t(ehi + 127) << 23) |
+		uint32_t(m & 0x007FFFFF);
+	float ret;
+	memcpy(&ret, &bits, sizeof(ret));
+	return ret;
 }
 
-#if PPSSPP_ARCH(SSE2)
+#if PPSSPP_ARCH(ARM64_NEON) || PPSSPP_ARCH(SSE2)
 
-static inline __m128i mulhi32x4(__m128i a, __m128i b) {
-	__m128i m02 = _mm_mul_epu32(a, b);
-	__m128i m13 = _mm_mul_epu32(
-		_mm_shuffle_epi32(a, _MM_SHUFFLE(3, 3, 1, 1)),
-		_mm_shuffle_epi32(b, _MM_SHUFFLE(3, 3, 1, 1)));
-	__m128i m=_mm_unpacklo_epi32(
-		_mm_shuffle_epi32(m02, _MM_SHUFFLE(3, 2, 3, 1)),
-		_mm_shuffle_epi32(m13, _MM_SHUFFLE(3, 2, 3, 1)));
-	return m;
+// Inf and NaN inputs are rare, and the reference handles them.
+static NO_INLINE float vfpu_dot_special(const float a[4], const float b[4]) {
+	return vfpu_dot_reference(a, b);
 }
 
-// Values of rounding_mode:
-//   -1 - detect at runtime
-//    0 - assume round-to-nearest-ties-to-even
-//    1 - round yourself in integer math
-template<int rounding_mode=-1>
-static float vfpu_dot_sse2(const float a[4], const float b[4])
-{
-	static const int EXTRA_BITS = 2;
-
-	bool is_default_rounding_mode = (rounding_mode == 0);
-	if(rounding_mode == -1)
-	{
-		volatile float test05 = 5.9604644775390625e-08f;  // 0.5*2^-23
-		volatile float test15 = 1.78813934326171875e-07f; // 1.5*2^-23
-		const float res15 = 1.0000002384185791015625f;    // 1+2^-22
-		test05 += 1.0f;
-		test15 += 1.0f;
-		is_default_rounding_mode = (test05 == 1.0f && test15 == res15);
-	}
-	__m128 A = _mm_loadu_ps(a);
-	__m128 B = _mm_loadu_ps(b);
-	// Extract exponents.
-	__m128 exp_mask = _mm_castsi128_ps(_mm_set1_epi32(0x7F800000));
-	__m128 eA = _mm_and_ps(A, exp_mask);
-	__m128 eB = _mm_and_ps(B, exp_mask);
-	__m128i exps = _mm_srli_epi32(_mm_add_epi32(
-		_mm_castps_si128(eA),
-		_mm_castps_si128(eB)),23);
-	// Find maximum exponent, stored as float32 in [1;2),
-	// so we can use _mm_max_ps() with normal arguments.
-	__m128 t = _mm_or_ps(_mm_castsi128_ps(exps), _mm_set1_ps(1.0f));
-	t = _mm_max_ps(t, _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(t), _MM_SHUFFLE(2, 3, 0, 1))));
-	t = _mm_max_ps(t, _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(t), _MM_SHUFFLE(1, 0, 3, 2))));
-	t = _mm_max_ps(t, _mm_castsi128_ps(_mm_set1_epi32(0x3F80007F)));
-	int32_t mexp = _mm_cvtsi128_si32(_mm_castps_si128(t)) & 511;
-	// NOTE: mexp is doubly-biased, same for exps.
-	int32_t max_exp = mexp - 127;
-	// Fall back on anything weird.
-	__m128 finiteA = _mm_sub_ps(A, A);
-	__m128 finiteB = _mm_sub_ps(B, B);
-	finiteA = _mm_cmpeq_ps(finiteA, finiteA);
-	finiteB = _mm_cmpeq_ps(finiteB, finiteB);
-	if(max_exp >= 255 || _mm_movemask_ps(_mm_and_ps(finiteA, finiteB)) != 15) return vfpu_dot_cpp(a, b);
-	// Extract significands.
-	__m128i mA = _mm_or_si128(_mm_and_si128(_mm_castps_si128(A),_mm_set1_epi32(0x007FFFFF)),_mm_set1_epi32(0x00800000));
-	__m128i mB = _mm_or_si128(_mm_and_si128(_mm_castps_si128(B),_mm_set1_epi32(0x007FFFFF)),_mm_set1_epi32(0x00800000));
-	// Multiply.
-	// NOTE: vfpu_dot does multiplication as
-	// ((x<<EXTRA_BITS)*(y<<EXTRA_BITS))>>(23+EXTRA_BITS),
-	// here we do (x*y)>>(23-EXTRA_BITS-1),
-	// which produces twice the result (neither expression
-	// overflows in our case). We need that because our
-	// variable-shift scheme (below) must shift by at least 1 bit.
-	static const int s = 32-(23 - EXTRA_BITS - 1), s0 = s / 2,s1 = s - s0;
-	// We compute ((x*y)>>shift) as
-	// (((x*y)<<(32-shift))>>32), which we express as
-	// (((x<<s0)*(y<<s1))>>32) (neither shift overflows).
-	__m128i m = mulhi32x4(_mm_slli_epi32(mA, s0), _mm_slli_epi32(mB, s1));
-	// Shift according to max_exp. Since SSE2 doesn't have
-	// variable per-lane shifts, we multiply *again*,
-	// specifically, x>>y turns into (x<<(1<<(32-y)))>>32.
-	// We compute 1<<(32-y) using floating-point casts.
-	// NOTE: the cast for 1<<31 produces the correct value,
-	// since the _mm_cvttps_epi32 error code just happens
-	// to be 0x80000000.
-	// So (since we pre-multiplied m by 2), we need
-	// (m>>1)>>(mexp-exps),
-	// i.e. m>>(mexp+1-exps),
-	// i.e. (m<<(32-(mexp+1-exps)))>>32,
-	// i.e. (m<<(exps-(mexp-31)))>>32.
-	__m128i amounts = _mm_sub_epi32(exps, _mm_set1_epi32(mexp - 31));
-	// Clamp by 0. Both zero and negative amounts produce zero,
-	// since they correspond to right-shifting by 32 or more bits.
-	amounts = _mm_and_si128(amounts, _mm_cmpgt_epi32(amounts, _mm_set1_epi32(0)));
-	// Set up multipliers.
-	__m128i bits = _mm_add_epi32(_mm_set1_epi32(0x3F800000), _mm_slli_epi32(amounts, 23));
-	__m128i muls = _mm_cvttps_epi32(_mm_castsi128_ps(bits));
-	m = mulhi32x4(m, muls);
-	// Extract signs.
-	__m128i signs = _mm_cmpgt_epi32(
-			_mm_set1_epi32(0),
-			_mm_xor_si128(_mm_castps_si128(A), _mm_castps_si128(B)));
-	// Apply signs to m.
-	m = _mm_sub_epi32(_mm_xor_si128(m, signs), signs);
-	// Horizontal sum.
-	// See https://stackoverflow.com/questions/6996764/fastest-way-to-do-horizontal-sse-vector-sum-or-other-reduction
-	__m128i h64 = _mm_shuffle_epi32(m, _MM_SHUFFLE(1, 0, 3, 2));
-	__m128i s64 = _mm_add_epi32(h64, m);
-	__m128i h32 = _mm_shufflelo_epi16(s64, _MM_SHUFFLE(1, 0, 3, 2));
-	__m128i s32 = _mm_add_epi32(s64, h32);
-	int32_t mant_sum = _mm_cvtsi128_si32(s32);
-
-	// The rest is scalar.
-	uint32_t sign_sum = 0;
-	if (mant_sum < 0) {
-		sign_sum = 0x80000000;
-		mant_sum = -mant_sum;
-	}
-
-	// Truncate off the extra bits now.  We want to zero them for rounding purposes.
-	mant_sum >>= EXTRA_BITS;
-
-	if (mant_sum == 0 || max_exp <= 0) {
-		return 0.0f;
-	}
-
-	if(is_default_rounding_mode)
-	{
-		float2int r;
-		r.f = (float)mant_sum;
-		mant_sum = (r.i & 0x007FFFFF) | 0x00800000;
-		max_exp += (r.i >> 23) - 0x96;
-	}
-	else
-	{
-		int8_t shift = (int8_t)clz32_nonzero(mant_sum) - 8;
-		if (shift < 0) {
-			// Round to even if we'd shift away a 0.5.
-			const uint32_t round_bit = 1 << (-shift - 1);
-			if ((mant_sum & round_bit) && (mant_sum & (round_bit << 1))) {
-				mant_sum += round_bit;
-				shift = (int8_t)clz32_nonzero(mant_sum) - 8;
-			} else if ((mant_sum & round_bit) && (mant_sum & (round_bit - 1))) {
-				mant_sum += round_bit;
-				shift = (int8_t)clz32_nonzero(mant_sum) - 8;
-			}
-			mant_sum >>= -shift;
-			max_exp += -shift;
-		} else {
-			mant_sum <<= shift;
-			max_exp -= shift;
-		}
-		_dbg_assert_msg_((mant_sum & 0x00800000) != 0, "Mantissa wrong: %08x", mant_sum);
-	}
-
-	if (max_exp >= 255) {
-		max_exp = 255;
-		mant_sum = 0;
-	} else if (max_exp <= 0) {
-		return 0.0f;
-	}
-
-	float2int result;
-	result.i = sign_sum | (max_exp << 23) | (mant_sum & 0x007FFFFF);
-	return result.f;
+// The end of the SIMD versions: drops the extra bits off the exact sum by truncation, then rounds to
+// 24 bits, nearest even. With the top bit moved to bit 62, adding 2^38 - 1 plus the lowest kept bit
+// and shifting out 39 bits does that for every magnitude, and adding the significand, implicit bit
+// and all, onto the exponent field lets a carry from the rounding bump the exponent by itself. It's
+// done in integers because the host rounding mode may be the game's.
+static inline float vfpu_dot_finish(int32_t val, uint32_t ehi) {
+	const uint32_t signBit = (uint32_t)val & 0x80000000u;
+	const uint32_t m = (val < 0 ? 0u - (uint32_t)val : (uint32_t)val) >> 2;
+	const int lz = 32 + (int)clz32_nonzero(m | 1);  // of m as 64 bits
+	const uint64_t top = (uint64_t)m << (lz - 1);
+	const uint64_t q = (top + ((1ULL << 38) - 1) + ((top >> 39) & 1)) >> 39;
+	const int64_t t = ((int64_t)((int)ehi - 88 - lz) << 23) + (int64_t)q;
+	uint32_t bits = t >= 0x7F800000 ? 0x7F800000u : (uint32_t)t;
+	bits = (t < 0x00800000 || m == 0) ? 0u : bits;
+	bits |= signBit;
+	float ret;
+	memcpy(&ret, &bits, sizeof(ret));
+	return ret;
 }
 
-#endif // PPSSPP_ARCH(SSE2)
+#endif
+
+#if PPSSPP_ARCH(ARM64_NEON)
+
+// The reference, four lanes at a time. Bit-exact with it.
+static float vfpu_dot_neon(const float a[4], const float b[4]) {
+	const uint32x4_t x = vld1q_u32((const uint32_t *)a);
+	const uint32x4_t y = vld1q_u32((const uint32_t *)b);
+	const uint32x4_t expBits = vdupq_n_u32(0x7F800000);
+	const uint32x4_t xe = vandq_u32(x, expBits), ye = vandq_u32(y, expBits);
+
+	// Zero and subnormal inputs make the product zero, with the lowest exponent. Inf and NaN get
+	// 0x7FF added, above any real exponent sum, so one maximum finds the alignment and the specials.
+	const uint32x4_t normal = vandq_u32(vtstq_u32(x, expBits), vtstq_u32(y, expBits));
+	const uint32x4_t special = vceqq_u32(vmaxq_u32(xe, ye), expBits);
+	const uint32x4_t e = vsraq_n_u32(vandq_u32(vshrq_n_u32(vaddq_u32(xe, ye), 23), normal), special, 21);
+	uint32x4_t emax = vpmaxq_u32(e, e);
+	emax = vpmaxq_u32(emax, emax);
+	const uint32_t ehi = vgetq_lane_u32(emax, 0);
+	if (ehi >= 0x7FF)
+		return vfpu_dot_special(a, b);
+
+	// 24x24-bit products, kept to 2 extra bits with round-to-odd.
+	const uint32x4_t mantMask = vdupq_n_u32(0x007FFFFF), implicitBit = vdupq_n_u32(0x00800000);
+	const uint32x4_t mx = vbslq_u32(mantMask, x, implicitBit);
+	const uint32x4_t my = vbslq_u32(mantMask, y, implicitBit);
+	const uint64x2_t plo = vmull_u32(vget_low_u32(mx), vget_low_u32(my));
+	const uint64x2_t phi = vmull_high_u32(mx, my);
+	const uint32x4_t kept = vcombine_u32(vshrn_n_u64(plo, 21), vshrn_n_u64(phi, 21));
+	const uint32x4_t dropped = vandq_u32(vuzp1q_u32(vreinterpretq_u32_u64(plo), vreinterpretq_u32_u64(phi)), vdupq_n_u32((1 << 21) - 1));
+	const uint32x4_t p = vandq_u32(vorrq_u32(kept, vminq_u32(dropped, vdupq_n_u32(1))), normal);
+
+	// Align to the largest exponent by truncation, apply the signs, and sum exactly.
+	const int32x4_t shift = vmaxq_s32(vreinterpretq_s32_u32(vsubq_u32(e, emax)), vdupq_n_s32(-28));
+	const int32x4_t v = vreinterpretq_s32_u32(vshlq_u32(p, shift));
+	const int32x4_t sign = vshrq_n_s32(vreinterpretq_s32_u32(veorq_u32(x, y)), 31);
+	return vfpu_dot_finish(vaddvq_s32(vsubq_s32(veorq_s32(v, sign), sign)), ehi);
+}
+
+#elif PPSSPP_ARCH(SSE2)
+
+// The reference, four lanes at a time. Bit-exact with it.
+static float vfpu_dot_sse2(const float a[4], const float b[4]) {
+	const __m128i x = _mm_loadu_si128((const __m128i *)a);
+	const __m128i y = _mm_loadu_si128((const __m128i *)b);
+	const __m128i expBits = _mm_set1_epi32(0x7F800000);
+	const __m128i xe = _mm_and_si128(x, expBits), ye = _mm_and_si128(y, expBits);
+	const __m128i zero = _mm_setzero_si128();
+
+	// Zero and subnormal inputs make the product zero, with the lowest exponent. Inf and NaN get
+	// 0x7FF, above any real exponent sum, so one maximum finds the alignment and the specials. All of
+	// these fit in 15 bits, so the 16-bit maximum works on them.
+	const __m128i flush = _mm_or_si128(_mm_cmpeq_epi32(xe, zero), _mm_cmpeq_epi32(ye, zero));
+	const __m128i special = _mm_or_si128(_mm_cmpeq_epi32(xe, expBits), _mm_cmpeq_epi32(ye, expBits));
+	const __m128i e = _mm_or_si128(_mm_andnot_si128(flush, _mm_srli_epi32(_mm_add_epi32(xe, ye), 23)), _mm_srli_epi32(special, 21));
+	__m128i emax = _mm_max_epi16(e, _mm_shuffle_epi32(e, _MM_SHUFFLE(1, 0, 3, 2)));
+	emax = _mm_max_epi16(emax, _mm_shuffle_epi32(emax, _MM_SHUFFLE(2, 3, 0, 1)));
+	const uint32_t ehi = (uint32_t)_mm_cvtsi128_si32(emax);
+	if (ehi >= 0x7FF)
+		return vfpu_dot_special(a, b);
+
+	// 24x24-bit products, even and odd lanes separately, kept to 2 extra bits with round-to-odd.
+	const __m128i mantMask = _mm_set1_epi32(0x007FFFFF), implicitBit = _mm_set1_epi32(0x00800000);
+	const __m128i mx = _mm_or_si128(_mm_and_si128(x, mantMask), implicitBit);
+	const __m128i my = _mm_or_si128(_mm_and_si128(y, mantMask), implicitBit);
+	const __m128i pEven = _mm_mul_epu32(mx, my);
+	const __m128i pOdd = _mm_mul_epu32(_mm_srli_epi64(mx, 32), _mm_srli_epi64(my, 32));
+	const __m128i kept = _mm_or_si128(_mm_srli_epi64(pEven, 21), _mm_slli_epi64(_mm_srli_epi64(pOdd, 21), 32));
+	const __m128i lowMask = _mm_set_epi32(0, (1 << 21) - 1, 0, (1 << 21) - 1);
+	const __m128i dropped = _mm_or_si128(_mm_and_si128(pEven, lowMask), _mm_slli_epi64(_mm_and_si128(pOdd, lowMask), 32));
+	const __m128i sticky = _mm_andnot_si128(_mm_cmpeq_epi32(dropped, zero), _mm_set1_epi32(1));
+	const __m128i p = _mm_andnot_si128(flush, _mm_or_si128(kept, sticky));
+
+	// Align to the largest exponent by truncation. SSE2 has no per-lane shift, so p >> d is done as
+	// (p * 2^(28 - d)) >> 28, with the power of two built as float bits and converted by truncation.
+	const __m128i d = _mm_min_epi16(_mm_sub_epi32(emax, e), _mm_set1_epi32(28));
+	const __m128i scale = _mm_cvttps_epi32(_mm_castsi128_ps(_mm_slli_epi32(_mm_sub_epi32(_mm_set1_epi32(127 + 28), d), 23)));
+	const __m128i sEven = _mm_srli_epi64(_mm_mul_epu32(p, scale), 28);
+	const __m128i sOdd = _mm_srli_epi64(_mm_mul_epu32(_mm_srli_epi64(p, 32), _mm_srli_epi64(scale, 32)), 28);
+	__m128i v = _mm_or_si128(sEven, _mm_slli_epi64(sOdd, 32));
+
+	// Apply the signs and sum exactly.
+	const __m128i sign = _mm_srai_epi32(_mm_xor_si128(x, y), 31);
+	v = _mm_sub_epi32(_mm_xor_si128(v, sign), sign);
+	v = _mm_add_epi32(v, _mm_shuffle_epi32(v, _MM_SHUFFLE(1, 0, 3, 2)));
+	v = _mm_add_epi32(v, _mm_shuffle_epi32(v, _MM_SHUFFLE(2, 3, 0, 1)));
+	return vfpu_dot_finish(_mm_cvtsi128_si32(v), ehi);
+}
+
+#endif
 
 float vfpu_dot(const float a[4], const float b[4]) {
-#if PPSSPP_ARCH(SSE2)
+#if PPSSPP_ARCH(ARM64_NEON)
+	return vfpu_dot_neon(a, b);
+#elif PPSSPP_ARCH(SSE2)
 	return vfpu_dot_sse2(a, b);
 #else
-	return vfpu_dot_cpp(a, b);
+	return vfpu_dot_reference(a, b);
 #endif
 }
 

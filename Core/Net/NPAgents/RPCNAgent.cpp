@@ -767,7 +767,7 @@ namespace net {
 			std::vector<flatbuffers::Offset<BinSearchFilter>> davec;
 			for (u32 i = 0; i < req->binFilterNum; i++)
 			{
-				auto bin_attr = CreateBinAttr(builder, req->binFilter[i].attr.id, builder.CreateVector(Memory::GetPointer(req->binFilter[i].attr.ptr.ptr), req->binFilter[i].attr.size));
+				auto bin_attr = CreateBinAttr(builder, req->binFilter[i].attr.id, builder.CreateVector(Memory::GetPointerUnchecked(req->binFilter[i].attr.ptr.ptr), req->binFilter[i].attr.size));
 				auto bin = CreateBinSearchFilter(builder, req->binFilter[i].searchOperator, bin_attr);
 				davec.push_back(bin);
 			}
@@ -906,7 +906,7 @@ namespace net {
 			for (u32 i = 0; i < req->roomBinAttrInternalNum; i++)
 			{
 				auto binAttr = req->roomBinAttrInternal + i;
-				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointerUnchecked(binAttr->ptr.ptr), binAttr->size));
 				put_binattr(binAttr->id, bin);
 			}
 		}
@@ -916,7 +916,7 @@ namespace net {
 			for (u32 i = 0; i < req->roomSearchableBinAttrExternalNum; i++)
 			{
 				auto binAttr = req->roomSearchableBinAttrExternal + i;
-				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointerUnchecked(binAttr->ptr.ptr), binAttr->size));
 				put_binattr(binAttr->id, bin);
 			}
 		}
@@ -926,7 +926,7 @@ namespace net {
 			for (u32 i = 0; i < req->roomBinAttrExternalNum; i++)
 			{
 				auto binAttr = req->roomBinAttrExternal + i;
-				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointerUnchecked(binAttr->ptr.ptr), binAttr->size));
 				put_binattr(binAttr->id, bin);
 			}
 		}
@@ -1009,7 +1009,7 @@ namespace net {
 			{
 				auto binAttr = req->roomMemberBinAttrInternal + i;
 				NOTICE_LOG(Log::Matching, " - ID: %d, Size: %d", binAttr->id, binAttr->size);
-				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointerUnchecked(binAttr->ptr.ptr), binAttr->size));
 				davec.push_back(bin);
 			}
 			final_memberbinattrinternal_vec = builder.CreateVector(davec);
@@ -1124,7 +1124,7 @@ namespace net {
 			std::vector<flatbuffers::Offset<BinAttr>> davec;
 			for (u32 i = 0; i < req->roomMemberBinAttrInternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomMemberBinAttrInternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomMemberBinAttrInternal[i].ptr.ptr), req->roomMemberBinAttrInternal[i].size));
+				auto bin = CreateBinAttr(builder, req->roomMemberBinAttrInternal[i].id, builder.CreateVector(Memory::GetPointerUnchecked(req->roomMemberBinAttrInternal[i].ptr.ptr), req->roomMemberBinAttrInternal[i].size));
 				davec.push_back(bin);
 			}
 			final_memberbinattrinternal_vec = builder.CreateVector(davec);
@@ -1392,7 +1392,7 @@ namespace net {
 			break;
 		}
 
-		auto req_finished = CreateSendRoomMessageRequest(builder, req->roomId, req->castType, builder.CreateVector(dst.data(), dst.size()), builder.CreateVector(Memory::GetPointer(req->msg.ptr), req->msgLen), req->option);
+		auto req_finished = CreateSendRoomMessageRequest(builder, req->roomId, req->castType, builder.CreateVector(dst.data(), dst.size()), builder.CreateVector(Memory::GetPointerUnchecked(req->msg.ptr), req->msgLen), req->option);
 		builder.Finish(req_finished);
 
 		// Wrap and send the packet
@@ -1432,7 +1432,7 @@ namespace net {
 			for (u32 i = 0; i < req->roomBinAttrInternalNum; i++)
 			{
 				auto binAttr = req->roomBinAttrInternal + i;
-				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointerUnchecked(binAttr->ptr.ptr), binAttr->size));
 				davec.push_back(bin);
 			}
 			final_binattrinternal_vec = builder.CreateVector(davec);
@@ -1544,7 +1544,7 @@ namespace net {
 			for (u32 i = 0; i < req->roomSearchableBinAttrExternalNum; i++)
 			{
 				auto binAttr = req->roomSearchableBinAttrExternal + i;
-				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointerUnchecked(binAttr->ptr.ptr), binAttr->size));
 				put_binattr(binAttr->id, bin);
 			}
 		}
@@ -1554,7 +1554,7 @@ namespace net {
 			for (u32 i = 0; i < req->roomBinAttrExternalNum; i++)
 			{
 				auto binAttr = req->roomBinAttrExternal + i;
-				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointer(binAttr->ptr.ptr), binAttr->size));
+				auto bin = CreateBinAttr(builder, binAttr->id, builder.CreateVector(Memory::GetPointerUnchecked(binAttr->ptr.ptr), binAttr->size));
 				put_binattr(binAttr->id, bin);
 			}
 		}
@@ -1621,7 +1621,7 @@ namespace net {
 			std::vector<flatbuffers::Offset<BinAttr>> davec;
 			for (u32 i = 0; i < req->roomMemberBinAttrInternalNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->roomMemberBinAttrInternal[i].id, builder.CreateVector(Memory::GetPointer(req->roomMemberBinAttrInternal[i].ptr.ptr), req->roomMemberBinAttrInternal[i].size));
+				auto bin = CreateBinAttr(builder, req->roomMemberBinAttrInternal[i].id, builder.CreateVector(Memory::GetPointerUnchecked(req->roomMemberBinAttrInternal[i].ptr.ptr), req->roomMemberBinAttrInternal[i].size));
 				davec.push_back(bin);
 			}
 			final_binattrinternal_vec = builder.CreateVector(davec);
@@ -1733,7 +1733,7 @@ namespace net {
 			std::vector<flatbuffers::Offset<BinAttr>> davec;
 			for (u32 i = 0; i < req->userBinAttrNum; i++)
 			{
-				auto bin = CreateBinAttr(builder, req->userBinAttr[i].id, builder.CreateVector(Memory::GetPointer(req->userBinAttr[i].ptr.ptr), req->userBinAttr[i].size));
+				auto bin = CreateBinAttr(builder, req->userBinAttr[i].id, builder.CreateVector(Memory::GetPointerUnchecked(req->userBinAttr[i].ptr.ptr), req->userBinAttr[i].size));
 				davec.push_back(bin);
 			}
 			final_memberbinattr_vec = builder.CreateVector(davec);
