@@ -803,6 +803,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/Net/NpMatching2Cache.cpp \
   $(SRC)/Core/Net/Buffer.cpp \
   $(SRC)/Core/Net/NPAgent.cpp \
+  $(SRC)/Core/Net/InfraServerList.cpp \
   $(SRC)/Core/Net/NPAgents/PSNAuthAgent.cpp \
   $(SRC)/Core/Net/NPAgents/PSNAgent.cpp \
   $(SRC)/Core/Net/NPAgents/RPCNAgent.cpp \
@@ -989,6 +990,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/MainScreen.cpp \
   $(SRC)/UI/TabbedDialogScreen.cpp \
   $(SRC)/UI/AdhocServerScreen.cpp \
+  $(SRC)/UI/InfraServerScreen.cpp \
   $(SRC)/UI/SimpleDialogScreen.cpp \
   $(SRC)/UI/MemStickScreen.cpp \
   $(SRC)/UI/IAPScreen.cpp \

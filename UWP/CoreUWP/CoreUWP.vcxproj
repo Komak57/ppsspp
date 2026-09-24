@@ -445,6 +445,7 @@
     <ClCompile Include="..\..\Core\Net\HTTPConnection.cpp" />
     <ClCompile Include="..\..\Core\Net\HTTPS.cpp" />
     <ClCompile Include="..\..\Core\Net\NPAgent.cpp" />
+    <ClCompile Include="..\..\Core\Net\InfraServerList.cpp" />
     <ClCompile Include="..\..\Core\Net\NPAgents\PSNAgent.cpp" />
     <ClCompile Include="..\..\Core\Net\NPAgents\PSNAuthAgent.cpp" />
     <ClCompile Include="..\..\Core\Net\NPAgents\RPCNAgent.cpp" />

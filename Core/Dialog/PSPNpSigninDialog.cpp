@@ -508,7 +508,7 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 				g_Config.sInfraNpId = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 				g_Config.sInfraToken = "";
 			},
-				[&]() {
+				[&](int) {
 				// Failure callback
 			}
 			);
@@ -527,7 +527,7 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 				g_Config.sInfraPassword = value;
 				g_Config.sInfraToken = "";
 			},
-				[&]() {
+				[&](int) {
 				// Failure callback
 			}
 			);
@@ -575,7 +575,7 @@ void PSPNpSigninDialog::UpdateSigninForm(int animSpeed) {
 					startTime = now;
 					Transition(SigninStage::CONNECT_REQUEST);
 				},
-					[&]() {
+					[&](int) {
 					// Failure callback
 				}
 				);
@@ -654,7 +654,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.npid = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 			},
-				[&]() {
+				[&](int) {
 				// Failure callback
 			}
 			);
@@ -683,7 +683,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryForm(int animSpeed) {
 						tmp.validEmail = false;
 					tmp.email = value;
 				},
-				[&]() {
+				[&](int) {
 					// Failure callback
 				}
 			);
@@ -776,7 +776,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.token = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 1, 20);
 			},
-				[&]() {
+				[&](int) {
 				// Failure callback
 			}
 			);
@@ -794,7 +794,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.password = value;
 			},
-				[&]() {
+				[&](int) {
 				// Failure callback
 			}
 			);
@@ -817,7 +817,7 @@ void PSPNpSigninDialog::UpdatePasswordRecoveryTokenForm(int animSpeed) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.password_confirm = value;
 			},
-				[&]() {
+				[&](int) {
 				// Failure callback
 			}
 			);
@@ -894,7 +894,7 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.npid = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 			},
-				[&]() {
+				[&](int) {
 				// Failure callback
 			}
 			);
@@ -918,7 +918,7 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 						tmp.validEmail = false;
 					tmp.email = value;
 				},
-					[&]() {
+					[&](int) {
 					// Failure callback
 				}
 			);
@@ -936,7 +936,7 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.password = value;
 			},
-				[&]() {
+				[&](int) {
 				// Failure callback
 			}
 			);
@@ -958,7 +958,7 @@ void PSPNpSigninDialog::UpdateRegistrationForm(int animSpeed) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.password_confirm = value;
 			},
-				[&]() {
+				[&](int) {
 				// Failure callback
 			}
 			);
@@ -1037,7 +1037,7 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 				// TODO: Alert the user that some characters are not allowed
 					tmp.online_name = SanitizeString(value, StringRestriction::AlphaNumUnderscore, 3, 16);
 			},
-				[&]() {
+				[&](int) {
 				// Failure callback
 			}
 			);
@@ -1058,7 +1058,7 @@ void PSPNpSigninDialog::UpdateRegistrationInfoForm(int animSpeed) {
 				[&](const std::string& value, int) {
 					tmp.avatar_url = value;
 			},
-				[&]() {
+				[&](int) {
 				// Failure callback
 			}
 			);

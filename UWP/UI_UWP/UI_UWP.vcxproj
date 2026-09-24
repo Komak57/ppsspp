@@ -86,6 +86,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\..\UI\AdhocServerScreen.h" />
+    <ClInclude Include="..\..\UI\InfraServerScreen.h" />
     <ClInclude Include="..\..\UI\AudioCommon.h" />
     <ClInclude Include="..\..\UI\Background.h" />
     <ClInclude Include="..\..\UI\BackgroundAudio.h" />
@@ -143,6 +144,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\UI\AdhocServerScreen.cpp" />
+    <ClCompile Include="..\..\UI\InfraServerScreen.cpp" />
     <ClCompile Include="..\..\UI\AudioCommon.cpp" />
     <ClCompile Include="..\..\UI\Background.cpp" />
     <ClCompile Include="..\..\UI\BackgroundAudio.cpp" />

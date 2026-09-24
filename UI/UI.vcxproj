@@ -28,6 +28,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AdhocServerScreen.cpp" />
+    <ClCompile Include="InfraServerScreen.cpp" />
     <ClCompile Include="Background.cpp" />
     <ClCompile Include="BackgroundAudio.cpp" />
     <ClCompile Include="BaseScreens.cpp" />
@@ -85,6 +86,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AdhocServerScreen.h" />
+    <ClInclude Include="InfraServerScreen.h" />
     <ClInclude Include="AudioCommon.h" />
     <ClInclude Include="Background.h" />
     <ClInclude Include="BackgroundAudio.h" />

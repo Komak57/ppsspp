@@ -1621,6 +1621,8 @@ list(APPEND NativeAppSource
 	UI/NativeApp.cpp
 	UI/AdhocServerScreen.h
 	UI/AdhocServerScreen.cpp
+	UI/InfraServerScreen.h
+	UI/InfraServerScreen.cpp
 	UI/BackgroundAudio.h
 	UI/BackgroundAudio.cpp
 	UI/Background.h
@@ -2589,6 +2591,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/Util/RecentFiles.h
 	Core/Net/NPAgent.h
 	Core/Net/NPAgent.cpp
+	Core/Net/InfraServerList.h
+	Core/Net/InfraServerList.cpp
 	Core/Net/SIGAgent.h
 	Core/Net/SIGAgent.cpp
 	Core/Net/NPAgents/RPCNAgent.cpp

@@ -573,7 +573,8 @@ public:
 	// PSN revival servers (actual code in development by FoxLovesYou from Discord)
 	int proInfraServerType;
 	std::string proInfraServer;
-	std::vector<std::string> proInfraServerList;
+	std::vector<std::string> vCustomInfraServerList;  // User-added servers; public list comes from Core/Net/InfraServerList.
+	std::string sInfraServerListUrl;
 
 	std::string sInfraNpId;
 	std::string sInfraPassword;

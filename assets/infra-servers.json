@@ -1,0 +1,22 @@
+{
+	"servers": [
+		{
+			"name": "Revurb",
+			"host": "rpcn.revurb.us",
+			"web": "",
+			"discord": "",
+			"location": "",
+			"description": "Self-hosted RPCN server for Private Beta testing.",
+			"rpcn_version": 27
+		},
+		{
+			"name": "Official RPCN (RPCS3)",
+			"host": "np.rpcs3.net",
+			"web": "https://rpcn.net/",
+			"discord": "https://discord.gg/rpcs3",
+			"location": "",
+			"description": "The official RPCN server operated by the RPCS3 team. Runs the current RPCN protocol, which may be newer than this build supports.",
+			"rpcn_version": 33
+		}
+	]
+}

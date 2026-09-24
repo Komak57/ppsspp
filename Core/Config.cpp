@@ -74,9 +74,6 @@ static const std::string_view logSectionName = "Log";
 
 bool TryUpdateSavedPath(Path *path);
 
-static const std::vector<std::string_view> defaultInfraServerList = {
-	"rpcn.revurb.us", "np.rpcs3.net", // TODO: Add some saved recent history too?
-};
 
 std::string GPUBackendToString(GPUBackend backend) {
 	switch (backend) {
@@ -1075,7 +1072,13 @@ static const ConfigSetting networkSettings[] = {
 	// See comment in header
 	ConfigSetting("infraServerType", SETTING(g_Config, proInfraServerType), 0, CfgFlag::PER_GAME),
 	ConfigSetting("infraServer", SETTING(g_Config, proInfraServer), "", CfgFlag::PER_GAME),
-	ConfigSetting("infraServerList", SETTING(g_Config, proInfraServerList), &defaultInfraServerList, CfgFlag::DEFAULT),
+	// Custom (user-added) infra servers only; the public list comes from
+	// InfraServerList.cpp (sInfraServerListUrl / assets/infra-servers.json).
+	// Old inis carry the former defaults (rpcn.revurb.us etc.) in this key;
+	// InfraServerScreen erases entries duplicating the public list, so those
+	// migrate away on first visit - same cleanup the adhoc screen does.
+	ConfigSetting("infraServerList", SETTING(g_Config, vCustomInfraServerList), &emptyList, CfgFlag::DEFAULT),
+	ConfigSetting("InfraServerListUrl", SETTING(g_Config, sInfraServerListUrl), "", CfgFlag::DEFAULT),  // URL for the public infra server list. Empty = bundled asset. Can be a local path.
 	ConfigSetting("PSNNPID", SETTING(g_Config, sInfraNpId), &DefaultInfrastructureUsername, CfgFlag::PER_GAME),
 	ConfigSetting("PSNPassword", SETTING(g_Config, sInfraPassword), "", CfgFlag::PER_GAME),
 	ConfigSetting("PSNToken", SETTING(g_Config, sInfraToken), "", CfgFlag::PER_GAME),

@@ -43,6 +43,7 @@
 #include "UI/DriverManagerScreen.h"
 #include "UI/DisplayLayoutScreen.h"
 #include "UI/GameSettingsScreen.h"
+#include "UI/InfraServerScreen.h"
 #include "UI/OnScreenDisplay.h"
 #include "UI/IconCache.h"
 #include "UI/MiscViews.h"
@@ -505,7 +506,7 @@ void DeveloperToolsScreen::CreateNetworkTab(UI::LinearLayout *list) {
 
 	ChoiceWithValueDisplay *server_addr = list->Add(new ChoiceWithValueDisplay(&g_Config.proInfraServer, di->T("Change proInfraServer Address", "Change proInfraServer Address (localhost = multiple instance)"), I18NCat::NONE));
 	server_addr->OnClick.Add([=](UI::EventParams &) {
-		screenManager()->push(new HostnameSelectScreen(&g_Config.proInfraServer, &g_Config.proInfraServerList, di->T("proInfraServer Address:")));
+		screenManager()->push(new InfraServerScreen(&g_Config.proInfraServer, di->T("proInfraServer Address:")));
 	});
 
 	if (g_Config.proInfraServerType != 0)
@@ -518,7 +519,7 @@ void DeveloperToolsScreen::CreateNetworkTab(UI::LinearLayout *list) {
 			server_addr->SetEnabled(false);
 	});
 
-	list->Add(new ItemHeader("Login Credentials"));
+	list->Add(new ItemHeader(di->T("Login Credentials")));
 	PopupTextInputChoice *usernameChoice = list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sInfraNpId, di->T("Username"), "", 64, screenManager()));
 	usernameChoice->SetRestriction(StringRestriction::AlphaNumUnderscore, 3);
 	list->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sInfraPassword, di->T("Password"), "", 64, screenManager()))->SetPasswordDisplay();

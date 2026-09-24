@@ -550,6 +550,7 @@
     <ClCompile Include="Net\HTTPS.cpp" />
     <ClCompile Include="Net\NpMatching2Cache.cpp" />
     <ClCompile Include="Net\NPAgent.cpp" />
+    <ClCompile Include="Net\InfraServerList.cpp" />
     <ClCompile Include="Net\NPAgents\PSNAgent.cpp" />
     <ClCompile Include="Net\NPAgents\PSNAuthAgent.cpp" />
     <ClCompile Include="Net\NPAgents\RPCNAgent.cpp" />
@@ -1075,6 +1076,7 @@
     <ClInclude Include="Net\HTTPConnection.h" />
     <ClInclude Include="Net\HTTPS.h" />
     <ClInclude Include="Net\NPAgent.h" />
+    <ClInclude Include="Net\InfraServerList.h" />
     <ClInclude Include="Net\NpMatching2Cache.h" />
     <ClInclude Include="Net\SignalingHandler.h" />
     <ClInclude Include="np2_structs_generated.h" />
