@@ -53,6 +53,16 @@ extern const char *const defaultNetSSID;
 
 void Register_sceNetInet();
 
+// P2P session table (firmware DAT_00035a94 registry equivalent). Owned by
+// sceNetInet as a module global. Higher layers (e.g. the signaling agent)
+// register peers DOWN into it; sceNetInet consults it to decide P2P routing.
+// sceNetInet itself must never depend on the signaling/NP layer - this is the
+// one-way seam that keeps it a standalone socket system.
+//   addr/port are network order; port 0 = wildcard (any port at that address).
+void RegisterSessionPeer(u32 addr, u16 port);
+void UnregisterSessionPeer(u32 addr);
+bool IsSessionPeer(u32 addr);
+
 void __NetInetShutdown();
 // CoreTiming event used to apply async-op results on the emu thread (worker
 // threads must never resume PSP threads directly - scheduler isn't thread-safe)

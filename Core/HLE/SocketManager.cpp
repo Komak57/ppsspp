@@ -147,6 +147,7 @@ void InetSocket::clear() {
 	dst.host = sockaddr_in{};
     threadID = -1;
 	abortPending.exchange(false);
+	soCrypto = 0;
 
 	// Clear the queue safely
 	{
@@ -362,8 +363,14 @@ void SocketManager::RetransmitSweep() {
 	// their own tx_buffer plus every pending (half-open) connection they are still handshaking.
 	for (int i = MIN_VALID_INET_SOCKET; i < VALID_INET_SOCKET_COUNT; i++) {
 		InetSocket* s = &inetSockets_[i];
-		if (s->state == SocketState::Unused || s->sendP2P != &InetSocket::Send_Reliable)
+		// Only reliable (TCP-family) sockets carry a tx_buffer to retransmit.
+		if (s->state == SocketState::Unused)
 			continue;
+		switch (s->type) {
+		case PSP_NET_INET_SOCK_STREAM: case PSP_NET_INET_SOCK_RAW: case PSP_NET_INET_SOCK_RDM:
+		case PSP_NET_INET_SOCK_SEQPACKET: case PSP_NET_INET_SOCK_PACKET: break;
+		default: continue;  // unreliable: nothing to retransmit
+		}
 		retransmit_buffer(s);
 		std::lock_guard<std::mutex> connections(s->conn_lock);
 		for (auto it = s->pending_connections.begin(); it != s->pending_connections.end(); ) {
@@ -414,6 +421,7 @@ bool SocketManager::P2PRecv() {
 	vpkt.src.host.sin_family = AF_INET;
 	vpkt.header_flags = header.flags;
 	vpkt.dst.virt.port = header.dest;
+	// Fix for RPCN related packets
 	if (header.dest == 0)
 		vpkt.sockType = PSP_NET_INET_SOCK_CONN_DGRAM;
 	// vport 0 (RPCN/signaling) is matched on the 3-byte header ALONE - no extended
@@ -531,11 +539,9 @@ int SocketManager::vBroadcast(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 		if (!target_sock || target_sock->state == SocketState::Unused)
 			continue;
 
-		if (!target_sock->processP2P) {
-			WARN_LOG(Log::sceNet, "vBroadcast: sock #%d (type=%d) has no processP2P - skipped", i, target_sock->type);
-			continue;
-		}
-		int got = (target_sock->*(target_sock->processP2P))(vpkt.clone(), dest);
+		// Each socket delivers per its own transport (virtual ProcessP2P); base
+		// InetSocket (error/unused) returns false and simply doesn't accept.
+		int got = target_sock->ProcessP2P(vpkt.clone(), dest);
 		delivered_count += got;
 		// A vport-0 ("system") packet carries no ext header, so vpkt.sockType is not real sender
 		// info - print "n/a" rather than a number that looks like a specific (and possibly wrong)
@@ -572,9 +578,22 @@ const char *SocketStateToString(SocketState state) {
 }
 
 // ============================================================================
+// P2P routing / dispatch (replaces the sendP2P/recvP2P/processP2P pointers)
+// ============================================================================
+bool InetSocket::IsP2P(int flags, u32 destAddr) const {
+	// Traffic-driven: the destination is a known peer (session registry), OR the
+	// call carries a per-packet crypto flag, OR the socket is a permanent crypto
+	// (CONN_DGRAM) socket. Never consults the NP/signaling layer.
+	return IsSessionPeer(destAddr)
+		|| (flags & (PSP_NET_INET_MSG_CRYPT_TX | PSP_NET_INET_MSG_CRYPT_RX)) != 0
+		|| (soCrypto & (SCE_NET_INET_SO_USECRYPTO_RX | SCE_NET_INET_SO_USECRYPTO_TX)) != 0;
+}
+
+// ============================================================================
 // Base Socket Class
 // Default fallback functions for things not yet implemented by other sockets
 // ============================================================================
+bool InetSocket::ProcessP2P(VirtualPacket&& vpkt, VirtualSockAddr dest)      { (void)vpkt; (void)dest; return false; }
 int InetSocket::send(const char* buf, int len, int flags) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::recv(char* buf, int len, int flags) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) { errno = EOPNOTSUPP; return -1; }
@@ -607,9 +626,12 @@ int InetSocket::setsockopt(int level, int optname, int optval, socklen_t optlen)
 		case 0x1022:// TODO: Ignoring SO_NOSIGPIPE flag to prevent crashing PPSSPP (not sure if PSP has NOSIGPIPE or not tho, defined as 0x1022 on Darwin)
 			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
 		case SCE_NET_INET_SO_USECRYPTO_RX:
-			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
 		case SCE_NET_INET_SO_USECRYPTO_TX:
-			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+			// The crypto payload transform is unimplemented, but the bit is the
+			// firmware's permanent-P2P marker (see IsP2P) - record it so a
+			// CONN_DGRAM socket routes P2P even before its peer is registered.
+			if (optval) soCrypto |= (u16)optname; else soCrypto &= ~(u16)optname;
+			return hleLogWarning(Log::sceNet, 0, "%s recorded as permanent p2p marker", host_optname_str.c_str());
 		case PSP_NET_INET_SO_RCVTIMEO:
 		case PSP_NET_INET_SO_SNDTIMEO:
 		{
@@ -703,9 +725,13 @@ int InetSocket::setsockopt(int level, int optname, const char* optval, socklen_t
 				break;
 			}
 		case SCE_NET_INET_SO_USECRYPTO_RX:
-			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
 		case SCE_NET_INET_SO_USECRYPTO_TX:
-			return hleLogWarning(Log::sceNet, 0, "%s not supported, ignoring", host_optname_str.c_str());
+		{
+			// See the int-overload above: record the permanent-P2P marker bit.
+			int v = (optval && optlen >= (socklen_t)sizeof(int)) ? *reinterpret_cast<const int*>(optval) : 1;
+			if (v) soCrypto |= (u16)optname; else soCrypto &= ~(u16)optname;
+			return hleLogWarning(Log::sceNet, 0, "%s recorded as permanent p2p marker", host_optname_str.c_str());
+		}
 		default:
 			break;  // Fall through to host socket options
 		}
@@ -722,9 +748,10 @@ int InetSocket::setsockopt(int level, int optname, const char* optval, socklen_t
 int InetSocket::getsockopt(int level, int optname, char* optval, socklen_t* optlen) {
 	if (!optval || !optlen) return -1;
 
-	// SPECIAL CASE: SO_ERROR for hybrid sockets needs custom handling
-	if (level == PSP_NET_INET_SOL_SOCKET && optname == PSP_NET_INET_SO_ERROR && 
-	    recvP2P) {
+	// SPECIAL CASE: SO_ERROR for hybrid/virtual sockets needs custom handling
+	// (previously gated on recvP2P being set, i.e. any real P2P-capable socket).
+	if (level == PSP_NET_INET_SOL_SOCKET && optname == PSP_NET_INET_SO_ERROR &&
+	    state != SocketState::Unused) {
 		// For hybrid sockets, check if connection succeeded locally
 		if (tcp_state == TCPState::Established) {
 			// Local connection succeeded, return 0
@@ -788,6 +815,7 @@ int InetSocket::connect(SceNetInetSockaddr* name, int namelen) { errno = EOPNOTS
 int InetSocket::listen(int backlog) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::accept(sockaddr* addr, socklen_t* addrlen) { errno = EOPNOTSUPP; return -1; }
 int InetSocket::shutdown(int how) { errno = EOPNOTSUPP; return -1; }
+void InetSocket::select(bool* readReady, bool* writeReady, bool* exceptReady) { (void)readReady; (void)writeReady; (void)exceptReady; } // Base: no virtual readiness (error/unused socket). Every P2P type overrides.
 void InetSocket::enqueue_packet(VirtualPacket packet) {
 	std::lock_guard<std::mutex> queue(queue_lock);
 	// Add timestamp for TTL tracking
@@ -1433,10 +1461,8 @@ int InetSocket::Accept_Reliable(sockaddr* addr, socklen_t* addrlen) {
 	new_sock->tx_seq = pending_conn->tx_seq; // sync with ACK
 
 	new_sock->state = SocketState::UsedNetInet;
-	// The accepted connection is a virtual reliable p2p socket regardless of the listener's type.
-	new_sock->sendP2P = &InetSocket::Send_Reliable;
-	new_sock->recvP2P = &InetSocket::Recv_Reliable;
-	new_sock->processP2P = &InetSocket::Process_Reliable;
+	// new_sock was created by the factory with the listener's (reliable) type, so
+	// its virtual send/recv/select/ProcessP2P already resolve to the reliable path.
 	INFO_LOG(Log::sceNet, "accept::RELIABLE: accepted from %s:%u on %s:%u (vport=%u) -> socket %d",
 		ip2str(new_sock->dst.virt.addr.s_addr).c_str(), ntohs(new_sock->dst.virt.port),
 		ip2str(new_sock->src.virt.addr.s_addr).c_str(), ntohs(new_sock->src.virt.port), ntohs(new_sock->src.virt.vport), new_socket_idx);
@@ -1592,7 +1618,16 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 				INFO_LOG(Log::sceNet, "process::RELIABLE: Received SYN at listening socket from %s:%u|%u",
 					ip2str(pkt.src.virt.addr).c_str(), ntohs(pkt.src.virt.port), ntohs(pkt.src.virt.vport));
 
-				InetSocket* conn = new InetSocket();
+				// Accepted/pending connections are always a virtual reliable
+				// (TCP-over-UDP) socket regardless of the listener's exact type, so
+				// create the concrete PacketSocket - its vtable gives the reliable
+				// send/recv/select/ProcessP2P without any function pointers. Drop the
+				// host fd the ctor opens; a virtual connection rides the relay only.
+				PacketSocket* conn = new PacketSocket(this->domain, this->protocol);
+				if (conn->sock != INVALID_SOCKET) {
+					::closesocket(conn->sock);
+					conn->sock = INVALID_SOCKET;
+				}
 				// Default assume local connection
 				conn->src.host = this->src.host;
 				conn->src.host.sin_family = AF_INET;
@@ -1608,9 +1643,6 @@ bool InetSocket::Process_Reliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 				conn->tcp_state = TCPState::SynReceived;
 				conn->tx_seq = 0;
 				conn->type = this->type;
-				conn->recvP2P = this->recvP2P;
-				conn->sendP2P = this->sendP2P;
-				conn->processP2P = this->processP2P;
 				if (!set_pending_connection(conn))
 					continue;
 				conn->rx_seq = 1; // Mark this packet received
@@ -1712,7 +1744,9 @@ int InetSocket::closesocket() {
 // ============================================================================
 // 
 // ============================================================================
+bool StreamSocket::ProcessP2P(VirtualPacket&& v, VirtualSockAddr d)     { return Process_Reliable(std::move(v), d); }
 int StreamSocket::send(const char* buf, int len, int flags) {
+	if (IsP2P(flags, dst.virt.addr.s_addr)) return Send_Reliable(buf, len, flags, nullptr, 0);
 	VERBOSE_LOG(Log::sceNet, "send::StreamSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
@@ -1730,6 +1764,7 @@ int StreamSocket::send(const char* buf, int len, int flags) {
 	return ret;
 }
 int StreamSocket::recv(char* buf, int len, int flags) {
+	if (IsP2P(flags, dst.virt.addr.s_addr)) return Recv_Reliable(buf, len, flags, nullptr, nullptr);
 	VERBOSE_LOG(Log::sceNet, "recv::StreamSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
@@ -1752,6 +1787,7 @@ int StreamSocket::recv(char* buf, int len, int flags) {
 	return ret;
 }
 int StreamSocket::connect(SceNetInetSockaddr* name, int namelen) {
+	{ const sockaddr_in* _pd = reinterpret_cast<const sockaddr_in*>(name); if (IsP2P(0, _pd->sin_addr.s_addr)) return Connect_Reliable(name, namelen); }
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
 	// Host Order
 	auto _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
@@ -1873,17 +1909,25 @@ int StreamSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	return ret;
 }
 int StreamSocket::shutdown(int how) {
+	if (!IsP2P(0, dst.virt.addr.s_addr)) return Shutdown_Reliable(how);
 	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
 	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
 	INFO_LOG(Log::sceNet, "shutdown::StreamSocket(how=%d): state=%d (real)", how, (int)tcp_state);
 	tcp_state = TCPState::Closed;
 	return ::shutdown(sock, how);
 }
-
+void StreamSocket::select(bool* readReady, bool* writeReady, bool* exceptReady) { 
+	if (readReady)
+		*readReady = *readReady || has_pending_data(true) || has_pending_connection();
+	if (writeReady)
+		*writeReady = *writeReady || (tcp_state == TCPState::Established);
+}
 // ============================================================================
 // 
 // ============================================================================
+bool DgramSocket::ProcessP2P(VirtualPacket&& v, VirtualSockAddr d)      { return Process_Unreliable(std::move(v), d); }
 int DgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	{ const sockaddr_in* _pd = reinterpret_cast<const sockaddr_in*>(to); u32 _da = to ? _pd->sin_addr.s_addr : dst.virt.addr.s_addr; u16 _dp = to ? _pd->sin_port : dst.virt.port; if (IsP2P(flags, _da) || _dp == htons(SCE_SIGN_PORT)) return Send_Unreliable(buf, len, flags, to, tolen); }
 	dbg.send++;
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
@@ -1910,6 +1954,7 @@ int DgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSoc
 	return hleLogDebug(Log::sceNet, ret, "sendto::DgramSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int DgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	if (src.virt.port == htons(SCE_SIGN_PORT)) return Recv_Unrealiable(buf, len, flags, from, fromlen);
 	// NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
@@ -1960,16 +2005,25 @@ int DgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	return ret;
 }
 int DgramSocket::shutdown(int how) {
+	if (!IsP2P(0, dst.virt.addr.s_addr)) return Shutdown_Reliable(how);
 	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
 	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
 	INFO_LOG(Log::sceNet, "shutdown::DgramSocket(how=%d): state=%d (real)", how, (int)tcp_state);
 	tcp_state = TCPState::Closed;
-	return ::shutdown(sock, how);}
+	return ::shutdown(sock, how);
+}
+void DgramSocket::select(bool* readReady, bool* writeReady, bool* exceptReady) {
+	(void)writeReady;
+	if (readReady)
+		*readReady = *readReady || has_pending_data();
+}
 
 // ============================================================================
 // 
 // ============================================================================
+bool RawSocket::ProcessP2P(VirtualPacket&& v, VirtualSockAddr d)        { return Process_Reliable(std::move(v), d); }
 int RawSocket::send(const char* buf, int len, int flags) {
+	if (IsP2P(flags, dst.virt.addr.s_addr)) return Send_Reliable(buf, len, flags, nullptr, 0);
 	VERBOSE_LOG(Log::sceNet, "send::RawSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
@@ -1987,6 +2041,7 @@ int RawSocket::send(const char* buf, int len, int flags) {
 	return ret;
 }
 int RawSocket::recv(char* buf, int len, int flags) {
+	if (IsP2P(flags, dst.virt.addr.s_addr)) return Recv_Reliable(buf, len, flags, nullptr, nullptr);
 	VERBOSE_LOG(Log::sceNet, "recv::RawSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
@@ -2009,6 +2064,7 @@ int RawSocket::recv(char* buf, int len, int flags) {
 	return ret;
 }
 int RawSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	{ const sockaddr_in* _pd = reinterpret_cast<const sockaddr_in*>(to); u32 _da = to ? _pd->sin_addr.s_addr : dst.virt.addr.s_addr; u16 _dp = to ? _pd->sin_port : dst.virt.port; if (IsP2P(flags, _da) || _dp == htons(SCE_SIGN_PORT)) return Send_Reliable(buf, len, flags, to, tolen); }
 	dbg.send++;
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
@@ -2035,6 +2091,7 @@ int RawSocket::sendto(const char* buf, int len, int flags, const SceNetInetSocka
 	return hleLogDebug(Log::sceNet, ret, "sendto::RawSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int RawSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	if (src.virt.port == htons(SCE_SIGN_PORT)) return Recv_Reliable(buf, len, flags, from, fromlen);
 	// NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
@@ -2084,11 +2141,19 @@ int RawSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
 	return ret;
 }
+void RawSocket::select(bool* readReady, bool* writeReady, bool* exceptReady) { 
+	if (readReady)
+		*readReady = *readReady || has_pending_data(true) || has_pending_connection();
+	if (writeReady)
+		*writeReady = *writeReady || (tcp_state == TCPState::Established);
+}
 
 // ============================================================================
 // 
 // ============================================================================
+bool RdmSocket::ProcessP2P(VirtualPacket&& v, VirtualSockAddr d)        { return Process_Reliable(std::move(v), d); }
 int RdmSocket::send(const char* buf, int len, int flags) {
+	if (IsP2P(flags, dst.virt.addr.s_addr)) return Send_Reliable(buf, len, flags, nullptr, 0);
 	VERBOSE_LOG(Log::sceNet, "send::RdmSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
@@ -2106,6 +2171,7 @@ int RdmSocket::send(const char* buf, int len, int flags) {
 	return ret;
 }
 int RdmSocket::recv(char* buf, int len, int flags) {
+	if (IsP2P(flags, dst.virt.addr.s_addr)) return Recv_Reliable(buf, len, flags, nullptr, nullptr);
 	VERBOSE_LOG(Log::sceNet, "recv::RdmSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
@@ -2128,6 +2194,7 @@ int RdmSocket::recv(char* buf, int len, int flags) {
 	return ret;
 }
 int RdmSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	{ const sockaddr_in* _pd = reinterpret_cast<const sockaddr_in*>(to); u32 _da = to ? _pd->sin_addr.s_addr : dst.virt.addr.s_addr; u16 _dp = to ? _pd->sin_port : dst.virt.port; if (IsP2P(flags, _da) || _dp == htons(SCE_SIGN_PORT)) return Send_Reliable(buf, len, flags, to, tolen); }
 	dbg.send++;
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
@@ -2154,6 +2221,7 @@ int RdmSocket::sendto(const char* buf, int len, int flags, const SceNetInetSocka
 	return hleLogDebug(Log::sceNet, ret, "sendto::RdmSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int RdmSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	if (src.virt.port == htons(SCE_SIGN_PORT)) return Recv_Reliable(buf, len, flags, from, fromlen);
 	// NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
@@ -2203,11 +2271,19 @@ int RdmSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
 	return ret;
 }
+void RdmSocket::select(bool* readReady, bool* writeReady, bool* exceptReady) { 
+	if (readReady)
+		*readReady = *readReady || has_pending_data(true) || has_pending_connection();
+	if (writeReady)
+		*writeReady = *writeReady || (tcp_state == TCPState::Established);
+}
 
 // ============================================================================
 // 
 // ============================================================================
+bool SeqpacketSocket::ProcessP2P(VirtualPacket&& v, VirtualSockAddr d)  { return Process_Reliable(std::move(v), d); }
 int SeqpacketSocket::send(const char* buf, int len, int flags) {
+	if (IsP2P(flags, dst.virt.addr.s_addr)) return Send_Reliable(buf, len, flags, nullptr, 0);
 	VERBOSE_LOG(Log::sceNet, "send::SeqpacketSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
@@ -2225,6 +2301,7 @@ int SeqpacketSocket::send(const char* buf, int len, int flags) {
 	return ret;
 }
 int SeqpacketSocket::recv(char* buf, int len, int flags) {
+	if (IsP2P(flags, dst.virt.addr.s_addr)) return Recv_Reliable(buf, len, flags, nullptr, nullptr);
 	VERBOSE_LOG(Log::sceNet, "recv::SeqpacketSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
@@ -2247,6 +2324,7 @@ int SeqpacketSocket::recv(char* buf, int len, int flags) {
 	return ret;
 }
 int SeqpacketSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	{ const sockaddr_in* _pd = reinterpret_cast<const sockaddr_in*>(to); u32 _da = to ? _pd->sin_addr.s_addr : dst.virt.addr.s_addr; u16 _dp = to ? _pd->sin_port : dst.virt.port; if (IsP2P(flags, _da) || _dp == htons(SCE_SIGN_PORT)) return Send_Reliable(buf, len, flags, to, tolen); }
 	dbg.send++;
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
@@ -2273,6 +2351,7 @@ int SeqpacketSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	return hleLogDebug(Log::sceNet, ret, "sendto::SeqpacketSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int SeqpacketSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	if (src.virt.port == htons(SCE_SIGN_PORT)) return Recv_Reliable(buf, len, flags, from, fromlen);
 	// NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
@@ -2302,6 +2381,7 @@ int SeqpacketSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr*
 	return hleLogDebug(Log::sceNet, ret, "recvfrom::SeqpacketSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int SeqpacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
+	{ const sockaddr_in* _pd = reinterpret_cast<const sockaddr_in*>(name); if (IsP2P(0, _pd->sin_addr.s_addr)) return Connect_Reliable(name, namelen); }
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
 	// Host Order
 	auto _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
@@ -2423,17 +2503,26 @@ int SeqpacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	return ret;
 }
 int SeqpacketSocket::shutdown(int how) {
+	if (!IsP2P(0, dst.virt.addr.s_addr)) return Shutdown_Reliable(how);
 	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
 	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
 	INFO_LOG(Log::sceNet, "shutdown::SeqpacketSocket(how=%d): state=%d (real)", how, (int)tcp_state);
 	tcp_state = TCPState::Closed;
 	return ::shutdown(sock, how);
 }
+void SeqpacketSocket::select(bool* readReady, bool* writeReady, bool* exceptReady) { 
+	if (readReady)
+		*readReady = *readReady || has_pending_data(true) || has_pending_connection();
+	if (writeReady)
+		*writeReady = *writeReady || (tcp_state == TCPState::Established);
+}
 
 // ============================================================================
 // 
 // ============================================================================
+bool DccpSocket::ProcessP2P(VirtualPacket&& v, VirtualSockAddr d)       { return Process_Unreliable(std::move(v), d); }
 int DccpSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	{ const sockaddr_in* _pd = reinterpret_cast<const sockaddr_in*>(to); u32 _da = to ? _pd->sin_addr.s_addr : dst.virt.addr.s_addr; u16 _dp = to ? _pd->sin_port : dst.virt.port; if (IsP2P(flags, _da) || _dp == htons(SCE_SIGN_PORT)) return Send_Unreliable(buf, len, flags, to, tolen); }
 	dbg.send++;
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
@@ -2460,6 +2549,7 @@ int DccpSocket::sendto(const char* buf, int len, int flags, const SceNetInetSock
 	return hleLogDebug(Log::sceNet, ret, "sendto::DccpSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
 int DccpSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	if (src.virt.port == htons(SCE_SIGN_PORT)) return Recv_Unrealiable(buf, len, flags, from, fromlen);
 	// NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
@@ -2510,17 +2600,25 @@ int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	return ret;
 }
 int DccpSocket::shutdown(int how) {
+	if (!IsP2P(0, dst.virt.addr.s_addr)) return Shutdown_Reliable(how);
 	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
 	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
 	INFO_LOG(Log::sceNet, "shutdown::DccpSocket(how=%d): state=%d (real)", how, (int)tcp_state);
 	tcp_state = TCPState::Closed;
 	return ::shutdown(sock, how);
 }
+void DccpSocket::select(bool* readReady, bool* writeReady, bool* exceptReady) {
+	(void)writeReady;
+	if (readReady)
+		*readReady = *readReady || has_pending_data();
+}
 
 // ============================================================================
 // Standard P2P Comm Channel (UDP)
 // ============================================================================
+bool ConnDgramSocket::ProcessP2P(VirtualPacket&& v, VirtualSockAddr d)  { return Process_Unreliable(std::move(v), d); }
 int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) {
+	{ const sockaddr_in* _pd = reinterpret_cast<const sockaddr_in*>(to); u32 _da = to ? _pd->sin_addr.s_addr : dst.virt.addr.s_addr; u16 _dp = to ? _pd->sin_port : dst.virt.port; if (IsP2P(flags, _da) || _dp == htons(SCE_SIGN_PORT)) return Send_Unreliable(buf, len, flags, to, tolen); }
 	dbg.send++;
 	int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
 	flgs = convertMSGFlagsPSP2Host(flgs);
@@ -2546,8 +2644,8 @@ int ConnDgramSocket::sendto(const char* buf, int len, int flags, const SceNetIne
 	dbg.sent++;
 	return hleLogDebug(Log::sceNet, ret, "sendto::ConnDgramSocket: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port));
 }
-
 int ConnDgramSocket::recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) {
+	if (src.virt.port == htons(SCE_SIGN_PORT)) return Recv_Unrealiable(buf, len, flags, from, fromlen);
 	// NOTICE_LOG(Log::sceNet, "ConnDgramSocket taking the Physical route.");
 	SockAddrIN4 saddr{};
 	if (fromlen)
@@ -2597,11 +2695,18 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	int ret = ::bind(sock, (struct sockaddr*)&saddr.in, sizeof(saddr.in));
 	return ret;
 }
+void ConnDgramSocket::select(bool* readReady, bool* writeReady, bool* exceptReady) {
+	(void)writeReady;
+	if (readReady)
+		*readReady = *readReady || has_pending_data();
+}
 
 // ============================================================================
 // TCP Virtual Socket with UPnP transmission capabilities
 // ============================================================================
+bool PacketSocket::ProcessP2P(VirtualPacket&& v, VirtualSockAddr d)     { return Process_Reliable(std::move(v), d); }
 int PacketSocket::send(const char* buf, int len, int flags) {
+	if (IsP2P(flags, dst.virt.addr.s_addr)) return Send_Reliable(buf, len, (p2ps_tcp_flags::PSH | p2ps_tcp_flags::TCP), nullptr, 0);
 	VERBOSE_LOG(Log::sceNet, "send::PacketSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
@@ -2619,6 +2724,7 @@ int PacketSocket::send(const char* buf, int len, int flags) {
 	return ret;
 }
 int PacketSocket::recv(char* buf, int len, int flags) {
+	if (IsP2P(flags, dst.virt.addr.s_addr)) return Recv_Reliable(buf, len, flags, nullptr, nullptr);
 	VERBOSE_LOG(Log::sceNet, "recv::PacketSocket(buf, %d, %d): state=%d", len, flags, (int)tcp_state);
 
 	// int flgs = flags & ~PSP_NET_INET_MSG_DONTWAIT; // removing non-POSIX flag, which is an alternative way to use non-blocking mode
@@ -2641,6 +2747,7 @@ int PacketSocket::recv(char* buf, int len, int flags) {
 	return ret;
 }
 int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
+	{ const sockaddr_in* _pd = reinterpret_cast<const sockaddr_in*>(name); if (IsP2P(0, _pd->sin_addr.s_addr)) return Connect_Reliable(name, namelen); }
 	const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(name);
 	// Host Order
 	auto _vport = (_dest->sin_zero[0] << 8) | _dest->sin_zero[1];
@@ -2762,9 +2869,16 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 	return ret;
 }
 int PacketSocket::shutdown(int how) {
+	if (!IsP2P(0, dst.virt.addr.s_addr)) return Shutdown_Reliable(how);
 	// sceNetInetShutdown routes a live virtual (non-local) connection to Shutdown_Reliable, which
 	// sends the FIN; a call reaching this override is a local/loopback teardown of the real fd.
 	INFO_LOG(Log::sceNet, "shutdown::PacketSocket(how=%d): state=%d (real)", how, (int)tcp_state);
 	tcp_state = TCPState::Closed;
 	return ::shutdown(sock, how);
+}
+void PacketSocket::select(bool* readReady, bool* writeReady, bool* exceptReady) { 
+	if (readReady)
+		*readReady = *readReady || has_pending_data(true) || has_pending_connection();
+	if (writeReady)
+		*writeReady = *writeReady || (tcp_state == TCPState::Established);
 }

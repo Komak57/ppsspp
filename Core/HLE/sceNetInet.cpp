@@ -14,9 +14,6 @@
 #include "Core/HLE/sceNet.h"
 #include "Core/HLE/sceNetAdhoc.h"
 #include "Core/HLE/sceNetInet.h"
-#include "Core/HLE/sceNp.h"
-#include "Core/HLE/sceNp2.h"
-#include "Core/HLE/sceNpSignaling.h"
 #include "Core/HLE/NetInetConstants.h"
 #include "Core/CoreTiming.h"
 #include "Core/MIPS/MIPS.h"
@@ -26,8 +23,6 @@
 #include "Core/MemMapHelpers.h"
 #include "Core/Util/PortManager.h"
 #include "Core/Instance.h"
-#include "Core/HLE/Np2Types.h"
-#include "Core/Net/SIGAgent.h"
 #ifdef __MINGW32__
 #include <mswsock.h>
 #endif
@@ -149,11 +144,14 @@ static const int NETINET_POLL_TICK_US = 200;
 // from its virtual queues, not the host fd (which may never signal).
 static int __NetInetPollScan(SceNetInetPollfd *fdarray, u32 nfds) {
 	auto virtRead = [](InetSocket *s) {
-		return (s->recvP2P == &InetSocket::Recv_Reliable && (s->has_pending_data(true) || s->has_pending_connection())) ||
-		       (s->recvP2P == &InetSocket::Recv_Unrealiable && s->has_pending_data());
+		bool r = false;
+		s->select(&r, nullptr, nullptr);
+		return r;
 	};
 	auto virtWrite = [](InetSocket *s) {
-		return s->recvP2P == &InetSocket::Recv_Reliable && s->tcp_state == TCPState::Established;
+		bool w = false;
+		s->select(nullptr, &w, nullptr);
+		return w;
 	};
 
 	fd_set readfds{}, writefds{}, exceptfds{};
@@ -277,6 +275,33 @@ void __NetInetRestoreEvents() {
 
 bool netInetInited = false;
 
+// ---- P2P session table (see sceNetInet.h) --------------------------------
+// The firmware kept its peer registry as a module global fed by ioctl; we keep
+// ours as a module global fed by RegisterSessionPeer(). addr->port, network
+// order, port 0 = wildcard. A socket routes P2P when its destination is here
+// (InetSocket::IsP2P), replacing the old up-call into sceNpSignaling.
+static std::mutex g_sessionPeerLock;
+static std::unordered_map<u32, u16> g_sessionPeers;  // addr -> port (0 = any)
+
+void RegisterSessionPeer(u32 addr, u16 port) {
+	if (!addr)
+		return;
+	std::lock_guard<std::mutex> guard(g_sessionPeerLock);
+	g_sessionPeers[addr] = port;
+}
+
+void UnregisterSessionPeer(u32 addr) {
+	std::lock_guard<std::mutex> guard(g_sessionPeerLock);
+	g_sessionPeers.erase(addr);
+}
+
+bool IsSessionPeer(u32 addr) {
+	if (!addr)
+		return false;
+	std::lock_guard<std::mutex> guard(g_sessionPeerLock);
+	return g_sessionPeers.find(addr) != g_sessionPeers.end();
+}
+
 void __NetInetShutdown()
 {
 	if (!netInetInited)
@@ -288,6 +313,10 @@ void __NetInetShutdown()
 	__NetInetPollShutdown();
 	g_socketManager.CloseAll();
 	g_inetLastErrno.clear();
+	{
+		std::lock_guard<std::mutex> guard(g_sessionPeerLock);
+		g_sessionPeers.clear();
+	}
 }
 
 void __NetInetWakeCheck(bool checkDeadlines) {
@@ -579,20 +608,19 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		hostSockets[i].sock = inetSock->sock;
 		if (inetSock->sock > maxHostSocket)
 			maxHostSocket = inetSock->sock;
+
+		bool virtReadReady = false;
+		bool virtWriteReady = false;
+		inetSock->select(&virtReadReady, &virtWriteReady, nullptr);
 		if (readfds && (NetInetFD_ISSET(i, readfds)))
 		{
 			hostSockets[i].wantsRead = true;
 			VERBOSE_LOG(Log::sceNet, "Input Read FD #%i (host: %d)", i, inetSock->sock);
 			if (rdcnt < FD_SETSIZE)
 			{
-				// Skip host checks on virtual sockets
-				if (inetSock->recvP2P == &InetSocket::Recv_Reliable && (inetSock->has_pending_data(true) || inetSock->has_pending_connection()))
-				{
-					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
-					tmout.tv_sec = 0;
-					tmout.tv_usec = 0;
-				}
-				else if (inetSock->recvP2P == &InetSocket::Recv_Unrealiable && inetSock->has_pending_data())
+				// Skip host checks on virtual sockets: the socket reports its own
+				// virtual read-readiness
+				if (virtReadReady)
 				{
 					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
 					tmout.tv_sec = 0;
@@ -616,8 +644,9 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 			VERBOSE_LOG(Log::sceNet, "Input Write FD #%i (host: %d)", i, inetSock->sock);
 			if (wrcnt < FD_SETSIZE)
 			{
-				// Skip host checks on virtual sockets
-				if (inetSock->recvP2P == &InetSocket::Recv_Reliable && (inetSock->tcp_state == TCPState::Established))
+				// Skip host checks on virtual sockets: the socket reports its own
+				// virtual write-readiness
+				if (virtWriteReady)
 				{
 					// We have existing data on one of the virtual sockets. Force an instant return for any other host sockets
 					tmout.tv_sec = 0;
@@ -695,14 +724,17 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 			continue; // Should we break here? Or populate all known data first?
 		}
 		_log += std::to_string(i) + "[";
+		// Each socket reports its own virtual readiness; OR it with the host fd result.
+		bool virtRead = false, virtWrite = false;
+		inetSock->select(&virtRead, &virtWrite, nullptr);
 		// Linger supports recv on CloseWait
-		if (readfds && hostSockets[i].wantsRead && (FD_ISSET(hostSockets[i].sock, &rdfds) || (inetSock->recvP2P == &InetSocket::Recv_Reliable && (inetSock->has_pending_data(true) || inetSock->has_pending_connection())) || (inetSock->recvP2P == &InetSocket::Recv_Unrealiable && inetSock->has_pending_data())))
+		if (readfds && hostSockets[i].wantsRead && (FD_ISSET(hostSockets[i].sock, &rdfds) || virtRead))
 		{
 			NetInetFD_SET(i, readfds);
 			ready_count++;
 			_log += "R";
 		}
-		if (writefds && hostSockets[i].wantsWrite && (FD_ISSET(hostSockets[i].sock, &wrfds) || (inetSock->recvP2P == &InetSocket::Recv_Reliable && inetSock->tcp_state == TCPState::Established)))
+		if (writefds && hostSockets[i].wantsWrite && (FD_ISSET(hostSockets[i].sock, &wrfds) || virtWrite))
 		{
 			NetInetFD_SET(i, writefds);
 			ready_count++;
@@ -827,14 +859,9 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	// Run the actual sendRequest on the host asynchronously
 	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval]() mutable
 	{
-		// Sockets created via virtual accept do not have a proper sock
-		// This must gate dest == peer to ensure it does not mis-report ENOTCONN
-		const bool routeP2P = inetSock->recvP2P
-			&& sceNpSignalingIsPeerAddress(inetSock->dst.virt.addr.s_addr);
-		if (routeP2P)
-			retval = (inetSock->*(inetSock->recvP2P))((char*)Memory::GetPointerOrException(bufPtr), bufLen, flags, nullptr, nullptr);
-		else
-			retval = inetSock->recv((char*)Memory::GetPointerOrException(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
+		// The socket self-routes: its recv() picks the virtual (relay) or host
+		// path from the session table, without sceNetInet knowing about peers.
+		retval = inetSock->recv((char*)Memory::GetPointerOrException(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
 			return;
@@ -902,19 +929,13 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetSend");
 	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
 
-	const bool routeP2P = inetSock->sendP2P
-		&& sceNpSignalingIsPeerAddress(inetSock->dst.virt.addr.s_addr);
-
 	// Run the actual sendRequest on the host asynchronously
-	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval, routeP2P]() mutable
+	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval]() mutable
 	{
-		if (routeP2P) {
-			// FIXME: We're dropping the socket flags for p2p flags. This should probably
-			//   be a per-socket function to define how to handle sendP2P for compatibility,
-			//   and then push to Send_Reliable with PSH+TCP
-			retval = (inetSock->*(inetSock->sendP2P))((char*)Memory::GetPointerOrException(bufPtr), bufLen, (p2ps_tcp_flags::PSH | p2ps_tcp_flags::TCP), nullptr, 0);
-		} else
-			retval = inetSock->send((char*)Memory::GetPointerOrException(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
+		// The socket self-routes via its send() (virtual relay vs host), and now
+		// carries the REAL caller flags into Send_Reliable - the old path forced
+		// PSH|TCP and dropped them.
+		retval = inetSock->send((char*)Memory::GetPointerOrException(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
 			return;
@@ -1064,7 +1085,14 @@ static int sceNetInetBind(int socket, u32 namePtr, int namelen)
 	// Check the socket type/protocol for SOCK_STREAM/SOCK_DGRAM or IPPROTO_TCP/IPPROTO_UDP instead of forwarding both protocols like in ANR2ME's original change.
 	// unsigned short port = ntohs(saddr.in.sin_port);
 	if (inetSock->src.host.sin_port != htons(SCE_SIGN_PORT))
-		UPnP_Add((inetSock->recvP2P == &InetSocket::Recv_Reliable) ? IP_PROTOCOL_TCP : IP_PROTOCOL_UDP, ntohs(inetSock->src.virt.port), ntohs(inetSock->src.virt.port));
+		// Reliable (TCP-family) socket types map TCP; datagram types map UDP.
+		{
+			const int t = inetSock->type;
+			const bool tcpLike = (t == PSP_NET_INET_SOCK_STREAM || t == PSP_NET_INET_SOCK_RAW ||
+			                      t == PSP_NET_INET_SOCK_RDM || t == PSP_NET_INET_SOCK_SEQPACKET ||
+			                      t == PSP_NET_INET_SOCK_PACKET);
+			UPnP_Add(tcpLike ? IP_PROTOCOL_TCP : IP_PROTOCOL_UDP, ntohs(inetSock->src.virt.port), ntohs(inetSock->src.virt.port));
+		}
 
 	// Workaround: Send a dummy 0 size message to AdhocServer IP to make sure the socket actually bound to an address when binded with INADDR_ANY before using getsockname, seems to fix sending DGRAM from incorrect port issue on Android
 	/*saddr.in.sin_addr.s_addr = g_adhocServerIP.in.sin_addr.s_addr;
@@ -1116,12 +1144,9 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen)
 	inetSock->thread = std::thread([retval, socket, inetSock, dst, sockAddrLen]() mutable
 	{
 		const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(dst);
-		// A connect targeting a signaling peer runs the virtual TCP-over-UDP handshake through the
-		// relay; any other destination (servers, loopback) keeps the real host connect.
-		if (dst && sceNpSignalingIsPeerAddress(_dest->sin_addr.s_addr))
-			retval = inetSock->Connect_Reliable(dst, sockAddrLen);
-		else
-			retval = inetSock->connect(dst, sockAddrLen);
+		// The socket self-routes: its connect() runs the virtual TCP-over-UDP
+		// handshake for a peer destination, or a real host connect otherwise.
+		retval = inetSock->connect(dst, sockAddrLen);
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
 			return;
@@ -1262,11 +1287,10 @@ static int sceNetInetShutdown(int socket, int how)
 		break;
 	}
 
-	int retVal = -1;
-	if (!sceNpSignalingIsPeerAddress(inetSock->dst.virt.addr.s_addr))
-		retVal = inetSock->Shutdown_Reliable(hostHow);
-	else
-		retVal = inetSock->shutdown(hostHow);
+	// The socket self-routes: its shutdown() tears down the virtual connection or
+	// the host socket. (NOTE: the per-type override preserves the pre-existing
+	// inverted gate - Shutdown_Reliable for NON-peer dsts - flagged for review.)
+	int retVal = inetSock->shutdown(hostHow);
 	// retVal = shutdown(inetSock->sock, hostHow);  // no translation
 	if (retVal < 0)
 	{
@@ -1420,16 +1444,9 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 		SceNetInetSockaddr *src = (SceNetInetSockaddr *)Memory::GetCharPointer(fromPtr);
 		socklen_t *srclen = (socklen_t *)Memory::GetCharPointer(fromlenPtr);
 
-		// P2P-capable sockets (recvP2P set) drain the virtual relay queue (falling back to the
-		// host fd inside Recv_*); a plain socket uses the host recvfrom. NOTE: the plain path must
-		// remain reachable while signaling runs - server/DNS sockets have no recvP2P and previously
-		// fell through with no recv at all (retval stuck at -1).
-		const bool routeP2P = (inetSock->src.host.sin_port == htons(SCE_SIGN_PORT)) && inetSock->recvP2P;
-		// NOTICE_LOG(Log::sceNet, "sceNetInetRecvfrom taking the %s route.", (routeP2P? "Hybrid" : "Raw"));
-		if (routeP2P)
-			retval = (inetSock->*(inetSock->recvP2P))((char *)Memory::GetPointerOrException(bufferPtr), len, flags, src, srclen);
-		else
-			retval = inetSock->recvfrom((char *)Memory::GetPointerOrException(bufferPtr), len, flags, src, srclen);
+		// The socket self-routes: its recvfrom() drains the virtual relay queue
+		// when bound to the signaling port, else the host recvfrom.
+		retval = inetSock->recvfrom((char *)Memory::GetPointerOrException(bufferPtr), len, flags, src, srclen);
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);
 			return;
@@ -1524,12 +1541,9 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 		DataToHexString(0, 0, Memory::GetPointerOrException(bufferPtr), len, &datahex);
 		VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", len, datahex.c_str());
 
-		const bool routeP2P = inetSock->sendP2P && (dst && (sceNpSignalingIsPeerAddress(_dest->sin_addr.s_addr) || _dest->sin_port == htons(SCE_SIGN_PORT)));
-		int retval;
-		if (routeP2P) {
-			retval = (inetSock->*(inetSock->sendP2P))((char *)Memory::GetPointerOrException(bufferPtr), len, flags, dst, tolen);
-		} else
-			retval = inetSock->sendto((char *)Memory::GetPointerOrException(bufferPtr), len, flags, dst, tolen);
+		// The socket self-routes: its sendto() relays to a peer destination (or the
+		// signaling port) via Send_Reliable/Unreliable, else a real host sendto.
+		int retval = inetSock->sendto((char *)Memory::GetPointerOrException(bufferPtr), len, flags, dst, tolen);
 
 		if (inetSock->abortPending.exchange(false)) {
 			inetSock->opDone.store(true, std::memory_order_release);

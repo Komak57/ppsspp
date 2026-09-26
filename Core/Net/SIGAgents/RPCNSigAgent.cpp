@@ -1,5 +1,6 @@
 #include <Core/Net/SIGAgent.h>
 #include <Core/HLE/SocketManager.h>
+#include <Core/HLE/sceNetInet.h>  // RegisterSessionPeer/UnregisterSessionPeer (peer routing table)
 #include <Core/HLE/NetInetConstants.h>
 #include <Core/HLE/proAdhoc.h>
 #include <Core/HLE/sceNp.h>
@@ -123,7 +124,7 @@ namespace net {
             socklen_t slen = sizeof(src);
             if (!UPNP_SUBSET_SOCK->has_pending_data())
                 break;
-            int n = (UPNP_SUBSET_SOCK->*(UPNP_SUBSET_SOCK->recvP2P))(reinterpret_cast<char*>(buf), sizeof(buf), 0,
+            int n = UPNP_SUBSET_SOCK->Recv_Unrealiable(reinterpret_cast<char*>(buf), sizeof(buf), 0,
                 &src, &slen);
             if (n < 0) {
                 int errorCode = 0;
@@ -292,7 +293,7 @@ namespace net {
             socklen_t slen = sizeof(src);
             if (!P2P_SUBSET_SOCK->has_pending_data())
                 break;
-            int n = (P2P_SUBSET_SOCK->*(P2P_SUBSET_SOCK->recvP2P))(reinterpret_cast<char*>(buf), sizeof(buf), 0,
+            int n = P2P_SUBSET_SOCK->Recv_Unrealiable(reinterpret_cast<char*>(buf), sizeof(buf), 0,
                 &src, &slen);
             if (n < 0) {
                 int errorCode = 0;
@@ -1189,6 +1190,11 @@ namespace net {
         {
             si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_ACTIVE;
 
+            // Register the peer DOWN into sceNetInet's session table so its socket
+            // layer routes traffic to this address as P2P - without sceNetInet ever
+            // knowing the signaling layer exists.
+            RegisterSessionPeer(si->addr, si->port);
+
             notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
 
             if (si->op_activated)
@@ -1207,6 +1213,8 @@ namespace net {
         else if ((si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_PENDING || si->conn_status == SCE_NP_SIGNALING_CONN_STATUS_ACTIVE) && new_status == SCE_NP_SIGNALING_CONN_STATUS_INACTIVE)
         {
             si->conn_status = SCE_NP_SIGNALING_CONN_STATUS_INACTIVE;
+            // Peer no longer active: drop it from sceNetInet's session table.
+            UnregisterSessionPeer(si->addr);
             // si->sig_status = SCE_NP_SIGNALING_EVENT_DEAD;
             // Clear the mutual-activation flag too, otherwise a stale op_activated wedges the
             // next establishment: update_si_status would compute last==now==MUTUAL and never

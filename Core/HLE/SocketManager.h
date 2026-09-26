@@ -222,9 +222,6 @@ struct InetSocket {
 	int domain;
 	int protocol;
 	bool nonblocking;
-	int (InetSocket::*sendP2P)(const char*, int, int, const SceNetInetSockaddr*, int) = nullptr;
-	int (InetSocket::*recvP2P)(char*, int, int, SceNetInetSockaddr*, socklen_t*) = nullptr;
-	bool (InetSocket::*processP2P)(VirtualPacket&&, VirtualSockAddr) = nullptr;
 
 	// Metadata for debug use only.
 	VirtualSockAddr src;
@@ -251,6 +248,10 @@ struct InetSocket {
 	// Subscription and Broadcasting flags
 	std::unordered_map<uint64_t, std::vector<uint8_t>> so_storage;
 	u32 broadcast_mask = 0;              // Bitfield tracking which "rooms/sessions" this socket participates in
+
+	// SO_USECRYPTO_RX|TX (0x1000/0x2000) bits, set via setsockopt. A socket with
+	// these is a permanent P2P socket (CONN_DGRAM). See IsP2P().
+	u16 soCrypto = 0;
 
 	// Packet queue for virtual sockets (SOCK_PACKET and SOCK_CONN_DGRAM)
 	uint32_t rx_seq;		// Next sequential packet
@@ -288,6 +289,7 @@ struct InetSocket {
 
 		so_storage.clear();
 		broadcast_mask = 0;
+		soCrypto = 0;
 
 		// Clear the queue safely
 		{
@@ -328,6 +330,7 @@ struct InetSocket {
 		
 		so_storage.clear();
 		broadcast_mask = 0;
+		soCrypto = 0;
 
 		// Clear the queue safely
 		{
@@ -348,6 +351,26 @@ struct InetSocket {
 			pending_connections.clear();
 		}
 	};
+	// --- P2P routing (firmware-faithful: traffic-driven, not socket-flag-driven) ---
+	// A send/sendto is P2P when its DESTINATION is a known peer, or the call
+	// carries the per-packet crypto flags, or the socket is a permanent crypto
+	// (CONN_DGRAM) socket. Evaluated per-operation by the type's own send path;
+	// consults the sceNetInet session registry (IsSessionPeer) - never the NP layer.
+	bool IsP2P(int flags, u32 destAddr) const;
+
+	// Reports this socket's VIRTUAL (relay-queue) readiness for select/poll. Each
+	// non-null out-param is OR'd with readiness for that op. Host-socket readiness
+	// is still tested separately via FD_ISSET. Base reports nothing; a type that
+	// participates in the relay (e.g. PacketSocket) overrides to report its own.
+	virtual void select(bool* readReady, bool* writeReady, bool* exceptReady);
+	// Distributes an inbound relay packet to this socket per its transport;
+	// base does nothing (error/unused), P2P types override. Replaces processP2P.
+	virtual bool ProcessP2P(VirtualPacket&& vpkt, VirtualSockAddr dest);
+	// Shared readiness bodies the per-type select() overrides delegate to, so the
+	// TCP/UDP logic lives in one place instead of being copied per socket class.
+	void selectReliable(bool* readReady, bool* writeReady, bool* exceptReady);    // TCP-compliant
+	void selectUnreliable(bool* readReady, bool* writeReady, bool* exceptReady);  // UDP-compliant
+
 	// Virtual methods - override in derived classes for type-specific behavior
 	// Base implementations return EOPNOTSUPP for unsupported operations
 	virtual int setsockopt(int level, int optname, int optval, socklen_t optlen);
@@ -410,9 +433,6 @@ public:
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
-		sendP2P = &InetSocket::Send_Reliable;  // reliable (TCP-over-UDP) p2p handlers
-		recvP2P = &InetSocket::Recv_Reliable;
-		processP2P = &InetSocket::Process_Reliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(type);
@@ -427,6 +447,8 @@ public:
 	int accept(sockaddr* addr, socklen_t* addrlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
+	void select(bool* readReady, bool* writeReady, bool* exceptReady) override;
+	bool ProcessP2P(VirtualPacket&& vpkt, VirtualSockAddr dest) override;
 };
 #pragma pack(pop)
 static_assert(sizeof(StreamSocket) == sizeof(InetSocket), "Socket size mismatch!");
@@ -442,9 +464,6 @@ public:
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
-		sendP2P = &InetSocket::Send_Unreliable;
-		recvP2P = &InetSocket::Recv_Unrealiable;
-		processP2P = &InetSocket::Process_Unreliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(type);
@@ -467,6 +486,8 @@ public:
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
+	void select(bool* readReady, bool* writeReady, bool* exceptReady) override;
+	bool ProcessP2P(VirtualPacket&& vpkt, VirtualSockAddr dest) override;
 };
 #pragma pack(pop)
 static_assert(sizeof(DgramSocket) == sizeof(InetSocket), "Socket size mismatch!");
@@ -484,9 +505,6 @@ public:
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
-		sendP2P = &InetSocket::Send_Reliable;  // reliable (TCP-over-UDP) p2p handlers
-		recvP2P = &InetSocket::Recv_Reliable;
-		processP2P = &InetSocket::Process_Reliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(type);
@@ -499,6 +517,8 @@ public:
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
+	void select(bool* readReady, bool* writeReady, bool* exceptReady) override;
+	bool ProcessP2P(VirtualPacket&& vpkt, VirtualSockAddr dest) override;
 };
 #pragma pack(pop)
 static_assert(sizeof(RawSocket) == sizeof(InetSocket), "Socket size mismatch!");
@@ -516,9 +536,6 @@ public:
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
-		sendP2P = &InetSocket::Send_Reliable;  // reliable (TCP-over-UDP) p2p handlers
-		recvP2P = &InetSocket::Recv_Reliable;
-		processP2P = &InetSocket::Process_Reliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(type);
@@ -531,6 +548,8 @@ public:
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
+	void select(bool* readReady, bool* writeReady, bool* exceptReady) override;
+	bool ProcessP2P(VirtualPacket&& vpkt, VirtualSockAddr dest) override;
 };
 #pragma pack(pop)
 static_assert(sizeof(RdmSocket) == sizeof(InetSocket), "Socket size mismatch!");
@@ -547,9 +566,6 @@ public:
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
-		sendP2P = &InetSocket::Send_Reliable;  // reliable (TCP-over-UDP) p2p handlers
-		recvP2P = &InetSocket::Recv_Reliable;
-		processP2P = &InetSocket::Process_Reliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(type);
@@ -566,6 +582,8 @@ public:
 	int accept(sockaddr* addr, socklen_t* addrlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
+	void select(bool* readReady, bool* writeReady, bool* exceptReady) override;
+	bool ProcessP2P(VirtualPacket&& vpkt, VirtualSockAddr dest) override;
 };
 #pragma pack(pop)
 static_assert(sizeof(SeqpacketSocket) == sizeof(InetSocket), "Socket size mismatch!");
@@ -582,9 +600,6 @@ public:
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
-		sendP2P = &InetSocket::Send_Unreliable;
-		recvP2P = &InetSocket::Recv_Unrealiable;
-		processP2P = &InetSocket::Process_Unreliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(type);
@@ -607,6 +622,8 @@ public:
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
+	void select(bool* readReady, bool* writeReady, bool* exceptReady) override;
+	bool ProcessP2P(VirtualPacket&& vpkt, VirtualSockAddr dest) override;
 };
 #pragma pack(pop)
 static_assert(sizeof(DccpSocket) == sizeof(InetSocket), "Socket size mismatch!");
@@ -622,9 +639,6 @@ public:
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
-		sendP2P = &InetSocket::Send_Unreliable;
-		recvP2P = &InetSocket::Recv_Unrealiable;
-		processP2P = &InetSocket::Process_Unreliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(type);
@@ -646,6 +660,8 @@ public:
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
+	void select(bool* readReady, bool* writeReady, bool* exceptReady) override;
+	bool ProcessP2P(VirtualPacket&& vpkt, VirtualSockAddr dest) override;
 };
 #pragma pack(pop)
 static_assert(sizeof(ConnDgramSocket) == sizeof(InetSocket), "Socket size mismatch!");
@@ -664,9 +680,6 @@ public:
 		this->src.virt.vport = 0;
 		this->domain = domain;
 		this->protocol = protocol;
-		sendP2P = &InetSocket::Send_Reliable;  // reliable (TCP-over-UDP) p2p handlers
-		recvP2P = &InetSocket::Recv_Reliable;
-		processP2P = &InetSocket::Process_Reliable;
 
 		int hostDomain = convertSocketDomainPSP2Host(domain);
 		int hostType = convertSocketTypePSP2Host(type);
@@ -681,6 +694,8 @@ public:
 	int accept(sockaddr* addr, socklen_t* addrlen) override;
 	int bind(SceNetInetSockaddr* name, int namelen) override;
 	int shutdown(int how) override;
+	void select(bool* readReady, bool* writeReady, bool* exceptReady) override;
+	bool ProcessP2P(VirtualPacket&& vpkt, VirtualSockAddr dest) override;
 };
 #pragma pack(pop)
 static_assert(sizeof(PacketSocket) == sizeof(InetSocket), "Socket size mismatch!");
