@@ -652,10 +652,10 @@ bool DirectDNSLookupIPV4(const char *dns_server_ip, const char *domain, uint32_t
 		return false;
 	}
 
+#ifndef _WIN32
 	struct timeval timeout;
 	timeout.tv_sec = 5;
 	timeout.tv_usec = 0;
-#ifndef _WIN32
 	// On non-Windows, we can't use select() if fd >= FD_SETSIZE
 	// For DNS, just set a socket timeout instead
 	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
@@ -705,11 +705,6 @@ bool DirectDNSLookupIPV4(const char *dns_server_ip, const char *domain, uint32_t
 		closesocket(sockfd);
 		return false;
 	}
-
-	// Set up a timeout
-	timeout.tv_sec = 3;  // 3 second timeout
-	timeout.tv_usec = 0;
-	setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof(timeout));
 
 	// Receive DNS response
 	socklen_t server_len = sizeof(server_addr);
