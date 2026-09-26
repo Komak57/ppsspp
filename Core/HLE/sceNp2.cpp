@@ -135,6 +135,8 @@ void __Np2Init() {
 }
 
 void __Np2Shutdown() {
+	npMatching2Inited = false;
+
 	if (npServer && npServer->IsConnected()) {
 		sceNpSignalingStop();
 		npServer->Disconnect();
@@ -912,6 +914,7 @@ static int sceNpMatching2ContextStop(int ctxId)
 	if (!ctx[ctxId]->started.load())
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_STARTED);
 
+	npMatching2Inited = false;
 	//TODO: Stop any in-progress HTTPClient communication used on sceNpMatching2ContextStart
 	ctx[ctxId]->started.store(false);
 
