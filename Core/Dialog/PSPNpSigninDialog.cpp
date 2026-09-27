@@ -215,18 +215,20 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			if (now - lastTime > NP_RUNNING_DELAY_US) {
 				if (runOnce) {
 					runOnce = false;
-					if (!server->Resolve()) {
-						failMessage = "Unable to find server. Retry?";
-						Transition(SigninStage::FAIL);
-						break;
-					}
-					if (!server->Connect()) {
-						failMessage = "Connection Failed. Retry?";
-						Transition(SigninStage::FAIL);
-						break;
+					if (server && !server->IsConnected()) {
+						if (!server->Resolve()) {
+							failMessage = "Unable to find server. Retry?";
+							Transition(SigninStage::FAIL);
+							break;
+						}
+						if (!server->Connect()) {
+							failMessage = "Connection Failed. Retry?";
+							Transition(SigninStage::FAIL);
+							break;
+						}
 					}
 					int ret = server->SendResetToken(tmp.npid.c_str(), tmp.email.c_str());
-					if (ret != 0) {
+					if ((ErrorType)ret != ErrorType::NoError) {
 						switch ((ErrorType)ret) {
 						case ErrorType::Blocked:
 							failMessage = "Server Disconnected before request.";
@@ -238,6 +240,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 							failMessage = "A database related error happened on the server!";
 							break;
 						case ErrorType::TooSoon:
+							// This specific error does not constitute a failure
 							failMessage = "You can only ask for a token mail once every 24 hours!";
 							break;
 						case ErrorType::EmailFail:
@@ -250,16 +253,16 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 							failMessage = "Unknown error sending the token. (" + std::to_string(ret) + ")";
 							break;
 						}
-						// This specific error does not constitute a failure
-						if (ret != (u8)ErrorType::TooSoon) {
-							Transition(SigninStage::FAIL);
-							break;
-						}
+						Transition(SigninStage::FAIL);
+						break;
+					} else {
+						Transition(SigninStage::PASSWORD_TOKEN_FORM);
 					}
 				}
 			}
 			if (now - lastTime > NP_RUNNING_DELAY_US * 2 && !transitioning) {
-				Transition(SigninStage::PASSWORD_TOKEN_FORM);
+				failMessage = "Could not request Token. (Request Timeout)";
+				Transition(SigninStage::FAIL);
 			}
 			break;
 		case SigninStage::PASSWORD_TOKEN_FORM:
@@ -278,18 +281,21 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			if (now - lastTime > NP_RUNNING_DELAY_US) {
 				if (runOnce) {
 					runOnce = false;
-					if (!server->Resolve()) {
-						failMessage = "Unable to find server. Retry?";
-						Transition(SigninStage::FAIL);
-						break;
-					}
-					if (!server->Connect()) {
-						failMessage = "Connection Failed. Retry?";
-						Transition(SigninStage::FAIL);
-						break;
+
+					if (server && !server->IsConnected()) {
+						if (!server->Resolve()) {
+							failMessage = "Unable to find server. Retry?";
+							Transition(SigninStage::FAIL);
+							break;
+						}
+						if (!server->Connect()) {
+							failMessage = "Connection Failed. Retry?";
+							Transition(SigninStage::FAIL);
+							break;
+						}
 					}
 					int ret = server->ResetPassword(tmp.npid.c_str(), tmp.token.c_str(), tmp.password.c_str());
-					if (ret != 0) {
+					if ((ErrorType)ret != ErrorType::NoError) {
 						switch ((ErrorType)ret) {
 						case ErrorType::Invalid:
 							failMessage = "The server has no email verification and doesn't support password changes!";
@@ -312,11 +318,14 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						}
 						Transition(SigninStage::FAIL);
 						break;
+					} else {
+						Transition(SigninStage::LOGIN_FORM);
 					}
 				}
 			}
 			if (now - lastTime > NP_RUNNING_DELAY_US * 2 && !transitioning) {
-				Transition(SigninStage::LOGIN_FORM);
+				failMessage = "Could not Reset Password. (Request Timeout)";
+				Transition(SigninStage::FAIL);
 			}
 			break;
 		case SigninStage::REGISTRATION_FORM:
@@ -338,18 +347,21 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			if (now - lastTime > NP_RUNNING_DELAY_US) {
 				if (runOnce) {
 					runOnce = false;
-					if (!server->Resolve()) {
-						failMessage = "Unable to find server. Retry?";
-						Transition(SigninStage::FAIL);
-						break;
-					}
-					if (!server->Connect()) {
-						failMessage = "Connection Failed. Retry?";
-						Transition(SigninStage::FAIL);
-						break;
+
+					if (server && !server->IsConnected()) {
+						if (!server->Resolve()) {
+							failMessage = "Unable to find server. Retry?";
+							Transition(SigninStage::FAIL);
+							break;
+						}
+						if (!server->Connect()) {
+							failMessage = "Connection Failed. Retry?";
+							Transition(SigninStage::FAIL);
+							break;
+						}
 					}
 					int ret = server->CreateAccount(tmp.npid.c_str(), tmp.password.c_str(), tmp.online_name.c_str(), tmp.avatar_url.c_str(), tmp.email.c_str());
-					if (ret != 0) {
+					if ((ErrorType)ret != ErrorType::NoError) {
 						switch ((ErrorType)ret) {
 						case ErrorType::CreationExistingUsername:
 							failMessage = "An account with that username already exists!";
@@ -369,11 +381,14 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						}
 						Transition(SigninStage::FAIL);
 						break;
+					} else {
+						Transition(SigninStage::LOGIN_FORM);
 					}
 				}
 			}
 			if (now - lastTime > NP_RUNNING_DELAY_US * 2 && !transitioning) {
-				Transition(SigninStage::LOGIN_FORM);
+				failMessage = "Could not Create Account. (Request Timeout)";
+				Transition(SigninStage::FAIL);
 			}
 			break;
 		case SigninStage::CONNECT_REQUEST:
@@ -419,6 +434,19 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			if (now - lastTime > NP_RUNNING_DELAY_US) {
 				if (runOnce) {
 					runOnce = false;
+
+					if (server && !server->IsConnected()) {
+						if (!server->Resolve()) {
+							failMessage = "Unable to find server. Retry?";
+							Transition(SigninStage::FAIL);
+							break;
+						}
+						if (!server->Connect()) {
+							failMessage = "Connection Failed. Retry?";
+							Transition(SigninStage::FAIL);
+							break;
+						}
+					}
 					std::string* creds = NpGetLogin();
 					if (server->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str()) != 0) {
 						g_Config.sInfraToken = ""; // Reset the Token to force re-entry
