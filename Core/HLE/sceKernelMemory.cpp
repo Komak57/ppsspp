@@ -935,10 +935,13 @@ static int sceKernelPrintf(const char *formatString) {
 
 	bool supported = true;
 	int param = 1;
-	char tempStr[24];
-	char tempFormat[24] = {'%'};
+	// With the support of modifiers, a larger buffer makes this safer
+	// Can be replaced by using snprintf to measure the length
+	char tempStr[256];
 	std::string result, format = formatString;
 	std::stringstream stream;
+	std::string fmtTypes = "diuoxXcpsn%";
+	std::string fmtModifiers = "-+ #0123456789.*lh";
 	float f_arg;
 
 	// Each printf is a separate line already in the log, so don't double space.
@@ -948,71 +951,53 @@ static int sceKernelPrintf(const char *formatString) {
 
 	for (size_t i = 0, n = format.size(); supported && i < n; )
 	{
-		size_t next = format.find('%', i);
-		if (next == format.npos)
+		// Find next format start
+		size_t start = format.find('%', i);
+		if (start == format.npos || start + 1 > n)
 		{
+			// End of formatString reached
 			result += format.substr(i);
 			break;
 		}
-		else if (next != i)
-			result += format.substr(i, next - i);
+		else if (start != i)
+			result += format.substr(i, start - i);
 
-		i = next + 1;
-		if (i >= n)
-		{
-			supported = false;
-			break;
+		// Find next format type, only admitting legal modifiers
+		size_t end = start + 1;
+		while (end < n && fmtModifiers.find(format[end]) != std::string::npos)
+			end++;
+		if (end >= n || fmtTypes.find(format[end]) == std::string::npos) {
+			// truncated spec (EOF) or an illegal char (e.g. 'k' in "% 8kbps"):
+			result += '%';          // emit the '%' literally
+			i = start + 1;          // resume right after it (outer loop)
+			continue;
 		}
+		std::string spec = format.substr(start, end - start + 1);
+		i = start + 1;
 
 		const char *s;
-		switch (format[i])
+		bool is64 = false;
+		u32 lo = 0;
+		u32 hi = 0;
+		u64 ll = 0;
+		switch (format[end])
 		{
-		case '%':
-			result += '%';
-			++i;
-			break;
-
-		case 's':
-			s = Memory::GetCharPointer(PARAM(param++));
-			result += s ? s : "(null)";
-			++i;
-			break;
-
-		case 'd':
-		case 'i':
-		case 'x':
-		case 'X':
-		case 'u':
-			tempFormat[1] = format[i];
-			tempFormat[2] = '\0';
-			snprintf(tempStr, sizeof(tempStr), tempFormat, PARAM(param++));
-			result += tempStr;
-			++i;
-			break;
-
-		case '0':
-			if (i + 3 > n || (format[i + 1] != '2' && format[i + 1] != '4' && format[i + 1] != '8') || (format[i + 2] != 'x' && format[i + 2] != 'X'))
-				supported = false;
+		case 'n': // output current print length to arg
+			lo = PARAM(param++);
+			if (Memory::IsValidAddress(lo))
+				Memory::WriteUnchecked_U32(result.size(), lo);
 			else
-			{
-				// These are the '0', '8', and 'x' or 'X' respectively.
-				tempFormat[1] = format[i];
-				tempFormat[2] = format[i + 1];
-				tempFormat[3] = format[i + 2];
-				tempFormat[4] = '\0';
-				snprintf(tempStr, sizeof(tempStr), tempFormat, PARAM(param++));
-				result += tempStr;
-				i += 3;
-			}
+				WARN_LOG(Log::Printf, "Illegal n pointer");
+			// Print nothing to result
+			i = end + 1;
 			break;
 
-		case 'p':
-			snprintf(tempStr, sizeof(tempStr), "%08x", PARAM(param++));
-			result += tempStr;
-			++i;
+		case '%': // Raw % character
+			result += '%';
+			i = end + 1;
 			break;
 
-		case 'f':
+		case 'f': // Not actually supported by the PSP
 			static_assert(sizeof(float) == 4, "sizeof(float) != sizeof(u32)!");
 
 			// Maybe worth replacing with std::bit_cast when (if) we move to C++20
@@ -1020,8 +1005,46 @@ static int sceKernelPrintf(const char *formatString) {
 			stream << f_arg;
 			result += stream.str();
 			
-			++i;
+			i = end + 1;
 			stream.str(std::string()); // Reset the stream
+			break;
+
+
+		case 'c': // Single Character
+		case 'd': // Signed Decimal
+		case 'i': // Signed Decimal
+		case 'x': // Unsigned Hex Lower
+		case 'X': // Unsigned Hex Upper
+		case 'u': // Unsigned Decimal
+		case 'o': // Unsigned Octal
+		case 'p': // pointer (hex)
+			is64 = spec.find("ll") != std::string::npos;
+			// Strip l for compatibility (host may use 8-byte long)
+			spec.erase(std::remove(spec.begin(), spec.end(), 'l'), spec.end());
+			if (is64) // inject long long
+				spec.insert(spec.size() -1, "ll");
+			if (format[end] == 'p')
+				spec.back() = 'x'; // convert to hex
+
+			if (is64) {
+				if (param % 2 == 0) param++;
+				lo = PARAM(param++);
+				hi = PARAM(param++);
+				ll = (static_cast<u64>(hi) << 32) | lo;
+				snprintf(tempStr, sizeof(tempStr), spec.c_str(), ll);
+			} else {
+				snprintf(tempStr, sizeof(tempStr), spec.c_str(), PARAM(param++));
+			}
+
+			result += tempStr;
+			i = end + 1;
+			break;
+		case 's': // String
+			lo = PARAM(param++);
+			s = Memory::GetCharPointer(lo);
+			snprintf(tempStr, sizeof(tempStr), spec.c_str(), s ? s : "(null)");
+			result += tempStr;
+			i = end + 1;
 			break;
 
 		default:
