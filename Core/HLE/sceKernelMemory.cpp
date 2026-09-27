@@ -308,6 +308,27 @@ void __KernelVplEndCallback(SceUID threadID, SceUID prevCallbackId);
 void __KernelFplBeginCallback(SceUID threadID, SceUID prevCallbackId);
 void __KernelFplEndCallback(SceUID threadID, SceUID prevCallbackId);
 
+// sceKernelPrintf output is a stream, not one line per call: titles emit partial data across
+// many calls and only terminate a line with '\n' (e.g. %02x hex dumps flushed every 16 bytes).
+// We accumulate here and emit a complete line to INFO on each newline, holding the trailing
+// partial until its terminator arrives.
+static std::string g_printfLineBuffer;
+
+static void FlushKernelPrintfLines(bool flushPartial) {
+	size_t nl;
+	while ((nl = g_printfLineBuffer.find('\n')) != std::string::npos) {
+		std::string line = g_printfLineBuffer.substr(0, nl);
+		if (!line.empty() && line.back() == '\r')
+			line.pop_back();  // fold CRLF down to a clean line
+		INFO_LOG(Log::Printf, "%s", line.c_str());
+		g_printfLineBuffer.erase(0, nl + 1);
+	}
+	if (flushPartial && !g_printfLineBuffer.empty()) {
+		INFO_LOG(Log::Printf, "%s", g_printfLineBuffer.c_str());
+		g_printfLineBuffer.clear();
+	}
+}
+
 void __KernelMemoryInit()
 {
 	MemBlockInfoInit();
@@ -329,6 +350,7 @@ void __KernelMemoryInit()
 	flags_ = 0;
 	sdkVersion_ = 0;
 	compilerVersion_ = 0;
+	g_printfLineBuffer.clear();
 	memset(tlsplUsedIndexes, 0, sizeof(tlsplUsedIndexes));
 
 	__KernelListenThreadEnd(&__KernelTlsplThreadEnd);
@@ -386,6 +408,7 @@ void __KernelMemoryShutdown()
 #endif
 	kernelMemory.Shutdown();
 	tlsplThreadEndChecks.clear();
+	FlushKernelPrintfLines(true);  // emit any line left without a terminating newline
 	MemBlockInfoShutdown();
 }
 
@@ -935,19 +958,12 @@ static int sceKernelPrintf(const char *formatString) {
 
 	bool supported = true;
 	int param = 1;
-	// With the support of modifiers, a larger buffer makes this safer
-	// Can be replaced by using snprintf to measure the length
-	char tempStr[256];
+	char tempStr[24];
 	std::string result, format = formatString;
 	std::stringstream stream;
 	std::string fmtTypes = "diuoxXcpsn%";
 	std::string fmtModifiers = "-+ #0123456789.*lh";
 	float f_arg;
-
-	// Each printf is a separate line already in the log, so don't double space.
-	// This does mean we break up strings, unfortunately.
-	if (!format.empty() && format[format.size() - 1] == '\n')
-		format.resize(format.size() - 1);
 
 	for (size_t i = 0, n = format.size(); supported && i < n; )
 	{
@@ -961,6 +977,7 @@ static int sceKernelPrintf(const char *formatString) {
 		}
 		else if (start != i)
 			result += format.substr(i, start - i);
+		i = start + 1;
 
 		// Find next format type, only admitting legal modifiers
 		size_t end = start + 1;
@@ -973,7 +990,6 @@ static int sceKernelPrintf(const char *formatString) {
 			continue;
 		}
 		std::string spec = format.substr(start, end - start + 1);
-		i = start + 1;
 
 		const char *s;
 		bool is64 = false;
@@ -1066,17 +1082,16 @@ static int sceKernelPrintf(const char *formatString) {
 		}
 	}
 
-	result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
-	result.erase(std::remove(result.begin(), result.end(), '\r'), result.end());
-
-	// Just in case there were embedded strings that had \n's.
-	if (!result.empty() && result[result.size() - 1] == '\n')
-		result.resize(result.size() - 1);
-
-	if (supported)
-		return hleLogInfo(Log::Printf, 0, "\"%s\"", result.c_str());
-	else
+	if (!supported)
 		return hleLogError(Log::Printf, 0, "UNIMPL fmt (%s, %08x, %08x, %08x)", format.c_str(), PARAM(1), PARAM(2), PARAM(3));
+
+	// Stream into the line buffer and emit only completed lines to INFO, so developers can
+	// pick their view by log channel: full lines land on Printf/INFO, the raw per-call chunk
+	// stays on Printf/VERBOSE.
+	g_printfLineBuffer += result;
+	FlushKernelPrintfLines(false);
+
+	return hleLogVerbose(Log::Printf, 0, "\"%s\"", result.c_str());
 }
 
 static int sceKernelSetCompiledSdkVersion(int sdkVersion) {
