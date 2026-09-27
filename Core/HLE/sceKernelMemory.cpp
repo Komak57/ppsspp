@@ -958,12 +958,21 @@ static int sceKernelPrintf(const char *formatString) {
 
 	bool supported = true;
 	int param = 1;
-	char tempStr[24];
 	std::string result, format = formatString;
 	std::stringstream stream;
 	std::string fmtTypes = "diuoxXcpsn%";
 	std::string fmtModifiers = "-+ #0123456789.*lh";
 	float f_arg;
+
+	auto emit = [&result](const char *fmt, auto arg) {
+		int need = snprintf(nullptr, 0, fmt, arg);
+		if (need < 0)
+			return;
+		size_t base = result.size();
+		result.resize(base + (size_t)need + 1);
+		snprintf(&result[base], (size_t)need + 1, fmt, arg);
+		result.resize(base + (size_t)need);  // drop snprintf's trailing null
+	};
 
 	for (size_t i = 0, n = format.size(); supported && i < n; )
 	{
@@ -1047,19 +1056,16 @@ static int sceKernelPrintf(const char *formatString) {
 				lo = PARAM(param++);
 				hi = PARAM(param++);
 				ll = (static_cast<u64>(hi) << 32) | lo;
-				snprintf(tempStr, sizeof(tempStr), spec.c_str(), ll);
+				emit(spec.c_str(), ll);
 			} else {
-				snprintf(tempStr, sizeof(tempStr), spec.c_str(), PARAM(param++));
+				emit(spec.c_str(), PARAM(param++));
 			}
-
-			result += tempStr;
 			i = end + 1;
 			break;
 		case 's': // String
 			lo = PARAM(param++);
 			s = Memory::GetCharPointer(lo);
-			snprintf(tempStr, sizeof(tempStr), spec.c_str(), s ? s : "(null)");
-			result += tempStr;
+			emit(spec.c_str(), s ? s : "(null)");
 			i = end + 1;
 			break;
 
