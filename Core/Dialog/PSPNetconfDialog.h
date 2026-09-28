@@ -34,6 +34,21 @@ struct SceUtilityNetconfParam {
 	int netWifiSpot;			// Flag to allow WIFI connections
 };
 
+// Stage machine, modeled after PSPNpSigninDialog. Each stage owns one screen (or
+// one wait), INIT routes by netAction, and every exit funnels through SUCCESS /
+// CANCELLED / FAIL so the finish bookkeeping lives in exactly one place each.
+enum class NetconfStage {
+	INIT,              // param parsed; route by netAction and WLAN switch
+	NO_WLAN,           // "The Wireless switch is off" error screen (infra only)
+	SELECT_CONNECTION, // reserved: interface/connection picker (currently pass-through)
+	APNET_CONNECT,     // issue sceNetApctlConnect, "Connecting to the access point..."
+	APNET_GETTING_IP,  // "Obtaining IP address..." until GOT_IP (and infra json ready)
+	ADHOC_CONNECT,     // create/scan+join/connect adhocctl group, "Connecting..."
+	SUCCESS,           // finish the dialog with the current (OK) result
+	FAIL,              // timeout/internal error screen, Back -> CANCELLED
+	CANCELLED,         // finish the dialog with SCE_UTILITY_DIALOG_RESULT_ABORT
+};
+
 class PSPNetconfDialog : public PSPDialog {
 public:
 	PSPNetconfDialog(UtilityDialogType type) : PSPDialog(type) {}
@@ -52,6 +67,16 @@ protected:
 private:
 	void DrawBanner();
 	void DrawIndicator();
+	void Transition(NetconfStage next);
+	void FinishDialog();
+	void FreeScanInfos();
+
+	// Stage handlers (one per drawing/waiting stage).
+	void UpdateNoWlan();
+	void UpdateApnetConnect(u64 now);
+	void UpdateApnetGettingIP(u64 now);
+	void UpdateAdhocConnect(u64 now);
+	void UpdateFail();
 
 	SceUtilityNetconfParam request{};
 	u32 requestAddr = 0;
@@ -61,6 +86,7 @@ private:
 	int scanStep = 0;
 	u64 startTime = 0;
 
-	bool showNoWlanNotice_ = false;
+	NetconfStage stage = NetconfStage::INIT;
+	bool stageEntered_ = false;  // one-shot work guard, armed by Transition()
 	bool jsonReady_ = false;
 };
