@@ -2848,6 +2848,26 @@ u32 sceKernelExtendThreadStack(u32 size, u32 entryAddr, u32 entryParameter) {
 	return hleLogDebug(Log::sceKernel, 0);
 }
 
+u32 sceKernelExtendKernelStack(u32 size, u32 entryAddr, u32 entryParameter) {
+	// The kernel-only sibling of sceKernelExtendThreadStack (OFW 6.60 threadman
+	// @0x152c0): allocates a temporary stack, swaps the current thread's stack
+	// pointers to it, runs entryAddr(entryParameter) there, then restores and
+	// frees - byte-for-byte the mechanism ExtendThreadStack already implements
+	// (nesting, 0xFF fill, v0/v1 passthrough included). Firmware callers are all
+	// HLE'd modules (utility, filesystems, DRM...), so in practice only
+	// kernel-mode plugins reach this export.
+	//
+	// OFW guards we keep: kernel context only (0x80020064), min size 0x200
+	// (shared path). Deliberately relaxed: the entry-must-be-kernel-segment
+	// check (0x800200d3) - plugins load into user RAM under HLE - and the
+	// kernel-partition allocation (userMemory here; games can't observe the
+	// difference, and our kernel partition is better left unfragmented).
+	if (!hleIsKernelMode() && !__KernelCurThreadIsKernelMode())
+		return hleLogError(Log::sceKernel, SCE_KERNEL_ERROR_ILLEGAL_CONTEXT, "kernel mode only");
+
+	return sceKernelExtendThreadStack(size, entryAddr, entryParameter);
+}
+
 void __KernelReturnFromExtendStack() {
 	hleSkipDeadbeef();
 

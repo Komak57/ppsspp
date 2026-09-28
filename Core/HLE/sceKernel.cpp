@@ -962,7 +962,7 @@ const HLEFunction ThreadManForKernel[] =
 	{0xB736E9FF, &WrapI_IU<sceKernelFreeVpl>,                        "sceKernelFreeVpl",                          'i', "ix",     HLE_KERNEL_SYSCALL },
 	{0x1D371B8A, &WrapI_IU<sceKernelCancelVpl>,                      "sceKernelCancelVpl",                        'i', "ix",     HLE_KERNEL_SYSCALL },
 	{0x39810265, &WrapI_IU<sceKernelReferVplStatus>,                 "sceKernelReferVplStatus",                   'i', "ip",     HLE_KERNEL_SYSCALL },
-	{0xBC31C1B9, nullptr, "sceKernelExtendKernelStack"},
+	{0xBC31C1B9, &WrapU_UUU<sceKernelExtendKernelStack>, "sceKernelExtendKernelStack", 'x', "xxx"},
 	// New entries must go here at the end, not inserted earlier in this table - the funcindex
 	// (this array position) gets baked directly into resolved-import syscall opcodes written
 	// into guest RAM (see GetSyscallOp() in HLE.cpp), which savestates capture verbatim. Inserting
