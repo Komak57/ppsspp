@@ -343,3 +343,4 @@ void Register_UtilsForKernel();
 const char *KernelErrorToString(u32 err);
 u32_le __CreateHLELoop(u32_le* loopAddr, const char* sceFuncName, const char* hleFuncName, const char* tagName);
 u32_le __CreateHLEHook(u32_le* hookAddr, const char* sceFuncName, const char* hleFuncName, const char* tagName);
+u32_le __CreateHLEFunc(u32_le* funcAddr, const char* sceFuncName, const char* hleFuncName, const char* tagName);

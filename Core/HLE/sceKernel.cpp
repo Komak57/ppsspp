@@ -1782,3 +1782,17 @@ u32_le __CreateHLEHook(u32_le* hookAddr, const char* sceFuncName, const char* hl
 	Memory::Memcpy(threadHackAddress, hookAddr, sizeof(u32_le) * 3); // This area will be cleared again after loading an old savestate :(
 	return threadHackAddress;
 }
+
+// A CALLABLE dummy PSP function
+u32_le __CreateHLEFunc(u32_le* funcAddr, const char* sceFuncName, const char* hleFuncName, const char* tagName) {
+	if (funcAddr == NULL || sceFuncName == NULL || hleFuncName == NULL)
+		return 0;
+
+	funcAddr[0] = MIPS_MAKE_JR_RA();
+	funcAddr[1] = MIPS_MAKE_SYSCALL(sceFuncName, hleFuncName); // Runs in the delay slot; v0 flows back to the caller
+	funcAddr[2] = MIPS_MAKE_NOP();
+	u32 blockSize = sizeof(u32_le) * 3;
+	u32_le funcHackAddress = kernelMemory.Alloc(blockSize, false, tagName); // blockSize will be rounded to 256 granularity
+	Memory::Memcpy(funcHackAddress, funcAddr, sizeof(u32_le) * 3); // This area will be cleared again after loading an old savestate :(
+	return funcHackAddress;
+}
