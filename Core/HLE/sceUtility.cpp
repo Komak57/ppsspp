@@ -342,6 +342,12 @@ static const char *accessThreadState = "initial";
 static int lastSaveStateVersion = -1;
 static int netParamLatestId = 1;
 
+// Guest-side worker stub for the netparam registry transactions, created
+// execute-once via __CreateHLEFunc. Layout of the 256-byte kernel block:
+//   +0x00  jr $ra; syscall __UtilityNetConfigList; nop     (the dummy PSP function)
+//   +0x10  ctx: { s32_le id, s32_le result }               (guest scratch)
+static u32 netConfigListAddr = 0;
+
 static void CleanupDialogThreads(bool force = false) {
 	if (accessThread) {
 		if (accessThread->Stopped() || accessThreadFinished) {
@@ -500,7 +506,7 @@ void __UtilityInit() {
 }
 
 void __UtilityDoState(PointerWrap &p) {
-	auto s = p.Section("sceUtility", 1, 7);
+	auto s = p.Section("sceUtility", 1, 8);
 	if (!s) {
 		return;
 	}
@@ -571,6 +577,21 @@ void __UtilityDoState(PointerWrap &p) {
 		lastSaveStateVersion = s.Version();
 	}
 
+	if (s >= 8) {
+		// The NetConfigList guest stub (instructions live in saved RAM; only the
+		// pointer needs carrying).
+		Do(p, netConfigListAddr);
+	} else if (p.mode == p.MODE_READ) {
+		netConfigListAddr = 0;
+	}
+	if (p.mode == p.MODE_READ && netConfigListAddr == 0 && g_netApctlInited) {
+		// The loaded state predates the stub (old version, or saved before
+		// sceNetApctlInit ran) but its apctl is already up, so the normal
+		// creation point will never fire again - recreate here. __NetDoState
+		// runs before us (see __KernelDoState), so g_netApctlInited is current.
+		__UtilityCreateNetConfigList();
+	}
+
 	if (!hasAccessThread && accessThread) {
 		accessThread->Forget();
 		delete accessThread;
@@ -587,6 +608,9 @@ void __UtilityShutdown() {
 	screenshotDialog->Shutdown(true);
 	gamedataInstallDialog->Shutdown(true);
 	npSigninDialog->Shutdown(true);
+
+	// The kernel-memory block goes away with the kernel; recreate on next use.
+	netConfigListAddr = 0;
 
 	if (accessThread) {
 		// Don't need to free it during shutdown, may have already been freed.
@@ -1051,15 +1075,65 @@ static int sceUtilityNetconfGetStatus() {
 *
 * Note: some homebrew may only support a limited number of entries (ie. 10 entries)
 */
-static int sceUtilityCheckNetParam(int id)
+// utility.prx FUN_000070cc, run by the OFW on a 4KB kernel stack borrowed via
+// sceKernelExtendKernelStack(0x1000, worker, &ctx). The transaction it performs:
+//   OpenRegistry("flash2/registry/system")                   (refcounted handle)
+//   OpenCategory("/CONFIG/NETWORK/INFRASTRUCTURE/<id>")      the existence check -
+//     registry error 0x80082718 "not found" remapped to 0x80110601 BAD_NETCONF
+//   OpenCategory(".../<id>/SUB1"), CREATING it when absent   (silent upgrade of
+//     pre-WPA-era profiles; no observable effect under HLE)
+//   FlushCategory/CloseCategory both, FlushRegistry, CloseRegistry
+// Ids map to registry category names VERBATIM (GetNetParam and CheckNetParam
+// share the same "%s/%d" path builder, FUN_000074b0) - no off-by-one.
+// Our net config storage stands in for the registry.
+// "Does registry category /CONFIG/NETWORK/INFRASTRUCTURE/<id> exist" - our net
+// config storage stands in for the registry. We only have the faked entries for
+// now; a real profile store can replace this check wholesale.
+static bool __UtilityNetConfExists(int id)
 {
-	bool available = (id >= 0 && id <= 24);
-	// We only have 1 faked net config entry
-	if (id > PSP_NETPARAM_MAX_NUMBER_DUMMY_ENTRIES) {
-		available = false;
+	return id <= PSP_NETPARAM_MAX_NUMBER_DUMMY_ENTRIES;
+}
+
+static int __UtilityNetConfigList(u32 ctxAddr)
+{
+	const int id = (int)Memory::ReadUnchecked_U32(ctxAddr);
+	int result = __UtilityNetConfExists(id) ? 0 : (int)SCE_ERROR_NETPARAM_BAD_NETCONF;
+	Memory::WriteUnchecked_U32((u32)result, ctxAddr + 4);
+	return hleLogDebugOrError(Log::sceUtility, result);
+}
+
+// Creates the resident guest-side netparam worker. On OFW this is just code in
+// utility.prx; here the apctl-based systems that consume netparams materialize
+// it at sceNetApctlInit time. Idempotent.
+void __UtilityCreateNetConfigList()
+{
+	if (netConfigListAddr != 0)
+		return;
+	u32_le stub[3];
+	netConfigListAddr = __CreateHLEFunc(stub, "sceUtility", "__UtilityNetConfigList", "NetConfigList");
+	if (!Memory::IsValidAddress(netConfigListAddr)) {  // Alloc returns -1 on failure
+		netConfigListAddr = 0;
+		WARN_LOG(Log::sceUtility, "Failed to create the NetConfigList stub - CheckNetParam falls back to the direct path");
 	}
-	int ret = available ? 0 : SCE_ERROR_NETPARAM_BAD_NETCONF;
-	return hleLogDebugOrError(Log::sceUtility, ret);
+}
+
+int sceUtilityCheckNetParam(int id)
+{
+	if (id < 0)
+		return hleLogError(Log::sceUtility, SCE_ERROR_NETPARAM_INVALID_NETCONF);
+
+	_dbg_assert_msg_(netConfigListAddr == 0, "sceUtilityCheckNetParam: no NetConfigList stub (called before sceNetApctlInit?)");
+	if (netConfigListAddr == 0) {
+		return hleLogError(Log::sceUtility, SCE_ERROR_NETPARAM_BAD_NETCONF, "netConfigList not loaded");
+	}
+
+	// Should we allocate this?
+	const u32 ctxAddr = netConfigListAddr + 0x10;
+	Memory::WriteUnchecked_U32((u32)id, ctxAddr);
+	Memory::WriteUnchecked_U32(0, ctxAddr + 4);
+	int ret = hleCall(ThreadManForUser, u32, sceKernelExtendThreadStack, 0x1000, netConfigListAddr, ctxAddr);
+	if (-1 < ret) return hleLogDebug(Log::sceUtility, 0);
+	return ret;
 }
 
 /**
@@ -1971,6 +2045,7 @@ const HLEFunction sceUtility[] =
 	{0xC0DE0001, &WrapI_I<UtilityFinishDialog>,                    "__UtilityFinishDialog",                  'i', "i"  },
 	{0xC0DE0002, &WrapI_I<UtilityWorkUs>,                          "__UtilityWorkUs",                        'i', "i"  },
 	{0xC0DE0003, &WrapI_I<UtilityInitDialog>,                      "__UtilityInitDialog",                    'i', "i"  },
+	{0xC0DE0004, &WrapI_U<__UtilityNetConfigList>,                 "__UtilityNetConfigList",                 'i', "x"  },
 };
 
 void Register_sceUtility()

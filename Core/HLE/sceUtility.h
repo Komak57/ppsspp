@@ -187,6 +187,10 @@ struct sceUtilityPsnConfig {
 const std::map<int, u32> &__UtilityGetLoadedModules();  // ->first gets the module ID, for use in the following two functions.
 const ModuleLoadInfo *__UtilityModuleInfo(int moduleID);
 bool __UtilityModuleGetMemoryRange(int moduleID, u32 *startPtr, u32 *sizePtr);
+int sceUtilityCheckNetParam(int id);
+// Creates the resident guest-side netparam worker stub (idempotent); called by
+// the apctl-based systems that consume netparams, at sceNetApctlInit time.
+void __UtilityCreateNetConfigList();
 
 void Register_sceUtility();
 

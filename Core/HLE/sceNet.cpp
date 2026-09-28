@@ -1488,6 +1488,11 @@ static int sceNetApctlInit(int stackSize, int initPriority) {
 	// Set default value before connected to an AP
 	NetApctl_InitDefaultInfo();
 
+	// Apctl is the consumer of net configs - make sure the guest-side netparam
+	// worker exists so CheckNetParam/GetNetParam can take the authentic
+	// borrowed-stack detour (on OFW this is resident utility.prx code).
+	__UtilityCreateNetConfigList();
+
 	// Create APctl fake-Thread
 	netValidateLoopMemory();
 	apctlThreadID = __KernelCreateThread("ApctlThread", __KernelGetCurThreadModuleId(), apctlThreadHackAddr, initPriority, stackSize, PSP_THREAD_ATTR_USER, 0, true);
@@ -1748,28 +1753,45 @@ static int sceNetApctlDelHandler(u32 handlerID) {
 }
 
 int sceNetApctlConnect(int confId) {
-	if (!g_Config.bEnableWlan)
-		return hleLogError(Log::sceNet, SCE_NET_APCTL_ERROR_WLAN_SWITCH_OFF);
+	int ret = 0;
+	ret = hleCall(ThreadManForUser, int, sceKernelCheckThreadStack);
+	if (0x13ef >= ret)
+		return hleLogError(Log::sceNet, 0x80410005, "Thread Stack Error");
 
-	if (netApctlState != PSP_NET_APCTL_STATE_DISCONNECTED)
-		return hleLogError(Log::sceNet, SCE_NET_APCTL_ERROR_NOT_DISCONNECTED);
+	if (!g_netApctlInited)
+		return hleLogError(Log::sceNet, SCE_NET_APCTL_ERROR_NOT_INITIALIZED);
+
+	// Submit Request Connect(1)/?(2)/Scan(3)/Hotspot(4)
+	if (netApctlState != PSP_NET_APCTL_STATE_DISCONNECTED) return hleLogError(Log::sceNet, 0x80410A80, "ApctlConnect Already in Progress (%d)", netApctlState);   // a request is already in flight
+    int err = sceUtilityCheckNetParam(confId);      		// profile must EXIST in the registry
+    if (err < 0) { return hleLogError(Log::sceNet, err); }  // netparam error returned DIRECTLY
 
 	// Is this confId is the index to the scanning's result data or sceNetApctlGetBSSDescIDListUser result?
-	netApctlInfoId = confId;
-
+    netApctlInfoId = confId;						// mailbox global
+    // sceKernelSetEventFlag(g_apctlEvf, 1);		// wake the apctl thread
+	
 	// Note: We're borrowing AdhocServer for Grouping purpose, so we can simulate Broadcast over the internet just like Adhoc's pro-online implementation
-	int ret = 0;
 	if (g_infraDNSConfig.connectAdHocForGrouping) {
 		ret = hleCall(sceNetAdhocctl, int, sceNetAdhocctlConnect, "INFRA");
 	}
+	__UpdateApctlHandlers(0, PSP_NET_APCTL_STATE_JOINING, PSP_NET_APCTL_EVENT_CONNECT_REQUEST, 0);
 
-	if (netApctlState == PSP_NET_APCTL_STATE_DISCONNECTED) {
-		__UpdateApctlHandlers(0, PSP_NET_APCTL_STATE_JOINING, PSP_NET_APCTL_EVENT_CONNECT_REQUEST, 0);
-	}
+	// if (!g_Config.bEnableWlan)
+	// 	return hleLogError(Log::sceNet, SCE_NET_APCTL_ERROR_WLAN_SWITCH_OFF);
+
+	// if (netApctlState != PSP_NET_APCTL_STATE_DISCONNECTED)
+	// 	return hleLogError(Log::sceNet, SCE_NET_APCTL_ERROR_NOT_DISCONNECTED);
+
+	// netApctlInfoId = confId;
+
+
+	// if (netApctlState == PSP_NET_APCTL_STATE_DISCONNECTED) {
+	// 	__UpdateApctlHandlers(0, PSP_NET_APCTL_STATE_JOINING, PSP_NET_APCTL_EVENT_CONNECT_REQUEST, 0);
+	// }
 
 	// hleDelayResult(0, "give time to init/cleanup", adhocEventDelayMS * 1000);
 	// TODO: Blocks current thread and wait for a state change to prevent user-triggered connection attempt from causing events to piles up
-	return hleLogInfo(Log::sceNet, 0, "connect = %i", ret);
+	return hleLogInfo(Log::sceNet, 0, "Connect(%i) = %i", confId, ret);
 }
 
 int sceNetApctlDisconnect() {
