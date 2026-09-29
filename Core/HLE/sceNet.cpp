@@ -1462,42 +1462,38 @@ void NetApctl_ResolveDNS(const NetApctlConfig *conf, char *primaryOut, char *sec
 
 void NetApctl_InitInfo(int confId) {
 	memset(&netApctlInfo, 0, sizeof(netApctlInfo));
-	// Set dummy/fake values, some of these (ie. IP set to Auto) probably not suppose to have valid info before connected to an AP, right?
-	// FIXME: Some of these info supposed to be taken from netConfInfo
-	truncate_cpy(netApctlInfo.name, sizeof(netApctlInfo.name), defaultNetConfigName + std::to_string(confId));
-	truncate_cpy(netApctlInfo.ssid, sizeof(netApctlInfo.ssid), defaultNetSSID);
+	const NetApctlConfig *conf = NetApctlGetConf(confId);
+	if (conf) {
+		// Report the generated net config for the selected adapter.
+		truncate_cpy(netApctlInfo.name, sizeof(netApctlInfo.name), conf->cnf_name);
+		truncate_cpy(netApctlInfo.ssid, sizeof(netApctlInfo.ssid), conf->ssid);
+		truncate_cpy(netApctlInfo.ip, sizeof(netApctlInfo.ip), conf->ip_address);
+		truncate_cpy(netApctlInfo.gateway, sizeof(netApctlInfo.gateway), conf->default_route);
+		truncate_cpy(netApctlInfo.subNetMask, sizeof(netApctlInfo.subNetMask), conf->netmask);
+	} else {
+		// No such config (shouldn't happen - Connect validates via CheckNetParam):
+		// legacy dummy values.
+		truncate_cpy(netApctlInfo.name, sizeof(netApctlInfo.name), defaultNetConfigName + std::to_string(confId));
+		truncate_cpy(netApctlInfo.ssid, sizeof(netApctlInfo.ssid), defaultNetSSID);
+		sockaddr_in sockAddr;
+		getLocalIp(&sockAddr); // This will be valid IP, we probably not suppose to have a valid IP before connected to any AP, right?
+		char ipstr[INET_ADDRSTRLEN] = "127.0.0.1"; // Patapon 3 seems to try to get current IP using ApctlGetInfo() right after ApctlInit(), what kind of IP should we use as default before ApctlConnect()? it shouldn't be a valid IP, right?
+		inet_ntop(AF_INET, &sockAddr.sin_addr, ipstr, sizeof(ipstr));
+		truncate_cpy(netApctlInfo.ip, sizeof(netApctlInfo.ip), ipstr);
+		// Change the last number to 1 to indicate a common dns server/internet gateway
+		((u8*)&sockAddr.sin_addr.s_addr)[3] = 1;
+		inet_ntop(AF_INET, &sockAddr.sin_addr, ipstr, sizeof(ipstr));
+		truncate_cpy(netApctlInfo.gateway, sizeof(netApctlInfo.gateway), ipstr);
+		truncate_cpy(netApctlInfo.subNetMask, sizeof(netApctlInfo.subNetMask), "255.255.255.0");
+	}
 	memcpy(netApctlInfo.bssid, "\1\1\2\2\3\3", sizeof(netApctlInfo.bssid)); // fake AP's mac address
-	netApctlInfo.ssidLength = static_cast<unsigned int>(strlen(defaultNetSSID));
+	netApctlInfo.ssidLength = static_cast<unsigned int>(strlen(netApctlInfo.ssid));
 	netApctlInfo.strength = 99;
 	netApctlInfo.channel = g_Config.iWlanAdhocChannel;
 	if (netApctlInfo.channel == PSP_SYSTEMPARAM_ADHOC_CHANNEL_AUTOMATIC) netApctlInfo.channel = defaultWlanChannel;
-	// Get Local IP Address
-	sockaddr_in sockAddr;
-	getLocalIp(&sockAddr); // This will be valid IP, we probably not suppose to have a valid IP before connected to any AP, right?
-	char ipstr[INET_ADDRSTRLEN] = "127.0.0.1"; // Patapon 3 seems to try to get current IP using ApctlGetInfo() right after ApctlInit(), what kind of IP should we use as default before ApctlConnect()? it shouldn't be a valid IP, right?
-	inet_ntop(AF_INET, &sockAddr.sin_addr, ipstr, sizeof(ipstr));
-	truncate_cpy(netApctlInfo.ip, sizeof(netApctlInfo.ip), ipstr);
-	// Change the last number to 1 to indicate a common dns server/internet gateway
-	((u8*)&sockAddr.sin_addr.s_addr)[3] = 1;
-	inet_ntop(AF_INET, &sockAddr.sin_addr, ipstr, sizeof(ipstr));
-	truncate_cpy(netApctlInfo.gateway, sizeof(netApctlInfo.gateway), ipstr);
 
-	// We use the configured DNS server, whether manually or auto configured.
-	// Games (for example, Wipeout Pulse) often use this to perform their own DNS lookups through UDP, so we need to pass in the configured server.
-	// The reason we need autoconfig is that private Servers may need to use custom DNS Server - and most games are now
-	// best played on private servers (only a few official ones remain, if any).
-	if (g_Config.bInfrastructureAutoDNS) {
-		INFO_LOG(Log::sceNet, "Responding to game query with AutoDNS address: %s", g_infraDNSConfig.dns.c_str());
-		truncate_cpy(netApctlInfo.primaryDns, sizeof(netApctlInfo.primaryDns), g_infraDNSConfig.dns);
-	} else {
-		INFO_LOG(Log::sceNet, "Responding to game query with manual DNS address: %s", g_Config.sInfrastructureDNSServer.c_str());
-		truncate_cpy(netApctlInfo.primaryDns, sizeof(netApctlInfo.primaryDns), g_Config.sInfrastructureDNSServer);
-	}
-
-	// We don't bother with a secondary DNS.
-	truncate_cpy(netApctlInfo.secondaryDns, sizeof(netApctlInfo.secondaryDns), "0.0.0.0"); // Fireteam Bravo 2 seems to try to use secondary DNS too if it's not 0.0.0.0
-
-	truncate_cpy(netApctlInfo.subNetMask, sizeof(netApctlInfo.subNetMask), "255.255.255.0");
+	NetApctl_ResolveDNS(conf, netApctlInfo.primaryDns, netApctlInfo.secondaryDns);
+	INFO_LOG(Log::sceNet, "Responding to game queries with DNS %s / %s", netApctlInfo.primaryDns, netApctlInfo.secondaryDns);
 }
 
 static int sceNetApctlInit(int stackSize, int initPriority) {
@@ -1510,6 +1506,12 @@ static int sceNetApctlInit(int stackSize, int initPriority) {
 
 	// Set default value before connected to an AP
 	NetApctl_InitDefaultInfo();
+
+	// Generate the net config list from the host's usable adapters - one config
+	// per adapter, so whatever the user has available is offered every time
+	// (nothing persisted, nothing stale). On OFW these were authored in the VSH
+	// and stored in the registry; see devtools/psp_ofw_netparam_apctl.md.
+	NetApctlGenerateConfigs();
 
 	// Apctl is the consumer of net configs - make sure the guest-side netparam
 	// worker exists so CheckNetParam/GetNetParam can take the authentic

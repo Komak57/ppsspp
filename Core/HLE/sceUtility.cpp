@@ -51,6 +51,7 @@
 #include "Core/HLE/sceAtrac.h"
 #include "Core/HLE/sceUtility.h"
 #include "Core/HLE/sceNet.h"
+#include "Core/HLE/sceNetApctl.h"
 #include "Core/HLE/sceNetAdhoc.h"
 
 #include "Core/Dialog/PSPDialog.h"
@@ -1091,7 +1092,9 @@ static int sceUtilityNetconfGetStatus() {
 // now; a real profile store can replace this check wholesale.
 static bool __UtilityNetConfExists(int id)
 {
-	return id <= PSP_NETPARAM_MAX_NUMBER_DUMMY_ENTRIES;
+	// Backed by the net config list generated from host adapters at
+	// sceNetApctlInit (our stand-in for the registry categories).
+	return NetApctlGetConf(id) != nullptr;
 }
 
 static int __UtilityNetConfigList(u32 ctxAddr)
@@ -1122,7 +1125,7 @@ int sceUtilityCheckNetParam(int id)
 	if (id < 0)
 		return hleLogError(Log::sceUtility, SCE_ERROR_NETPARAM_INVALID_NETCONF);
 
-	_dbg_assert_msg_(netConfigListAddr == 0, "sceUtilityCheckNetParam: no NetConfigList stub (called before sceNetApctlInit?)");
+	_dbg_assert_msg_(netConfigListAddr != 0, "sceUtilityCheckNetParam: no NetConfigList stub (called before sceNetApctlInit?)");
 	if (netConfigListAddr == 0) {
 		return hleLogError(Log::sceUtility, SCE_ERROR_NETPARAM_BAD_NETCONF, "netConfigList not loaded");
 	}
@@ -1145,206 +1148,157 @@ int sceUtilityCheckNetParam(int id)
 * @return 0 on success
 */
 // Let's figure out what games use this.
+// Serves the generated net config record (see NetApctlConfig for the OFW
+// keep/synthesize/reserve split). Write sizes are unchanged from the previous
+// implementation; only the validation order (now OFW: 0x602/0x603/0x604 before
+// the existence check 0x601) and the data sources changed.
 static int sceUtilityGetNetParam(int id, int param, u32 dataAddr) {
-	if (id < 0 || id > 24) {
-		return hleLogWarning(Log::sceUtility, SCE_ERROR_NETPARAM_BAD_NETCONF, "invalid id=%d", id);
-	}
+	// OFW validation order (utility.prx sceUtilityGetNetParam @0x69b0):
+	if (id < 0)
+		return hleLogWarning(Log::sceUtility, SCE_ERROR_NETPARAM_INVALID_NETCONF, "invalid id=%d", id);
+	if (dataAddr == 0)
+		return hleLogError(Log::sceUtility, SCE_ERROR_NETPARAM_BAD_DATA, "null data");
+	if (param < 0 || param > PSP_NETPARAM_WIFI_CONFIG)
+		return hleLogWarning(Log::sceUtility, SCE_ERROR_NETPARAM_BAD_PARAM, "invalid param=%d", param);
+	// (params 0x19..0x1f - wifisvc/bt/at/phone - are netparam_internal only on OFW)
 
 	if (!g_netApctlInited) {
-		// Is this allowed?
+		// Is this allowed? The config list is generated at sceNetApctlInit.
 		WARN_LOG_REPORT_ONCE(getnetparam_early, Log::sceNet, "sceUtilityGetNetParam called before initializing netApctl!");
 	}
 
-	// TODO: Replace the temporary netApctlInfo with netConfInfo, since some of netApctlInfo contents supposed to be taken from netConfInfo during ApctlInit, while sceUtilityGetNetParam can be used before Apctl Initialized
-	char name[APCTL_PROFILENAME_MAXLEN];
-	truncate_cpy(name, sizeof(name), defaultNetConfigName + std::to_string(id == 0 ? netParamLatestId:id));
-	char dummyWEPKey[6] = "XXXXX"; // WEP 64-bit = 10 hex digits key or 5-digit ASCII equivalent
-	char dummyUserPass[256] = "PPSSPP"; // FIXME: Username / Password max length = 255 chars?
-	char dummyWPAKey[64] = "XXXXXXXX"; // FIXME: WPA 256-bit = 64 hex digits key or 8 to 63-chars ASCII passphrases?
+	const NetApctlConfig *conf = NetApctlGetConf(id == 0 ? netParamLatestId : id);
+	if (!conf)
+		return hleLogWarning(Log::sceUtility, SCE_ERROR_NETPARAM_BAD_NETCONF, "no such net config (id=%d)", id);
+
+	char strBuf[256]{};  // staging for string params; each case copies its exact size
 	switch (param) {
-	case PSP_NETPARAM_NAME:
+	case PSP_NETPARAM_NAME:  // OFW key: cnf_name (str 64)
 		if (!Memory::IsValidRange(dataAddr, APCTL_PROFILENAME_MAXLEN))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, name, APCTL_PROFILENAME_MAXLEN);
+		truncate_cpy(strBuf, APCTL_PROFILENAME_MAXLEN, conf->cnf_name);
+		Memory::MemcpyUnchecked(dataAddr, strBuf, APCTL_PROFILENAME_MAXLEN);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, APCTL_PROFILENAME_MAXLEN, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_SSID:
+	case PSP_NETPARAM_SSID:  // OFW key: ssid (str 33)
 		if (!Memory::IsValidRange(dataAddr, APCTL_SSID_MAXLEN))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, netApctlInfo.ssid, APCTL_SSID_MAXLEN);
+		truncate_cpy(strBuf, APCTL_SSID_MAXLEN, conf->ssid);
+		Memory::MemcpyUnchecked(dataAddr, strBuf, APCTL_SSID_MAXLEN);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, APCTL_SSID_MAXLEN, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_SECURE:
-		// 0 is no security.
-		// 1 is WEP (64-bit).
-		// 2 is WEP (128-bit).
-		// 3 is WPA (256-bit ?).
+	case PSP_NETPARAM_SECURE:  // OFW key: auth_proto - always 0 (open); no security checks here
 		if (!Memory::IsValidRange(dataAddr, 4))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::WriteUnchecked_U32(1, dataAddr); // WEP 64-bit
+		Memory::WriteUnchecked_U32(conf->auth_proto, dataAddr);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 4, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_WEPKEY:
-		// WEP 64-bit = 10 hex digits key or 5-digit ASCII equivalent
-		// WEP 128-bit = 26 hex digits key or 13-digit ASCII equivalent
-		// WEP 256-bit = 58 hex digits key or 29-digit ASCII equivalent
-		// WPA 256-bit = 64 hex digits key or 8 to 63-chars ASCII passphrases?
+	case PSP_NETPARAM_WEPKEY:  // OFW key: wep_key (bin 13) - empty, auth_proto is open
 		if (!Memory::IsValidRange(dataAddr, 5))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, dummyWEPKey, 5);
+		Memory::MemcpyUnchecked(dataAddr, strBuf, 5);  // zeros
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 5, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_IS_STATIC_IP:
-		// 0 is DHCP.
-		// 1 is static.
-		// 2 is PPPOE.
+	case PSP_NETPARAM_IS_STATIC_IP:  // OFW key: how_to_set_ip - 0=DHCP (the host's lease is our lease)
 		if (!Memory::IsValidRange(dataAddr, 4))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::WriteUnchecked_U32(1, dataAddr);  // static IP
+		Memory::WriteUnchecked_U32(conf->how_to_set_ip, dataAddr);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 4, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_IP:
+	case PSP_NETPARAM_IP:  // OFW key: ip_address (str 16) - the adapter's address
 		if (!Memory::IsValidRange(dataAddr, APCTL_IPADDR_MAXLEN))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, netApctlInfo.ip, APCTL_IPADDR_MAXLEN);
+		truncate_cpy(strBuf, APCTL_IPADDR_MAXLEN, conf->ip_address);
+		Memory::MemcpyUnchecked(dataAddr, strBuf, APCTL_IPADDR_MAXLEN);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, APCTL_IPADDR_MAXLEN, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_NETMASK:
+	case PSP_NETPARAM_NETMASK:  // OFW key: netmask (str 16)
 		if (!Memory::IsValidRange(dataAddr, APCTL_IPADDR_MAXLEN))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, netApctlInfo.subNetMask, APCTL_IPADDR_MAXLEN);
+		truncate_cpy(strBuf, APCTL_IPADDR_MAXLEN, conf->netmask);
+		Memory::MemcpyUnchecked(dataAddr, strBuf, APCTL_IPADDR_MAXLEN);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, APCTL_IPADDR_MAXLEN, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_ROUTE:
+	case PSP_NETPARAM_ROUTE:  // OFW key: default_route (str 16)
 		if (!Memory::IsValidRange(dataAddr, APCTL_IPADDR_MAXLEN))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, netApctlInfo.gateway, APCTL_IPADDR_MAXLEN);
+		truncate_cpy(strBuf, APCTL_IPADDR_MAXLEN, conf->default_route);
+		Memory::MemcpyUnchecked(dataAddr, strBuf, APCTL_IPADDR_MAXLEN);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, APCTL_IPADDR_MAXLEN, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_MANUAL_DNS:
-		// 0 is auto.
-		// 1 is manual. We always use manual.
+	case PSP_NETPARAM_MANUAL_DNS:  // OFW key: dns_flag - manual, we always report our DNS
 		if (!Memory::IsValidRange(dataAddr, 4))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::WriteUnchecked_U32(1, dataAddr);  // manual
+		Memory::WriteUnchecked_U32(conf->dns_flag, dataAddr);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 4, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_PRIMARYDNS:
+	case PSP_NETPARAM_PRIMARYDNS:    // OFW key: primary_dns (str 16)
+	case PSP_NETPARAM_SECONDARYDNS:  // OFW key: secondary_dns (str 16)
+	{
 		if (!Memory::IsValidRange(dataAddr, APCTL_IPADDR_MAXLEN))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, netApctlInfo.primaryDns, APCTL_IPADDR_MAXLEN);
+		// Resolved at read time: config override, else AutoDNS/manual setting
+		// (games like Wipeout Pulse do their own UDP lookups against this).
+		char primary[APCTL_IPADDR_MAXLEN], secondary[APCTL_IPADDR_MAXLEN];
+		NetApctl_ResolveDNS(conf, primary, secondary);
+		Memory::MemcpyUnchecked(dataAddr, param == PSP_NETPARAM_PRIMARYDNS ? primary : secondary, APCTL_IPADDR_MAXLEN);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, APCTL_IPADDR_MAXLEN, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_SECONDARYDNS:
-		if (!Memory::IsValidRange(dataAddr, APCTL_IPADDR_MAXLEN))
-			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, netApctlInfo.secondaryDns, APCTL_IPADDR_MAXLEN);
-		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, APCTL_IPADDR_MAXLEN, "UtilityGetNetParam");
-		break;
-	case PSP_NETPARAM_PROXY_USER:
-		// FIXME: Proxy's Username max length = 255 chars?
+	}
+	case PSP_NETPARAM_PROXY_USER:  // OFW key: auth_name (PPPoE username, str 128) - unused
+	case PSP_NETPARAM_PROXY_PASS:  // OFW key: auth_key (PPPoE password, str 128) - unused
+	case PSP_NETPARAM_8021X_USER:  // OFW key: auth_8021x_auth_name (str 128) - unused
+	case PSP_NETPARAM_8021X_PASS:  // OFW key: auth_8021x_auth_key (str 128) - unused
 		if (!Memory::IsValidRange(dataAddr, 255))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, dummyUserPass, 255);
+		Memory::MemcpyUnchecked(dataAddr, strBuf, 255);  // zeros
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 255, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_PROXY_PASS:
-		// FIXME: Proxy's Password max length = 255 chars?
-		if (!Memory::IsValidRange(dataAddr, 255))
-			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, dummyUserPass, 255);
-		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 255, "UtilityGetNetParam");
-		break;
-	case PSP_NETPARAM_USE_PROXY:
-		// 0 is to not use proxy.
-		// 1 is to use proxy.
+	case PSP_NETPARAM_USE_PROXY:  // OFW key: http_proxy_flag - RESERVED (off)
 		if (!Memory::IsValidRange(dataAddr, 4))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::WriteUnchecked_U32(netApctlInfo.useProxy, dataAddr);
+		Memory::WriteUnchecked_U32(conf->http_proxy_flag, dataAddr);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 4, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_PROXY_SERVER:
+	case PSP_NETPARAM_PROXY_SERVER:  // OFW key: http_proxy_server (str 128) - RESERVED
 		if (!Memory::IsValidRange(dataAddr, APCTL_URL_MAXLEN))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, netApctlInfo.proxyUrl, APCTL_URL_MAXLEN);
+		truncate_cpy(strBuf, APCTL_URL_MAXLEN <= sizeof(strBuf) ? APCTL_URL_MAXLEN : sizeof(strBuf), conf->http_proxy_server);
+		Memory::MemcpyUnchecked(dataAddr, strBuf, APCTL_URL_MAXLEN);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, APCTL_URL_MAXLEN, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_PROXY_PORT:
+	case PSP_NETPARAM_PROXY_PORT:  // OFW key: http_proxy_port - RESERVED
 		if (!Memory::IsValidRange(dataAddr, 2))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::WriteUnchecked_U16(netApctlInfo.proxyPort, dataAddr);
+		Memory::WriteUnchecked_U16((u16)conf->http_proxy_port, dataAddr);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 2, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_VERSION:
-		// 0 is not used.
-		// 1 is old version.
-		// 2 is new version.
+	case PSP_NETPARAM_VERSION:  // OFW key: version - profile format revision
 		if (!Memory::IsValidRange(dataAddr, 4))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::WriteUnchecked_U32(2, dataAddr);  // new version
+		Memory::WriteUnchecked_U32(conf->version, dataAddr);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 4, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_UNKNOWN:
+	case PSP_NETPARAM_DEVICE:  // OFW key: device - the adapter selector (was "UNKNOWN")
 		if (!Memory::IsValidRange(dataAddr, 4))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::WriteUnchecked_U32(0, dataAddr);  // reserved?
+		Memory::WriteUnchecked_U32(conf->device, dataAddr);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 4, "UtilityGetNetParam");
-		DEBUG_LOG(Log::sceUtility, "sceUtilityGetNetParam - Unknown Param(%d)", param);
 		break;
-	case PSP_NETPARAM_8021X_AUTH_TYPE:
-		// 0 is none.
-		// 1 is EAP (MD5).
+	case PSP_NETPARAM_8021X_AUTH_TYPE:  // OFW key: auth_8021x_type - none
+	case PSP_NETPARAM_WPA_TYPE:         // OFW key: wpa_key_type - unused (auth_proto is open)
+	case PSP_NETPARAM_BROWSER:          // OFW key: browser_flag - no hotspot login
+	case PSP_NETPARAM_WIFI_CONFIG:      // OFW key: wifisvc_config - no Wi-Fi service
 		if (!Memory::IsValidRange(dataAddr, 4))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::WriteUnchecked_U32(netApctlInfo.eapType, dataAddr);
+		Memory::WriteUnchecked_U32(0, dataAddr);
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 4, "UtilityGetNetParam");
 		break;
-	case PSP_NETPARAM_8021X_USER:
-		// FIXME: 8021X's Username max length = 255 chars?
-		if (!Memory::IsValidRange(dataAddr, 255))
-			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, dummyUserPass, 255);
-		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 255, "UtilityGetNetParam");
-		break;
-	case PSP_NETPARAM_8021X_PASS:
-		// FIXME: 8021X's Password max length = 255 chars?
-		if (!Memory::IsValidRange(dataAddr, 255))
-			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, dummyUserPass, 255);
-		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 255, "UtilityGetNetParam");
-		break;
-	case PSP_NETPARAM_WPA_TYPE:
-		// 0 is key in hexadecimal format.
-		// 1 is key in ASCII format.
-		if (!Memory::IsValidRange(dataAddr, 4))
-			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::WriteUnchecked_U32(1, dataAddr);  // ASCII format
-		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 4, "UtilityGetNetParam");
-		break;
-	case PSP_NETPARAM_WPA_KEY:
-		// FIXME: WPA 256-bit = 64 hex digits key or 8 to 63-chars ASCII passphrases?
+	case PSP_NETPARAM_WPA_KEY:  // OFW key: wpa_key (bin 64) - empty
 		if (!Memory::IsValidRange(dataAddr, 63))
 			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::MemcpyUnchecked(dataAddr, dummyWPAKey, 63);
+		Memory::MemcpyUnchecked(dataAddr, strBuf, 63);  // zeros
 		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 63, "UtilityGetNetParam");
-		break;
-	case PSP_NETPARAM_BROWSER:
-		// 0 is to not start the native browser.
-		// 1 is to start the native browser.
-		if (!Memory::IsValidRange(dataAddr, 4))
-			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::WriteUnchecked_U32(netApctlInfo.startBrowser, dataAddr);
-		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 4, "UtilityGetNetParam");
-		break;
-	case PSP_NETPARAM_WIFI_CONFIG:
-		// 0 is no config.
-		// 1 is unknown. (WISP ?)
-		// 2 is Playstation Spot.
-		// 3 is unknown.
-		if (!Memory::IsValidRange(dataAddr, 4))
-			return hleLogError(Log::sceNet, -1, "invalid arg");
-		Memory::WriteUnchecked_U32(0, dataAddr);  // no config / netApctlInfo.wifisp ?
-		NotifyMemInfo(MemBlockFlags::WRITE, dataAddr, 4, "UtilityGetNetParam");
 		break;
 	default:
 		return hleLogWarning(Log::sceUtility, SCE_ERROR_NETPARAM_BAD_PARAM, "invalid param=%d", param);
