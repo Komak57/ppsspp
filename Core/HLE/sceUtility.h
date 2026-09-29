@@ -96,7 +96,7 @@ class PointerWrap;
 #define PSP_NETPARAM_PROXY_SERVER       14 // string
 #define PSP_NETPARAM_PROXY_PORT         15 // int
 #define PSP_NETPARAM_VERSION            16 // int
-#define PSP_NETPARAM_UNKNOWN            17 // int
+#define PSP_NETPARAM_DEVICE             17 // int
 #define PSP_NETPARAM_8021X_AUTH_TYPE    18 // int
 #define PSP_NETPARAM_8021X_USER         19 // string
 #define PSP_NETPARAM_8021X_PASS         20 // string

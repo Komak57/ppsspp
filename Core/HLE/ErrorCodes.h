@@ -300,6 +300,7 @@ enum PSPErrorCode : u32 {
 
 	SCE_ERROR_NETPARAM_BAD_NETCONF                    = 0x80110601,
 	SCE_ERROR_NETPARAM_INVALID_NETCONF                = 0x80110602,  // OFW: sceUtilityCheckNetParam with id < 0
+	SCE_ERROR_NETPARAM_BAD_DATA                       = 0x80110603,  // OFW: sceUtilityGetNetParam with null data pointer
 	SCE_ERROR_NETPARAM_BAD_PARAM                      = 0x80110604,
 	SCE_ERROR_MODULE_BAD_ID                           = 0x80111101,
 	SCE_ERROR_MODULE_ALREADY_LOADED                   = 0x80111102,
