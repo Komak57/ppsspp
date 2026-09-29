@@ -1,6 +1,47 @@
 #pragma once
 
+#include <string>
+
+#include "Common/CommonTypes.h"
+
 // TODO: move sceNetApctl here
+
+// A generated PSP net config ("connection"). On OFW these were authored in the
+// VSH network settings and stored in the registry.
+//
+// Field groups relative to the OFW schema:
+//   KEEP        - stored on OFW, still real here.
+//   AUTHENTIC   - stored on OFW; synthesized constants here (no radio involved),
+//                 kept so games reading them see a plausible record.
+//   SYNTHESIZE  - captured from the live adapter at generation time.
+//   RESERVE     - games can read these; kept empty/off for future use.
+// Dropped outright: wep/wpa/802.1X/wifisvc/bt/at/phone (host-owned or dead tech).
+struct NetApctlConfig {
+	// KEEP
+	std::string cnf_name;
+	int device = 0;             // OFW: 0=wlan, 2=Bluetooth DUN; We're using the adapter index
+	int dns_flag = 1;           // manual DNS (we always report our DNS explicitly)
+	std::string primary_dns;    // empty = resolve from AutoDNS/config at read time
+	std::string secondary_dns;
+	// AUTHENTIC
+	std::string ssid;           // mirrors the adapter name
+	int auth_proto = 0;         // 0 = open; no security checks are performed
+	int version = 2;            // WPA-era record revision
+	// SYNTHESIZE
+	int how_to_set_ip = 0;      // 0 = DHCP (the host's lease is our "lease")
+	std::string ip_address;
+	std::string netmask;
+	std::string default_route;
+	// RESERVE
+	int http_proxy_flag = 0;
+	std::string http_proxy_server;
+	int http_proxy_port = 0;
+	// Host linkage (not a netparam - never surfaced to the game directly)
+	std::string adapterId;      // OS interface identifier
+	u32 rawIp = 0;              // network byte order
+	u32 rawNetmask = 0;
+	u32 rawGateway = 0;         // 0 = unknown (fabricate .1 when reporting)
+};
 
 enum {
 	PSP_NET_APCTL_STATE_DISCONNECTED = 0,
