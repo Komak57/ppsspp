@@ -73,6 +73,7 @@ private:
 
 	// Stage handlers (one per drawing/waiting stage).
 	void UpdateNoWlan();
+	void UpdateSelectConnection();
 	void UpdateApnetConnect(u64 now);
 	void UpdateApnetGettingIP(u64 now);
 	void UpdateAdhocConnect(u64 now);
@@ -89,4 +90,8 @@ private:
 	NetconfStage stage = NetconfStage::INIT;
 	bool stageEntered_ = false;  // one-shot work guard, armed by Transition()
 	bool jsonReady_ = false;
+
+	// Select Connection screen: row 0 = [New Connection], rows 1..N = confIds.
+	int selectedRow_ = -1;   // -1 = initialize from the session's latest on entry
+	int chosenConfId_ = 1;   // what APNET_CONNECT hands to sceNetApctlConnect
 };

@@ -55,6 +55,11 @@ int NetApctlConfCount();
 // latest-used id. Returns nullptr when the config doesn't exist.
 const NetApctlConfig *NetApctlGetConf(int confId);
 
+// Session-only "last used" tracking (the OFW stored latest_id in the registry).
+// 0 = nothing picked yet this session.
+void NetApctlSetLatestConf(int confId);
+int NetApctlGetLatestConf();
+
 enum {
 	PSP_NET_APCTL_STATE_DISCONNECTED = 0,
 	PSP_NET_APCTL_STATE_SCANNING = 1,

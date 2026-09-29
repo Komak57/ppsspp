@@ -82,6 +82,8 @@ int PSPNetconfDialog::Init(u32 paramAddr) {
 	startTime = (u64)(time_now_d() * 1000000.0);
 	stage = NetconfStage::INIT;
 	stageEntered_ = false;
+	selectedRow_ = -1;
+	chosenConfId_ = 1;
 
 	StartFade(true);
 	return 0;
@@ -132,8 +134,6 @@ void PSPNetconfDialog::UpdateNoWlan() {
 	auto di = GetI18NCategory(I18NCat::DIALOG);
 	auto err = GetI18NCategory(I18NCat::ERRORS);
 	const float WRAP_WIDTH = 254.0f;
-	const int cancelBtn = GetCancelButton();
-	const ImageID cancelBtnImage = cancelBtn == CTRL_CIRCLE ? ImageID("I_CIRCLE") : ImageID("I_CROSS");
 
 	PPGeStyle textStyle = FadedStyle(PPGeAlign::BOX_CENTER, 0.5f);
 	PPGeStyle buttonStyle = FadedStyle(PPGeAlign::BOX_LEFT, 0.5f);
@@ -141,11 +141,100 @@ void PSPNetconfDialog::UpdateNoWlan() {
 	PPGeDrawRect(0, 0, 480, 272, CalcFadedColor(0x63636363));
 	DrawBanner();
 	PPGeDrawTextWrapped(err->T("WirelessSwitchOffError", "A connection error has occurred.\nThe Wireless switch on the PSP system is off (network is disabled)."), 241, 132, WRAP_WIDTH, 0, textStyle);
-	PPGeDrawImage(cancelBtnImage, 255, 240, 20, 20, buttonStyle);
+	// Glyph and input follow the game's buttonSwap (set in UpdateCommon).
+	PPGeDrawImage(cancelButtonImg, 255, 240, 20, 20, buttonStyle);
 	PPGeDrawText(di->T("Cancel"), 285, 243, buttonStyle);
 
 	// Let the player read the message and choose to bail out (ie. for testing networks API)
-	if (IsButtonPressed(cancelBtn)) {
+	if (IsButtonPressed(cancelButtonFlag)) {
+		Transition(NetconfStage::CANCELLED);
+	}
+}
+
+// The Select Connection screen, laid out to match the OFW netconf dialog:
+// transparent background (the game stays visible behind it), centered heading,
+// left-aligned rows at x=180 starting y=105 with 23px spacing, [New Connection]
+// first, and a thin focus outline hugging the selected entry's text. The row
+// list is the net config list generated from host adapters at sceNetApctlInit.
+void PSPNetconfDialog::UpdateSelectConnection() {
+	auto di = GetI18NCategory(I18NCat::DIALOG);
+	const int confCount = NetApctlConfCount();
+	const int rowCount = confCount + 1;  // row 0 = [New Connection]
+
+	if (selectedRow_ < 0) {
+		// Initial focus: the session's last-used connection, like the OFW
+		// (which highlighted latest_id), else the first real config.
+		const int latest = NetApctlGetLatestConf();
+		selectedRow_ = (latest >= 1 && latest <= confCount) ? latest : (confCount >= 1 ? 1 : 0);
+	}
+	if (selectedRow_ >= rowCount)
+		selectedRow_ = rowCount - 1;
+
+	// No background rect: this screen is fully transparent on hardware. The
+	// banner strip and button bar carry their own translucency.
+	DrawBanner();
+
+	// Font scales follow PSPNpSigninDialog's forms (0.5 for rows/labels).
+	const float TEXT_SCALE = 0.5f;
+	PPGeStyle headingStyle = FadedStyle(PPGeAlign::BOX_HCENTER, TEXT_SCALE);
+	PPGeDrawText(di->T("Select connection."), 240, 62, headingStyle);
+
+	PPGeStyle rowStyle = FadedStyle(PPGeAlign::BOX_LEFT, TEXT_SCALE);
+	const float listX = 180.0f, listY = 105.0f, rowH = 23.0f;
+	for (int row = 0; row < rowCount; row++) {
+		const float y = listY + row * rowH;
+		std::string label;
+		if (row == 0) {
+			label = di->T("[New Connection]");
+		} else {
+			const NetApctlConfig *conf = NetApctlGetConf(row);  // row index == confId
+			label = conf ? conf->cnf_name : "?";
+		}
+
+		if (row == selectedRow_) {
+			// Focus is an opaque fill BEHIND the selected entry's text (drawn
+			// first), hugging the text like the OFW selector.
+			float w = 0.0f, h = 0.0f;
+			PPGeMeasureText(&w, &h, label, TEXT_SCALE);
+			PPGeDrawRect(listX - 6.0f, y - 3.0f, listX + w + 6.0f, y + h + 3.0f, CalcFadedColor(0xFF666666));
+		}
+		PPGeDrawText(label, listX, y, rowStyle);
+	}
+
+	// Default captions are "Enter"/"Back". Both the glyphs and the input flags
+	// (okButtonFlag/cancelButtonFlag, set in UpdateCommon) follow the GAME's
+	// requested buttonSwap - a JP title like PSP2i gets circle=Enter - so input
+	// must use those flags, never GetConfirmButton()/GetCancelButton() (those
+	// read the emulator's Button Preference and can contradict the labels).
+	DisplayButtons(DS_BUTTON_OK | DS_BUTTON_CANCEL);
+
+	// "(triangle) Options" in the lower right, like the OFW (edit/delete there).
+	// Not wired to anything yet - our configs are generated, nothing to edit.
+	{
+		PPGeStyle buttonStyle = FadedStyle(PPGeAlign::BOX_LEFT, FONT_SCALE);
+		PPGeDrawImage(ImageID("I_TRIANGLE"), 402, 256, 11.5f, 11.5f, buttonStyle);
+		PPGeDrawText(di->T("Options"), 416.5f, 252, buttonStyle);
+	}
+
+	if (IsButtonPressed(CTRL_UP)) {
+		if (selectedRow_ > 0)
+			selectedRow_--;
+	} else if (IsButtonPressed(CTRL_DOWN)) {
+		if (selectedRow_ < rowCount - 1)
+			selectedRow_++;
+	} else if (IsButtonPressed(okButtonFlag)) {
+		if (selectedRow_ == 0) {
+			// [New Connection]: on OFW this opens the connection wizard. Our
+			// configs come from the host, so the closest analog is a rescan for
+			// newly available adapters.
+			NetApctlGenerateConfigs();
+		} else {
+			chosenConfId_ = selectedRow_;
+			NetApctlSetLatestConf(chosenConfId_);
+			StartFade(true);
+			Transition(NetconfStage::APNET_CONNECT);
+		}
+	} else if (IsButtonPressed(cancelButtonFlag)) {
 		Transition(NetconfStage::CANCELLED);
 	}
 }
@@ -163,8 +252,9 @@ void PSPNetconfDialog::UpdateApnetConnect(u64 now) {
 	DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
 
 	if (state == PSP_NET_APCTL_STATE_DISCONNECTED && connResult < 0) {
-		// When connecting with infrastructure, simulate a connection using the first network configuration entry.
-		connResult = hleCall(sceNetApctl, int, sceNetApctlConnect, 1);
+		// Connect with the config chosen on the Select Connection screen (or
+		// the session's latest for NETCONF_CONNECT_APNET_LAST).
+		connResult = hleCall(sceNetApctl, int, sceNetApctlConnect, chosenConfId_);
 	}
 
 	if (state == PSP_NET_APCTL_STATE_JOINING) {
@@ -370,8 +460,13 @@ int PSPNetconfDialog::Update(int animSpeed) {
 		case NETCONF_CONNECT_APNET_LAST:
 			if (!g_Config.bEnableWlan) {
 				Transition(NetconfStage::NO_WLAN);
+			} else if (request.netAction == NETCONF_CONNECT_APNET_LAST && NetApctlGetLatestConf() > 0) {
+				// "Connect to the last-used config": silent once something has
+				// actually been picked this session; until then there is no
+				// meaningful "last", so the picker shows.
+				chosenConfId_ = NetApctlGetLatestConf();
+				Transition(NetconfStage::APNET_CONNECT);
 			} else {
-				// SELECT_CONNECTION is a pass-through until the interface picker exists.
 				Transition(NetconfStage::SELECT_CONNECTION);
 			}
 			break;
@@ -392,9 +487,7 @@ int PSPNetconfDialog::Update(int animSpeed) {
 		break;
 
 	case NetconfStage::SELECT_CONNECTION:
-		// TODO: Present the connection/interface list here, like hardware does.
-		// For now there is only one (fake) network configuration entry.
-		Transition(NetconfStage::APNET_CONNECT);
+		UpdateSelectConnection();
 		break;
 
 	case NetconfStage::APNET_CONNECT:
@@ -448,7 +541,7 @@ int PSPNetconfDialog::Shutdown(bool force) {
 void PSPNetconfDialog::DoState(PointerWrap &p) {
 	PSPDialog::DoState(p);
 
-	auto s = p.Section("PSPNetconfigDialog", 0, 3);
+	auto s = p.Section("PSPNetconfigDialog", 0, 4);
 	if (!s)
 		return;
 
@@ -469,6 +562,13 @@ void PSPNetconfDialog::DoState(PointerWrap &p) {
 		// Old save: INIT re-routes by netAction, and the connect stages only act
 		// on the live apctl/adhocctl state, so recovery is natural.
 		stage = NetconfStage::INIT;
+	}
+	if (s >= 4) {
+		Do(p, selectedRow_);
+		Do(p, chosenConfId_);
+	} else {
+		selectedRow_ = -1;
+		chosenConfId_ = 1;
 	}
 
 	if (p.mode == p.MODE_READ) {

@@ -163,10 +163,21 @@ int NetApctlConfCount() {
 	return (int)g_apctlConfigs.size();
 }
 
+// Session-only "last used" (the OFW kept latest_id in the registry).
+static int g_apctlLatestConf = 0;
+
 const NetApctlConfig *NetApctlGetConf(int confId) {
 	if (confId == 0)
-		confId = 1;  // "latest"; refined once connect tracks the last-used id
+		confId = g_apctlLatestConf > 0 ? g_apctlLatestConf : 1;  // "latest"
 	if (confId < 1 || confId > (int)g_apctlConfigs.size())
 		return nullptr;
 	return &g_apctlConfigs[confId - 1];
+}
+
+void NetApctlSetLatestConf(int confId) {
+	g_apctlLatestConf = confId;
+}
+
+int NetApctlGetLatestConf() {
+	return g_apctlLatestConf;
 }
