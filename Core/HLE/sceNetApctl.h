@@ -43,6 +43,18 @@ struct NetApctlConfig {
 	u32 rawGateway = 0;         // 0 = unknown (fabricate .1 when reporting)
 };
 
+// Regenerates the config list from the host's adapters (called at
+// sceNetApctlInit). Always yields at least one entry: with no usable adapter
+// the legacy fallback config (defaultNetConfigName/defaultNetSSID, addressing
+// via getLocalIp guessing) is synthesized so behavior never regresses.
+void NetApctlGenerateConfigs();
+
+int NetApctlConfCount();
+
+// confIds are 1-based like the netparam registry categories; 0 resolves to the
+// latest-used id. Returns nullptr when the config doesn't exist.
+const NetApctlConfig *NetApctlGetConf(int confId);
+
 enum {
 	PSP_NET_APCTL_STATE_DISCONNECTED = 0,
 	PSP_NET_APCTL_STATE_SCANNING = 1,

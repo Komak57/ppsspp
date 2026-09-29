@@ -1437,6 +1437,29 @@ void NetApctl_InitDefaultInfo() {
 	truncate_cpy(netApctlInfo.subNetMask, sizeof(netApctlInfo.subNetMask), ipstr);
 }
 
+// Resolves the DNS servers a net config reports (see sceNet.h). Kept apart from
+// config generation because the AutoDNS json may arrive after sceNetApctlInit.
+void NetApctl_ResolveDNS(const NetApctlConfig *conf, char *primaryOut, char *secondaryOut) {
+	// We use the configured DNS server, whether manually or auto configured.
+	// Games (for example, Wipeout Pulse) often use this to perform their own DNS lookups through UDP, so we need to pass in the configured server.
+	// The reason we need autoconfig is that private Servers may need to use custom DNS Server - and most games are now
+	// best played on private servers (only a few official ones remain, if any).
+	if (conf && !conf->primary_dns.empty()) {
+		truncate_cpy(primaryOut, APCTL_IPADDR_MAXLEN, conf->primary_dns);
+	} else if (g_Config.bInfrastructureAutoDNS) {
+		truncate_cpy(primaryOut, APCTL_IPADDR_MAXLEN, g_infraDNSConfig.dns);
+	} else {
+		truncate_cpy(primaryOut, APCTL_IPADDR_MAXLEN, g_Config.sInfrastructureDNSServer);
+	}
+	// Secondary only from an explicit config override.
+	// Fireteam Bravo 2 seems to try to use secondary DNS too if it's not 0.0.0.0
+	if (conf && !conf->secondary_dns.empty()) {
+		truncate_cpy(secondaryOut, APCTL_IPADDR_MAXLEN, conf->secondary_dns);
+	} else {
+		truncate_cpy(secondaryOut, APCTL_IPADDR_MAXLEN, "0.0.0.0");
+	}
+}
+
 void NetApctl_InitInfo(int confId) {
 	memset(&netApctlInfo, 0, sizeof(netApctlInfo));
 	// Set dummy/fake values, some of these (ie. IP set to Auto) probably not suppose to have valid info before connected to an AP, right?

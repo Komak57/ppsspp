@@ -102,6 +102,13 @@ extern SceNetApctlInfoInternal netApctlInfo;
 extern const char * const defaultNetConfigName;
 extern const char * const defaultNetSSID;
 
+// Resolves the DNS servers a net config reports: the config's explicit override
+// when set, otherwise AutoDNS / the manual config setting (the infra json can
+// arrive after config generation, so this is evaluated at read time).
+// Both outputs must hold APCTL_IPADDR_MAXLEN bytes.
+struct NetApctlConfig;
+void NetApctl_ResolveDNS(const NetApctlConfig *conf, char *primaryOut, char *secondaryOut);
+
 extern u32 SceNetUpnpThreadHackAddr;
 extern u32_le SceNetUpnpThreadCode[3];
 extern SceUID SceNetUpnpThreadID;
