@@ -386,7 +386,6 @@ namespace net {
 				{
 					ERROR_LOG(Log::sceNet, "Failed to get the client address from the socket!");
 				}
-				sigServer->local_addr_sig.store(client_addr.sin_addr.s_addr);
 				// Start reading data
 				start_read_thread();
 				return true;
@@ -724,12 +723,7 @@ namespace net {
 		}
 
 		u32 addr = RegisterIp(sigAddr->ip());
-		if (addr == 0)
-			addr = sigServer->local_addr_sig.load();
-
 		u16 port = sigAddr->port();
-		/*if (port == SCE_SIGN_PORT)
-			port = SCE_INTERNAL_PORT;*/
 
 		sigServer->connect(conn_id, addr, port);
 

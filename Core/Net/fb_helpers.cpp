@@ -429,7 +429,7 @@ namespace np
 				// echoes a fixed placeholder for every member. For our own entry we actually know
 				// the real value, so use it instead of trusting the server's echo.
 				if (sigServer)
-					sce_member->natType = sigServer->nat_type.load();
+					sce_member->natType = netInfo.natType.load();
 				INFO_LOG(Log::sceNet, " - Member #%d[%d] = %s, is Self at %08x", i, sce_member->memberId, sce_member->userInfo.npId.handle.data, room_info->memberList.me.ptr);
 				break;
 			}

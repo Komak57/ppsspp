@@ -69,6 +69,8 @@
 bool g_netInited;
 bool g_netApctlInited;
 SceNetApctlInfoInternal netApctlInfo;
+NetApctlInfo netInfo;
+
 u32 netApctlState;
 const char *const defaultNetConfigName = "NetConf";
 const char *const defaultNetSSID = "Wifi"; // fake AP/hotspot
@@ -1485,6 +1487,7 @@ void NetApctl_InitInfo(int confId) {
 	if (netApctlInfo.channel == PSP_SYSTEMPARAM_ADHOC_CHANNEL_AUTOMATIC) netApctlInfo.channel = defaultWlanChannel;
 
 	NetApctl_ResolveDNS(conf, netApctlInfo.primaryDns, netApctlInfo.secondaryDns);
+	netInfo.UpdateFromApctl(netApctlInfo);
 	INFO_LOG(Log::sceNet, "Responding to game queries with DNS %s / %s", netApctlInfo.primaryDns, netApctlInfo.secondaryDns);
 }
 
@@ -1708,6 +1711,40 @@ static int sceNetApctlGetInfo(int code, u32 pInfoAddr) {
 	}
 
 	return hleLogDebug(Log::sceNet, 0);
+}
+
+void NetApctlInfo::UpdateFromApctl(const SceNetApctlInfoInternal &info) {
+	Reset();
+	sockaddr_in sockAddr{};
+	if (::inet_pton(AF_INET, info.ip, &sockAddr.sin_addr) == 1)
+		localAddr.store(sockAddr.sin_addr.s_addr);
+	localPort.store(SCE_SIGN_PORT);
+	
+	if (::inet_pton(AF_INET, info.subNetMask, &sockAddr.sin_addr) == 1)
+		subnetMask.store(sockAddr.sin_addr.s_addr);
+	if (::inet_pton(AF_INET, info.gateway, &sockAddr.sin_addr) == 1)
+		gateway.store(sockAddr.sin_addr.s_addr);
+	if (::inet_pton(AF_INET, info.primaryDns, &sockAddr.sin_addr) == 1)
+		primaryDns.store(sockAddr.sin_addr.s_addr);
+	if (::inet_pton(AF_INET, info.secondaryDns, &sockAddr.sin_addr) == 1)
+		secondaryDns.store(sockAddr.sin_addr.s_addr);
+
+}
+
+void NetApctlInfo::Reset() {
+	localAddr.store(0);
+	subnetMask.store(0);
+	gateway.store(0);
+	primaryDns.store(0);
+	secondaryDns.store(0);
+
+	localPort.store(0);
+	publicAddr.store(0);
+	publicPort.store(0);
+	natType.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN);
+	upnpStatus.store(SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
+	npportStatus.store(SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN);
+	latency.store(0);
 }
 
 static int NetApctl_AddHandler(u32 handlerPtr, u32 handlerArg) {
@@ -2194,11 +2231,11 @@ static int sceNetUpnpGetNatInfo(u32 unknownPtr) {
 	auto uPnPInfo = PSPPointer<SceNpUpnpInfo>::Create(unknownPtr);
 
 	// Load immediate value. If we wait for a valid value, it locks up the thread
-	uPnPInfo->public_address = sigServer->addr_sig.load();
+	uPnPInfo->public_address = netInfo.publicAddr.load(); // sigServer->addr_sig.load();
 	// This value seems to reference sceNetUpnpStart, not g_PortManager
-	uPnPInfo->upnp_status = (STUN_addr ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
-	uPnPInfo->npport_status = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
-	uPnPInfo->nat_status = sigServer->nat_type.load();
+	uPnPInfo->upnp_status = netInfo.upnpStatus.load(); // (STUN_addr ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
+	uPnPInfo->npport_status = netInfo.npportStatus.load(); //SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
+	uPnPInfo->nat_status = netInfo.natType.load(); //sigServer->nat_type.load();
 
 
 	if (uPnPInfo->public_address != 0) {

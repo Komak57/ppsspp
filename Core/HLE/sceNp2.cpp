@@ -1838,36 +1838,27 @@ static int sceNpMatching2SignalingGetLocalNetInfo(u32 netInfoPtr)
 	if (!Memory::IsValidAddress(netInfoPtr))
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_ARGUMENT, "Invalid Argument");
 
-	auto netInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
+	auto pspNetInfo = PSPPointer<SceNpMatching2SignalingNetInfo>::Create(netInfoPtr);
 
-	if (netInfo->size != 0x18) {
-		if (netInfo->size != 0x1c)
+	if (pspNetInfo->size != 0x18) {
+		if (pspNetInfo->size != 0x1c)
 			return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_INVALID_OPT_SIZE, "Invalid Size");
-		netInfo->port = sigServer->GetSigPort();
+		pspNetInfo->port = netInfo.publicPort.load();;
 	}
-	if (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE) {
-		netInfo->natStatus = sigServer->nat_type.load();
-		netInfo->mappedAddr = sigServer->GetSigAddr();		// Public IP
-	} else {
-		netInfo->natStatus = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
-		netInfo->mappedAddr = 0xffffffff;		// Public IP
-	}
-	netInfo->UPnPStatus = (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
-	if (sigServer && sigServer->IsInitialized())
-		netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN;
-	else
-		netInfo->portStatus = SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_CLOSED;
-
+	pspNetInfo->natStatus = netInfo.natType.load();// sigServer->nat_type.load();
+	pspNetInfo->mappedAddr = netInfo.publicAddr.load();// sigServer->GetSigAddr();		// Public IP
+	pspNetInfo->UPnPStatus = netInfo.upnpStatus.load();// (g_PortManager.GetInitState() == UPNP_INITSTATE_DONE ? SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_VALID : SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID);
+	pspNetInfo->portStatus = netInfo.npportStatus.load();
 	// Not actually set in the official firmware
-	netInfo->localAddr = sigServer->GetLocalAddr();	// Local  IP
+	pspNetInfo->localAddr = netInfo.localAddr.load();
 
-	INFO_LOG(Log::sceNp2, "NetInfo.size =       %i", netInfo->size);
-	INFO_LOG(Log::sceNp2, "NetInfo.localAddr =  %s", ip2str(netInfo->localAddr).c_str());
-	INFO_LOG(Log::sceNp2, "NetInfo.mappedAddr = %s", ip2str(netInfo->mappedAddr).c_str());
-	INFO_LOG(Log::sceNp2, "NetInfo.natStatus =  %i", netInfo->natStatus);
-	INFO_LOG(Log::sceNp2, "NetInfo.UPnPStatus = %i", netInfo->UPnPStatus);
-	INFO_LOG(Log::sceNp2, "NetInfo.portStatus = %i", netInfo->portStatus);
-	INFO_LOG(Log::sceNp2, "NetInfo.port =       %u", netInfo->port);
+	INFO_LOG(Log::sceNp2, "NetInfo.size =       %i", pspNetInfo->size);
+	INFO_LOG(Log::sceNp2, "NetInfo.localAddr =  %s", ip2str(pspNetInfo->localAddr).c_str());
+	INFO_LOG(Log::sceNp2, "NetInfo.mappedAddr = %s", ip2str(pspNetInfo->mappedAddr).c_str());
+	INFO_LOG(Log::sceNp2, "NetInfo.natStatus =  %i", pspNetInfo->natStatus);
+	INFO_LOG(Log::sceNp2, "NetInfo.UPnPStatus = %i", pspNetInfo->UPnPStatus);
+	INFO_LOG(Log::sceNp2, "NetInfo.portStatus = %i", pspNetInfo->portStatus);
+	INFO_LOG(Log::sceNp2, "NetInfo.port =       %u", pspNetInfo->port);
 
 	return SCE_NP_MATCHING2_OKAY;
 }

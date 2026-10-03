@@ -21,39 +21,6 @@ namespace net {
 
     bool SIGAgent::IsRunning() { return running; }
 	bool SIGAgent::IsInitialized() { return initialized; }
-
-    // Returns Local Address in Network Order
-    u32 SIGAgent::GetLocalAddr() {
-        std::unique_lock<std::mutex> lock(rpcn_mtx_);
-        if (local_addr_sig.load() == 0)
-            sigv.wait_for(lock, std::chrono::seconds(5), [&] { return local_addr_sig.load() != 0; });
-        return local_addr_sig.load();
-    }
-    // Returns Signaling Address in Network Order
-    u32 SIGAgent::GetSigAddr() {
-        std::unique_lock<std::mutex> lock(rpcn_mtx_);
-        if (addr_sig.load() == 0)
-            sigv.wait_for(lock, std::chrono::seconds(5), [&] { return addr_sig.load() != 0; });
-        return addr_sig.load();
-    }
-    // Returns Signaling Port in Host Order
-    u16 SIGAgent::GetSigPort() {
-        std::unique_lock<std::mutex> lock(rpcn_mtx_);
-        if (port_sig.load() == 0)
-            sigv.wait_for(lock, std::chrono::seconds(5), [&] { return port_sig.load() != 0; });
-        u16 sig_port = port_sig.load();
-        // if (sig_port == SCE_SIGN_PORT)
-            // sig_port = SCE_INTERNAL_PORT;
-        return sig_port;
-    }
-    u8 SIGAgent::GetNatType() {
-        std::unique_lock<std::mutex> lock(rpcn_mtx_);
-        return nat_type.load();
-    }
-    u64 SIGAgent::GetLatencyUs() {
-        return latency.load();
-    }
-
 	// Signaling Helpers
 
 	u32 SIGAgent::init_sig(const SceNpId& npid) {

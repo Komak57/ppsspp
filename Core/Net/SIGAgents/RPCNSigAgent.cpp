@@ -1,6 +1,7 @@
 #include <Core/Net/SIGAgent.h>
 #include <Core/HLE/SocketManager.h>
 #include <Core/HLE/sceNetInet.h>  // RegisterSessionPeer/UnregisterSessionPeer (peer routing table)
+#include <Core/HLE/sceNetApctl.h>
 #include <Core/HLE/NetInetConstants.h>
 #include <Core/HLE/proAdhoc.h>
 #include <Core/HLE/sceNp.h>
@@ -10,6 +11,7 @@
 #include <Core/Debugger/Np2Printer.h>
 #include "Common/System/OSD.h"
 #include "Common/Data/Text/I18n.h"
+#include "Common/StringUtils.h"
 
 /* DOCUMENTATION:
     RPCN only supports NAT Type 3 communications to support Symmetric NAT routers.
@@ -59,6 +61,7 @@ namespace net {
     
     RPCNSigAgent::RPCNSigAgent() {
         auto p2p_sock = g_socketManager.GetP2PSocket();
+        INFO_LOG(Log::Signaling, "RPCNSigAgent: local addr from netconfig: %s", ip2str(netInfo.localAddr.load()).c_str());
         // Create the Virtual Socket for p2p handshakes
         // Signaling sockets now bound to vport 0 - no explicit subscription needed
         // psp_sock will deliver packets based on vport matching
@@ -442,24 +445,24 @@ namespace net {
                 const u32 new_addr_sig = read_from_ptr<u32_le>(&msg[0]);
                 // Pull port in Host Order
                 const u16 new_port_sig = read_from_ptr<u16_be>(&msg[4]);
-                const u32 old_addr_sig = addr_sig;
-                const u16 old_port_sig = port_sig;
-                latency = std::chrono::duration_cast<std::chrono::microseconds>(now - last_ping_time_ipv4).count() / 2;
+                const u32 old_addr_sig = netInfo.publicAddr.load();
+                const u16 old_port_sig = netInfo.publicPort.load();
+                netInfo.latency.store(std::chrono::duration_cast<std::chrono::microseconds>(now - last_ping_time_ipv4).count() / 2);
 
                 if (new_addr_sig != old_addr_sig)
                 {
                     {
                         std::lock_guard<std::mutex> lock(sig_mutex);
-                        addr_sig = new_addr_sig;
-                        auto local_ip = local_addr_sig.load();
+                        netInfo.publicAddr.store(new_addr_sig);
+                        auto local_ip = netInfo.publicAddr.load();
 
                         if (new_addr_sig == local_ip) // Direct Connection
-                            nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1);
+                            netInfo.natType.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE1);
                         else if (new_port_sig == SCE_SIGN_PORT) // Direct Port
-                            nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2);
+                            netInfo.natType.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2);
                         // RPCN has no way of detecting a type 2 vs type 3
                         else
-                            nat_type.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3);
+                            netInfo.natType.store(SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE3);
 
                         // Upgrade a Type 3 to a Type 2 when we can test the router's NAT type support
                         // if (nat_type.load() < SCE_NP_SIGNALING_NETINFO_NAT_STATUS_TYPE2)
@@ -482,7 +485,7 @@ namespace net {
                 {
                     {
                         std::lock_guard<std::mutex> lock(sig_mutex);
-                        port_sig = new_port_sig;
+                        netInfo.publicPort.store(new_port_sig);
                     }
                     NOTICE_LOG(Log::Signaling, "New P2P PORT: %d", new_port_sig);
                     if (old_port_sig == 0)
@@ -518,7 +521,7 @@ namespace net {
                 //ping.emplace(ping.begin() + 1, _user_id);
                 //ping.emplace(ping.begin() + 9, +local_addr);
                 write_to_ptr<s64_le>(ping, 1, user_id.load());
-                write_to_ptr<u32_le>(ping, 9, +local_addr_sig.load());
+                write_to_ptr<u32_le>(ping, 9, +netInfo.localAddr.load());
                 return ping;
             };
 

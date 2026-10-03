@@ -35,15 +35,6 @@ namespace net {
 		bool IsRunning();
 		bool IsInitialized();
 
-		// Returns Local Address in Network Order
-		u32 GetLocalAddr();
-		// Returns Signaling Address in Network Order
-		u32 GetSigAddr();
-		// Returns Signaling Port in Host Order
-		u16 GetSigPort();
-		u8 GetNatType();
-		u64 GetLatencyUs();
-
 		bool isSignalingPeer(u32 addr) {
 			for (auto const& [id, peer] : sig_peers) {
 				if (peer && 
@@ -125,16 +116,7 @@ namespace net {
 
 	public:
 		int tries = 0;
-		// Public and Private addresses
 		std::condition_variable sigv;
-		// Network Order
-		std::atomic<u32> addr_sig;
-		// Host Order
-		std::atomic<u16> port_sig;
-		// Network Order
-		std::atomic<u32> local_addr_sig = 0;
-		std::atomic<u8> nat_type = SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN;
-        std::atomic<u64> latency = 0;
 
 	private:
 

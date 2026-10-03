@@ -67,6 +67,28 @@ typedef struct SceNetApctlInfoInternal { // Using struct instead of union for in
 	unsigned int 	wifisp; // 1 if connection is for Wifi service providers (WISP) for sharing internet connection
 } SceNetApctlInfoInternal;
 
+class NetApctlInfo {
+public:
+	// "takes the struct as input" - the snapshot side, written at GOT_IP:
+	void UpdateFromApctl(const SceNetApctlInfoInternal &info);  // parses once, stores raw
+    void Reset();                                               // NetApctl_Term / disconnect
+
+    // Discovered (atomics - updated from sig/keepalive threads at runtime):
+    std::atomic<u32> localAddr{0};		// 
+    std::atomic<u32> subnetMask{0};		// 
+    std::atomic<u32> gateway{0};		// 
+    std::atomic<u32> primaryDns{0};		// 
+    std::atomic<u32> secondaryDns{0};	// 
+
+    std::atomic<u16> localPort{0};		// 
+    std::atomic<u32> publicAddr{0};		// 
+    std::atomic<u16> publicPort{0};		// 
+    std::atomic<u8>  natType{SCE_NP_SIGNALING_NETINFO_NAT_STATUS_UNKNOWN};	// 
+    std::atomic<u8>  upnpStatus{SCE_NP_SIGNALING_NETINFO_UPNP_STATUS_INVALID};	// 
+	std::atomic<u8>  npportStatus{SCE_NP_SIGNALING_NETINFO_NPPORT_STATUS_OPEN};	// 
+    std::atomic<u64> latency{0};												// 
+};
+
 struct ApctlHandler {
 	u32 entryPoint;
 	u32 argument;
@@ -99,6 +121,7 @@ extern bool g_netInited;
 extern bool g_netApctlInited;
 extern u32 netApctlState;
 extern SceNetApctlInfoInternal netApctlInfo;
+extern NetApctlInfo netInfo;
 extern const char * const defaultNetConfigName;
 extern const char * const defaultNetSSID;
 

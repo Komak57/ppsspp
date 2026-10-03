@@ -129,7 +129,7 @@ u64 GetNetworkTimeUs() {
 		if (npAuthServer && npAuthServer->IsConnected())
 			currentNetworkTimeUs = npAuthServer->GetNetworkTime(); // - Latency is not available until npServer starts
 		else if (npServer && npServer->IsConnected())
-			currentNetworkTimeUs = npServer->GetNetworkTime() + sigServer->GetLatencyUs();
+			currentNetworkTimeUs = npServer->GetNetworkTime() + netInfo.latency.load();
 
 		if (currentNetworkTimeUs != 0) {
 			lastNetworkUpdate = currentTicks; // Reset Update Counter
@@ -152,7 +152,7 @@ void InitializeNetworkTime() {
 	if (npAuthServer && npAuthServer->IsConnected())
 		currentNetworkTimeUs = npAuthServer->GetNetworkTime(); // - Latency is not available until npServer starts
 	else if (npServer && npServer->IsConnected())
-		currentNetworkTimeUs = npServer->GetNetworkTime() + sigServer->GetLatencyUs();
+		currentNetworkTimeUs = npServer->GetNetworkTime() + netInfo.latency.load();
 
 	if (currentNetworkTimeUs != 0) {
 		lastNetworkTimeUs = currentNetworkTimeUs;
