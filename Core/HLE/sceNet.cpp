@@ -2163,10 +2163,7 @@ static int sceNetUpnpStart() {
 	//  As such, it has additional functions in sceNp that
 	//  trigger signaling to start, and P2P connect requests
 
-	/*if (sigServer->create_connection())
-		sigServer->set_self_sig_info(*NpGetNpId());
-	else
-		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_ABORTED, "Signaling Loop could not be started");*/
+	StartUPnPService();
 
 	return hleLogWarning(Log::sceNet, 0, "Untested");
 }

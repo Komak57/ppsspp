@@ -130,6 +130,7 @@ private:
 
 extern PortManager g_PortManager;
 
+void StartUPnPService();
 void __UPnPInit(unsigned int timeout_ms);
 void __UPnPShutdown();
 

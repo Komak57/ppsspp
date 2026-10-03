@@ -705,6 +705,7 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 	// and g_Config.Init() above doesn't read the ini, it just builds a lookup table.
 	// Probably an excessive timeout. It only causes delays on shutdown, though.
 	__UPnPInit(2000);
+	StartUPnPService();
 
 	// This parameter should be a boot filename. Only accept it if we
 	// don't already have one.

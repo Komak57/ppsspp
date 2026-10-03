@@ -1059,6 +1059,7 @@ void GameSettingsScreen::CreateNetworkingSettings(UI::ViewGroup *networkingSetti
 	enableUPnP->OnClick.Add([](UI::EventParams &e) {
 		// Wake the UPnP service thread so it connects (or tears its mappings back down) right
 		// away, instead of waiting for a port request that may never come.
+		StartUPnPService();
 		UPnP_Notify();
 	});
 	auto *useOriPort = networkingSettings->Add(new CheckBox(&g_Config.bUPnPUseOriginalPort, n->T("UPnP use original port", "UPnP use original port (Enabled = PSP compatibility)")));

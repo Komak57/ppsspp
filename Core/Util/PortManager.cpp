@@ -604,7 +604,7 @@ static int upnpService(unsigned int timeout) {
 }
 
 // Starts the service thread if the setting is on and it isn't up already.
-static void StartUPnPService() {
+void StartUPnPService() {
 	std::lock_guard<std::mutex> threadLock(g_upnpThreadLock);
 	{
 		std::lock_guard<std::mutex> lock(g_upnpLock);
@@ -632,9 +632,6 @@ void __UPnPInit(unsigned int timeout) {
 		g_upnpInitialized = true;
 		g_upnpTimeout = timeout;
 	}
-	// Only actually spawns a thread if UPnP is enabled; otherwise UPnP_Notify() starts one when
-	// the user turns it on.
-	StartUPnPService();
 }
 
 void __UPnPShutdown() {
@@ -711,8 +708,4 @@ void UPnP_Notify() {
 		g_upnpResetBackoff = true;
 	}
 	g_upnpCond.notify_one();
-	// Turned on: start a thread. Turned off: the running one cleans up and exits by itself, which
-	// we deliberately don't wait for here - this is called from the UI thread, and the cleanup
-	// means talking to a router that may be slow to answer.
-	StartUPnPService();
 }
