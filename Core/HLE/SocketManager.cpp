@@ -824,31 +824,51 @@ void InetSocket::enqueue_packet(VirtualPacket packet) {
 	rx_queue.push_back(std::move(packet));
 	DEBUG_LOG(Log::sceNet, "Enqueued packet for vport %d (queue size: %zu)", ntohs(src.virt.vport), rx_queue.size());
 }
-bool InetSocket::dequeue_packet(VirtualPacket& packet, bool seq) {
+int InetSocket::dequeue_packet(char* buf, int len, sockaddr_in* out_addr, bool seq) {
 	std::lock_guard<std::mutex> buffers(buffer_lock);
 	const u64 MAX_PACKET_AGE_US = 30000000;  // 30 seconds
 	
+    int total_copied = 0;
 	while (((seq && (rx_buffer.find(rx_seq + 1) != rx_buffer.end())) || !seq) && !rx_buffer.empty()) {
-		if (seq)
-			rx_seq++;
-		else
-			rx_seq = rx_buffer.begin()->first;
-		packet = std::move(rx_buffer.find(rx_seq)->second);
-		rx_buffer.erase(rx_seq);
-		
-		// Check packet TTL
-		u64 current_time_us = (u64)(time_now_d() * 1000000.0);
-		u64 packet_age_us = current_time_us - packet.enqueue_time_us;
-		
-		if (packet_age_us > MAX_PACKET_AGE_US) {
-            WARN_LOG(Log::sceNet, "dequeue_stream: Receiving stale packet (age: %.2f seconds)", (float)packet_age_us / 1000000.0f);
+
+		u32 seq_id = (seq? rx_seq + 1 : rx_buffer.begin()->first);
+		rx_seq++;
+		VirtualPacket packet = std::move(rx_buffer.find(seq_id)->second);
+		rx_buffer.erase(seq_id);
+
+        int pkt_len = packet.len;
+        int room_in_buf = len - total_copied;
+        int bytes_to_copy = std::min(pkt_len, room_in_buf);
+        
+        // Copy data to the caller's buffer
+        if (bytes_to_copy > 0 && packet.data != nullptr) {
+            memcpy(buf + total_copied, packet.data.get(), bytes_to_copy);
+            total_copied += bytes_to_copy;
+        }
+        
+		if (out_addr) {
+			*out_addr = packet.src.host;
 		}
-		
-		DEBUG_LOG(Log::sceNet, "Dequeued packet from vport %d (queue size: %zu)", ntohs(src.virt.vport), rx_buffer.size());
-		return true;
+        // If we didn't consume the whole packet, push the remainder back to the FRONT
+        if (bytes_to_copy < pkt_len) {
+            VirtualPacket remainder;
+            int remaining_len = pkt_len - bytes_to_copy;
+            
+            remainder.data = std::make_unique<char[]>(remaining_len);
+            memcpy(remainder.data.get(), packet.data.get() + bytes_to_copy, remaining_len);
+            
+            remainder.len = remaining_len;
+            remainder.header_flags = packet.header_flags;
+            remainder.src.virt = packet.src.virt;
+            remainder.enqueue_time_us = packet.enqueue_time_us; // Preserve TTL
+            
+			rx_buffer[seq_id] = std::move(remainder);
+			rx_seq--; // mark this as the next packet to receive
+            break; // Buffer is full
+        }
 	}
 	
-	return false;  // Queue is empty
+	return total_copied;  // Queue is empty
 }
 int InetSocket::dequeue_stream(char* buf, int len, sockaddr_in* out_addr, bool seq) {
 	std::lock_guard<std::mutex> buffers(buffer_lock);
@@ -1105,53 +1125,34 @@ int InetSocket::Recv_Unrealiable(char* buf, int len, int flags, SceNetInetSockad
 	}
 	// NOTICE_LOG(Log::sceNet, "Recv_Unreliable taking the Virtual route.");
 	// Dequeue from local packet queue for virtual sockets
-	VirtualPacket pkt;
-	_dbg_assert_msg_(dequeue_packet(pkt), "Impossibly empty virtual queue");
+	sockaddr_in source_addr{};
+	int copy_len = dequeue_packet(buf, len, &source_addr);
+	_dbg_assert_msg_(copy_len > 0, "Impossibly empty virtual queue");
 
-	// ===== STRICT DESTRUCTIVE FIFO SEMANTICS =====
-	//
-	// If the caller's buffer is smaller than the packet:
-	//   - Copy only what fits (truncate)
-	//   - DISCARD THE REMAINDER (do not queue it back)
-	//   - Return the truncated size
-	//
-	// If the caller's buffer is larger than the packet:
-	//   - Copy the entire packet
-	//   - Return the actual packet size (do NOT pad)
-	//
-	// Always preserve source address information
+	VERBOSE_LOG(Log::sceNet, "%d bytes received from (%s:%u); [tx=%d/rx=%d]",
+		copy_len, inet_ntoa(source_addr.sin_addr), ntohs(source_addr.sin_port),
+		tx_seq, rx_seq);
+		
+	if (copy_len == 0) {
+#if PPSSPP_PLATFORM(WINDOWS)
+		SetLastError(WSAEWOULDBLOCK);
+#else
+		socket_errno = EWOULDBLOCK;
+#endif
+		return -1;
+	}
+	u16 _vport = (source_addr.sin_zero[0] << 8) | source_addr.sin_zero[1];
 
-	// Copy payload (truncate if necessary)
-	size_t copy_len = std::min((size_t)len, pkt.len);
-	if (copy_len > 0 && buf && pkt.data) {
-		memcpy(buf, pkt.data.get(), copy_len);
-	}
-	// Log truncation if it occurred
-	if (copy_len < pkt.len) {
-		DEBUG_LOG(Log::sceNet, "recv::UNRELIABLE: TRUNCATED packet for vport %d (buf=%zu, pkt=%zu, discarding %zu bytes)",
-			ntohs(src.virt.vport), copy_len, pkt.len, pkt.len - copy_len);
-	}
+	std::string msg = "recv::UNRELIABLE " + ip2str(source_addr.sin_addr.s_addr) + ":" + std::to_string(ntohs(source_addr.sin_port)) +
+	"[" + std::to_string(ntohs(_vport)) + "] (" + std::to_string(dbg.send) + ", " +
+	std::to_string(dbg.recv) + "/" + std::to_string(dbg.read) + ")";
+	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, copy_len, 386);
 
-	// Copy source address (only update sin_addr and sin_port, preserve other fields)
-	if (from && fromlen) {
-		sockaddr_in* from_in = (sockaddr_in*)from;
-		// Preserve caller's structure but update only the address and port
-		from_in->sin_addr = pkt.src.host.sin_addr;
-		from_in->sin_port = pkt.src.host.sin_port;
-		from_in->sin_zero[0] = pkt.src.host.sin_zero[0]; // Copy vport
-		from_in->sin_zero[1] = pkt.src.host.sin_zero[1];
-		*fromlen = sizeof(sockaddr_in);  // Always set to actual size
-	}
-	// Log with hex dump at INFO level so we see packet pickup
-	std::string msg = "recv::UNRELIABLE (vport " + std::to_string(ntohs(src.virt.vport)) + "): picked up " +
-		std::to_string(copy_len) + " bytes from " + ip2str(pkt.src.host.sin_addr) +
-		":" + std::to_string(ntohs(pkt.src.host.sin_port)) + "|" + std::to_string(ntohs(pkt.src.virt.vport));
-	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, (int)copy_len, 256);
+	WARN_LOG(Log::sceNet, "%d bytes received from virtual (%s:%u);",
+		copy_len, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port));
 
 	dbg.recv++;
-
-	DEBUG_LOG(Log::sceNet, "VPORT %d s(%lld/%lld) r(%lld,%lld)", ntohs(src.virt.vport), dbg.sent, dbg.send, dbg.recv, dbg.read);
-	return (int)copy_len;
+	return copy_len;
 }
 bool InetSocket::Process_Unreliable(VirtualPacket&& vpkt, VirtualSockAddr dest) {
 	// sockType demuxes game p2p sockets that share a vport (DGRAM side-channel vs CONN_DGRAM game).
