@@ -914,7 +914,6 @@ static int sceNpMatching2ContextStop(int ctxId)
 	if (!ctx[ctxId]->started.load())
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_STARTED);
 
-	npMatching2Inited = false;
 	//TODO: Stop any in-progress HTTPClient communication used on sceNpMatching2ContextStart
 	ctx[ctxId]->started.store(false);
 
@@ -944,6 +943,7 @@ static int sceNpMatching2DestroyContext(int ctxId)
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
+	npMatching2Inited = false;
 	auto it = ctx.find(ctxId);
 	if (it == ctx.end())
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND, "Context Not Found"); //SCE_NP_MATCHING2_ERROR_INVALID_CONTEXT_ID
