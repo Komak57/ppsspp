@@ -1592,6 +1592,7 @@ static int sceUtilityNpSigninShutdownStart() {
 	}
 
 	if (npSigninDialog->GetCommonParam()->result == SCE_UTILITY_DIALOG_RESULT_SUCCESS)
+	{
 		npAuthServer = npSigninDialog->GetServer();
 
 		WARN_LOG(Log::sceNet, "Creating P2P Socket");
