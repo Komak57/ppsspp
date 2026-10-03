@@ -1817,7 +1817,7 @@ int sceNetApctlConnect(int confId) {
 
 	// Submit Request Connect(1)/?(2)/Scan(3)/Hotspot(4)
 	if (netApctlState != PSP_NET_APCTL_STATE_DISCONNECTED) return hleLogError(Log::sceNet, 0x80410A80, "ApctlConnect Already in Progress (%d)", netApctlState);   // a request is already in flight
-    int err = sceUtilityCheckNetParam(confId);      		// profile must EXIST in the registry
+    int err = hleCall(sceUtility, int, sceUtilityCheckNetParam, confId);      		// profile must EXIST in the registry
     if (err < 0) { return hleLogError(Log::sceNet, err); }  // netparam error returned DIRECTLY
 
 	// Is this confId is the index to the scanning's result data or sceNetApctlGetBSSDescIDListUser result?
