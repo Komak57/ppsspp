@@ -2130,23 +2130,19 @@ void SceNetUpnpThread()
 	// WARN_LOG(Log::Signaling, "UNTESTED %s()", __FUNCTION__);
 	// hleSkipDeadbeef();
 	auto start = std::chrono::steady_clock::now();
-	int newState = SCE_NP_MATCHING2_STATE_NONE;
 	int delayus = 100000;
 	uint64_t net_time = 0;
 	uint64_t upnp_time = 0;
 	if (uPnPInitialized) {
-		newState = SCE_NP_MATCHING2_STATE_INIT;
 		delayus = 16000;
-		// The persistent NAT/UPnP state machine (firmware: SceNetUpnpThread). Drains the
-		// UPnP subset socket - now fed by the netintr thread's demux delivery - and runs
-		// NAT keepalive/message processing. This is the correct home for NATKeepAlive;
-		// it used to run on the signaling Echo thread, which is not where firmware put it.
-		if (sigServer && sigServer->IsInitialized()) {
-			if (STUN_addr) {
-				newState = SCE_NP_MATCHING2_STATE_CONNECTED;
-				upnp_time = sigServer->NATKeepAlive();
-			} else {
-				upnp_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+		// Delay NAT Bypass until a NetConfig has been selected, and the Local IP obtained
+		if (netApctlState >= PSP_NET_APCTL_STATE_GOT_IP) {
+			if (sigServer && sigServer->IsInitialized()) {
+				if (STUN_addr) {
+					upnp_time = sigServer->NATKeepAlive();
+				} else {
+					upnp_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+				}
 			}
 		}
 		net_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count() - upnp_time;
