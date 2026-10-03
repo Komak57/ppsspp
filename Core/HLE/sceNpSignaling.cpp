@@ -167,7 +167,6 @@ int sceNpSignalingStop() {
 		__KernelStopThread(signalingThreadId, SCE_KERNEL_ERROR_THREAD_TERMINATED, "thread terminated");
 		__KernelStopThread(signalingEchoThreadId, SCE_KERNEL_ERROR_THREAD_TERMINATED, "thread terminated");
 		// TODO: retire packets
-
 	}
 	if (ret < 0)
 		return hleLogError(Log::sceNet, ret, "Error stopping Signagling Threads");
@@ -187,8 +186,8 @@ int sceNpSignalingTerm() {
 				}
 			}
 		}
-		signalingInit = false;
 	}
+	signalingInit = false;
 	if (ret < 0)
 		return hleLogError(Log::sceNet, ret, "Error terminating Signagling Threads");
 	return hleLogWarning(Log::sceNet, ret);
