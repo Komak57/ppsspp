@@ -222,3 +222,6 @@ int sceNetFreeThreadinfo(SceUID thid);
 
 int sceNetApctlConnect(int connIndex);
 int sceNetApctlDisconnect();
+void __NetUpnpInit();
+void __NetUpnpShutdown();
+int sceNetUpnpTerm();

@@ -2212,7 +2212,7 @@ static int sceNetUpnpStop() {
 	return hleLogError(Log::sceNet, 0, "UNIMPL");
 }
 // return usually ignored
-static int sceNetUpnpTerm() {
+int sceNetUpnpTerm() {
 	uPnPInitialized = false;
 	if (SceNetUpnpThreadID != 0) {
 		__KernelStopThread(SceNetUpnpThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "Upnp Thread stopped");
