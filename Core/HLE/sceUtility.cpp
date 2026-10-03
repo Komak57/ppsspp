@@ -1594,6 +1594,17 @@ static int sceUtilityNpSigninShutdownStart() {
 	if (npSigninDialog->GetCommonParam()->result == SCE_UTILITY_DIALOG_RESULT_SUCCESS)
 		npAuthServer = npSigninDialog->GetServer();
 
+		WARN_LOG(Log::sceNet, "Creating P2P Socket");
+		// NOTE: This socket does not register as a virtual socket, but carries all virtual traffic
+		if (g_socketManager.CreateP2PSocket() == INVALID_SOCKET)
+			return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_TOO_MANY_CONN, "P2P Socket could not be created");
+
+		sigServer = InitSigAgent((net::NPAgentType)g_Config.proInfraServerType);
+		if (!sigServer || !sigServer->IsInitialized())
+			return hleLogError(Log::sceNet, SCE_NP_SIGNALING_ERROR_CTX_NOT_FOUND, "UPnP Signaling agent could not be started");
+
+	}
+
 	DeactivateDialog();
 	return hleLogDebug(Log::sceUtility, npSigninDialog->Shutdown());
 }
