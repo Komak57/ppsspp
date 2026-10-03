@@ -66,6 +66,8 @@
 #include "Core/Dialog/PSPHtmlViewer.h"
 // #include "Core/Net/SignalingHandler.h"
 #include "Core/HLE/sceNp.h"
+#include "Core/HLE/SocketManager.h"
+#include "Core/Net/SIGAgent.h"
 
 #define PSP_AV_MODULE_AVCODEC     0
 #define PSP_AV_MODULE_SASCORE     1
