@@ -704,22 +704,13 @@ void __NetInit() {
 	SceNetCalloutThreadHackAddr = __CreateHLELoop(SceNetCalloutThreadCode, "sceNet", "SceNetCalloutThread", "SceNetCalloutThread");
 	SceNetNetintrThreadHackAddr = __CreateHLELoop(SceNetNetintrThreadCode, "sceNet", "SceNetNetintrThread", "SceNetNetintrThread");
 	// For libretro we don't have a better place. On other platforms, we just init/shutdown it with the rest of the emu (NativeInit / NativeShutdown).
-#ifdef __LIBRETRO__
-	__UPnPInit(2000);
-#endif
-	// The UPnP service thread only exists while UPnP is enabled, and a per-game config (or a
-	// libretro core option) can turn it on after startup. Kick it here so discovery is already
-	// done by the time the game binds its first socket, rather than starting on that request.
-	UPnP_Notify();
 
 	__ResetInitNetLib();
 	__NetApctlInit();
 	__NetCallbackInit();
+	__NetUpnpInit();
 
-	apctlUpnpState = NP_SIGNIN_STATUS_NONE;
-	apctlUpnpStateEvent = CoreTiming::RegisterEvent("__UpnpState", __UpnpState);
 	netintrDriverEvent = CoreTiming::RegisterEvent("__NetintrDriver", __NetintrDriver);
-	SceNetUpnpThreadHackAddr = __CreateHLELoop(SceNetUpnpThreadCode, "sceNetUpnp", "SceNetUpnpThread", "SceNetUpnpThread");
 }
 
 void __NetApctlShutdown() {
@@ -739,6 +730,7 @@ void __NetShutdown() {
 	__NetInetShutdown();
 	__NetApctlShutdown();
 	__ResetInitNetLib();
+	__NetUpnpShutdown();
 
 #ifdef __LIBRETRO__
 	__UPnPShutdown();
@@ -2068,7 +2060,25 @@ static int sceNetApctl_lib2_C20A144C(int connIndex, u32 ps3MacAddressPtr) {
 	return sceNetApctlConnect(connIndex);
 }
 
+void __NetUpnpInit() {
+	__UPnPInit(2000);
+	apctlUpnpState = NP_SIGNIN_STATUS_NONE;
+	apctlUpnpStateEvent = CoreTiming::RegisterEvent("__UpnpState", __UpnpState);
+	SceNetUpnpThreadHackAddr = __CreateHLELoop(SceNetUpnpThreadCode, "sceNetUpnp", "SceNetUpnpThread", "SceNetUpnpThread");
+}
 
+void __NetUpnpShutdown() {
+	if (SceNetUpnpThreadID)
+		__KernelStopThread(SceNetUpnpThreadID, 0, 0);
+
+	uPnPInitialized = false;
+	if (SceNetUpnpThreadID != 0) {
+		__KernelStopThread(SceNetUpnpThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "Upnp Thread stopped");
+		__KernelDeleteThread(SceNetUpnpThreadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "Upnp Thread deleted");
+		SceNetUpnpThreadID = 0;
+	}
+	__UPnPShutdown();
+}
 /*
 *   Signaling is made of 3 parts. This is Part 1, which handles the STUN based public/local IP information
 
