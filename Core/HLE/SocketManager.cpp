@@ -523,7 +523,8 @@ void SocketManager::CloseAll() {
 	// The p2p master must go too, or the next game boot trips the recreate
 	// assert and inherits a socket bound under the previous session.
 	if (p2p_sock != INVALID_SOCKET) {
-		closesocket(p2p_sock);
+		::shutdown(p2p_sock, SHUT_RDWR);
+		::close(p2p_sock);
 		p2p_sock = INVALID_SOCKET;
 	}
 }
