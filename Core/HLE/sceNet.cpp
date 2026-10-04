@@ -1872,17 +1872,20 @@ bool __NetApctlConnected() {
 }
 
 static int sceNetApctlGetState(u32 pStateAddr) {
-	//if (!netApctlInited) return hleLogError(Log::sceNet, SCE_NET_APCTL_ERROR_NOT_IN_BSS, "apctl not in bss");
-
+	int ret = 0;
+	ret = hleCall(ThreadManForUser, int, sceKernelCheckThreadStack);
+	if (0x13ef >= ret)
+		return hleLogError(Log::sceNet, 0x80410005, "Thread Stack Error");
+	if (!g_netApctlInited)
+		return hleLogError(Log::sceNet, SCE_NET_APCTL_ERROR_NOT_INITIALIZED, "Not Initialized");
 	// Valid Arguments
-	if (Memory::IsValidAddress(pStateAddr)) {
-		// Return Thread Status
-		Memory::WriteOrException_U32(NetApctl_GetState(), pStateAddr);
-		// Return Success
-		return hleLogDebug(Log::sceNet, 0);
-	}
+	if (!Memory::IsValidAddress(pStateAddr))
+		return hleLogError(Log::sceNet, SCE_NET_APCTL_ERROR_INVALID_IP, "Invalid Argument");
 
-	return hleLogError(Log::sceNet, -1, "apctl invalid arg"); // 0x8002013A or ERROR_NET_WLAN_INVALID_ARG ?
+	// Return Thread Status
+	Memory::WriteOrException_U32(NetApctl_GetState(), pStateAddr);
+
+	return hleLogDebug(Log::sceNet, 0);
 }
 
 // This one logs like a syscall because it's called at the end of some.
