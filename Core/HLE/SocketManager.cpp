@@ -123,11 +123,9 @@ bool InetSocket::is_broadcast_enabled() const {
 }
 
 bool isLocalTarget(const u32 addr) {
-	sockaddr_in local_addr{};
-	getLocalIp(&local_addr);
 	return (addr == htonl(INADDR_LOOPBACK) || 
 				addr == htonl(INADDR_ANY) ||
-				(addr == local_addr.sin_addr.s_addr));
+				(addr == netInfo.localAddr));
 }
 
 // InetSocket now has mutex and condition variable, it can't be reset by {}
@@ -420,6 +418,7 @@ bool SocketManager::P2PRecv() {
 	vpkt.src.host = _from;
 	vpkt.src.host.sin_family = AF_INET;
 	vpkt.header_flags = header.flags;
+	vpkt.dst.virt.addr.s_addr = netInfo.localAddr.load();
 	vpkt.dst.virt.port = header.dest;
 	// Fix for RPCN related packets
 	if (header.dest == 0)
@@ -455,7 +454,7 @@ bool SocketManager::P2PRecv() {
 		ret, ip2str(vpkt.src.virt.addr).c_str(), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport), ntohs(vpkt.dst.virt.port), ntohs(vpkt.dst.virt.vport), FlagsToStr(vpkt.header_flags).c_str(), vpkt.sockType);
 
 	VirtualSockAddr dest{};
-	getLocalIp(&dest.host);
+	dest.host.sin_addr.s_addr = netInfo.localAddr;
 	if (has_vpkt) {
 		// Flip back to game-space: the datagram physically arrived on our real UDP
 		// port (3658), but it's addressed to the game endpoint in the ext header.
@@ -1332,6 +1331,7 @@ int InetSocket::Recv_Reliable(char* buf, int len, int flags, SceNetInetSockaddr*
 
 	sockaddr_in source_addr{};
 	int copy_len = dequeue_stream(buf, len, &source_addr, true);
+	// int copy_len = dequeue_packet(buf, len, &source_addr, true);
 
 	VERBOSE_LOG(Log::sceNet, "%d bytes received from (%s:%u); [tx=%d/rx=%d]",
 		copy_len, inet_ntoa(source_addr.sin_addr), ntohs(source_addr.sin_port),
@@ -2142,6 +2142,8 @@ int RawSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	// Update socket debug metadata
 	src.host = saddr.in;
+	if (src.host.sin_addr.s_addr == INADDR_ANY)
+		src.host.sin_addr.s_addr = netInfo.localAddr.load();
 	if (src.virt.vport == 0)
 		src.virt.vport = htons(user_id.load());
 	// Re-bind p2p sockets
@@ -2272,6 +2274,8 @@ int RdmSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	// Update socket debug metadata
 	src.host = saddr.in;
+	if (src.host.sin_addr.s_addr == INADDR_ANY)
+		src.host.sin_addr.s_addr = netInfo.localAddr.load();
 	if (src.virt.vport == 0)
 		src.virt.vport = htons(user_id.load());
 	// Re-bind p2p sockets
@@ -2503,6 +2507,8 @@ int SeqpacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	// Update socket debug metadata
 	src.host = saddr.in;
+	if (src.host.sin_addr.s_addr == INADDR_ANY)
+		src.host.sin_addr.s_addr = netInfo.localAddr.load();
 	if (src.virt.vport == 0)
 		src.virt.vport = htons(user_id.load());
 	// Re-bind p2p sockets
@@ -2600,6 +2606,8 @@ int DccpSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	// Update socket debug metadata
 	src.host = saddr.in;
+	if (src.host.sin_addr.s_addr == INADDR_ANY)
+		src.host.sin_addr.s_addr = netInfo.localAddr.load();
 	if (src.virt.vport == 0)
 		src.virt.vport = htons(user_id.load());
 	// Re-bind p2p sockets
@@ -2696,6 +2704,8 @@ int ConnDgramSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	// Update socket debug metadata
 	src.host = saddr.in;
+	if (src.host.sin_addr.s_addr == INADDR_ANY)
+		src.host.sin_addr.s_addr = netInfo.localAddr.load();
 	if (src.virt.vport == 0)
 		src.virt.vport = htons(user_id.load());
 	// Re-bind p2p sockets
@@ -2778,6 +2788,8 @@ int PacketSocket::connect(SceNetInetSockaddr* name, int namelen) {
 	// Store connected socket
 	dst.host.sin_family = AF_INET;
 	dst.host.sin_addr.s_addr = _dest->sin_addr.s_addr;
+	if (dst.host.sin_addr.s_addr == INADDR_ANY)
+		dst.host.sin_addr.s_addr = netInfo.localAddr.load();
 	// Flip PSP port/vports
 	dst.virt.port = _dest->sin_port;
 	dst.virt.vport = htons(_vport);
@@ -2869,6 +2881,8 @@ int PacketSocket::bind(SceNetInetSockaddr* name, int namelen) {
 
 	// Update socket debug metadata
 	src.host = saddr.in;
+	if (src.host.sin_addr.s_addr == INADDR_ANY)
+		src.host.sin_addr.s_addr = netInfo.localAddr;
 	if (src.virt.vport == 0)
 		src.virt.vport = htons(user_id.load());
 	// Re-bind p2p sockets
