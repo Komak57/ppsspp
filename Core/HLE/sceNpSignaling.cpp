@@ -245,8 +245,8 @@ InetSocket* CreateSignalingSocket(u16 port, u16 vport, int domain, int type, int
 	}
 
 	// Bind socket for listening
-	getLocalIp(&inetSocket->src.host);
 	inetSocket->src.host.sin_family = AF_INET;
+	inetSocket->src.host.sin_addr.s_addr = netInfo.localAddr.load();
 	inetSocket->src.virt.port = htons(port); // P2P Socket
 	inetSocket->src.virt.vport = htons(vport); // Reachable Socket
 
