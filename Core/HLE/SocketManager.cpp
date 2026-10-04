@@ -1141,6 +1141,17 @@ int InetSocket::Recv_Unrealiable(char* buf, int len, int flags, SceNetInetSockad
 #endif
 		return -1;
 	}
+	
+	// Copy source address (only update sin_addr and sin_port, preserve other fields)
+	if (from && fromlen) {
+		sockaddr_in* from_in = (sockaddr_in*)from;
+		// Preserve caller's structure but update only the address and port
+		from_in->sin_addr = source_addr.sin_addr;
+		from_in->sin_port = source_addr.sin_port;
+		from_in->sin_zero[0] = source_addr.sin_zero[0]; // Copy vport
+		from_in->sin_zero[1] = source_addr.sin_zero[1];
+		*fromlen = sizeof(sockaddr_in);  // Always set to actual size
+	}
 	u16 _vport = (source_addr.sin_zero[0] << 8) | source_addr.sin_zero[1];
 
 	std::string msg = "recv::UNRELIABLE " + ip2str(source_addr.sin_addr.s_addr) + ":" + std::to_string(ntohs(source_addr.sin_port)) +
@@ -1149,7 +1160,7 @@ int InetSocket::Recv_Unrealiable(char* buf, int len, int flags, SceNetInetSockad
 	INFO_HEXLOG(Log::sceNet, msg.c_str(), buf, copy_len, 386);
 
 	WARN_LOG(Log::sceNet, "%d bytes received from virtual (%s:%u);",
-		copy_len, ip2str(dst.virt.addr.s_addr).c_str(), ntohs(dst.virt.port));
+		copy_len, ip2str(source_addr.sin_addr.s_addr).c_str(), ntohs(source_addr.sin_port));
 
 	dbg.recv++;
 	return copy_len;
