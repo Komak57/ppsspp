@@ -439,6 +439,15 @@ public:
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
+		
+		int recv_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set StreamSocket RecvBuf");
+		}
+		int send_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set StreamSocket RecvBuf");
+		}
 	}
 	int send(const char* buf, int len, int flags) override;
 	int recv(char* buf, int len, int flags) override;
@@ -481,6 +490,15 @@ public:
 		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse));
 #endif
 		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
+		
+		int recv_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set DgramSocket RecvBuf");
+		}
+		int send_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set DgramSocket RecvBuf");
+		}
 	}
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
@@ -511,6 +529,15 @@ public:
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
+		
+		int recv_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set RawSocket RecvBuf");
+		}
+		int send_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set RawSocket RecvBuf");
+		}
 	}
 	int send(const char* buf, int len, int flags) override;
 	int recv(char* buf, int len, int flags) override;
@@ -542,6 +569,15 @@ public:
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
+
+		int recv_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set RdmSocket RecvBuf");
+		}
+		int send_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set RdmSocket RecvBuf");
+		}
 	}
 	int send(const char* buf, int len, int flags) override;
 	int recv(char* buf, int len, int flags) override;
@@ -572,6 +608,15 @@ public:
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
+
+		int recv_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set SeqpacketSocket RecvBuf");
+		}
+		int send_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set SeqpacketSocket RecvBuf");
+		}
 	}
 	int send(const char* buf, int len, int flags) override;
 	int recv(char* buf, int len, int flags) override;
@@ -617,6 +662,15 @@ public:
 		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse));
 #endif
 		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
+
+		int recv_buf = 41600; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set DccpSocket RecvBuf");
+		}
+		int send_buf = 9216; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set DccpSocket RecvBuf");
+		}
 	}
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
@@ -656,6 +710,15 @@ public:
 		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse));
 #endif
 		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
+
+		int recv_buf = 124800; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set ConnDgramSocket RecvBuf");
+		}
+		int send_buf = 9216; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set ConnDgramSocket RecvBuf");
+		}
 	}
 	int sendto(const char* buf, int len, int flags, const SceNetInetSockaddr* to, int tolen) override;
 	int recvfrom(char* buf, int len, int flags, SceNetInetSockaddr* from, socklen_t* fromlen) override;
@@ -686,6 +749,15 @@ public:
 		int hostProtocol = convertSocketProtoPSP2Host(protocol);
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
+
+		int send_buf = 16384; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set PacketSocket RecvBuf");
+		}
+		int recv_buf = 16384; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set PacketSocket RecvBuf");
+		}
 	}
 	int send(const char* buf, int len, int flags) override;
 	int recv(char* buf, int len, int flags) override;
