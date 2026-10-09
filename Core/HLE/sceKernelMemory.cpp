@@ -1052,7 +1052,7 @@ static int sceKernelPrintf(const char *formatString) {
 				spec.back() = 'x'; // convert to hex
 
 			if (is64) {
-				if (param % 2 == 0) param++;
+				if (param % 2 != 0) param++;
 				lo = PARAM(param++);
 				hi = PARAM(param++);
 				ll = (static_cast<u64>(hi) << 32) | lo;
