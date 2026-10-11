@@ -139,6 +139,9 @@ static std::vector<NetInetPollOp> g_pollOps; // emu-thread only, no locking need
 static int netInetPollEvent = -1;
 static const int NETINET_POLL_TICK_US = 200;
 
+// Per-socket receive arrival delay.
+static const s64 RX_ARRIVAL_DELAY_US = 50000; // 50 ms (~3 frames)
+
 // Evaluate one poll set: fills revents, returns the number of fds with events.
 // Same hybrid rules as sceNetInetSelect: a P2P-capable socket reports readiness
 // from its virtual queues, not the host fd (which may never signal).
@@ -712,6 +715,7 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 	// But we do need to check any virtual buffers
 
 	std::string _log = "";
+	const s64 nowUs = (s64)CoreTiming::GetGlobalTimeUs();
 	for (int i = SocketManager::MIN_VALID_INET_SOCKET; i < nfds; i++)
 	{
 		// Skip sockets that weren't requested
@@ -728,11 +732,26 @@ int sceNetInetSelect(int nfds, u32 readfdsPtr, u32 writefdsPtr, u32 exceptfdsPtr
 		bool virtRead = false, virtWrite = false;
 		inetSock->select(&virtRead, &virtWrite, nullptr);
 		// Linger supports recv on CloseWait
-		if (readfds && hostSockets[i].wantsRead && (FD_ISSET(hostSockets[i].sock, &rdfds) || virtRead))
+		if (readfds && hostSockets[i].wantsRead)
 		{
-			NetInetFD_SET(i, readfds);
-			ready_count++;
-			_log += "R";
+			const bool rdy = FD_ISSET(hostSockets[i].sock, &rdfds) || virtRead;
+			if (!rdy)
+			{
+				inetSock->readReadySinceUs = -1; // nothing pending: reset the timer
+			}
+			else
+			{
+				if (inetSock->readReadySinceUs < 0)
+					inetSock->readReadySinceUs = nowUs; // first moment data became available
+				if (nowUs - inetSock->readReadySinceUs >= RX_ARRIVAL_DELAY_US)
+				{
+					NetInetFD_SET(i, readfds);
+					ready_count++;
+					_log += "R";
+				}
+				else
+					_log += "d"; // held back, simulating arrival latency
+			}
 		}
 		if (writefds && hostSockets[i].wantsWrite && (FD_ISSET(hostSockets[i].sock, &wrfds) || virtWrite))
 		{

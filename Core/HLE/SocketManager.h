@@ -252,6 +252,7 @@ struct InetSocket {
 	// SO_USECRYPTO_RX|TX (0x1000/0x2000) bits, set via setsockopt. A socket with
 	// these is a permanent P2P socket (CONN_DGRAM). See IsP2P().
 	u16 soCrypto = 0;
+	s64 readReadySinceUs = -1;
 
 	// Packet queue for virtual sockets (SOCK_PACKET and SOCK_CONN_DGRAM)
 	uint32_t rx_seq;		// Next sequential packet

@@ -168,6 +168,9 @@ void InetSocket::clear() {
     
     // Reset pointers
     pending_connections.clear();
+
+    // Reset receive arrival-delay timer
+    readReadySinceUs = -1;
 }
 
 InetSocket* SocketManager::CreateSystemSocket(int* index, int* returned_errno, SocketState state, int domain, int type, int protocol) {
