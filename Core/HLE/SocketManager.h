@@ -441,12 +441,12 @@ public:
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
 		
-		int recv_buf = 8192; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
-			ERROR_LOG(Log::sceNet, "Unable to set StreamSocket RecvBuf");
-		}
 		int send_buf = 8192; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, (const char*)&send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set StreamSocket SendBuf");
+		}
+		int recv_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, (const char*)&recv_buf, sizeof(recv_buf)) < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to set StreamSocket RecvBuf");
 		}
 	}
@@ -492,12 +492,12 @@ public:
 #endif
 		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
 		
-		int recv_buf = 8192; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
-			ERROR_LOG(Log::sceNet, "Unable to set DgramSocket RecvBuf");
-		}
 		int send_buf = 8192; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, (const char*)&send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set DgramSocket SendBuf");
+		}
+		int recv_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, (const char*)&recv_buf, sizeof(recv_buf)) < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to set DgramSocket RecvBuf");
 		}
 	}
@@ -531,12 +531,12 @@ public:
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
 		
-		int recv_buf = 8192; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
-			ERROR_LOG(Log::sceNet, "Unable to set RawSocket RecvBuf");
-		}
 		int send_buf = 8192; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, (const char*)&send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set RawSocket SendBuf");
+		}
+		int recv_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, (const char*)&recv_buf, sizeof(recv_buf)) < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to set RawSocket RecvBuf");
 		}
 	}
@@ -571,12 +571,12 @@ public:
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
 
-		int recv_buf = 8192; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
-			ERROR_LOG(Log::sceNet, "Unable to set RdmSocket RecvBuf");
-		}
 		int send_buf = 8192; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, (const char*)&send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set RdmSocket SendBuf");
+		}
+		int recv_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, (const char*)&recv_buf, sizeof(recv_buf)) < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to set RdmSocket RecvBuf");
 		}
 	}
@@ -610,12 +610,12 @@ public:
 
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
 
-		int recv_buf = 8192; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
-			ERROR_LOG(Log::sceNet, "Unable to set SeqpacketSocket RecvBuf");
-		}
 		int send_buf = 8192; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, (const char*)&send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set SeqpacketSocket SendBuf");
+		}
+		int recv_buf = 8192; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, (const char*)&recv_buf, sizeof(recv_buf)) < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to set SeqpacketSocket RecvBuf");
 		}
 	}
@@ -664,12 +664,12 @@ public:
 #endif
 		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
 
-		int recv_buf = 41600; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
-			ERROR_LOG(Log::sceNet, "Unable to set DccpSocket RecvBuf");
+		int send_buf = 41600; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, (const char*)&send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set DccpSocket SendBuf");
 		}
-		int send_buf = 9216; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+		int recv_buf = 9216; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, (const char*)&recv_buf, sizeof(recv_buf)) < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to set DccpSocket RecvBuf");
 		}
 	}
@@ -712,12 +712,12 @@ public:
 #endif
 		::setsockopt(this->sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
 
-		int recv_buf = 124800; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
-			ERROR_LOG(Log::sceNet, "Unable to set ConnDgramSocket RecvBuf");
+		int send_buf = 124800; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, (const char*)&send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set ConnDgramSocket SendBuf");
 		}
-		int send_buf = 9216; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
+		int recv_buf = 9216; 
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, (const char*)&recv_buf, sizeof(recv_buf)) < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to set ConnDgramSocket RecvBuf");
 		}
 	}
@@ -752,11 +752,11 @@ public:
 		this->sock = ::socket(hostDomain, hostType, hostProtocol);
 
 		int send_buf = 16384; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, &send_buf, sizeof(send_buf)) < 0) {
-			ERROR_LOG(Log::sceNet, "Unable to set PacketSocket RecvBuf");
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_SNDBUF, (const char*)&send_buf, sizeof(send_buf)) < 0) {
+			ERROR_LOG(Log::sceNet, "Unable to set PacketSocket SendBuf");
 		}
 		int recv_buf = 16384; 
-		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, &recv_buf, sizeof(recv_buf)) < 0) {
+		if (::setsockopt(this->sock, SOL_SOCKET, SO_RCVBUF, (const char*)&recv_buf, sizeof(recv_buf)) < 0) {
 			ERROR_LOG(Log::sceNet, "Unable to set PacketSocket RecvBuf");
 		}
 	}
