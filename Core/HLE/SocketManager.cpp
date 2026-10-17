@@ -328,7 +328,7 @@ void SocketManager::RetransmitSweep() {
 					return true;
 				continue;
 			}
-			u64 now_us = (u64)(time_now_d() * BASE_RTO_US);
+			u64 now_us = (u64)(time_now_d() * 1000000);
 			if (now_us - pkt.last_sent_us < BASE_RTO_US)				// too soon
 				continue;
 
@@ -1273,7 +1273,7 @@ int InetSocket::Send_Reliable(const char* buf, int len, int flags, const SceNetI
 	vpkt.dst = dest;
 	// Add timestamp for TTL tracking
 	vpkt.enqueue_time_us = (u64)(time_now_d() * 1000000.0);
-	vpkt.last_sent_us = (u64)(time_now_d() * BASE_RTO_US);
+	vpkt.last_sent_us = (u64)(time_now_d() * 1000000);
 
 	auto send_pkt = vpkt.clone();
 	{
@@ -2729,6 +2729,7 @@ void ConnDgramSocket::select(bool* readReady, bool* writeReady, bool* exceptRead
 
 // ============================================================================
 // TCP Virtual Socket with UPnP transmission capabilities
+// Commonly used in peer-to-peer networking for lossless sequential packets
 // ============================================================================
 bool PacketSocket::ProcessP2P(VirtualPacket&& v, VirtualSockAddr d)     { return Process_Reliable(std::move(v), d); }
 int PacketSocket::send(const char* buf, int len, int flags) {
