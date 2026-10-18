@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <functional>
 #include "Common/StringUtils.h"
+#include "Common/TimeUtil.h"
 #include "Common/Net/SocketCompat.h"
 #include "Common/Data/Text/Parsers.h"
 #include "Common/Serialize/Serializer.h"
@@ -83,40 +85,194 @@ int _sce_pspnet_set_thread_errno(int error, int thread_id = -1) {
 }
 
 // ============================================================================
-// Async-op completion polling. Worker threads (the bridge that provides REAL
-// host blocking/non-blocking semantics until a system-wide solution exists;
-// unlike adhoc's fully-simulated blocking) must never touch kernel state -
-// resuming a thread from a foreign thread mutates the scheduler ready-queue
-// concurrently with the emu thread, corrupting it (GetFast asserts, segfault).
-// Workers store their outcome in the InetSocket (opDone/pendingResult/
-// pendingErrno) and this event - running on the emu thread - applies the errno
-// and resumes the waiting PSP thread.
+// Emu-thread network op scheduler. Replaces the old per-socket std::thread
+// worker: every host socket call now runs ON the emu thread, in issue order,
+// paced by emulated time - so a blocking op can no longer complete on wall-
+// clock time and let sibling PSP threads race ahead of it (the cross-socket
+// reordering seen in PSP2i's load/lobby flow). This mirrors adhoc's fully-
+// simulated blocking (WaitBlockingAdhocSocket) and the sceNetInetPoll tick.
+//
+// A NON-blocking call runs inline (__NetInetRunInline) and never parks. A
+// BLOCKING call parks its PSP thread (WAITTYPE_NET) and registers a NetInetOp;
+// __NetInetOpTick re-attempts it every NETINET_RESUME_POLL_US of EMULATED time
+// (always as a non-blocking host call, so it can never stall the core) until it
+// completes, errors, or is canceled, then resumes the thread - on the emu
+// thread, the only context where touching kernel/scheduler state is safe.
 // ============================================================================
-static int netInetResumeEvent = -1;
 static const int NETINET_RESUME_POLL_US = 200;
 
-static void __NetInetResume(u64 userdata, int cyclesLate) {
-	int socket = (int)userdata;
-	InetSocket *inetSock;
-	if (!g_socketManager.GetInetSocket(socket, &inetSock)) {
-		// Socket was closed with the op still in flight; nothing left to resume
-		// safely (matches previous behavior on close-during-op).
+// Emulated-time charged to a completed inline op (adhoc-matched pacing) vs an
+// inline non-blocking op that found nothing. The old worker model implicitly
+// put EVERY op on the 200us resume grid, which throttled busy-poll loops; the
+// inline path lost that, so a spinning recv/poll loop stormed host syscalls and
+// starved weak hardware (lobby-load and signaling deadlines overran). Charging
+// the idle 200us only on EWOULDBLOCK restores that throttle while keeping data
+// delivery immediate (50us), so packet ordering is unaffected. Tunable: raise
+// NETINET_IDLE_POLL_US if a weak device still storms.
+static const int NETINET_OP_PACING_US = 50;
+static const int NETINET_IDLE_POLL_US = 200;
+
+// Sentinel a park op's run() returns to mean "made progress but not done, keep
+// polling" (e.g. a MSG_WAITALL recv that got a partial chunk). The tick treats
+// it as not-ready without touching socket_errno; the PSP thread never sees it.
+static const int NETINET_OP_PENDING = -2;
+
+struct NetInetOp {
+	SceUID threadID = -1;
+	int socket = -1;
+	std::function<int()> run;  // one non-blocking host attempt; sets socket_errno; returns host retval
+	bool active = false;
+};
+static std::vector<NetInetOp> g_netOps; // emu-thread only, serviced in FIFO (issue) order
+static int netInetOpEvent = -1;
+
+// ---- Per-PSP-thread net op profiler (diagnostic) --------------------------
+// Flip g_netProfile to true and rebuild to log, once per host second, how many
+// inet syscalls each PSP thread issued and the host time they cost. A thread
+// busy-polling recv/select stands out as an outsized call count. Zero cost when
+// false: every accounting site is gated on the flag, so the body is elided.
+static const bool g_netProfile = false;
+struct NetThreadStat { double hostUs = 0.0; u64 calls = 0; };
+static std::unordered_map<SceUID, NetThreadStat> g_netThreadStats;
+static double g_netProfileLastDump = 0.0;
+
+static void __NetProfileAccount(SceUID tid, double hostUs) {
+	NetThreadStat &s = g_netThreadStats[tid];
+	s.hostUs += hostUs;
+	s.calls++;
+	const double now = time_now_d();
+	if (g_netProfileLastDump == 0.0) {
+		g_netProfileLastDump = now;
 		return;
 	}
-	if (!inetSock->opDone.load(std::memory_order_acquire)) {
-		// Worker still running - poll again shortly.
-		CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, userdata);
+	if (now - g_netProfileLastDump < 1.0)
 		return;
+	u64 totalCalls = 0;
+	double totalUs = 0.0;
+	for (auto &kv : g_netThreadStats) { totalCalls += kv.second.calls; totalUs += kv.second.hostUs; }
+	NOTICE_LOG(Log::sceNet, "[netprof] %.2f ms host / %llu inet calls in the last second:", totalUs / 1000.0, (unsigned long long)totalCalls);
+	for (auto &kv : g_netThreadStats) {
+		NOTICE_LOG(Log::sceNet, "[netprof]   %-18s (0x%08x): %8llu calls  %7.2f ms",
+			__KernelGetThreadName(kv.first), kv.first, (unsigned long long)kv.second.calls, kv.second.hostUs / 1000.0);
 	}
-	int tid = inetSock->threadID.exchange(-1);
-	if (tid > 0) {
-		int pspErrno = inetSock->pendingErrno.load();
+	g_netThreadStats.clear();
+	g_netProfileLastDump = now;
+}
+
+// A host result maps to one of these PSP errnos while the op is still pending.
+static inline bool __NetInetWouldBlock(int pspErrno) {
+	return pspErrno == ERROR_INET_EAGAIN || pspErrno == ERROR_INET_EWOULDBLOCK ||
+	       pspErrno == ERROR_INET_EINPROGRESS || pspErrno == ERROR_INET_EALREADY;
+}
+
+static void __NetInetOpTick(u64 userdata, int cyclesLate) {
+	bool anyActive = false;
+	// FIFO: a socket's op completes in the order it was issued, so simultaneous
+	// completions resume their PSP threads in single-core issue order.
+	for (size_t i = 0; i < g_netOps.size(); i++) {
+		NetInetOp &op = g_netOps[i];
+		if (!op.active)
+			continue;
+		if (!HLEKernel::VerifyWait(op.threadID, WAITTYPE_NET, op.threadID)) {
+			// Thread was released some other way (abort/close/delete) - drop it.
+			op.active = false;
+			continue;
+		}
+		const double t0 = g_netProfile ? time_now_d() : 0.0;
+		int retval = op.run();
+		if (g_netProfile) __NetProfileAccount(op.threadID, (time_now_d() - t0) * 1.0e6);
+		if (retval == NETINET_OP_PENDING) {
+			anyActive = true; // progressed (e.g. partial WAITALL) but not done - retry
+			continue;
+		}
+		int pspErrno = (retval < 0) ? convertInetErrnoHost2PSP(socket_errno) : 0;
+		if (retval < 0 && __NetInetWouldBlock(pspErrno)) {
+			anyActive = true; // not ready yet - retry next tick
+			continue;
+		}
+		op.active = false;
+		SceUID tid = op.threadID;
+		InetSocket *owner = nullptr;
+		if (g_socketManager.GetInetSocket(op.socket, &owner))
+			owner->threadID.store(-1);
 		if (pspErrno != 0)
 			_sce_pspnet_set_thread_errno(pspErrno, tid);
-		__KernelResumeThreadFromWait(tid, inetSock->pendingResult.load());
+		__KernelResumeThreadFromWait(tid, retval);
 	}
-	// tid <= 0: the op was aborted (sceNetInetSocketAbort already resumed the
-	// thread with EINTR on the emu thread) - nothing to do.
+	if (anyActive)
+		CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetOpEvent, 0);
+}
+
+// Run a non-blocking op inline on the emu thread (HW-faithful: no park, no
+// thread switch), paced like adhoc. Returns the host retval; sets PSP errno.
+static int __NetInetRunInline(const std::function<int()> &run) {
+	const double t0 = g_netProfile ? time_now_d() : 0.0;
+	int retval = run();
+	if (g_netProfile) __NetProfileAccount(__KernelGetCurThread(), (time_now_d() - t0) * 1.0e6);
+	int pace = NETINET_OP_PACING_US;
+	if (retval < 0) {
+		int pe = convertInetErrnoHost2PSP(socket_errno);
+		_sce_pspnet_set_thread_errno(pe);
+		if (__NetInetWouldBlock(pe))
+			pace = NETINET_IDLE_POLL_US; // nothing there - throttle the spin like the old resume grid
+	}
+	hleEatMicro(pace);
+	// Balance this HLE call's func-desc push with a single guarded pop. The
+	// socket method may itself have logged (and popped); hleNoLog's pop then
+	// no-ops. Using hleNoLog (not hleLogDebug) avoids a spurious "stack
+	// mismatch" line when the inner method already logged.
+	return hleNoLog(retval);
+}
+
+// Park the calling PSP thread and queue a blocking op for the retry tick. The
+// returned value is ignored by the HLE layer; the real result reaches the
+// thread via __KernelResumeThreadFromWait when the op completes.
+static int __NetInetParkOp(InetSocket *inetSock, int socket, std::function<int()> run, const char *reason) {
+	SceUID tid = __KernelGetCurThread();
+	inetSock->threadID = tid;
+	NetInetOp *op = nullptr;
+	for (auto &candidate : g_netOps) {
+		if (!candidate.active) { op = &candidate; break; }
+	}
+	if (!op) {
+		g_netOps.emplace_back();
+		op = &g_netOps.back();
+	}
+	op->threadID = tid;
+	op->socket = socket;
+	op->run = std::move(run);
+	op->active = true;
+	__KernelWaitCurThread(WAITTYPE_NET, tid, 0, 0, false, reason);
+	if (!CoreTiming::IsScheduled(netInetOpEvent))
+		CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetOpEvent, 0);
+	return -1;
+}
+
+// Cancel any queued blocking op on this socket. If resumeThread, wake the
+// parked PSP thread with EINTR; otherwise just drop it (the caller already
+// resumed/aborted the thread itself).
+static void __NetInetCancelOp(int socket, bool resumeThread) {
+	for (auto &op : g_netOps) {
+		if (!op.active || op.socket != socket)
+			continue;
+		op.active = false;
+		if (resumeThread && HLEKernel::VerifyWait(op.threadID, WAITTYPE_NET, op.threadID)) {
+			_sce_pspnet_set_thread_errno(ERROR_INET_EINTR, op.threadID);
+			__KernelResumeThreadFromWait(op.threadID, -1);
+		}
+	}
+}
+
+// Called from __NetInetShutdown (emu thread): release any thread still parked on a net op.
+static void __NetInetOpShutdown() {
+	for (auto &op : g_netOps) {
+		if (op.active && HLEKernel::VerifyWait(op.threadID, WAITTYPE_NET, op.threadID)) {
+			_sce_pspnet_set_thread_errno(ERROR_INET_EINTR, op.threadID);
+			__KernelResumeThreadFromWait(op.threadID, -1);
+		}
+		op.active = false;
+	}
+	g_netOps.clear();
 }
 
 // ============================================================================
@@ -267,12 +423,12 @@ static void __NetInetPollShutdown() {
 }
 
 void __NetInetRegisterEvents() {
-	netInetResumeEvent = CoreTiming::RegisterEvent("__NetInetResume", __NetInetResume);
+	netInetOpEvent = CoreTiming::RegisterEvent("__NetInetOpTick", __NetInetOpTick);
 	netInetPollEvent = CoreTiming::RegisterEvent("__NetInetPollTick", __NetInetPollTick);
 }
 
 void __NetInetRestoreEvents() {
-	CoreTiming::RestoreRegisterEvent(netInetResumeEvent, "__NetInetResume", __NetInetResume);
+	CoreTiming::RestoreRegisterEvent(netInetOpEvent, "__NetInetOpTick", __NetInetOpTick);
 	CoreTiming::RestoreRegisterEvent(netInetPollEvent, "__NetInetPollTick", __NetInetPollTick);
 }
 
@@ -314,6 +470,7 @@ void __NetInetShutdown()
 
 	netInetInited = false;
 	__NetInetPollShutdown();
+	__NetInetOpShutdown();
 	g_socketManager.CloseAll();
 	g_inetLastErrno.clear();
 	{
@@ -850,61 +1007,45 @@ static int sceNetInetRecv(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 		return hleLogError(Log::sceNet, ERROR_INET_EBADF, "Bad socket #%d", socket);
 	}
 
-    // Check if a previous send is still pending.
-	if (inetSock->thread.joinable()) {
-		inetSock->thread.join();
-	}
 	if (inetSock->threadID > 0) {
-		// UpdateErrnoFromHost(__KernelGetCurThread(), , __FUNCTION__);
 		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR);
 		_dbg_assert_msg_(false, "Socket currently running an operation in another thread.")
-		return hleLogError(Log::sceNet, -1, "Socket is busy with previous send operation");
+		return hleLogError(Log::sceNet, -1, "Socket is busy with previous operation");
     }
 
-	int retval = -1;
-	// Get current PSP thread
-	inetSock->threadID = sceKernelGetThreadId();
-	inetSock->opDone.store(false, std::memory_order_relaxed);
+	// The socket self-routes: its recv() picks the virtual (relay) or host path
+	// from the session table. The host read is forced non-blocking (DONTWAIT) so
+	// it can never stall the emu thread; blocking is simulated by the op tick.
+	const bool blocking = !inetSock->nonblocking && !(flags & PSP_NET_INET_MSG_DONTWAIT);
+	const u32 hostFlags = flags | PSP_NET_INET_MSG_DONTWAIT;
+	auto run = [bufPtr, bufLen, hostFlags, inetSock]() -> int {
+		return inetSock->recv((char*)Memory::GetPointerOrException(bufPtr), bufLen, hostFlags);
+	};
+	if (!blocking)
+		return __NetInetRunInline(run);
 
-	if (!inetSock->nonblocking) {
-		if (!(flags & PSP_NET_INET_MSG_DONTWAIT))
-			WARN_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
-		else
-			NOTICE_LOG(Log::sceNet, "%s: BLOCKING recv on socket #%d - flagged as MSG_DONTWAIT", __FUNCTION__, socket);
+	// A BLOCKING MSG_WAITALL recv must return the FULL requested length - that's
+	// how a length-framed reader (PSP2i's HTTPS/ComSize thread) pulls an exact
+	// frame. The single-shot tick would resume on the first partial chunk and
+	// desync the reader (it lands its next length read on image/GIM payload), so
+	// accumulate across tick retries until full, EOF, or a hard error. Each
+	// attempt is non-blocking (DONTWAIT, WAITALL stripped) so it can't stall.
+	if (flags & PSP_NET_INET_MSG_WAITALL) {
+		auto got = std::make_shared<int>(0);
+		const u32 pollFlags = (flags & ~PSP_NET_INET_MSG_WAITALL) | PSP_NET_INET_MSG_DONTWAIT;
+		auto waitall = [bufPtr, bufLen, pollFlags, inetSock, got]() -> int {
+			int r = inetSock->recv((char*)Memory::GetPointerOrException(bufPtr) + *got, (int)bufLen - *got, pollFlags);
+			if (r > 0) {
+				*got += r;
+				return (*got >= (int)bufLen) ? *got : NETINET_OP_PENDING; // full, else need more
+			}
+			if (r == 0)
+				return *got; // peer closed: return what we have (0 = clean EOF)
+			return r; // <0: EWOULDBLOCK keeps waiting (real errno), hard error completes
+		};
+		return __NetInetParkOp(inetSock, socket, std::move(waitall), "sceNetInetRecv");
 	}
-	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetRecv");
-	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
-
-	// Run the actual sendRequest on the host asynchronously
-	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval]() mutable
-	{
-		// The socket self-routes: its recv() picks the virtual (relay) or host
-		// path from the session table, without sceNetInet knowing about peers.
-		retval = inetSock->recv((char*)Memory::GetPointerOrException(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
-		if (inetSock->abortPending.exchange(false)) {
-			inetSock->opDone.store(true, std::memory_order_release);
-			return;
-		}
-		int pspErrno = 0;
-		if (retval < 0) {
-			pspErrno = convertInetErrnoHost2PSP(socket_errno);
-			if (pspErrno == ERROR_INET_EAGAIN)
-				DEBUG_LOG(Log::sceNet, "%d=sceNetInetRecv(%i, %08x, %i, %i): EAGAIN", retval, socket, bufPtr, bufLen, flags);
-			else
-				ERROR_LOG(Log::sceNet, "%d=sceNetInetRecv(%i, %08x, %i, %i): Error: %d", retval, socket, bufPtr, bufLen, flags, socket_errno);
-		} else {
-			std::string datahex;
-			DataToHexString(10, 0, Memory::GetPointerOrException(bufPtr), retval, &datahex);
-			VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", retval, datahex.c_str());
-		}
-
-		// Hand the outcome to the emu thread - no kernel calls from here
-		inetSock->pendingErrno.store(pspErrno);
-		inetSock->pendingResult.store(retval);
-		inetSock->opDone.store(true, std::memory_order_release);
-	});
-
-	return retval;
+	return __NetInetParkOp(inetSock, socket, std::move(run), "sceNetInetRecv");
 }
 
 static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
@@ -918,63 +1059,33 @@ static int sceNetInetSend(int socket, u32 bufPtr, u32 bufLen, u32 flags)
 		return hleLogError(Log::sceNet, ERROR_INET_EBADF, "Bad socket #%d", socket);
 	}
 
-	std::string datahex;
-	DataToHexString(10, 0, Memory::GetPointerOrException(bufPtr), bufLen, &datahex);
-	VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", bufLen, datahex.c_str());
-
-    // Check if a previous send is still pending.
-	if (inetSock->thread.joinable()) {
-		inetSock->thread.join();
+	// Only build the hex dump when VERBOSE sceNet logging is actually on - this
+	// runs on every send on the emu thread, so unconditionally formatting the
+	// whole buffer is wasted work (and host CPU) during normal play.
+	if (GenericLogEnabled(Log::sceNet, LogLevel::LVERBOSE)) {
+		std::string datahex;
+		DataToHexString(10, 0, Memory::GetPointerOrException(bufPtr), bufLen, &datahex);
+		VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", bufLen, datahex.c_str());
 	}
+
 	if (inetSock->threadID > 0) {
-		// UpdateErrnoFromHost(__KernelGetCurThread(), , __FUNCTION__);
 		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR);
 		_dbg_assert_msg_(false, "Socket currently running an operation in another thread.")
-		return hleLogError(Log::sceNet, -1, "Socket is busy with previous send operation");
+		return hleLogError(Log::sceNet, -1, "Socket is busy with previous operation");
     }
 
-	int retval = -1;
-	// Get current PSP thread
-	inetSock->threadID = sceKernelGetThreadId();
-	inetSock->opDone.store(false, std::memory_order_relaxed);
-
-	if (!inetSock->nonblocking) {
-		if (!(flags & PSP_NET_INET_MSG_DONTWAIT))
-			WARN_LOG(Log::sceNet, "%s: BLOCKING send on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
-		else
-			NOTICE_LOG(Log::sceNet, "%s: BLOCKING send on socket #%d - flagged as MSG_DONTWAIT", __FUNCTION__, socket);
-	}
-	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
-	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetSend");
-	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
-
-	// Run the actual sendRequest on the host asynchronously
-	inetSock->thread = std::thread([socket, inetSock, bufPtr, bufLen, flags, retval]() mutable
-	{
-		// The socket self-routes via its send() (virtual relay vs host), and now
-		// carries the REAL caller flags into Send_Reliable - the old path forced
-		// PSH|TCP and dropped them.
-		retval = inetSock->send((char*)Memory::GetPointerOrException(bufPtr), bufLen, flags); // flgs | MSG_NOSIGNAL
-		if (inetSock->abortPending.exchange(false)) {
-			inetSock->opDone.store(true, std::memory_order_release);
-			return;
-		}
-		//int retval = send(inetSock->sock, (char*)Memory::GetPointerOrException(bufPtr), bufLen, flgs | MSG_NOSIGNAL);
-		int pspErrno = 0;
-		if (retval < 0) {
-			pspErrno = convertInetErrnoHost2PSP(socket_errno);
-			if (pspErrno == ERROR_INET_EAGAIN)
-				DEBUG_LOG(Log::sceNet, "%d=sceNetInetSend(%i, %08x, %i, %i): EAGAIN", retval, socket, bufPtr, bufLen, flags);
-			else
-				ERROR_LOG(Log::sceNet, "%d=sceNetInetSend(%i, %08x, %i, %i) Error: %08x", retval, socket, bufPtr, bufLen, flags, socket_errno);
-		}
-		// Hand the outcome to the emu thread - no kernel calls from here
-		inetSock->pendingErrno.store(pspErrno);
-		inetSock->pendingResult.store(retval);
-		inetSock->opDone.store(true, std::memory_order_release);
-	});
-
-	return retval;
+	// The socket self-routes via its send() (virtual relay vs host) and carries
+	// the REAL caller flags into Send_Reliable. The host write is forced non-
+	// blocking (DONTWAIT) so a full send buffer can never stall the emu thread;
+	// a blocking send is retried on the op tick.
+	const bool blocking = !inetSock->nonblocking && !(flags & PSP_NET_INET_MSG_DONTWAIT);
+	const u32 hostFlags = flags | PSP_NET_INET_MSG_DONTWAIT;
+	auto run = [bufPtr, bufLen, hostFlags, inetSock]() -> int {
+		return inetSock->send((char*)Memory::GetPointerOrException(bufPtr), bufLen, hostFlags);
+	};
+	if (!blocking)
+		return __NetInetRunInline(run);
+	return __NetInetParkOp(inetSock, socket, std::move(run), "sceNetInetSend");
 }
 
 int sceNetInetSocket(int domain, int type, int protocol)
@@ -1136,61 +1247,48 @@ static int sceNetInetConnect(int socket, u32 sockAddrPtr, int sockAddrLen)
 
 	SceNetInetSockaddr *dst = (SceNetInetSockaddr *)Memory::GetPointerOrException(sockAddrPtr);
 
-    // Check if a previous send is still pending.
-	if (inetSock->thread.joinable()) {
-		inetSock->thread.join();
-	}
 	if (inetSock->threadID > 0) {
-		// UpdateErrnoFromHost(__KernelGetCurThread(), , __FUNCTION__);
 		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR);
 		_dbg_assert_msg_(false, "Socket currently running an operation in another thread.")
-		return hleLogError(Log::sceNet, -1, "Socket is busy with previous send operation");
+		return hleLogError(Log::sceNet, -1, "Socket is busy with previous operation");
     }
 
-	int retval = -1;
-	// Get current PSP thread
-	inetSock->threadID = sceKernelGetThreadId();
-	inetSock->opDone.store(false, std::memory_order_relaxed);
+	// Copy the sockaddr by value: a parked blocking connect re-polls on the op
+	// tick after this frame, and connect() may write back into it (sa_len).
+	SceNetInetSockaddr addrCopy = *dst;
+	const bool blocking = !inetSock->nonblocking;
 
-	// A BLOCKING socket's worker can stall until the handshake resolves
-	if (!inetSock->nonblocking)
-		WARN_LOG(Log::sceNet, "%s: BLOCKING connect on socket #%d", __FUNCTION__, socket);
-	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
-	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetConnect");
-	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
+	// The socket self-routes: its connect() runs the virtual TCP-over-UDP
+	// handshake for a peer destination, or a real host connect otherwise. Both
+	// are poll-safe - re-calling while in progress returns EINPROGRESS/EALREADY,
+	// and EISCONN once it lands - so the retry tick can drive completion.
+	auto run = [addrCopy, sockAddrLen, inetSock]() mutable -> int {
+		int r = inetSock->connect(&addrCopy, sockAddrLen);
+		if (r >= 0)
+			return r;
+		// A re-polled connect reports EISCONN once it lands - that's success.
+		// Return 0 without clearing socket_errno: callers only read it when the
+		// result is < 0, so the stale value is never consumed (and socket_errno
+		// is WSAGetLastError() on Windows - not assignable).
+		if (convertInetErrnoHost2PSP(socket_errno) == ERROR_INET_EISCONN)
+			return 0;
+		return r;
+	};
 
-	// Run the actual sendRequest on the host asynchronously
-	inetSock->thread = std::thread([retval, socket, inetSock, dst, sockAddrLen]() mutable
-	{
-		const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(dst);
-		// The socket self-routes: its connect() runs the virtual TCP-over-UDP
-		// handshake for a peer destination, or a real host connect otherwise.
-		retval = inetSock->connect(dst, sockAddrLen);
-		if (inetSock->abortPending.exchange(false)) {
-			inetSock->opDone.store(true, std::memory_order_release);
-			return;
+	if (!blocking) {
+		int r = run();
+		if (r < 0) {
+			int pe = convertInetErrnoHost2PSP(socket_errno);
+			if (pe == ERROR_INET_EAGAIN)
+				pe = ERROR_INET_EINPROGRESS; // POSIX/Windows parity for non-blocking connect
+			_sce_pspnet_set_thread_errno(pe);
 		}
-		int pspErrno = 0;
-		if (retval < 0) {
-			pspErrno = convertInetErrnoHost2PSP(socket_errno);
-			// Windows compatibility adjustment
-			if (pspErrno == ERROR_INET_EAGAIN)
-				pspErrno = ERROR_INET_EINPROGRESS;
-			if (pspErrno == ERROR_INET_EINPROGRESS)
-				INFO_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i): EINPROGRESS", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
-			else
-				ERROR_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i) %s", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen, convertInetErrno2str(pspErrno));
-		} else
-			INFO_LOG(Log::sceNet, "%d=sceNetInetConnect(%i, %s:%u, %i)", retval, socket, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), sockAddrLen);
+		hleEatMicro(50);
+		return hleNoLog(r);
+	}
 
-		// Hand the outcome to the emu thread - no kernel calls from here
-		inetSock->pendingErrno.store(pspErrno);
-		inetSock->pendingResult.store(retval);
-		inetSock->opDone.store(true, std::memory_order_release);
-	});
-
-	// hleLog will throw a stack mismatch here
-	return retval;
+	WARN_LOG(Log::sceNet, "%s: BLOCKING connect on socket #%d", __FUNCTION__, socket);
+	return __NetInetParkOp(inetSock, socket, std::move(run), "sceNetInetConnect");
 }
 
 static int sceNetInetListen(int socket, int backlog)
@@ -1373,6 +1471,8 @@ static int sceNetInetSocketAbort(int socket)
 		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR, tid);
 		__KernelResumeThreadFromWait(tid, -1);
 	}
+	// Drop the queued op entry (the parked thread was just resumed above).
+	__NetInetCancelOp(socket, false);
 
 	// FIXME: either using shutdown/close or select? probably using select if blocking mode is being simulated with non-blocking
 	// int retval = inetSock->shutdown(SHUT_RDWR);
@@ -1394,8 +1494,9 @@ int sceNetInetClose(int socket)
 		_sce_pspnet_set_thread_errno(ERROR_INET_EBADF);
 		return hleLogError(Log::sceNet, -1, "Bad socket #%d", socket);
 	}
-	if (inetSock->thread.joinable())
-		inetSock->thread.join();
+	// Wake (with EINTR) any PSP thread still parked on a blocking op for this
+	// socket before it goes away, so it can't hang waiting for a dead socket.
+	__NetInetCancelOp(socket, true);
 	g_socketManager.Close(inetSock);
 	return hleLogInfo(Log::sceNet, 0);
 }
@@ -1418,6 +1519,7 @@ static int sceNetInetCloseWithRST(int socket)
 	sl.l_linger = 0; // timeout interval in seconds
 	inetSock->setsockopt(SOL_SOCKET, SO_LINGER, (const char *)&sl, sizeof(sl));
 	// setsockopt(inetSock->sock, SOL_SOCKET, SO_LINGER, (const char*)&sl, sizeof(sl));
+	__NetInetCancelOp(socket, true);
 	g_socketManager.Close(inetSock);
 	return hleLogInfo(Log::sceNet, 0);
 }
@@ -1433,77 +1535,26 @@ static int sceNetInetRecvfrom(int socket, u32 bufferPtr, int len, int flags, u32
 		return hleLogError(Log::sceNet, -1, "Bad socket #%d", socket);
 	}
 
-    // Check if a previous send is still pending.
-	if (inetSock->thread.joinable()) {
-		inetSock->thread.join();
-	}
 	if (inetSock->threadID > 0) {
-		// UpdateErrnoFromHost(__KernelGetCurThread(), , __FUNCTION__);
 		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR);
 		_dbg_assert_msg_(false, "Socket currently running an operation in another thread.")
-		return hleLogError(Log::sceNet, -1, "Socket is busy with previous send operation");
+		return hleLogError(Log::sceNet, -1, "Socket is busy with previous operation");
     }
 
-	int retval = 0;
-	inetSock->threadID = __KernelGetCurThread();
-	inetSock->opDone.store(false, std::memory_order_relaxed);
-
-	if (!inetSock->nonblocking && !(flags & PSP_NET_INET_MSG_DONTWAIT)) {
-		WARN_LOG(Log::sceNet, "%s: BLOCKING recvfrom on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
-	}
-	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
-	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetRecvfrom");
-	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
-
-	// Run the actual sendRequest on the host asynchronously. retval is captured BY
-	// VALUE - the real result reaches the PSP thread via the resume value; writing
-	// through a reference into this (already dead) stack frame would smash the stack.
-	inetSock->thread = std::thread([retval, socket, inetSock, bufferPtr, len, flags, fromPtr, fromlenPtr]() mutable
-	{
+	// The socket self-routes: its recvfrom() drains the virtual relay queue when
+	// bound to the signaling port, else the host recvfrom. Forced non-blocking
+	// (DONTWAIT) so it can never stall the emu thread. The from/fromlen pointers
+	// live in the (parked, therefore frozen) caller stack, so they stay valid.
+	const bool blocking = !inetSock->nonblocking && !(flags & PSP_NET_INET_MSG_DONTWAIT);
+	const u32 hostFlags = flags | PSP_NET_INET_MSG_DONTWAIT;
+	auto run = [bufferPtr, len, hostFlags, fromPtr, fromlenPtr, inetSock]() -> int {
 		SceNetInetSockaddr *src = (SceNetInetSockaddr *)Memory::GetCharPointer(fromPtr);
 		socklen_t *srclen = (socklen_t *)Memory::GetCharPointer(fromlenPtr);
-
-		// The socket self-routes: its recvfrom() drains the virtual relay queue
-		// when bound to the signaling port, else the host recvfrom.
-		retval = inetSock->recvfrom((char *)Memory::GetPointerOrException(bufferPtr), len, flags, src, srclen);
-		if (inetSock->abortPending.exchange(false)) {
-			inetSock->opDone.store(true, std::memory_order_release);
-			return;
-		}
-		// retval = recvfrom(inetSock->sock, (char*)Memory::GetPointerOrException(bufferPtr), len, flgs | MSG_NOSIGNAL, (struct sockaddr*)&saddr.addr, srclen);
-		int pspErrno = 0;
-		if (retval < 0)
-		{
-			pspErrno = convertInetErrnoHost2PSP(socket_errno);
-			if (pspErrno == ERROR_INET_EAGAIN)
-				DEBUG_LOG(Log::sceNet, "%d=sceNetInetRecvfrom(%i, %08x, %i, %i, %08x, %i): EAGAIN", retval, socket, bufferPtr, len, flags, fromPtr, (int)*srclen);
-			else
-				DEBUG_LOG(Log::sceNet, "%d=sceNetInetRecvfrom(%i, %08x, %i, %i, %08x, %i): Error: %08x", retval, socket, bufferPtr, len, flags, fromPtr, (int)*srclen, socket_errno);
-		} else {
-			std::string datahex;
-			DataToHexString(0, 0, Memory::GetPointerOrException(bufferPtr), retval, &datahex);
-			VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", retval, datahex.c_str());
-		}
-
-		// Discard if it came from APIPA address (ie. self-received broadcasts from 169.254.x.x when broadcasting to INADDR_BROADCAST on Windows) on Untold Legends The Warrior's Code / Twisted Metal Head On
-		/*if (isAPIPA(saddr.in.sin_addr.s_addr)) {
-			inetLastErrno = EAGAIN;
-			retval = -1;
-			DEBUG_LOG(Log::sceNet, "RecvFrom: Ignoring Address = %s", ip2str(saddr.in.sin_addr).c_str());
-			hleLogDebug(Log::sceNet, retval, "faked errno = %d", inetLastErrno);
-			return hleDelayResult(retval, "workaround until blocking-socket", 500);
-		}*/
-
-		// Hand the outcome to the emu thread - no kernel calls from here
-		inetSock->pendingErrno.store(pspErrno);
-		inetSock->pendingResult.store(retval);
-		inetSock->opDone.store(true, std::memory_order_release);
-	});
-
-	// Using hleDelayResult as a workaround for games that need blocking-socket to be implemented (ie. Coded Arms Contagion)
-	// return hleDelayResult(hleLogDebug(Log::sceNet, retval,
-	// 	"RecvFrom: Address = %s, Port = %d", ip2str(saddr.in.sin_addr).c_str(), ntohs(saddr.in.sin_port)), "workaround until blocking-socket", 500);
-	return retval;
+		return inetSock->recvfrom((char *)Memory::GetPointerOrException(bufferPtr), len, hostFlags, src, srclen);
+	};
+	if (!blocking)
+		return __NetInetRunInline(run);
+	return __NetInetParkOp(inetSock, socket, std::move(run), "sceNetInetRecvfrom");
 }
 
 static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 toPtr, int tolen)
@@ -1517,74 +1568,25 @@ static int sceNetInetSendto(int socket, u32 bufferPtr, int len, int flags, u32 t
 		return hleLogError(Log::sceNet, -1, "Bad socket #%d", socket);
 	}
 
-    // Check if a previous send is still pending.
-	if (inetSock->thread.joinable()) {
-		inetSock->thread.join();
-	}
 	if (inetSock->threadID > 0) {
-		// UpdateErrnoFromHost(__KernelGetCurThread(), , __FUNCTION__);
 		_sce_pspnet_set_thread_errno(ERROR_INET_EINTR);
 		_dbg_assert_msg_(false, "Socket currently running an operation in another thread.")
-		return hleLogError(Log::sceNet, -1, "Socket is busy with previous send operation");
+		return hleLogError(Log::sceNet, -1, "Socket is busy with previous operation");
     }
 
-	int retval = 0;
-	inetSock->threadID = __KernelGetCurThread();
-	inetSock->opDone.store(false, std::memory_order_relaxed);
-
-	if (!inetSock->nonblocking && !(flags & PSP_NET_INET_MSG_DONTWAIT)) {
-		WARN_LOG(Log::sceNet, "%s: BLOCKING sendto on socket #%d - worker may stall until data arrives", __FUNCTION__, socket);
-	}
-	// Wait first, then poll for completion on the emu thread (see sceNetInetRecv)
-	__KernelWaitCurThread(WAITTYPE_NET, inetSock->threadID, 0, 0, false, "sceNetInetSendto");
-	CoreTiming::ScheduleEvent(usToCycles(NETINET_RESUME_POLL_US), netInetResumeEvent, (u64)socket);
-
-	// Run the actual sendRequest on the host asynchronously. retval captured BY
-	// VALUE - the result travels via the resume value (see sceNetInetRecvfrom).
-	inetSock->thread = std::thread([retval, socket, inetSock, bufferPtr, len, flags, toPtr, tolen]() mutable
-	{
+	// The socket self-routes: its sendto() relays to a peer destination (or the
+	// signaling port) via Send_Reliable/Unreliable, else a real host sendto.
+	// Forced non-blocking (DONTWAIT) so it can never stall the emu thread; the
+	// to-address lives in the (parked, frozen) caller stack and stays valid.
+	const bool blocking = !inetSock->nonblocking && !(flags & PSP_NET_INET_MSG_DONTWAIT);
+	const u32 hostFlags = flags | PSP_NET_INET_MSG_DONTWAIT;
+	auto run = [bufferPtr, len, hostFlags, toPtr, tolen, inetSock]() -> int {
 		SceNetInetSockaddr *dst = (SceNetInetSockaddr *)Memory::GetCharPointer(toPtr);
-		SockAddrIN4 saddr{};
-		int dstlen = std::min(tolen > 0 ? tolen : 0, static_cast<int>(sizeof(saddr)));
-		if (dst) {
-			saddr.addr.sa_family = dst->sa_family;
-			memcpy(saddr.addr.sa_data, dst->sa_data, sizeof(dst->sa_data));
-		}
-		const sockaddr_in* _dest = reinterpret_cast<const sockaddr_in*>(&saddr.addr);
-		// Same sin_zero decode as Connect_Reliable: [0]=MSB, [1]=LSB -> host order, no swap needed.
-		const u16 dest_vport = (saddr.in.sin_zero[0] << 8) | saddr.in.sin_zero[1];
-
-		INFO_LOG(Log::sceNet, "sendto(%i, %s:%u|%u) at %08x", len, ip2str(_dest->sin_addr).c_str(), ntohs(_dest->sin_port), dest_vport, currentMIPS->pc);
-		
-		std::string datahex;
-		DataToHexString(0, 0, Memory::GetPointerOrException(bufferPtr), len, &datahex);
-		VERBOSE_LOG(Log::sceNet, "Data Dump (%d bytes):\n%s", len, datahex.c_str());
-
-		// The socket self-routes: its sendto() relays to a peer destination (or the
-		// signaling port) via Send_Reliable/Unreliable, else a real host sendto.
-		int retval = inetSock->sendto((char *)Memory::GetPointerOrException(bufferPtr), len, flags, dst, tolen);
-
-		if (inetSock->abortPending.exchange(false)) {
-			inetSock->opDone.store(true, std::memory_order_release);
-			return;
-		}
-		int pspErrno = 0;
-		if (retval < 0)
-		{
-			pspErrno = convertInetErrnoHost2PSP(socket_errno);
-			if (pspErrno == ERROR_INET_EAGAIN)
-				DEBUG_LOG(Log::sceNet, "%d=sceNetInetSendto(%i, %08x, %i, %i, %08x, %i): EAGAIN", retval, socket, bufferPtr, len, flags, toPtr, tolen);
-			else
-				ERROR_LOG(Log::sceNet, "%d=sceNetInetSendto(%i, %08x, %i, %i, %08x, %i): Error: %08x", retval, socket, bufferPtr, len, flags, toPtr, tolen, socket_errno);
-		}
-
-		// Hand the outcome to the emu thread - no kernel calls from here
-		inetSock->pendingErrno.store(pspErrno);
-		inetSock->pendingResult.store(retval);
-		inetSock->opDone.store(true, std::memory_order_release);
-	});
-
-	return retval;
+		return inetSock->sendto((char *)Memory::GetPointerOrException(bufferPtr), len, hostFlags, dst, tolen);
+	};
+	if (!blocking)
+		return __NetInetRunInline(run);
+	return __NetInetParkOp(inetSock, socket, std::move(run), "sceNetInetSendto");
 }
 
 // Similar to POSIX's sendmsg or Winsock2's WSASendMsg? Are their packets compatible one another?
