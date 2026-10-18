@@ -767,17 +767,26 @@ namespace np
 
 		if (auto msg = mi->msg())
 		{
-			NOTICE_LOG(Log::sceNet, " - Message Len: %d", msg->size());
-			NOTICE_HEXLOG(Log::sceNet, " - Message:", msg->Data(), msg->size(), msg->size());
-			sce_mi->msgLen = msg->size();
-			if (sce_mi->msgLen > 0) {
-				//auto* ptr_msg_data = static_cast<u8*>(edata.allocate<void>(msg->size(), sce_mi->msg));
-				u32 alloc = msg->size();
+			const u32 rawLen = msg->size();
+			// PSP2i's command-stream (ComSize) parser requires 4-aligned frames -
+			// every working room message is a multiple of 4. RPCN can hand us a
+			// length that isn't (e.g. 250), which skews the parser by 2 bytes and
+			// desyncs it onto later payload (it reads a content-length-framed GIM
+			// as a length -> RCV_LENGTH_ERROR 0x2E47494D ".GIM"). Pad the frame up
+			// to a 4-byte boundary, zero-filling, so the length the game sees stays
+			// aligned. Already-aligned messages are unchanged.
+			const u32 paddedLen = (rawLen + 3u) & ~3u;
+			NOTICE_LOG(Log::sceNet, " - Message Len: %d (aligned to %d)", rawLen, paddedLen);
+			NOTICE_HEXLOG(Log::sceNet, " - Message:", msg->Data(), rawLen, rawLen);
+			sce_mi->msgLen = paddedLen;
+			if (paddedLen > 0) {
+				//auto* ptr_msg_data = static_cast<u8*>(edata.allocate<void>(paddedLen, sce_mi->msg));
+				u32 alloc = paddedLen;
 				sce_mi->msg = PSPPointer<u8>::Create(edata.Alloc(alloc));
-				for (u32 i = 0; i < msg->size(); i++)
-				{
+				for (u32 i = 0; i < rawLen; i++)
 					sce_mi->msg[i] = msg->Get(i);
-				}
+				for (u32 i = rawLen; i < paddedLen; i++)
+					sce_mi->msg[i] = 0; // zero-fill the alignment padding
 			}
 		}
 	}
