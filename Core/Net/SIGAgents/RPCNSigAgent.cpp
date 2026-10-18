@@ -317,26 +317,24 @@ namespace net {
                 // hleCall(ThreadManForUser, int, sceKernelDelayThread, 100000);
                 continue;
             }
+            int pkt_size = sizeof(SignalingPacket);
+            for (int i = 0; i + pkt_size <= n; i+= pkt_size) {
+                std::vector<u8> data;
+                std::copy(std::begin(buf) + i, std::begin(buf) + std::min(n - i, i + pkt_size), std::back_inserter(data));
 
-            // UPDATE: vport was moved to SocketManager, and stripped in recvfrom
-            //const u16 vport_le = *reinterpret_cast<const u16_le*>(&buf[0]);
-            // const u8 subset = buf[0];
-            // const auto data_size = n - VPORT_0_HEADER_SIZE;
-            std::vector<u8> data;
-            std::copy(std::begin(buf), std::begin(buf) + n, std::back_inserter(data));
+                SignalingMessage msg;
+                SockAddrIN4 saddr{};
+                memcpy(saddr.addr.sa_data, src.sa_data, sizeof(src.sa_data));
+                msg.src_addr = saddr.in.sin_addr.s_addr;
+                msg.src_port = ntohs(saddr.in.sin_port);
+                msg.data = std::move(data);
+                auto header = "recv_loop::SIGN " + ip2str(saddr.in.sin_addr) + ":" + std::to_string(SCE_INTERNAL_PORT) + "{1}";
+                DEBUG_HEXLOG(Log::Signaling, header.c_str(), reinterpret_cast<const char*>(buf), n, 386);
 
-            SignalingMessage msg;
-            SockAddrIN4 saddr{};
-            memcpy(saddr.addr.sa_data, src.sa_data, sizeof(src.sa_data));
-            msg.src_addr = saddr.in.sin_addr.s_addr;
-            msg.src_port = ntohs(saddr.in.sin_port);
-            msg.data = std::move(data);
-            auto header = "recv_loop::SIGN " + ip2str(saddr.in.sin_addr) + ":" + std::to_string(SCE_INTERNAL_PORT) + "{1}";
-            DEBUG_HEXLOG(Log::Signaling, header.c_str(), reinterpret_cast<const char*>(buf), n, 386);
-
-            {
-                std::lock_guard lock(sign_mtx_);
-                sign_msgs.push_back(std::move(msg));
+                {
+                    std::lock_guard lock(sign_mtx_);
+                    sign_msgs.push_back(std::move(msg));
+                }
             }
             sign_msg_cv.notify_all();
             // Wake the Main thread immediately (replaces the fragile resume-from-delay hack).
