@@ -55,6 +55,8 @@ private:
 	void CreateControlsSettings(UI::ViewGroup *tools);
 	void CreateAudioSettings(UI::ViewGroup *audioSettings);
 	void CreateNetworkingSettings(UI::ViewGroup *networkingSettings);
+	void CreateAdhocSettings(UI::ViewGroup *adhocSettings);
+	void CreateInfraSettings(UI::ViewGroup *infraSettings);
 	void CreateToolsSettings(UI::ViewGroup *tools);
 	void CreateSystemSettings(UI::ViewGroup *systemSettings);
 	void CreateVRSettings(UI::ViewGroup *vrSettings);

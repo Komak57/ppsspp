@@ -66,6 +66,7 @@
 #include "UI/BackgroundAudio.h"
 #include "UI/MiscViews.h"
 #include "UI/AdhocServerScreen.h"
+#include "UI/InfraServerScreen.h"
 
 #include "Common/File/FileUtil.h"
 #include "Common/File/AndroidContentURI.h"
@@ -236,11 +237,40 @@ void GameSettingsScreen::CreateTabs() {
 		CreateAudioSettings(parent);
 	});
 
-	AddTab("GameSettingsNetworking", ms->T("Networking"), ImageID("I_WIFI"), [this](UI::LinearLayout *parent) {
-		auto ms = GetI18NCategory(I18NCat::MAINSETTINGS);
-		parent->Add(new PaneTitleBar(gamePath_, ms->T("Networking"), "network"));
-		CreateNetworkingSettings(parent);
-	});
+	auto networking = AddTabGroup("GameSettingsNetworking", ms->T("Networking"), ImageID("I_WIFI"), [this](UI::LinearLayout *parent) {
+        auto ms = GetI18NCategory(I18NCat::MAINSETTINGS);
+        parent->Add(new PaneTitleBar(gamePath_, ms->T("Networking"), "network"));
+        CreateNetworkingSettings(parent);
+    });
+
+	networking.AddTab("GameSettingsNetworkingAdhoc", ms->T("Ad-hoc"), ImageID("I_ARROW_RIGHT"), [this](UI::LinearLayout *parent) {
+			auto ms = GetI18NCategory(I18NCat::MAINSETTINGS);
+			parent->Add(new PaneTitleBar(gamePath_, ms->T("Networking / Ad-hoc"), "adhoc"));
+			CreateAdhocSettings(parent);
+		});
+
+	networking.AddTab("GameSettingsNetworkingInfrastructure", ms->T("Infrastructure"), ImageID("I_ARROW_RIGHT"), [this](UI::LinearLayout *parent) {
+			auto ms = GetI18NCategory(I18NCat::MAINSETTINGS);
+			parent->Add(new PaneTitleBar(gamePath_, ms->T("Networking / Infrastructure"), "infrastructure"));
+			CreateInfraSettings(parent);
+		});
+	// AddTab("GameSettingsNetworking", ms->T("Networking"), ImageID("I_WIFI"), [this](UI::LinearLayout *parent) {
+	// 	auto ms = GetI18NCategory(I18NCat::MAINSETTINGS);
+	// 	parent->Add(new PaneTitleBar(gamePath_, ms->T("Networking"), "network"));
+	// 	CreateNetworkingSettings(parent);
+	// });
+
+	// AddTab("GameSettingsNetworking", ms->T(">Ad-hoc"), ImageID(""), [this](UI::LinearLayout *parent) {
+	// 	auto ms = GetI18NCategory(I18NCat::MAINSETTINGS);
+	// 	parent->Add(new PaneTitleBar(gamePath_, ms->T("Networking / Ad-hoc"), "adhoc"));
+	// 	CreateAdhocSettings(parent);
+	// });
+
+	// AddTab("GameSettingsNetworking", ms->T(">Infrastructure"), ImageID(""), [this](UI::LinearLayout *parent) {
+	// 	auto ms = GetI18NCategory(I18NCat::MAINSETTINGS);
+	// 	parent->Add(new PaneTitleBar(gamePath_, ms->T("Networking / Infrastructure"), "infrastructure"));
+	// 	CreateInfraSettings(parent);
+	// });
 
 	AddTab("GameSettingsTools", ms->T("Tools"), ImageID("I_TOOLS"), [this](UI::LinearLayout *parent) {
 		auto ms = GetI18NCategory(I18NCat::MAINSETTINGS);
@@ -989,64 +1019,8 @@ void GameSettingsScreen::CreateNetworkingSettings(UI::ViewGroup *networkingSetti
 	networkingSettings->Add(new CheckBox(&g_Config.bEnableWlan, n->T("Enable networking", "Enable networking/wlan (beta)")));
 	networkingSettings->Add(new MacAddressChooser(GetRequesterToken(), gamePath_, &g_Config.sMACAddress, n->T("MAC address"), screenManager()));
 
-	networkingSettings->Add(new ItemHeader(n->T("Ad Hoc multiplayer")));
-
-	auto launchAdhocServerScreen = [this](UI::EventParams &) {
-		auto n = GetI18NCategory(I18NCat::NETWORKING);
-		screenManager()->push(new AdhocServerScreen(&g_Config.sProAdhocServer, n->T("Ad hoc server address")));
-	};
-
-	if (AdhocServerNameIsCustom()) {
-		LinearLayout *serverRow = networkingSettings->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
-		serverRow->SetSpacing(0.0f);
-		serverRow->Add(new ChoiceWithValueDisplay(&g_Config.sProAdhocServer, n->T("Ad hoc server address"), I18NCat::NONE, new LinearLayoutParams(1.0f)))->OnClick.Add(launchAdhocServerScreen);
-		serverRow->Add(new Choice(ImageID("I_EDIT_TEXT"), new LinearLayoutParams(ITEM_HEIGHT, ITEM_HEIGHT)))->OnClick.Add([this](UI::EventParams &) {
-			AskToEditCurrentServer(GetRequesterToken(), screenManager());
-		});
-	} else if (!g_Config.sProAdhocServer.empty()) {
-		AdhocServerListEntry entry;
-		if (AdhocGetServerByHost(g_Config.sProAdhocServer, &entry)) {
-			networkingSettings->Add(new ChoiceWithFixedValueDisplay(ApplySafeSubstitutions("%1 (%2)", entry.name, entry.host), n->T("Ad hoc server address")))->OnClick.Add(launchAdhocServerScreen);
-			Choice *status = networkingSettings->Add(new Choice(ApplySafeSubstitutions(n->T("Server status: %1"), entry.name)));
-			status->SetIconLeft(ImageID("I_INFO"));
-			status->OnClick.Add([this, entry](UI::EventParams &) {
-				screenManager()->push(new AdhocServerInfoScreen(entry));
-			});
-		} else {
-			// This case happens when updating from a previous version, as well as clicking on one of the local addresses
-			networkingSettings->Add(new ChoiceWithFixedValueDisplay(g_Config.sProAdhocServer, n->T("Ad hoc server address")))->OnClick.Add(launchAdhocServerScreen);
-		}
-	} else {
-		networkingSettings->Add(new ChoiceWithFixedValueDisplay(g_Config.sProAdhocServer, n->T("Ad hoc server address")))->OnClick.Add(launchAdhocServerScreen);
-	}
-
-	static const char *relayModes[] = {"Auto", "Yes", "No"};
-	PopupMultiChoice *relayModePopup = networkingSettings->Add(new PopupMultiChoice(&g_Config.iAdhocServerRelayMode, n->T("Try to use server-provided packet relay"), relayModes, 0, ARRAY_SIZE(relayModes), I18NCat::DIALOG, screenManager()));
-	relayModePopup->SetEnabled(!PSP_IsInited());
-	networkingSettings->Add(new SettingHint(n->T("PacketRelayHint", "Available on servers that provide 'aemu_postoffice' packet relay, like socom.cc. Disable this for LAN or VPN play. Can be more reliable, but sometimes slower."), relayModePopup));
-
-	PopupTextInputChoice *nickname = networkingSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sNickName, sy->T("Nickname"), "", 32, screenManager()));
-	if (g_Config.sNickName == "PPSSPP") {
-		nickname->SetIconRight(ImageID("I_WARNING"));
-	}
-	nickname->OnChange.Add([this](UI::EventParams &e) {
-		RecreateViews();
-	});
-	networkingSettings->Add(new SettingHint(n->T("Try to pick a unique nickname for ad hoc play"), nullptr));
-
-	networkingSettings->Add(new CheckBox(&g_Config.bEnableAdhocServer, n->T("Enable built-in ad hoc server")));
-
 	networkingSettings->Add(new ItemHeader(n->T("Infrastructure")));
-	if (g_Config.sInfraNpId.empty()) {
-		networkingSettings->Add(new NoticeView(NoticeLevel::WARN, n->T("To play in Infrastructure Mode, you must enter your RPCN Credentials"), ""));
-	}
-	PopupTextInputChoice *usernameChoice = networkingSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sInfraNpId, di->T("Username"), "", 16, screenManager()));
-	usernameChoice->SetRestriction(StringRestriction::AlphaNumUnderscore, 3);
-	usernameChoice->OnChange.Add([this](UI::EventParams &e) {
-		RecreateViews();
-	});
-	usernameChoice->SetEnabled(false);
-
+	
 	networkingSettings->Add(new CheckBox(&g_Config.bInfrastructureAutoDNS, n->T("Autoconfigure")));
 	auto *dnsServer = networkingSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sInfrastructureDNSServer, n->T("DNS server"), "", 32, screenManager()));
 	dnsServer->SetDisabledPtr(&g_Config.bInfrastructureAutoDNS);
@@ -1062,28 +1036,8 @@ void GameSettingsScreen::CreateNetworkingSettings(UI::ViewGroup *networkingSetti
 		StartUPnPService();
 		UPnP_Notify();
 	});
-	auto *useOriPort = networkingSettings->Add(new CheckBox(&g_Config.bUPnPUseOriginalPort, n->T("UPnP use original port", "UPnP use original port (Enabled = PSP compatibility)")));
-	networkingSettings->Add(new SettingHint(n->T("UseOriginalPort Tip", "May not work for all devices or games, see wiki."), useOriPort));
-
-	useOriPort->SetEnabledPtr(&g_Config.bEnableUPnP);
-
-	networkingSettings->Add(new ItemHeader(n->T("Chat")));
-	networkingSettings->Add(new CheckBox(&g_Config.bEnableNetworkChat, n->T("Enable network chat")));
-	static const char *chatButtonPositions[] = { "Bottom Left", "Bottom Center", "Bottom Right", "Top Left", "Top Center", "Top Right", "Center Left", "Center Right", "None" };
-	networkingSettings->Add(new PopupMultiChoice(&g_Config.iChatButtonPosition, n->T("Chat Button Position"), chatButtonPositions, 0, ARRAY_SIZE(chatButtonPositions), I18NCat::DIALOG, screenManager()))->SetEnabledPtr(&g_Config.bEnableNetworkChat);
-	static const char *chatScreenPositions[] = { "Bottom Left", "Bottom Center", "Bottom Right", "Top Left", "Top Center", "Top Right" };
-	networkingSettings->Add(new PopupMultiChoice(&g_Config.iChatScreenPosition, n->T("Chat Screen Position"), chatScreenPositions, 0, ARRAY_SIZE(chatScreenPositions), I18NCat::DIALOG, screenManager()))->SetEnabledPtr(&g_Config.bEnableNetworkChat);
-	networkingSettings->Add(new CheckBox(&g_Config.bChatTimestamps, n->T("Show timestamps in chat")))->SetEnabledPtr(&g_Config.bEnableNetworkChat);
-
-	networkingSettings->Add(new ItemHeader(n->T("Quick chat")));
-	CheckBox *qc = networkingSettings->Add(new CheckBox(&g_Config.bEnableQuickChat, n->T("Enable quick chat")));
-	qc->SetEnabledPtr(&g_Config.bEnableNetworkChat);
-
-	for (int i = 0; i < 5; i++) {
-		PopupTextInputChoice *qc1 = networkingSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sQuickChat[i], ApplySafeSubstitutions(n->T("Quick chat %1"), i + 1), "", 32, screenManager()));
-		qc1->SetEnabledFunc([] { return g_Config.bEnableQuickChat && g_Config.bEnableNetworkChat; });
-	}
-
+	networkingSettings->Add(new SettingHint(n->T("UPnP Tip", "Must be enabled on your router"), enableUPnP));
+	
 	networkingSettings->Add(new ItemHeader(n->T("Misc", "Misc (default = compatibility)")));
 	Choice *wiki = networkingSettings->Add(new Choice(n->T("Open PPSSPP Multiplayer Wiki Page"), ImageID("I_LINK_OUT")));
 	wiki->OnClick.Add([](EventParams &e) {
@@ -1098,14 +1052,139 @@ void GameSettingsScreen::CreateNetworkingSettings(UI::ViewGroup *networkingSetti
 		wlanChannelChoice->HideChoice(i + 2);
 		wlanChannelChoice->HideChoice(i + 7);
 	}
-	PopupSliderChoice *portOffset = networkingSettings->Add(new PopupSliderChoice(&g_Config.iPortOffset, 0, 60000, 10000, n->T("Port offset"), 100, screenManager()));
-	networkingSettings->Add(new SettingHint(n->T("PortOffsetHint"), portOffset));
 	networkingSettings->Add(new PopupSliderChoice(&g_Config.iMinTimeout, 0, 15000, 0, n->T("Minimum Timeout", "Minimum Timeout (override in ms, 0 = default)"), 50, screenManager()))->SetFormat(di->T("%d ms"));
 	networkingSettings->Add(new CheckBox(&g_Config.bForcedFirstConnect, n->T("Forced First Connect", "Forced First Connect (faster Connect)")));
 	networkingSettings->Add(new CheckBox(&g_Config.bAllowSpeedControlWhileConnected, n->T("Allow speed control while connected (not recommended)")));
 	if (Discord::IsAvailable()) {
 		networkingSettings->Add(new CheckBox(&g_Config.bDiscordRichPresence, n->T("Send Discord Presence information")));
 	}
+}
+void GameSettingsScreen::CreateAdhocSettings(UI::ViewGroup *adhocSettings) {
+	using namespace UI;
+
+	auto n = GetI18NCategory(I18NCat::NETWORKING);
+	auto ms = GetI18NCategory(I18NCat::MAINSETTINGS);
+	auto di = GetI18NCategory(I18NCat::DIALOG);
+	auto sy = GetI18NCategory(I18NCat::SYSTEM);
+
+	adhocSettings->Add(new ItemHeader(ms->T("Networking")));
+
+	adhocSettings->Add(new CheckBox(&g_Config.bEnableAdhocServer, n->T("Enable built-in ad hoc server")));
+
+	auto *useOriPort = adhocSettings->Add(new CheckBox(&g_Config.bUPnPUseOriginalPort, n->T("UPnP use original port", "UPnP use original port (Enabled = PSP compatibility)")));
+	adhocSettings->Add(new SettingHint(n->T("UseOriginalPort Tip", "May not work for all devices or games, see wiki."), useOriPort));
+
+	useOriPort->SetEnabledPtr(&g_Config.bEnableUPnP);
+
+	PopupSliderChoice *portOffset = adhocSettings->Add(new PopupSliderChoice(&g_Config.iPortOffset, 0, 60000, 10000, n->T("Port offset"), 100, screenManager()));
+	adhocSettings->Add(new SettingHint(n->T("PortOffsetHint"), portOffset));
+
+	adhocSettings->Add(new ItemHeader(n->T("Ad Hoc multiplayer")));
+
+	auto launchAdhocServerScreen = [this](UI::EventParams &) {
+		auto n = GetI18NCategory(I18NCat::NETWORKING);
+		screenManager()->push(new AdhocServerScreen(&g_Config.sProAdhocServer, n->T("Ad hoc server address")));
+	};
+
+	if (AdhocServerNameIsCustom()) {
+		LinearLayout *serverRow = adhocSettings->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
+		serverRow->SetSpacing(0.0f);
+		serverRow->Add(new ChoiceWithValueDisplay(&g_Config.sProAdhocServer, n->T("Ad hoc server address"), I18NCat::NONE, new LinearLayoutParams(1.0f)))->OnClick.Add(launchAdhocServerScreen);
+		serverRow->Add(new Choice(ImageID("I_EDIT_TEXT"), new LinearLayoutParams(ITEM_HEIGHT, ITEM_HEIGHT)))->OnClick.Add([this](UI::EventParams &) {
+			AskToEditCurrentServer(GetRequesterToken(), screenManager());
+		});
+	} else if (!g_Config.sProAdhocServer.empty()) {
+		AdhocServerListEntry entry;
+		if (AdhocGetServerByHost(g_Config.sProAdhocServer, &entry)) {
+			adhocSettings->Add(new ChoiceWithFixedValueDisplay(ApplySafeSubstitutions("%1 (%2)", entry.name, entry.host), n->T("Ad hoc server address")))->OnClick.Add(launchAdhocServerScreen);
+			Choice *status = adhocSettings->Add(new Choice(ApplySafeSubstitutions(n->T("Server status: %1"), entry.name)));
+			status->SetIconLeft(ImageID("I_INFO"));
+			status->OnClick.Add([this, entry](UI::EventParams &) {
+				screenManager()->push(new AdhocServerInfoScreen(entry));
+			});
+		} else {
+			// This case happens when updating from a previous version, as well as clicking on one of the local addresses
+			adhocSettings->Add(new ChoiceWithFixedValueDisplay(g_Config.sProAdhocServer, n->T("Ad hoc server address")))->OnClick.Add(launchAdhocServerScreen);
+		}
+	} else {
+		adhocSettings->Add(new ChoiceWithFixedValueDisplay(g_Config.sProAdhocServer, n->T("Ad hoc server address")))->OnClick.Add(launchAdhocServerScreen);
+	}
+
+	static const char *relayModes[] = {"Auto", "Yes", "No"};
+	PopupMultiChoice *relayModePopup = adhocSettings->Add(new PopupMultiChoice(&g_Config.iAdhocServerRelayMode, n->T("Try to use server-provided packet relay"), relayModes, 0, ARRAY_SIZE(relayModes), I18NCat::DIALOG, screenManager()));
+	relayModePopup->SetEnabled(!PSP_IsInited());
+	adhocSettings->Add(new SettingHint(n->T("PacketRelayHint", "Available on servers that provide 'aemu_postoffice' packet relay, like socom.cc. Disable this for LAN or VPN play. Can be more reliable, but sometimes slower."), relayModePopup));
+
+	PopupTextInputChoice *nickname = adhocSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sNickName, sy->T("Nickname"), "", 32, screenManager()));
+	if (g_Config.sNickName == "PPSSPP") {
+		nickname->SetIconRight(ImageID("I_WARNING"));
+	}
+	nickname->OnChange.Add([this](UI::EventParams &e) {
+		RecreateViews();
+	});
+	adhocSettings->Add(new SettingHint(n->T("Try to pick a unique nickname for ad hoc play"), nullptr));
+
+	adhocSettings->Add(new ItemHeader(n->T("Chat")));
+	adhocSettings->Add(new CheckBox(&g_Config.bEnableNetworkChat, n->T("Enable network chat")));
+	static const char *chatButtonPositions[] = { "Bottom Left", "Bottom Center", "Bottom Right", "Top Left", "Top Center", "Top Right", "Center Left", "Center Right", "None" };
+	adhocSettings->Add(new PopupMultiChoice(&g_Config.iChatButtonPosition, n->T("Chat Button Position"), chatButtonPositions, 0, ARRAY_SIZE(chatButtonPositions), I18NCat::DIALOG, screenManager()))->SetEnabledPtr(&g_Config.bEnableNetworkChat);
+	static const char *chatScreenPositions[] = { "Bottom Left", "Bottom Center", "Bottom Right", "Top Left", "Top Center", "Top Right" };
+	adhocSettings->Add(new PopupMultiChoice(&g_Config.iChatScreenPosition, n->T("Chat Screen Position"), chatScreenPositions, 0, ARRAY_SIZE(chatScreenPositions), I18NCat::DIALOG, screenManager()))->SetEnabledPtr(&g_Config.bEnableNetworkChat);
+	adhocSettings->Add(new CheckBox(&g_Config.bChatTimestamps, n->T("Show timestamps in chat")))->SetEnabledPtr(&g_Config.bEnableNetworkChat);
+
+	adhocSettings->Add(new ItemHeader(n->T("Quick chat")));
+	CheckBox *qc = adhocSettings->Add(new CheckBox(&g_Config.bEnableQuickChat, n->T("Enable quick chat")));
+	qc->SetEnabledPtr(&g_Config.bEnableNetworkChat);
+
+	for (int i = 0; i < 5; i++) {
+		PopupTextInputChoice *qc1 = adhocSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sQuickChat[i], ApplySafeSubstitutions(n->T("Quick chat %1"), i + 1), "", 32, screenManager()));
+		qc1->SetEnabledFunc([] { return g_Config.bEnableQuickChat && g_Config.bEnableNetworkChat; });
+	}
+
+}
+void GameSettingsScreen::CreateInfraSettings(UI::ViewGroup *infraSettings) {
+	using namespace UI;
+
+	auto n = GetI18NCategory(I18NCat::NETWORKING);
+	auto ms = GetI18NCategory(I18NCat::MAINSETTINGS);
+	auto di = GetI18NCategory(I18NCat::DIALOG);
+	auto sy = GetI18NCategory(I18NCat::SYSTEM);
+
+	// infraSettings->Add(new ItemHeader(ms->T("Networking")));
+
+	infraSettings->Add(new ItemHeader(di->T("Infra Server")));
+	static const char *serverTypes[] = { "RPCN", "Fake PSN", "PSN" };
+	PopupMultiChoice *server_type = infraSettings->Add(new PopupMultiChoice(&g_Config.proInfraServerType, di->T("Server Type"), serverTypes, 0, ARRAY_SIZE(serverTypes), I18NCat::SYSTEM, screenManager()));
+#ifndef USE_PSN
+	server_type->HideChoice(2);
+#endif
+
+	ChoiceWithValueDisplay *server_addr = infraSettings->Add(new ChoiceWithValueDisplay(&g_Config.proInfraServer, di->T("Change proInfraServer Address", "Change proInfraServer Address (localhost = multiple instance)"), I18NCat::NONE));
+	server_addr->OnClick.Add([=](UI::EventParams &) {
+		screenManager()->push(new InfraServerScreen(&g_Config.proInfraServer, di->T("proInfraServer Address:")));
+	});
+
+	if (g_Config.proInfraServerType != 0)
+		server_addr->SetEnabled(false);
+
+	server_type->OnChoice.Add([=](UI::EventParams &e) {
+		if (g_Config.proInfraServerType == 0)
+			server_addr->SetEnabled(true);
+		else
+			server_addr->SetEnabled(false);
+	});
+
+	infraSettings->Add(new ItemHeader(di->T("Login Credentials")));
+	if (g_Config.sInfraNpId.empty()) {
+		infraSettings->Add(new NoticeView(NoticeLevel::WARN, n->T("To play in Infrastructure Mode, you must enter your RPCN Credentials"), ""));
+	}
+	PopupTextInputChoice *usernameChoice = infraSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sInfraNpId, di->T("Username"), "", 64, screenManager()));
+	usernameChoice->SetRestriction(StringRestriction::AlphaNumUnderscore, 3);
+	infraSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sInfraPassword, di->T("Password"), "", 64, screenManager()))->SetPasswordDisplay();
+	infraSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sInfraToken, "Token", "", 64, screenManager()))->SetPasswordDisplay();
+	infraSettings->Add(new CheckBox(&g_Config.bInfraAutoSignIn, n->T("Auto Sign-In")));
+	infraSettings->Add(new CheckBox(&g_Config.bInfraRememberPwd, n->T("Remember Password")));
+
 }
 
 void GameSettingsScreen::CreateToolsSettings(UI::ViewGroup *tools) {
