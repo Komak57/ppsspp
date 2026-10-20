@@ -30,6 +30,28 @@ ENUM_CLASS_BITOPS(TabFlags);
 
 class UITabbedBaseDialogScreen : public UIBaseDialogScreen {
 public:
+	class TabGroupBuilder {
+	public:
+		TabGroupBuilder(UITabbedBaseDialogScreen *screen, int group)
+			: screen_(screen), group_(group) {}
+
+		void AddTab(const char *tag, std::string_view title,
+					ImageID imageId,
+					std::function<void(UI::LinearLayout *)> createCallback,
+					TabFlags flags = TabFlags::Default);
+
+		void AddTab(const char *tag, std::string_view title,
+					std::function<void(UI::LinearLayout *)> createCallback,
+					TabFlags flags = TabFlags::Default) {
+			AddTab(tag, title, ImageID::invalid(),
+				std::move(createCallback), flags);
+		}
+
+	private:
+		UITabbedBaseDialogScreen *screen_;
+		int group_;
+	};
+
 	// currentTabSetting can be null if you don't want to persist the current tab.
 	UITabbedBaseDialogScreen(const Path &gamePath, int *currentTabSetting = nullptr, TabDialogFlags flags = TabDialogFlags::Default);
 	void AddTab(const char *tag, std::string_view title, ImageID imageId, std::function<void(UI::LinearLayout *)> createCallback, TabFlags flags = TabFlags::Default);
@@ -38,6 +60,7 @@ public:
 	}
 	void CreateViews() override;
 
+	TabGroupBuilder AddTabGroup(const char *tag, std::string_view title, ImageID imageId, std::function<void(UI::LinearLayout *)> createCallback, TabFlags flags = TabFlags::Default);
 protected:
 	// Load data and define your tabs here.
 	virtual void PreCreateViews() {}
@@ -55,6 +78,8 @@ protected:
 
 private:
 	void ApplySearchFilter();
+	void AddGroupedTab(int group, const char *tag, std::string_view title, ImageID imageId, std::function<void(UI::LinearLayout *)> createCallback, TabFlags flags);
+	std::function<UI::ViewGroup *()> MakeTabContentFunc(const char *tag, std::string_view title, std::function<void(UI::LinearLayout *)> createCallback, TabFlags flags);
 
 	UI::TabHolder *tabHolder_ = nullptr;
 	UI::TextView *filterNotice_ = nullptr;

@@ -20,16 +20,32 @@ enum class TabHolderFlags {
 };
 ENUM_CLASS_BITOPS(TabHolderFlags);
 
+struct TabGroup {
+    int choiceIndex = -1;
+    int defaultTab = -1;
+    std::vector<int> tabs;
+};
+
 class TabHolder : public LinearLayout {
 public:
 	TabHolder(Orientation orientation, float stripSize, TabHolderFlags flags, View *bannerView, std::function<void()> contextMenuCallback, LayoutParams *layoutParams);
+
+	// Creates a group whose header is itself a real tab (with createCb contents).
+	// Tabs later added with this group index are only visible while a tab
+	// belonging to the group (the header included) is selected.
+	int AddTabGroup(std::string_view title, ImageID imageId, std::function<ViewGroup *()> createCb);
+	int AddTabDeferred(std::string_view title, ImageID imageId,
+					std::function<ViewGroup *()> createCb,
+					int group = -1);
+
+	void SetTabGroupVisible(int group, bool visible);
+	int GetTabGroupForTab(int tab) const;
 
 	template <class T>
 	T *AddTab(std::string_view title, ImageID imageId, T *tabContents) {
 		AddTabContents(title, imageId, tabContents);
 		return tabContents;
 	}
-	void AddTabDeferred(std::string_view title, ImageID imageId, std::function<ViewGroup *()> createCb);
 	void EnableTab(int tab, bool enabled);
 
 	void AddBack(UIScreen *parent);
@@ -57,8 +73,14 @@ public:
 private:
 	void AddTabContents(std::string_view title, ImageID imageId, ViewGroup *tabContents);
 	void OnTabClick(EventParams &e);
+	void UpdateGroupVisibility();
 
 	View *bannerView_ = nullptr;
+	std::vector<int> tabToChoice_;
+	std::vector<int> choiceToTab_;
+	std::vector<int> tabGroups_;
+	std::vector<TabGroup> tabGroupsList_;
+
 	LinearLayout *tabContainer_ = nullptr;
 	ChoiceStrip *tabStrip_ = nullptr;
 	ScrollView *tabScroll_ = nullptr;
@@ -75,9 +97,10 @@ private:
 class ChoiceStrip : public LinearLayout {
 public:
 	ChoiceStrip(Orientation orientation, LayoutParams *layoutParams = 0);
-
+	
 	void AddChoice(std::string_view title, ImageID imageId = ImageID::invalid());
 	void AddChoice(ImageID buttonImage);
+	void SetChoiceVisibility(int choice, bool visible);
 
 	int GetSelection() const { return selected_; }
 	void SetSelection(int sel, bool triggerClick);

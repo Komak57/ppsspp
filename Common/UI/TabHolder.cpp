@@ -73,6 +73,9 @@ void TabHolder::AddBack(UIScreen *parent) {
 }
 
 void TabHolder::AddTabContents(std::string_view title, ImageID imageId, ViewGroup *tabContents) {
+	int tab = (int)tabs_.size();
+	int choice = (int)choiceToTab_.size();
+
 	tabs_.push_back(tabContents);
 	if (tabOrientation_ == ORIENT_HORIZONTAL && (flags_ & TabHolderFlags::HorizontalOnlyIcons) && imageId.isValid()) {
 		tabStrip_->AddChoice(imageId);
@@ -90,10 +93,18 @@ void TabHolder::AddTabContents(std::string_view title, ImageID imageId, ViewGrou
 	tabTweens_.push_back(nullptr);
 	// This entry doesn't need one.
 	createFuncs_.push_back(nullptr);
+
+	tabToChoice_.push_back(choice);
+	choiceToTab_.push_back(tab);
+	tabGroups_.push_back(-1);
 }
 
-void TabHolder::AddTabDeferred(std::string_view title, ImageID imageId, std::function<ViewGroup *()> createCb) {
-	tabs_.push_back(nullptr);  // marker
+int TabHolder::AddTabDeferred(std::string_view title, ImageID imageId, std::function<ViewGroup *()> createCb, int group) {
+	int tab = (int)tabs_.size();
+	int choice = (int)choiceToTab_.size();
+
+	tabs_.push_back(nullptr);
+
 	if (tabOrientation_ == ORIENT_HORIZONTAL && (flags_ & TabHolderFlags::HorizontalOnlyIcons) && imageId.isValid()) {
 		tabStrip_->AddChoice(imageId);
 	} else if (tabOrientation_ == ORIENT_VERTICAL && (flags_ & TabHolderFlags::VerticalShowIcons) && imageId.isValid()) {
@@ -101,8 +112,64 @@ void TabHolder::AddTabDeferred(std::string_view title, ImageID imageId, std::fun
 	} else {
 		tabStrip_->AddChoice(title);
 	}
+
 	tabTweens_.push_back(nullptr);
-	createFuncs_.push_back(createCb);
+	createFuncs_.push_back(std::move(createCb));
+
+	tabToChoice_.push_back(choice);
+	choiceToTab_.push_back(tab);
+	tabGroups_.push_back(group);
+
+	if (group >= 0 && group < (int)tabGroupsList_.size()) {
+		tabGroupsList_[group].tabs.push_back(tab);
+		// Group members start hidden until their group is selected.
+		tabStrip_->SetChoiceVisibility(choice, false);
+	}
+
+	return tab;
+}
+
+int TabHolder::AddTabGroup(std::string_view title, ImageID imageId, std::function<ViewGroup *()> createCb) {
+	int group = (int)tabGroupsList_.size();
+
+	// The group header is a real tab: selecting it shows its own contents
+	// and reveals the group's member tabs. It's not in TabGroup::tabs, so
+	// its choice stays visible when the group is collapsed.
+	int headerTab = AddTabDeferred(title, imageId, std::move(createCb));
+	tabGroups_[headerTab] = group;
+
+	TabGroup groupInfo;
+	groupInfo.choiceIndex = tabToChoice_[headerTab];
+	groupInfo.defaultTab = headerTab;
+	tabGroupsList_.push_back(std::move(groupInfo));
+
+	return group;
+}
+
+void TabHolder::SetTabGroupVisible(int group, bool visible) {
+	if (group < 0 || group >= (int)tabGroupsList_.size())
+		return;
+
+	for (int tab : tabGroupsList_[group].tabs) {
+		tabStrip_->SetChoiceVisibility(tabToChoice_[tab], visible);
+	}
+}
+
+void TabHolder::UpdateGroupVisibility() {
+	if (tabGroupsList_.empty())
+		return;
+
+	int currentGroup = GetTabGroupForTab(currentTab_);
+	for (int group = 0; group < (int)tabGroupsList_.size(); ++group) {
+		SetTabGroupVisible(group, group == currentGroup);
+	}
+}
+
+int TabHolder::GetTabGroupForTab(int tab) const {
+	if (tab < 0 || tab >= (int)tabGroups_.size())
+		return -1;
+
+	return tabGroups_[tab];
 }
 
 void TabHolder::EnsureAllCreated() {
@@ -142,7 +209,8 @@ void TabHolder::SetInitialTab(int tab) {
 	}
 	EnsureTab(tab);
 	currentTab_ = tab;
-	tabStrip_->SetSelection(tab, false);
+	UpdateGroupVisibility();
+	tabStrip_->SetSelection(tabToChoice_[tab], false);
 }
 
 bool TabHolder::SetCurrentTab(int tab, bool skipTween) {
@@ -156,7 +224,8 @@ bool TabHolder::SetCurrentTab(int tab, bool skipTween) {
 		_dbg_assert_(tabs_[tab]);
 		// No current tab, so just switch immediately.
 		currentTab_ = tab;
-		tabStrip_->SetSelection(tab, false);
+		UpdateGroupVisibility();
+		tabStrip_->SetSelection(tabToChoice_[tab], false);
 		if (tabs_[tab]) {
 			tabs_[tab]->SetVisibility(V_VISIBLE);
 		}
@@ -164,7 +233,13 @@ bool TabHolder::SetCurrentTab(int tab, bool skipTween) {
 	}
 
 	if (tab == currentTab_) {
-		tabStrip_->SetSelection(tab, false);
+		if (tab >= (int)tabToChoice_.size()) {
+			// _dbg_assert_msg_(false, "Tab-to-choice mapping is incomplete!");
+			return false;
+		}
+
+		// tabStrip_->SetSelection(tab, false);
+		tabStrip_->SetSelection(tabToChoice_[tab], false);
 		return false;
 	}
 
@@ -219,7 +294,8 @@ bool TabHolder::SetCurrentTab(int tab, bool skipTween) {
 	tabs_[tab]->SetVisibility(V_VISIBLE);
 
 	currentTab_ = tab;
-	tabStrip_->SetSelection(tab, false);
+	UpdateGroupVisibility();
+	tabStrip_->SetSelection(tabToChoice_[tab], false);
 	UI::EventParams e{};
 	e.v = this;
 	e.a = currentTab_;
@@ -230,10 +306,15 @@ bool TabHolder::SetCurrentTab(int tab, bool skipTween) {
 void TabHolder::OnTabClick(EventParams &e) {
 	// We have e.b set when it was an explicit click action.
 	// In that case, we make the view gone and then visible - this scrolls scrollviews to the top.
-	if (e.b != 0) {
-		// SetCurrentTab calls EnsureTab if needed.
-		SetCurrentTab((int)e.a);
-	}
+	if (e.b == 0)
+		return;
+
+	int choice = (int)e.a;
+	if (choice < 0 || choice >= (int)choiceToTab_.size())
+		return;
+
+	// SetCurrentTab calls EnsureTab if needed.
+	SetCurrentTab(choiceToTab_[choice]);
 }
 
 void TabHolder::PersistData(PersistStatus status, std::string anonId, PersistMap &storage) {
@@ -263,7 +344,9 @@ void TabHolder::PersistData(PersistStatus status, std::string anonId, PersistMap
 }
 
 void TabHolder::EnableTab(int tab, bool enabled) {
-	tabStrip_->EnableChoice(tab, enabled);
+	if (tab >= 0 && tab < (int)tabToChoice_.size()) {
+		tabStrip_->EnableChoice(tabToChoice_[tab], enabled);
+	}
 }
 
 ChoiceStrip::ChoiceStrip(Orientation orientation, LayoutParams *layoutParams)
@@ -381,6 +464,12 @@ bool ChoiceStrip::Key(const KeyInput &input) {
 		}
 	}
 	return ViewGroup::Key(input);
+}
+
+void ChoiceStrip::SetChoiceVisibility(int choice, bool visible) {
+	if (choice >= 0 && choice < (int)choices_.size()) {
+		choices_[choice]->SetVisibility(visible ? V_VISIBLE : V_GONE);
+	}
 }
 
 std::string ChoiceStrip::DescribeText() const {

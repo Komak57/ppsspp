@@ -17,13 +17,11 @@
 UITabbedBaseDialogScreen::UITabbedBaseDialogScreen(const Path &gamePath, int *currentTabSetting, TabDialogFlags flags)
 	: UIBaseDialogScreen(gamePath), currentTabSetting_(currentTabSetting), flags_(flags) {}
 
-void UITabbedBaseDialogScreen::AddTab(const char *tag, std::string_view title, ImageID imageId, std::function<void(UI::LinearLayout *)> createCallback, TabFlags flags) {
-	using namespace UI;
-
+std::function<UI::ViewGroup *()> UITabbedBaseDialogScreen::MakeTabContentFunc(const char *tag, std::string_view title, std::function<void(UI::LinearLayout *)> createCallback, TabFlags flags) {
 	TabDialogFlags dialogFlags = flags_;
 	Path gamePath = gamePath_;
 	std::string cachedTitle(title);
-	tabHolder_->AddTabDeferred(title, imageId, [createCallback = std::move(createCallback), tag, flags, dialogFlags, gamePath, cachedTitle]() -> UI::ViewGroup * {
+	return [createCallback = std::move(createCallback), tag, flags, dialogFlags, gamePath, cachedTitle]() -> UI::ViewGroup * {
 		using namespace UI;
 		ViewGroup *scroll = nullptr;
 		if (!(flags & TabFlags::NonScrollable)) {
@@ -34,7 +32,6 @@ void UITabbedBaseDialogScreen::AddTab(const char *tag, std::string_view title, I
 		contents->SetSpacing(0);
 
 		if (dialogFlags & TabDialogFlags::AddAutoTitles) {
-			auto di = GetI18NCategory(I18NCat::DIALOG);
 			contents->Add(new PaneTitleBar(gamePath, cachedTitle, ""));
 		}
 
@@ -45,7 +42,11 @@ void UITabbedBaseDialogScreen::AddTab(const char *tag, std::string_view title, I
 		} else {
 			return contents;
 		}
-	});
+	};
+}
+
+void UITabbedBaseDialogScreen::AddTab(const char *tag, std::string_view title, ImageID imageId, std::function<void(UI::LinearLayout *)> createCallback, TabFlags flags) {
+	tabHolder_->AddTabDeferred(title, imageId, MakeTabContentFunc(tag, title, std::move(createCallback), flags));
 }
 
 void UITabbedBaseDialogScreen::CreateViews() {
@@ -232,4 +233,18 @@ void UITabbedBaseDialogScreen::ApplySearchFilter() {
 	noSearchResults_->SetText(ApplySafeSubstitutions(se->T("No settings matched '%1'"), searchFilter_));
 	noSearchResults_->SetVisibility(matches ? UI::V_GONE : UI::V_VISIBLE);
 	clearSearchChoice_->SetVisibility(searchFilter_.empty() ? UI::V_GONE : UI::V_VISIBLE);
+}
+
+void UITabbedBaseDialogScreen::AddGroupedTab(int group, const char *tag, std::string_view title, ImageID imageId, std::function<void(UI::LinearLayout *)> createCallback, TabFlags flags) {
+	tabHolder_->AddTabDeferred(title, imageId, MakeTabContentFunc(tag, title, std::move(createCallback), flags), group);
+}
+
+UITabbedBaseDialogScreen::TabGroupBuilder
+UITabbedBaseDialogScreen::AddTabGroup(const char *tag, std::string_view title, ImageID imageId, std::function<void(UI::LinearLayout *)> createCallback, TabFlags flags) {
+	int group = tabHolder_->AddTabGroup(title, imageId, MakeTabContentFunc(tag, title, std::move(createCallback), flags));
+	return TabGroupBuilder(this, group);
+}
+
+void UITabbedBaseDialogScreen::TabGroupBuilder::AddTab(const char *tag, std::string_view title, ImageID imageId, std::function<void(UI::LinearLayout *)> createCallback, TabFlags flags) {
+	screen_->AddGroupedTab(group_, tag, title, imageId, std::move(createCallback), flags);
 }
