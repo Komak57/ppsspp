@@ -147,5 +147,6 @@ bool NpMatching2ProcessEvents();
 
 void __Np2Init();
 void __Np2Shutdown();
+void __NpMatching2WakeThread();
 
 void Register_sceNpMatching2();

@@ -200,6 +200,10 @@ int InvokeAsyncCallbacks() {
 	return SCE_NP_MATCHING2_ERROR_INVALID_REQUEST_PARAMETER;
 }
 
+void __NpMatching2WakeThread() {
+    if (npMatching2EventID > 0)
+        __KernelSetEventFlag(npMatching2EventID, 1); 
+}
 /* Process Matching server Responses
  * @return void
  * @note Currently processing the P2P responses designated for Signaling
@@ -210,7 +214,12 @@ void SceNpMatching2Thread()
 	if (!npMatching2Inited)
 		return;
 	
-	*timeout = 100000;
+	if (npMatching2Handlers.size() > 0 || defaultOptParams.size() > 0)
+		*timeout = 100000;  // Are we able to act on any responses?
+	else if(npMatching2ThreadState == NP_SIGNIN_STATUS_CANCELED)
+		*timeout = 1000000; // Are we aborting?
+	else
+		*timeout = 0;       // infinite wait until any event wakes us
 	// if (fds_pending)
 	//     *timeout = 100000;
 	// else if (any_context_stopping || npMatching2ThreadState == NP_SIGNIN_STATUS_STOPPING)
@@ -225,6 +234,7 @@ void SceNpMatching2Thread()
 
 	// Check socket read/write
 	// sceNetInetSelect()
+	// npServer->PollResponses();
 
 	// Set the next timeout to 100ms
 	// if (max_fd > 0)
@@ -404,7 +414,7 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
 	NOTICE_LOG(Log::sceNp2, "notifyRequestHandler - %s_%08x(ctxId: %d, reqId: %d, event: 0x%08x, error: 0x%08x, dataPtr: 0x%08x, cbArgPtr: 0x%08x)", EventToString(SCE_NP_MATCHING2_REQUEST_EVENT).c_str(), handler->cb.ptr,
 		args[0], args[1], args[2], args[3], args[4], args[5]);
 	
-	hleCall(ThreadManForUser, int, sceKernelSetEventFlag, npMatching2EventID, args[0]);
+	__NpMatching2WakeThread();
 	return 0;
 }
 
@@ -448,7 +458,7 @@ int notifyRoomMessageHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMem
 	NOTICE_LOG(Log::sceNp2, "notifyRoomMessageHandler - %s_%08x(ctxId: %d, roomId: %llu, param_4: %d, memberId: %d, requestEvent: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_MSG_EVENT).c_str(), handler->cb.ptr,
 		args[0], ((u64)args[1] | (u64)args[2] >> 32), args[3], args[4], args[5], args[6], args[7]);
 	
-	hleCall(ThreadManForUser, int, sceKernelSetEventFlag, npMatching2EventID, args[0]);
+	__NpMatching2WakeThread();
 	return 0;
 }
 
@@ -493,7 +503,7 @@ int notifyRoomEventHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 	NOTICE_LOG(Log::sceNp2, "notifyRoomEventHandler - %s_%08x(ctxId: %d, roomId: %llu, memberId: %d, event: %d, dataPtr: %08x, cbArgPtr: %08x)", EventToString(SCE_NP_MATCHING2_ROOM_EVENT).c_str(), handler->cb.ptr,
 		args[0], ((u64)args[1] | (u64)args[2] >> 32), args[3], args[4], args[5], args[6]);
 
-	hleCall(ThreadManForUser, int, sceKernelSetEventFlag, npMatching2EventID, args[0]);
+	__NpMatching2WakeThread();
 	return 0;
 }
 
@@ -550,7 +560,7 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 	// if (Memory::IsValidAddress(handler->cb.ptr))
 		// hleEnqueueCall(handler->cb.ptr, 8, args);
 
-	sceKernelSetEventFlag(npMatching2EventID, args[0]);
+	__NpMatching2WakeThread();
 	return 0;
 }
 
