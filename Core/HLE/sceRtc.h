@@ -79,6 +79,7 @@ void __RtcTimeOfDay(PSPTimeval *tv);
 int32_t RtcBaseTime(int32_t *micro = nullptr);
 void RtcSetBaseTime(int32_t seconds, int32_t micro = 0);
 u64 __RtcGetCurrentTick();
+void __RtcSetCurrentNetworkTick(u64 tick);
 
 void Register_sceRtc();
 void Register_sceRtc_driver();

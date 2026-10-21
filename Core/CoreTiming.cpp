@@ -64,9 +64,6 @@ alignas(16) static s64 globalTimer;
 static s64 idledCycles;
 static s64 lastGlobalTimeTicks;
 static s64 lastGlobalTimeUs;
-static s64 lastNetworkUpdate;
-static s64 lastNetworkTimeTicks;
-static s64 lastNetworkTimeUs;
 // See SetBreakDeadlineUs. 0 = none. Deliberately not saved in savestates - it belongs to a
 // debugger session, not to the emulated machine.
 static s64 breakDeadlineUs;
@@ -120,46 +117,6 @@ u64 GetGlobalTimeUs() {
 	return lastGlobalTimeUs + usSinceLast;
 }
 
-u64 GetNetworkTimeUs() {
-	const u64 currentTicks = GetTicks(currentMIPS);
-	s64 ticksSinceLast = currentTicks - lastNetworkTimeTicks;
-	s64 usSinceLast = cyclesToUs(ticksSinceLast);
-	if (currentTicks - lastNetworkUpdate > usToCycles(NETWORK_RESYNC_US)) {
-		u64 currentNetworkTimeUs = 0;
-		if (npAuthServer && npAuthServer->IsConnected())
-			currentNetworkTimeUs = npAuthServer->GetNetworkTime(); // - Latency is not available until npServer starts
-		else if (npServer && npServer->IsConnected())
-			currentNetworkTimeUs = npServer->GetNetworkTime() + netInfo.latency.load();
-
-		if (currentNetworkTimeUs != 0) {
-			lastNetworkUpdate = currentTicks; // Reset Update Counter
-			lastNetworkTimeUs = currentNetworkTimeUs;
-			lastNetworkTimeTicks = currentTicks;
-			return currentNetworkTimeUs;
-		}
-	}
-	if (ticksSinceLast > UINT_MAX) {
-		// Adjust the calculated value to avoid overflow errors.
-		lastNetworkTimeUs += usSinceLast;
-		lastNetworkTimeTicks = currentTicks;
-		usSinceLast = 0;
-	}
-	return lastNetworkTimeUs + usSinceLast;
-}
-
-void InitializeNetworkTime() {
-	u64 currentNetworkTimeUs = 0;
-	if (npAuthServer && npAuthServer->IsConnected())
-		currentNetworkTimeUs = npAuthServer->GetNetworkTime(); // - Latency is not available until npServer starts
-	else if (npServer && npServer->IsConnected())
-		currentNetworkTimeUs = npServer->GetNetworkTime() + netInfo.latency.load();
-
-	if (currentNetworkTimeUs != 0) {
-		lastNetworkTimeUs = currentNetworkTimeUs;
-		lastNetworkTimeTicks = GetTicks(currentMIPS);
-		lastNetworkUpdate = lastNetworkTimeTicks; // Reset Update Counter
-	}
-}
 // Turns the microsecond deadline into the tick count Advance() compares against. Has to be redone
 // whenever the clock frequency changes, since that changes how many ticks the remaining time is.
 static void RecomputeBreakDeadline() {
@@ -268,8 +225,6 @@ void Init(MIPSState *mips) {
 	idledCycles = 0;
 	lastGlobalTimeTicks = 0;
 	lastGlobalTimeUs = 0;
-	lastNetworkTimeTicks = 0;
-	lastNetworkTimeUs = 0;
 	breakDeadlineUs = 0;
 	breakDeadlineTicks = 0;
 	CPU_HZ = initialHz;

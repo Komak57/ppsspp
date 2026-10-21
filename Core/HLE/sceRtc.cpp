@@ -35,6 +35,7 @@
 #include "Core/Reporting.h"
 #include "Core/CoreTiming.h"
 #include "Core/MemMapHelpers.h"
+#include "Core/HLE/sceKernelTime.h"
 
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceRtc.h"
@@ -1072,39 +1073,50 @@ static int sceRtcFormatRFC3339LocalTime(u32 outPtr, u32 srcTickPtr)
 	return __RtcFormatRFC3339(outPtr, srcTickPtr, tz_seconds / 60);
 }
 
-s64 lastNetworkTimeUs = 0;
+bool g_netTickValid = false;
+s64 g_netTickOffset = 0;
 
-/* Produces the time in microseconds
- * @param timeDiffPtr PSPTimeval containing the current time in microseconds with respect to rtcMagicOffset
+void __RtcSetCurrentNetworkTick(u64 tick) {
+	g_netTickOffset = (s64)tick - (s64)CoreTiming::GetGlobalTimeUs();//hleCall(ThreadManForUser, int, sceKernelGetSystemTimeWide);
+	g_netTickValid = true;
+}
+/* Sets the time in microseconds
+ * @param tickPtr u64 containing the current time in microseconds with respect to rtcMagicOffset
  * @return 0; Returning anything other than 0 is usually flagged as an error
  * @note A Network Tick > 72000 can trigger a PSN Update request
  */
-static int sceRtcGetCurrentNetworkTick(u32 timeDiffPtr)
+static int sceRtcSetCurrentNetworkTick(u32 tickPtr) {
+	if (!Memory::IsValidAddress(tickPtr))
+		return hleLogError(Log::sceRtc, 0x80000023, "Invalid Pointer");
+	auto tick = PSPPointer<u64>::Create(tickPtr);
+
+	__RtcSetCurrentNetworkTick(*tick);
+	return 0;
+}
+
+/* Produces the time in microseconds
+ * @param tickPtr u64 containing the current time in microseconds with respect to rtcMagicOffset
+ * @return 0; Returning anything other than 0 is usually flagged as an error
+ * @note A Network Tick > 72000 can trigger a PSN Update request
+ */
+static int sceRtcGetCurrentNetworkTick(u32 tickPtr)
 {
-	DEBUG_LOG(Log::sceRtc, "UNTESTED %s(%08x) at %08x", __FUNCTION__, timeDiffPtr, currentMIPS->pc);
-	auto time = PSPPointer<PSPTimeval>::Create(timeDiffPtr);
+	DEBUG_LOG(Log::sceRtc, "UNTESTED %s(%08x) at %08x", __FUNCTION__, tickPtr, currentMIPS->pc);
+	if (!Memory::IsValidAddress(tickPtr))
+		return hleLogError(Log::sceRtc, 0x80000023, "Invalid Pointer");
+	if (!g_netTickValid)
+		return hleLogError(Log::sceRtc, 0x80000001, "Network Time never set");
 
-	if (lastNetworkTimeUs == 0) {
-		CoreTiming::InitializeNetworkTime();
-		lastNetworkTimeUs = CoreTiming::GetNetworkTimeUs() - rtcMagicOffset;
-	}
-	s64 currentNetworkTimeUs = CoreTiming::GetNetworkTimeUs() - rtcMagicOffset;
-	lastNetworkTimeUs = currentNetworkTimeUs;
+	auto tick = PSPPointer<u64>::Create(tickPtr);
 
-	time->tv_sec = (s32)(currentNetworkTimeUs & 0xFFFFFFFF);
-	time->tv_usec = (s32)(currentNetworkTimeUs >> 32);
+	*tick = CoreTiming::GetGlobalTimeUs() + g_netTickOffset;//hleCall(ThreadManForUser, int, sceKernelGetSystemTimeWide) + g_netTickOffset;
+	return 0;
+}
 
-	s64 deltaTimeUs = currentNetworkTimeUs - lastNetworkTimeUs;
-	// Update cached time
-	if (deltaTimeUs < 0) {
-		return hleLogWarning(Log::sceRtc, 0, "Network Time Rollback Detected: %ds / %dus", time->tv_sec, time->tv_usec);
-	}
-
-	// Some error occured
-	//_dbg_assert_msg_(deltaTimeUs < 72000, "Network Ticks exceed threshold: %llu", deltaTimeUs);
-	if (deltaTimeUs > 72000)
-		return hleLogWarning(Log::sceRtc, 0, "Ticks: %ds / %dus", time->tv_sec, time->tv_usec);
-
+// Clock tamper trigger
+static int sceRtc_driver_1C1859DF() {
+	g_netTickOffset = 0;
+	g_netTickValid = false;
 	return 0;
 }
 
@@ -1156,6 +1168,8 @@ const HLEFunction sceRtc[] =
 	{0XFB3B18CD, nullptr,                                  "sceRtcRegisterCallback",         '?', ""   },
 	{0X6A676D2D, nullptr,                                  "sceRtcUnregisterCallback",       '?', ""   },
 	{0XC2DDBEB5, &WrapI_U<sceRtcGetAlarmTick>,             "sceRtcGetAlarmTick",             'i', "x"  },
+	{0X508BA64B, &WrapI_U<sceRtcSetCurrentNetworkTick>,    "sceRtcSetCurrentNetworkTick",    'i', "x"  },
+	{0X1C1859DF, &WrapI_V<sceRtc_driver_1C1859DF>,         "sceRtc_driver_1C1859DF",         'i', ""   },
 };
 
 void Register_sceRtc()
