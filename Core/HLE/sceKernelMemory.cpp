@@ -320,11 +320,11 @@ static void FlushKernelPrintfLines(bool flushPartial) {
 		std::string line = g_printfLineBuffer.substr(0, nl);
 		if (!line.empty() && line.back() == '\r')
 			line.pop_back();  // fold CRLF down to a clean line
-		INFO_LOG(Log::Printf, "%s", line.c_str());
+		INFO_LOG(Log::Printf, "sceKernelPrintf() : %s", line.c_str());
 		g_printfLineBuffer.erase(0, nl + 1);
 	}
 	if (flushPartial && !g_printfLineBuffer.empty()) {
-		INFO_LOG(Log::Printf, "%s", g_printfLineBuffer.c_str());
+		INFO_LOG(Log::Printf, "sceKernelPrintf() : %s", g_printfLineBuffer.c_str());
 		g_printfLineBuffer.clear();
 	}
 }
