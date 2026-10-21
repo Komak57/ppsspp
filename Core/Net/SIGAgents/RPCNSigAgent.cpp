@@ -318,9 +318,9 @@ namespace net {
                 continue;
             }
             int pkt_size = sizeof(SignalingPacket);
-            for (int i = 0; i + pkt_size <= n; i+= pkt_size) {
+            for (int i = 0; i + pkt_size <= (size_t)n; i+= pkt_size) {
                 std::vector<u8> data;
-                std::copy(std::begin(buf) + i, std::begin(buf) + std::min(n - i, i + pkt_size), std::back_inserter(data));
+                std::copy(std::begin(buf) + i, std::begin(buf) + i + pkt_size, std::back_inserter(data));
 
                 SignalingMessage msg;
                 SockAddrIN4 saddr{};
