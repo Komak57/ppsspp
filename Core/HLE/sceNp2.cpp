@@ -883,14 +883,15 @@ static int sceNpMatching2ContextStart(int ctxId)
 		return hleLogError(Log::sceNp2, SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE);
 
 	int ret = SCE_NP_MATCHING2_SERVER_ERROR_SERVICE_UNAVAILABLE;
-	if (npAuthServer->GetAuthType() == net::NPAgentType::PSN || (npAuthServer->GetAuthType() == net::NPAgentType::RPCN && npServer->IsConnected()))
+	if (npAuthServer->GetAuthType() == net::NPAgentType::PSN || (npAuthServer->GetAuthType() == net::NPAgentType::RPCN && npServer->IsConnected())) {
 		ret = npServer->GetServers(npTitleId);
+	}
 
 	//hleEatMicro(1000000);
 	// Returning 0x805508A6 (error code inherited from sceNpService_76867C01 which check server availability) if can't check server availability (ie. Fat Princess (US) through http://static-resource.np.community.playstation.net/np/resource/psp-title/NPWR00670_00/matching/NPWR00670_00-matching.xml using User-Agent: "PS3Community-agent/1.0.0 libhttp/1.0.0")
-	if (ret != 0)
+	if (ret < 0)
 		return hleLogError(Log::sceNp2, ret, "Unable to retrieve Server list");
-	return SCE_NP_MATCHING2_OKAY;
+	return ret;
 }
 
 /* Stop Context

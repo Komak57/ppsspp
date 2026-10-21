@@ -5,12 +5,14 @@
 #include <TimeUtil.h>
 #include <chrono>
 #include <Core/CoreTiming.h>
+#include "Core/HLE/sceRtc.h"
 #include <Core/HLE/sceNp2.h>
 // #include <Core/Net/SignalingHandler.h>
 #include <Core/Net/SIGAgent.h>
 #include <Core/HLE/sceNp.h>
 #include <Core/Config.h>
 #include <Core/System.h>
+
 
 namespace net {
 	// FIXME: Populate with actual connection credentials for RPCN
@@ -67,18 +69,9 @@ namespace net {
 		if (ctxId != 0 || reqId != 0)
 			return static_cast<u64>(ctxId) << 32 | static_cast<u64>(reqId);
 
-		static u64 fallback_id = 1; // In case map is empty
+		static std::atomic<u64> next{1};
 
-		if (responses.empty())
-			return fallback_id++;
-
-		u64 max_key = 0;
-		for (const auto& [key, _] : responses)
-		{
-			if (key > max_key)
-				max_key = key;
-		}
-		return max_key + 1;
+		return next++;
 	}
 
 	void RPCNAuthAgent::start_read_thread() {
@@ -92,23 +85,6 @@ namespace net {
 		if (read_thread.joinable()) {
 			read_thread.join();
 		}
-	}
-
-	// Blocking wait for a specific request_id
-	RPCNResponse RPCNAuthAgent::take_pending_request(u64 request_id) {
-		std::unique_lock<std::mutex> lock(buffer_mutex);
-		buffer_cv.wait(lock, [&]() {
-			return running && responses.find(request_id) != responses.end();
-		});
-		if (!running) {
-			RPCNResponse ret{};
-			ret.error = (u8)ErrorType::Unsupported;
-			return ret;
-		}
-
-		auto data = std::move(responses[request_id]);
-		responses.erase(request_id);
-		return data;
 	}
 
 	void RPCNAuthAgent::read_loop() {
@@ -147,6 +123,7 @@ namespace net {
 
 			SceNpMatching2ContextId ctxId = static_cast<u32>(header.uid >> 32);
 			SceNpMatching2RequestId reqId = header.uid & 0xFFFFFFFF;
+			u64 retval = 0;
 
 			std::lock_guard<std::mutex> lock(buffer_mutex);
 			switch ((PacketType)header.request) {
@@ -166,7 +143,23 @@ namespace net {
 				}
 				switch ((CommandType)header.command) {
 				case CommandType::GetWorldList: GetWorldInfo_Reply(ctxId, reqId, buf); break;
-				default: responses[header.uid] = std::move(buf); break; // Response is synchronous
+				case CommandType::Login: retval = Login_Reply(ctxId, reqId, buf); break;
+				case CommandType::Create: retval = CreateAccount_Reply(ctxId, reqId, buf); break;
+				case CommandType::SendToken: retval = SendResetToken_Reply(ctxId, reqId, buf); break;
+				case CommandType::ResetPassword: retval = ResetPassword_Reply(ctxId, reqId, buf); break;
+				case CommandType::GetNetworkTime: retval = GetNetworkTime_Reply(ctxId, reqId, buf); break;
+				default: break;
+				}
+
+				if (pending.find(header.uid) != pending.end()) {
+					NOTICE_LOG(Log::sceNet, "Triggering Callback");
+					if (pending[header.uid].callback != nullptr) {
+						NpResponse resp{};
+						resp.error = buf.error;
+						resp.value = retval;
+						pending[header.uid].callback(resp);
+					}
+					pending.erase(header.uid);
 				}
 				break;
 			case PacketType::Notification:
@@ -182,6 +175,7 @@ namespace net {
 					break;
 				}
 				INFO_LOG(Log::sceNet, "Server is communicating on version %d", version);
+
 				break;
 			}
 			default:
@@ -368,7 +362,7 @@ namespace net {
 		return false;
 	}
 
-	int RPCNAuthAgent::Login(const char* npid, const char* token, const char* password) {
+	bool RPCNAuthAgent::Login(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb) {
 		Packet packet = Packet();
 		packet.Write(npid);
 		packet.Write((u8)0);
@@ -379,6 +373,22 @@ namespace net {
 
 		auto reqId = generate_uid();
 		packet.Pack(CommandType::Login, reqId);
+		bool isBlocking = true;
+		if (cb)
+			isBlocking = false;
+
+		BlockingCB slot;
+		if (isBlocking) {
+			cb = NpCallback();
+			cb->callback = [&slot](NpResponse resp) {
+				std::lock_guard<std::mutex> lk(slot.m);
+				slot.response = resp;
+				slot.done = true;
+				slot.cv.notify_one();
+			};
+			cb->timeout = 10*1000*1000;
+		}
+		pending[reqId] = std::move(*cb);
 
 		INFO_LOG(Log::sceNet, "Sending Login Request");
 
@@ -387,14 +397,18 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
 			return false;
 		}
-
+		if (isBlocking) {
+			std::unique_lock<std::mutex> lk(slot.m);
+			slot.cv.wait(lk, [&]{ return slot.done; });
+			return slot.response.value;
+		}
 		/*Packet response = Packet();
 		int ret = Recv(&response);
 		if (ret < 0) {
 			ERROR_LOG(Log::sceNet, "Failed to read response -0x%04x", -ret);
 			return false;
 		}*/
-		auto resp = take_pending_request(reqId);
+		/*auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
@@ -407,12 +421,36 @@ namespace net {
 			std::min<size_t>(127, avatar.length()));
 		user_id.store(resp.stream->get<s64>());
 
+		NpSetNpId(g_Config.sInfraNpId);*/
+
+		return true;
+	}
+	bool RPCNAuthAgent::Login_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError)
+			return false;
+		resp.stream = new vec_stream(resp.data, 1);
+
+		auto name = resp.stream->get_string(false);
+		memcpy(&online_name.data, name.c_str(),
+			std::min<size_t>(49, name.length()));
+		auto avatar = resp.stream->get_string(false);
+		memcpy(&avatar_url.data, avatar.c_str(),
+			std::min<size_t>(127, avatar.length()));
+		user_id.store(resp.stream->get<s64>());
+
 		NpSetNpId(g_Config.sInfraNpId);
 
-		return 0;
+		// Set Network Time
+		GetNetworkTime(NpCallback {
+			[this](NpResponse resp) {
+				__RtcSetCurrentNetworkTick(resp.value);
+			}, 
+			10*1000*1000
+		});
+		return true;
 	}
 
-	int RPCNAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
+	bool RPCNAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email, std::optional<NpCallback> cb) {
 		Packet packet = Packet();
 		packet.Write(npid);
 		packet.Write((u8)0);
@@ -427,6 +465,22 @@ namespace net {
 
 		auto reqId = generate_uid();
 		packet.Pack(CommandType::Create, reqId);
+		bool isBlocking = true;
+		if (cb)
+			isBlocking = false;
+
+		BlockingCB slot;
+		if (isBlocking) {
+			cb = NpCallback();
+			cb->callback = [&slot](NpResponse resp) {
+				std::lock_guard<std::mutex> lk(slot.m);
+				slot.response = resp;
+				slot.done = true;
+				slot.cv.notify_one();
+			};
+			cb->timeout = 10*1000*1000;
+		}
+		pending[reqId] = std::move(*cb);
 
 		INFO_LOG(Log::sceNet, "Sending Registration Request");
 
@@ -436,15 +490,26 @@ namespace net {
 			return false;
 		}
 
-		auto resp = take_pending_request(reqId);
+		if (isBlocking) {
+			std::unique_lock<std::mutex> lk(slot.m);
+			slot.cv.wait(lk, [&]{ return slot.done; });
+			return slot.response.value;
+		}
+		/*auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return resp.error;
-		resp.stream = new vec_stream(resp.data, 1);
+		resp.stream = new vec_stream(resp.data, 1);*/
 
 		return true;
 	}
+	bool RPCNAuthAgent::CreateAccount_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError)
+			return false;
+		resp.stream = new vec_stream(resp.data, 1);
+		return true;
+	}
 
-	int RPCNAuthAgent::ResendToken(const char* npid, const char* password) {
+	bool RPCNAuthAgent::ResendToken(const char* npid, const char* password, std::optional<NpCallback> cb) {
 		Packet packet = Packet();
 		packet.Write(npid);
 		packet.Write((u8)0);
@@ -453,6 +518,22 @@ namespace net {
 
 		auto reqId = generate_uid();
 		packet.Pack(CommandType::SendToken, reqId);
+		bool isBlocking = true;
+		if (cb)
+			isBlocking = false;
+
+		BlockingCB slot;
+		if (isBlocking) {
+			cb = NpCallback();
+			cb->callback = [&slot](NpResponse resp) {
+				std::lock_guard<std::mutex> lk(slot.m);
+				slot.response = resp;
+				slot.done = true;
+				slot.cv.notify_one();
+			};
+			cb->timeout = 10*1000*1000;
+		}
+		pending[reqId] = std::move(*cb);
 
 		INFO_LOG(Log::sceNet, "Sending Login Request");
 
@@ -462,15 +543,27 @@ namespace net {
 			return false;
 		}
 
-		auto resp = take_pending_request(reqId);
+		if (isBlocking) {
+			std::unique_lock<std::mutex> lk(slot.m);
+			slot.cv.wait(lk, [&]{ return slot.done; });
+			return slot.response.value;
+		}
+		/*auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return resp.error;
 		//resp.stream = new vec_stream(resp.data, 1);
+		DEBUG_LOG(Log::sceNet, "Token has successfully been resent!");*/
+		return true;
+	}
+	bool RPCNAuthAgent::ResendToken_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError)
+			return false;
+		//resp.stream = new vec_stream(resp.data, 1);
 		DEBUG_LOG(Log::sceNet, "Token has successfully been resent!");
-		return 0;
+		return true;
 	}
 
-	int RPCNAuthAgent::SendResetToken(const char* npid, const char* email) {
+	bool RPCNAuthAgent::SendResetToken(const char* npid, const char* email, std::optional<NpCallback> cb) {
 		Packet packet = Packet();
 		packet.Write(npid);
 		packet.Write((u8)0);
@@ -479,25 +572,54 @@ namespace net {
 
 		auto reqId = generate_uid();
 		packet.Pack(CommandType::SendResetToken, reqId);
+		bool isBlocking = true;
+		if (cb)
+			isBlocking = false;
+
+		BlockingCB slot;
+		if (isBlocking) {
+			cb = NpCallback();
+			cb->callback = [&slot](NpResponse resp) {
+				std::lock_guard<std::mutex> lk(slot.m);
+				slot.response = resp;
+				slot.done = true;
+				slot.cv.notify_one();
+			};
+			cb->timeout = 10*1000*1000;
+		}
+		pending[reqId] = std::move(*cb);
 
 		INFO_LOG(Log::sceNet, "Sending Login Request");
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return (u8)ErrorType::Blocked;
+			return false;
 		}
 
-		auto resp = take_pending_request(reqId);
+		if (isBlocking) {
+			std::unique_lock<std::mutex> lk(slot.m);
+			slot.cv.wait(lk, [&]{ return slot.done; });
+			return slot.response.value;
+		}
+		/*auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
-			return resp.error;
+			return false;
 		//resp.stream = new vec_stream(resp.data, 1);
 
+		DEBUG_LOG(Log::sceNet, "Password reset token has successfully been sent!");*/
+		return true;
+	}
+	bool RPCNAuthAgent::SendResetToken_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError)
+			return false;
+		// resp.stream = new vec_stream(resp.data, 1);
+
 		DEBUG_LOG(Log::sceNet, "Password reset token has successfully been sent!");
-		return 0;
+		return true;
 	}
 
-	int RPCNAuthAgent::ResetPassword(const char* npid, const char* token, const char* password) {
+	bool RPCNAuthAgent::ResetPassword(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb) {
 		Packet packet = Packet();
 		packet.Write(npid);
 		packet.Write((u8)0);
@@ -508,6 +630,22 @@ namespace net {
 
 		auto reqId = generate_uid();
 		packet.Pack(CommandType::ResetPassword, reqId);
+		bool isBlocking = true;
+		if (cb)
+			isBlocking = false;
+
+		BlockingCB slot;
+		if (isBlocking) {
+			cb = NpCallback();
+			cb->callback = [&slot](NpResponse resp) {
+				std::lock_guard<std::mutex> lk(slot.m);
+				slot.response = resp;
+				slot.done = true;
+				slot.cv.notify_one();
+			};
+			cb->timeout = 10*1000*1000;
+		}
+		pending[reqId] = std::move(*cb);
 
 		INFO_LOG(Log::sceNet, "Sending Login Request");
 
@@ -517,19 +655,47 @@ namespace net {
 			return false;
 		}
 
-		auto resp = take_pending_request(reqId);
+		if (isBlocking) {
+			std::unique_lock<std::mutex> lk(slot.m);
+			slot.cv.wait(lk, [&]{ return slot.done; });
+			return slot.response.value;
+		}
+		/*auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return resp.error;
 		//resp.stream = new vec_stream(resp.data, 1);
+		DEBUG_LOG(Log::sceNet, "Password has successfully been reset!");*/
+		return true;
+	}
+	bool RPCNAuthAgent::ResetPassword_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError)
+			return false;
+		//resp.stream = new vec_stream(resp.data, 1);
 		DEBUG_LOG(Log::sceNet, "Password has successfully been reset!");
-		return 0;
+		return true;
 	}
 
-	u64 RPCNAuthAgent::GetNetworkTime() {
+	u64 RPCNAuthAgent::GetNetworkTime(std::optional<NpCallback> cb) {
 		Packet packet = Packet();
 
 		auto reqId = generate_uid();
 		packet.Pack(CommandType::GetNetworkTime, reqId);
+		bool isBlocking = true;
+		if (cb)
+			isBlocking = false;
+
+		BlockingCB slot;
+		if (isBlocking) {
+			cb = NpCallback();
+			cb->callback = [&slot](NpResponse resp) {
+				std::lock_guard<std::mutex> lk(slot.m);
+				slot.response = resp;
+				slot.done = true;
+				slot.cv.notify_one();
+			};
+			cb->timeout = 10*1000*1000;
+		}
+		pending[reqId] = std::move(*cb);
 
 		INFO_LOG(Log::sceNet, "Sending Get Network Time Request");
 
@@ -539,7 +705,12 @@ namespace net {
 			return -1;
 		}
 
-		auto resp = take_pending_request(reqId);
+		if (isBlocking) {
+			std::unique_lock<std::mutex> lk(slot.m);
+			slot.cv.wait(lk, [&]{ return slot.done; });
+			return slot.response.value;
+		}
+		/*auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return -2;
 		resp.stream = new vec_stream(resp.data, 1);
@@ -550,10 +721,25 @@ namespace net {
 			ERROR_LOG(Log::sceNet, "Malformed reply to GetNetworkTime command");
 			return -3;
 		}
+		return tick;*/
+		return 0;
+	}
+	u64 RPCNAuthAgent::GetNetworkTime_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError)
+			return 0;
+		resp.stream = new vec_stream(resp.data, 1);
+
+		u64 tick = resp.stream->get<u64>();
+
+		if (resp.stream->is_error()) {
+			ERROR_LOG(Log::sceNet, "Malformed reply to GetNetworkTime command");
+			resp.error = (u8)ErrorType::Malformed;
+			return 0;
+		}
 		return tick;
 	}
 
-	int RPCNAuthAgent::GetServers(SceNpCommunicationId npTitleId) {
+	int RPCNAuthAgent::GetServers(SceNpCommunicationId npTitleId, std::optional<NpCallback> cb) {
 		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 
 		Packet packet = Packet();
@@ -561,16 +747,37 @@ namespace net {
 
 		auto reqId = generate_uid();
 		packet.Pack(CommandType::GetServerList, reqId);
+		bool isBlocking = true;
+		if (cb)
+			isBlocking = false;
+
+		BlockingCB slot;
+		if (isBlocking) {
+			cb = NpCallback();
+			cb->callback = [&slot](NpResponse resp) {
+				std::lock_guard<std::mutex> lk(slot.m);
+				slot.response = resp;
+				slot.done = true;
+				slot.cv.notify_one();
+			};
+			cb->timeout = 10*1000*1000;
+		}
+		pending[reqId] = std::move(*cb);
 
 		INFO_LOG(Log::sceNet, "Sending Server List Request: %llu", reqId);
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::sceNet, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND;
+			return false;
 		}
 
-		auto resp = take_pending_request(reqId);
+		if (isBlocking) {
+			std::unique_lock<std::mutex> lk(slot.m);
+			slot.cv.wait(lk, [&]{ return slot.done; });
+			return slot.response.value;
+		}
+		/*auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
@@ -596,10 +803,10 @@ namespace net {
 			servers.clear();
 			ERROR_LOG(Log::sceNet, "Malformed reply to GetServerList command");
 			return SCE_NP_MATCHING2_ERROR_CONNECTION_CLOSED_BY_SERVER;
-		}
+		}*/
 		//serversPtr->emplace(1, net::CreateNPAgent(net::NPAgentType::RPCN, 1, "rpcn.revurb.us", 31313, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
 		//serversPtr->emplace(2, net::CreateNPAgent(net::NPAgentType::RPCN, 2, "rpcn.revurb.us", 3657, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
-		return SCE_NP_MATCHING2_OKAY;
+		return true;
 	}
 
 	// async

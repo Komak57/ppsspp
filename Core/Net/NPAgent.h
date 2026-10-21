@@ -491,12 +491,30 @@ namespace net {
 		vec_stream* stream;
 	};
 
+	struct NpResponse {
+		int error;
+		u64 value;
+	};
+
+	struct BlockingCB {
+		std::mutex m;
+		bool done = false;
+		NpResponse response{};
+		std::condition_variable cv;
+	};
+
+	using NpCallbackAddr = std::function<void(NpResponse response)>;
+	struct NpCallback {
+		NpCallbackAddr callback; // void(NpResponse response)
+		u64 timeout; // microseconds
+	};
 	class NPAgent : public HTTPS {
 	public:
 		virtual ~NPAgent() = default;
 
 		// Inits the sockaddr_in.
 		bool Resolve(DNSType type = DNSType::ANY);
+		int Select(fd_set* readFds, fd_set* writeFds, fd_set* exceptFds, timeval* timeout);
 		bool Send(Packet* packet, double timeout, bool* cancelled);
 		int Recv(Packet* packet, bool* cancelled);
 		
@@ -522,10 +540,9 @@ namespace net {
 		virtual bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr);
 		virtual void Disconnect();
 		// NPAuthAgent Functions
-		virtual int Login(const char* npid, const char* token, const char* password);
-		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
-		virtual int GetServers(SceNpCommunicationId npTitleId);
-		virtual u64 GetNetworkTime();
+		virtual bool Login(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb = std::nullopt);
+		virtual int GetServers(SceNpCommunicationId npTitleId, std::optional<NpCallback> cb = std::nullopt);
+		virtual u64 GetNetworkTime(std::optional<NpCallback> cb = std::nullopt);
 
 		// NPAgent Functions
 		virtual int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
@@ -586,9 +603,8 @@ namespace net {
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) override;
 		void Disconnect() override;
-		int Login(const char* npid, const char* token, const char* password) override;
-		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) override;
-		int GetServers(SceNpCommunicationId npTitleId) override;
+		bool Login(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb = std::nullopt) override;
+		int GetServers(SceNpCommunicationId npTitleId, std::optional<NpCallback> cb = std::nullopt) override;
 
 		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) override;
 		int RequestSignalingInfo(std::string npid, u32 conn_id, bool isNetInfo = false) override;
@@ -609,10 +625,12 @@ namespace net {
 
 		bool Connect(int maxTries = 1, double timeout = 10.0f, bool* cancelConnect = nullptr) override;
 		void Disconnect() override;
-		int Login(const char* npid, const char* token, const char* password) override;
-		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) override;
-		int GetServers(SceNpCommunicationId npTitleId) override;
-		u64 GetNetworkTime() override;
+		bool Login(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb = std::nullopt) override;
+		bool Login_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
+		int GetServers(SceNpCommunicationId npTitleId, std::optional<NpCallback> cb = std::nullopt) override;
+		int GetServers_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
+		u64 GetNetworkTime(std::optional<NpCallback> cb = std::nullopt) override;
+		u64 GetNetworkTime_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
 
 		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) override;
 		int GetWorldInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
@@ -654,9 +672,6 @@ namespace net {
 			//std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
 			return std::vector<u8>(buffer.begin(), buffer.end()-1);
 		}
-		// Waits for a response matching request_id
-		// Blocks until the full packet for that request is ready
-		RPCNResponse take_pending_request(u64 request_id);
 	private:
 		void read_loop();
 
@@ -667,7 +682,8 @@ namespace net {
 		std::mutex buffer_mutex;
 		std::condition_variable buffer_cv;
 
-		std::unordered_map<u64, RPCNResponse> responses;
+		std::map<u64, NpCallback> pending;
+		std::atomic<u64> next{1};
 		std::unordered_map<u64, RPCNResponse> notifications;
 	};
 
@@ -682,19 +698,20 @@ namespace net {
 		virtual void Disconnect();
 		virtual NPAgentType GetAuthType() const { return (NPAgentType)g_Config.proInfraServerType; }
 
+		int Select(fd_set* readFds, fd_set* writeFds, fd_set* exceptFds, timeval* timeout);
 		bool Send(Packet* packet, double timeout, bool* cancelled);
 		int Recv(Packet* packet, bool* cancelled);
 
 		//int GetID() { return ID; }
 		//SceNpMatching2ServerInfo GetServerInfo() { return { ID, status }; };
 
-		virtual int Login(const char* npid, const char* token, const char* password);
-		virtual int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email);
-		virtual int ResendToken(const char* npid, const char* password);
-		virtual int SendResetToken(const char* npid, const char* email);
-		virtual int ResetPassword(const char* npid, const char* token, const char* password);
-		virtual u64 GetNetworkTime();
-		virtual int GetServers(SceNpCommunicationId npTitleId);
+		virtual bool Login(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb = std::nullopt);
+		virtual bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email, std::optional<NpCallback> cb);
+		virtual bool ResendToken(const char* npid, const char* password, std::optional<NpCallback> cb = std::nullopt);
+		virtual bool SendResetToken(const char* npid, const char* email, std::optional<NpCallback> cb = std::nullopt);
+		virtual bool ResetPassword(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb = std::nullopt);
+		virtual u64 GetNetworkTime(std::optional<NpCallback> cb = std::nullopt);
+		virtual int GetServers(SceNpCommunicationId npTitleId, std::optional<NpCallback> cb = std::nullopt);
 		virtual int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId);
 
 		// Only to be used for bring-up and debugging.
@@ -746,9 +763,9 @@ namespace net {
 		std::unique_ptr<NPAgent> CreateAgent() override;
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr) override;
 		void Disconnect() override;
-		int Login(const char* npid, const char* token, const char* password) override;
+		bool Login(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb = std::nullopt) override;
 		NPAgentType GetAuthType() const override { return NPAgentType::PSN; }
-		int GetServers(SceNpCommunicationId npTitleId) override;
+		int GetServers(SceNpCommunicationId npTitleId, std::optional<NpCallback> cb = std::nullopt) override;
 	};
 	class RPCNAuthAgent : public NPAuthAgent {
 	public:
@@ -758,13 +775,19 @@ namespace net {
 		bool Connect(int maxTries = 2, double timeout = 20.0f, bool* cancelConnect = nullptr) override;
 		void Disconnect() override;
 		static std::string generate_npid();
-		int Login(const char* npid, const char* token, const char* password) override;
-		int CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) override;
-		int ResendToken(const char* npid, const char* password) override;
-		int SendResetToken(const char* npid, const char* email) override;
-		int ResetPassword(const char* npid, const char* token, const char* password) override;
-		u64 GetNetworkTime() override;
-		int GetServers(SceNpCommunicationId npTitleId) override;
+		bool Login(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb = std::nullopt) override;
+		bool Login_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
+		bool CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email, std::optional<NpCallback> cb) override;
+		bool CreateAccount_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
+		bool ResendToken(const char* npid, const char* password, std::optional<NpCallback> cb = std::nullopt) override;
+		bool ResendToken_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
+		bool SendResetToken(const char* npid, const char* email, std::optional<NpCallback> cb = std::nullopt) override;
+		bool SendResetToken_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
+		bool ResetPassword(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb = std::nullopt) override;
+		bool ResetPassword_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
+		u64 GetNetworkTime(std::optional<NpCallback> cb = std::nullopt) override;
+		u64 GetNetworkTime_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
+		int GetServers(SceNpCommunicationId npTitleId, std::optional<NpCallback> cb = std::nullopt) override;
 		int GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) override;
 		int GetWorldInfo_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp);
 
@@ -780,9 +803,6 @@ namespace net {
 			//std::vector<u8> ret(data, data + COMMUNICATION_ID_SIZE);
 			return std::vector<u8>(buffer.begin(), buffer.end() - 1);
 		}
-		// Waits for a response matching request_id
-		// Blocks until the full packet for that request is ready
-		RPCNResponse take_pending_request(u64 request_id);
 	private:
 		void read_loop();
 
@@ -792,7 +812,7 @@ namespace net {
 		std::mutex buffer_mutex;
 		std::condition_variable buffer_cv;
 
-		std::unordered_map<u64, RPCNResponse> responses;
+		std::map<u64, NpCallback> pending;
 		std::unordered_map<u64, RPCNResponse> notifications;
 	};
 

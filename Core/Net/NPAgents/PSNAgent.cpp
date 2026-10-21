@@ -176,14 +176,11 @@ namespace net {
 		}
 		return false;
 	}
-
-	int PSNAgent::Login(const char* npid, const char* token, const char* password) {
+	
+	bool PSNAgent::Login(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb) {
 		return false;
 	}
 
-	int PSNAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
-		return false;
-	}
 	/*
 			22:37:312 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:185 net::PSNAuthAgent::GetServers - Title ID: NPWR01446_00
 			22:37:312 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:206 net::PSNAuthAgent::GetServers - Agent-FQDN#1 ID: 1
@@ -195,7 +192,7 @@ namespace net {
 			22:37:313 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:229 net::PSNAuthAgent::GetServers - Agent-FQDN#2 Status: alive
 			22:37:313 user_main    I[SCENET]: Util\PSNAuthAgent.cpp:238 net::PSNAuthAgent::GetServers - Agent-FQDN#2 Host: agent-20901.ww.np.matching.playstation.net
 		*/
-	int PSNAgent::GetServers(SceNpCommunicationId npTitleId) {
+	int PSNAgent::GetServers(SceNpCommunicationId npTitleId, std::optional<NpCallback> cb) {
 		Url url("http://static-resource.np.community.playstation.net/np/resource/psp-title/" + std::string(npTitleId.data) + "_00/matching/" + std::string(npTitleId.data) + "_00-matching.xml");
 		http::Client client(&ProcessHostnameWithInfraDNS);
 		bool cancelled = false;

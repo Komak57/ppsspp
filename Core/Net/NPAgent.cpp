@@ -209,6 +209,31 @@ namespace net {
 		connected = false;
 	}
 
+	int NPAgent::Select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout) {
+		if (!connected)
+			return 0;
+			
+		if (readfds) {
+			FD_ZERO(readfds);
+			FD_SET(sock(), readfds);
+		}
+		if (writefds) {
+			FD_ZERO(writefds);
+			FD_SET(sock(), writefds);
+		}
+		if (exceptfds) {
+			FD_ZERO(exceptfds);
+			FD_SET(sock(), exceptfds);
+		}
+		int retval = 0;
+		if (tls.enabled) {
+			retval = select(tls.netCtx.fd + 1, readfds, writefds, exceptfds, timeout);
+		} else {
+			retval = select(sock() + 1, readfds, writefds, exceptfds, timeout);
+		}
+		return retval;
+	}
+
 	bool NPAgent::Send(Packet* packet, double timeout, bool* cancelled) {
 		if (sock() <= 0) {
 			ERROR_LOG(Log::IO, "Send Failed - Invalid Socket");
@@ -374,22 +399,18 @@ namespace net {
 		return received;  // Return HTML Status Code or Error Code
 	}
 
-	int NPAgent::Login(const char* npid, const char* token, const char* password) {
+
+	bool NPAgent::Login(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb) {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
-	int NPAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
-		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
-		return 0;
-	}
-
-	u64 NPAgent::GetNetworkTime() {
+	u64 NPAgent::GetNetworkTime(std::optional<NpCallback> cb) {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 1000000ULL * rtcBaseTime.tv_sec + rtcBaseTime.tv_usec + rtcMagicOffset;
 	}
 
-	int NPAgent::GetServers(SceNpCommunicationId npTitleId) {
+	int NPAgent::GetServers(SceNpCommunicationId npTitleId, std::optional<NpCallback> cb) {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
@@ -472,6 +493,31 @@ namespace net {
 	void NPAuthAgent::Disconnect() {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		connected = false;
+	}
+
+	int NPAuthAgent::Select(fd_set* readfds, fd_set* writefds, fd_set* exceptfds, timeval* timeout) {
+		if (!connected)
+			return 0;
+
+		if (readfds) {
+			FD_ZERO(readfds);
+			FD_SET(sock(), readfds);
+		}
+		if (writefds) {
+			FD_ZERO(writefds);
+			FD_SET(sock(), writefds);
+		}
+		if (exceptfds) {
+			FD_ZERO(exceptfds);
+			FD_SET(sock(), exceptfds);
+		}
+		int retval = 0;
+		if (tls.enabled) {
+			retval = select(tls.netCtx.fd + 1, readfds, writefds, exceptfds, timeout);
+		} else {
+			retval = select(sock() + 1, readfds, writefds, exceptfds, timeout);
+		}
+		return retval;
 	}
 
 	bool NPAuthAgent::Send(Packet* packet, double timeout, bool* cancelled) {
@@ -639,37 +685,37 @@ namespace net {
 		return received;  // Return HTML Status Code or Error Code
 	}
 
-	int NPAuthAgent::Login(const char* npid, const char* token, const char* password) {
+	bool NPAuthAgent::Login(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb) {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
-	int NPAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
+	bool NPAuthAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email, std::optional<NpCallback> cb) {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
-	int NPAuthAgent::ResendToken(const char* npid, const char* password) {
+	bool NPAuthAgent::ResendToken(const char* npid, const char* password, std::optional<NpCallback> cb) {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
-	int NPAuthAgent::SendResetToken(const char* npid, const char* email) {
+	bool NPAuthAgent::SendResetToken(const char* npid, const char* email, std::optional<NpCallback> cb) {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
-	int NPAuthAgent::ResetPassword(const char* npid, const char* token, const char* password) {
+	bool NPAuthAgent::ResetPassword(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb) {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
-	u64 NPAuthAgent::GetNetworkTime() {
+	u64 NPAuthAgent::GetNetworkTime(std::optional<NpCallback> cb) {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}
 
-	int NPAuthAgent::GetServers(SceNpCommunicationId npTitleId) {
+	int NPAuthAgent::GetServers(SceNpCommunicationId npTitleId, std::optional<NpCallback> cb) {
 		WARN_LOG(Log::Matching, "UNIMPLEMENTED");
 		return 0;
 	}

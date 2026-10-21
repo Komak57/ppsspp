@@ -150,7 +150,6 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 	auto err = GetI18NCategory(I18NCat::ERRORS);
 
 	if (request.npSigninStatus == NP_SIGNIN_STATUS_NONE) {
-
 		u64 now = (u64)(time_now_d() * 1000000.0);
 		deltaTime = (time_now_d() - deltaTime);
 		auto di = GetI18NCategory(I18NCat::DIALOG);
@@ -227,37 +226,39 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 							break;
 						}
 					}
-					int ret = server->SendResetToken(tmp.npid.c_str(), tmp.email.c_str());
-					if ((ErrorType)ret != ErrorType::NoError) {
-						switch ((ErrorType)ret) {
-						case ErrorType::Blocked:
-							failMessage = "Server Disconnected before request.";
-							break;
-						case ErrorType::Invalid:
-							failMessage = "The server has no email verification and doesn't support password changes!";
-							break;
-						case ErrorType::DbFail:
-							failMessage = "A database related error happened on the server!";
-							break;
-						case ErrorType::TooSoon:
-							// This specific error does not constitute a failure
-							failMessage = "You can only ask for a token mail once every 24 hours!";
-							break;
-						case ErrorType::EmailFail:
-							failMessage = "The mail couldn't be sent successfully!";
-							break;
-						case ErrorType::LoginError:
-							failMessage = "The username/email pair is invalid!";
-							break;
-						default:
-							failMessage = "Unknown error sending the token. (" + std::to_string(ret) + ")";
-							break;
+					int ret = server->SendResetToken(tmp.npid.c_str(), tmp.email.c_str(), net::NpCallback{ [this](net::NpResponse resp) {
+						if ((ErrorType)resp.error != ErrorType::NoError) {
+							switch ((ErrorType)resp.error) {
+							case ErrorType::Blocked:
+								failMessage = "Server Disconnected before request.";
+								break;
+							case ErrorType::Invalid:
+								failMessage = "The server has no email verification and doesn't support password changes!";
+								break;
+							case ErrorType::DbFail:
+								failMessage = "A database related error happened on the server!";
+								break;
+							case ErrorType::TooSoon:
+								// This specific error does not constitute a failure
+								failMessage = "You can only ask for a token mail once every 24 hours!";
+								break;
+							case ErrorType::EmailFail:
+								failMessage = "The mail couldn't be sent successfully!";
+								break;
+							case ErrorType::LoginError:
+								failMessage = "The username/email pair is invalid!";
+								break;
+							default:
+								failMessage = "Unknown error sending the token. (" + std::to_string(resp.error) + ")";
+								break;
+							}
+							Transition(SigninStage::FAIL);
+						} else {
+							Transition(SigninStage::PASSWORD_TOKEN_FORM);
 						}
-						Transition(SigninStage::FAIL);
-						break;
-					} else {
-						Transition(SigninStage::PASSWORD_TOKEN_FORM);
-					}
+					},
+					10});
+					break;
 				}
 			}
 			if (now - lastTime > NP_RUNNING_DELAY_US * 2 && !transitioning) {
@@ -294,33 +295,33 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 							break;
 						}
 					}
-					int ret = server->ResetPassword(tmp.npid.c_str(), tmp.token.c_str(), tmp.password.c_str());
-					if ((ErrorType)ret != ErrorType::NoError) {
-						switch ((ErrorType)ret) {
-						case ErrorType::Invalid:
-							failMessage = "The server has no email verification and doesn't support password changes!";
-							break;
-						case ErrorType::DbFail:
-							failMessage = "A database related error happened on the server!";
-							break;
-						case ErrorType::TooSoon:
-							failMessage = "You can only reset your password once every 24 hours!";
-							break;
-						case ErrorType::EmailFail:
-							failMessage = "The mail couldn't be sent!";
-							break;
-						case ErrorType::LoginError:
-							failMessage = "The username/password pair is invalid!";
-							break;
-						default:
-							failMessage = "Failed to reset the password. (" + std::to_string(ret) + ")";
-							break;
+					int ret = server->ResetPassword(tmp.npid.c_str(), tmp.token.c_str(), tmp.password.c_str(), net::NpCallback{ [this](net::NpResponse resp) {
+						if ((ErrorType)resp.error != ErrorType::NoError) {
+							switch ((ErrorType)resp.error) {
+							case ErrorType::Invalid:
+								failMessage = "The server has no email verification and doesn't support password changes!";
+								break;
+							case ErrorType::DbFail:
+								failMessage = "A database related error happened on the server!";
+								break;
+							case ErrorType::TooSoon:
+								failMessage = "You can only reset your password once every 24 hours!";
+								break;
+							case ErrorType::EmailFail:
+								failMessage = "The mail couldn't be sent!";
+								break;
+							case ErrorType::LoginError:
+								failMessage = "The username/password pair is invalid!";
+								break;
+							default:
+								failMessage = "Failed to reset the password. (" + std::to_string(resp.error) + ")";
+								break;
+							}
+							Transition(SigninStage::FAIL);
+						} else {
+							Transition(SigninStage::LOGIN_FORM);
 						}
-						Transition(SigninStage::FAIL);
-						break;
-					} else {
-						Transition(SigninStage::LOGIN_FORM);
-					}
+					}, 10});
 				}
 			}
 			if (now - lastTime > NP_RUNNING_DELAY_US * 2 && !transitioning) {
@@ -360,30 +361,30 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 							break;
 						}
 					}
-					int ret = server->CreateAccount(tmp.npid.c_str(), tmp.password.c_str(), tmp.online_name.c_str(), tmp.avatar_url.c_str(), tmp.email.c_str());
-					if ((ErrorType)ret != ErrorType::NoError) {
-						switch ((ErrorType)ret) {
-						case ErrorType::CreationExistingUsername:
-							failMessage = "An account with that username already exists!";
-							break;
-						case ErrorType::CreationBannedEmailProvider:
-							failMessage = "This email provider is unsupported!";
-							break;
-						case ErrorType::CreationExistingEmail:
-							failMessage = "An account with that email already exists!";
-							break;
-						case ErrorType::CreationError:
-							failMessage = "Could not Create Account.";
-							break;
-						default:
-							failMessage = "Could not Create Account. (" + std::to_string(ret) + ")";
-							break;
+					int ret = server->CreateAccount(tmp.npid.c_str(), tmp.password.c_str(), tmp.online_name.c_str(), tmp.avatar_url.c_str(), tmp.email.c_str(), net::NpCallback{ [this](net::NpResponse resp) {
+						if ((ErrorType)resp.error != ErrorType::NoError) {
+							switch ((ErrorType)resp.error) {
+							case ErrorType::CreationExistingUsername:
+								failMessage = "An account with that username already exists!";
+								break;
+							case ErrorType::CreationBannedEmailProvider:
+								failMessage = "This email provider is unsupported!";
+								break;
+							case ErrorType::CreationExistingEmail:
+								failMessage = "An account with that email already exists!";
+								break;
+							case ErrorType::CreationError:
+								failMessage = "Could not Create Account.";
+								break;
+							default:
+								failMessage = "Could not Create Account. (" + std::to_string(resp.error) + ")";
+								break;
+							}
+							Transition(SigninStage::FAIL);
+						} else {
+							Transition(SigninStage::LOGIN_FORM);
 						}
-						Transition(SigninStage::FAIL);
-						break;
-					} else {
-						Transition(SigninStage::LOGIN_FORM);
-					}
+					}, 10});
 				}
 			}
 			if (now - lastTime > NP_RUNNING_DELAY_US * 2 && !transitioning) {
@@ -425,7 +426,7 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 			DrawBanner();
 			DrawIndicator();
 			DrawLogo();
-			DisplayMessage2(di->T("SigninPleaseWait", "Please wait for a moment."));
+			DisplayMessage2(di->T("PleaseWait", "Please wait for a moment."));
 			DisplayButtons(DS_BUTTON_CANCEL, di->T("Cancel"));
 			if (IsButtonPressed(cancelButtonFlag)) {
 				Transition(SigninStage::CANCELLED);
@@ -448,17 +449,39 @@ int PSPNpSigninDialog::Update(int animSpeed) {
 						}
 					}
 					std::string* creds = NpGetLogin();
-					if (server->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str()) != 0) {
-						g_Config.sInfraToken = ""; // Reset the Token to force re-entry
-						failMessage = "Authentication Failed. Retry?";
-						Transition(SigninStage::FAIL);
-						break;
-					}
+					server->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str(), net::NpCallback{ [this](net::NpResponse resp) {
+						if ((ErrorType)resp.error != ErrorType::NoError) {
+							switch ((ErrorType)resp.error) {
+							case ErrorType::LoginError:
+								failMessage = "Login Error";
+								break;
+							case ErrorType::LoginAlreadyLoggedIn:
+								failMessage = "User is already signed in";
+								break;
+							case ErrorType::LoginInvalidUsername:
+								failMessage = "Invalid Login Credentials";
+								break;
+							case ErrorType::LoginInvalidPassword:
+								failMessage = "Invalid Login Credentials";
+								break;
+							case ErrorType::LoginInvalidToken:
+								failMessage = "Invalid Token";
+								break;
+							default:
+								failMessage = "Unable to Log In (" + std::to_string(resp.error) + ")";
+							}
+							g_Config.sInfraToken = ""; // Reset the Token to force re-entry
+							Transition(SigninStage::FAIL);
+						} else {
+							NOTICE_LOG(Log::sceNet, " - Login Successful");
+							Transition(SigninStage::SUCCESS);
+						}
+					}, 10});
 				}
 			}
-			if (now - lastTime > NP_RUNNING_DELAY_US * 2 && !transitioning) {
-				NOTICE_LOG(Log::sceNet, " - Login Successful");
-				Transition(SigninStage::SUCCESS);
+			if (now - lastTime > NP_RUNNING_DELAY_US * 10 && !transitioning) {
+				failMessage = "Could not Login. (Request Timeout)";
+				Transition(SigninStage::FAIL);
 			}
 			break;
 		case SigninStage::SUCCESS:

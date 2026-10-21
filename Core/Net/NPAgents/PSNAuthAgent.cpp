@@ -20,7 +20,7 @@ namespace net {
 		Disconnect();
 	}
 
-	int PSNAuthAgent::Login(const char* titleId, const char* token, const char* password) {
+	bool PSNAuthAgent::Login(const char* titleId, const char* token, const char* password, std::optional<NpCallback> cb) {
 		return false;
 	}
 
@@ -157,7 +157,7 @@ namespace net {
 		return false;
 	}
 
-	int PSNAuthAgent::GetServers(SceNpCommunicationId npTitleId) {
+	int PSNAuthAgent::GetServers(SceNpCommunicationId npTitleId, std::optional<NpCallback> cb) {
 		Url url("http://static-resource.np.community.playstation.net/np/resource/psp-title/" + std::string(npTitleId.data) + "_00/matching/" + std::string(npTitleId.data) + "_00-matching.xml");
 		http::Client client(&ProcessHostnameWithInfraDNS);
 		bool cancelled = false;

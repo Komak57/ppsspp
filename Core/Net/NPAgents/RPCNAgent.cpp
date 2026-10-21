@@ -64,18 +64,7 @@ namespace net {
 		if (ctxId != 0 || reqId != 0)
 			return static_cast<u64>(ctxId) << 32 | static_cast<u64>(reqId);
 
-		static u64 fallback_id = 1; // In case map is empty
-
-		if (responses.empty())
-			return fallback_id++;
-
-		u64 max_key = 0;
-		for (const auto& [key, _] : responses)
-		{
-			if (key > max_key)
-				max_key = key;
-		}
-		return max_key + 1;
+		return next++;
 	}
 
 	void RPCNAgent::start_read_thread() {
@@ -105,31 +94,14 @@ namespace net {
 		}
 	}
 
-	// Blocking wait for a specific request_id
-	RPCNResponse RPCNAgent::take_pending_request(u64 request_id) {
-		std::unique_lock<std::mutex> lock(buffer_mutex);
-		buffer_cv.wait(lock, [&]() {
-			return running && responses.find(request_id) != responses.end();
-		});
-		if (!running) {
-			RPCNResponse ret{};
-			ret.error = (u8)ErrorType::Unsupported;
-			return ret;
-		}
-
-		auto data = std::move(responses[request_id]);
-		responses.erase(request_id);
-		return data;
-	}
-
 	void RPCNAgent::read_loop() {
-		while (running) {
+		while (running && !cancelled) {
 			Packet packet;
 			int ret = Recv(&packet, &cancelled); // Uses NPAuthAgent::Recv
 			if (cancelled)
 				return;
 			if (ret <= 0) {
-					running = false;
+				running = false;
 				break;
 			}
 
@@ -158,6 +130,7 @@ namespace net {
 
 			SceNpMatching2ContextId ctxId = static_cast<u32>(header.uid >> 32);
 			SceNpMatching2RequestId reqId = header.uid & 0xFFFFFFFF;
+			u64 retval = 0;
 
 			std::lock_guard<std::mutex> lock(buffer_mutex);
 			switch ((PacketType)header.request) {
@@ -178,6 +151,7 @@ namespace net {
 							ERROR_LOG(Log::sceNet, "RPCN Read Error 0x0%01X: %s", buf.error, PacketTypeNames[buf.error]);
 					}
 					switch ((CommandType)header.command) {
+					case CommandType::GetServerList: GetServers_Reply(ctxId, reqId, buf); break;
 					case CommandType::GetWorldList: GetWorldInfo_Reply(ctxId, reqId, buf); break;
 					case CommandType::SearchRoom: SearchRoom_Reply(ctxId, reqId, buf); break;
 					case CommandType::CreateRoom: CreateJoinRoom_Reply(ctxId, reqId, buf); break;
@@ -192,7 +166,20 @@ namespace net {
 					case CommandType::SendRoomMessage: SendRoomMessage_Reply(ctxId, reqId, buf); break;
 					case CommandType::SetUserInfo: SetUserInfo_Reply(ctxId, reqId, buf); break;
 					case CommandType::RequestSignalingInfos: RequestSignalingInfo_Reply(ctxId, reqId, buf); break;
-					default: responses[header.uid] = std::move(buf); break; // Response is synchronous
+					case CommandType::Login: retval = Login_Reply(ctxId, reqId, buf); break;
+					case CommandType::GetNetworkTime: retval = GetNetworkTime_Reply(ctxId, reqId, buf); break;
+					default: break; // Response is synchronous
+				}
+
+				if (pending.find(header.uid) != pending.end()) {
+					NOTICE_LOG(Log::sceNet, "Triggering Callback");
+					if (pending[header.uid].callback != nullptr) {
+						NpResponse resp{};
+						resp.error = buf.error;
+						resp.value = retval;
+						pending[header.uid].callback(resp);
+					}
+					pending.erase(header.uid);
 				}
 				break;
 				case PacketType::Notification:
@@ -402,7 +389,7 @@ namespace net {
 		return false;
 	}
 
-	int RPCNAgent::Login(const char* npid, const char* token, const char* password) {
+	bool RPCNAgent::Login(const char* npid, const char* token, const char* password, std::optional<NpCallback> cb) {
 		// npid
 		// password
 		// token
@@ -427,6 +414,22 @@ namespace net {
 
 		auto reqId = generate_uid();
 		packet.Pack(CommandType::Login, reqId);
+		bool isBlocking = true;
+		if (cb)
+			isBlocking = false;
+
+		BlockingCB slot{};
+		if (isBlocking) {
+			cb = NpCallback();
+			cb->callback = [&slot](NpResponse resp) {
+				std::lock_guard<std::mutex> lk(slot.m);
+				slot.response = resp;
+				slot.done = true;
+				slot.cv.notify_one();
+			};
+			cb->timeout = 10*1000*1000;
+		}
+		pending[reqId] = std::move(*cb);
 
 		INFO_LOG(Log::Matching, "Sending Login Request");
 
@@ -436,13 +439,18 @@ namespace net {
 			return false;
 		}
 
+		if (isBlocking) {
+			std::unique_lock<std::mutex> lk(slot.m);
+			slot.cv.wait(lk, [&]{ return slot.done; });
+			return slot.response.value;
+		}
 		/*Packet response = Packet();
 		int ret = Recv(&response);
 		if (ret < 0) {
 			ERROR_LOG(Log::Matching, "Failed to read response -0x%04x", -ret);
 			return false;
 		}*/
-		auto resp = take_pending_request(reqId);
+		/*auto resp = take_pending_request(reqId);
 
 		switch ((ErrorType)resp.error) {
 		case ErrorType::NoError:
@@ -470,54 +478,29 @@ namespace net {
 			std::min<size_t>(127, avatar.length()));
 		user_id.store(resp.stream->get<s64>());
 
-		NpSetNpId(g_Config.sInfraNpId);
+		NpSetNpId(g_Config.sInfraNpId);*/
 
-		return SCE_NP_MATCHING2_OKAY;
-	}
-	int RPCNAgent::CreateAccount(const char* npid, const char* password, const char* online_name, const char* avatar_url, const char* email) {
-		Packet packet = Packet();
-		packet.Write(npid);
-		packet.Write((u8)0);
-		packet.Write(password);
-		packet.Write((u8)0);
-		packet.Write(online_name);
-		packet.Write((u8)0);
-		packet.Write(avatar_url);
-		packet.Write((u8)0);
-		packet.Write(email);
-		packet.Write((u8)0);
-
-		auto reqId = generate_uid();
-		packet.Pack(CommandType::Create, reqId);
-
-		INFO_LOG(Log::Matching, "Sending Registration Request");
-
-		bool flushed = Send(&packet, 5.0, &cancelled);
-		if (!flushed) {
-			ERROR_LOG(Log::Matching, "Unable to Send, returning Empty");
-			return false;
-		}
-		/*Packet response = Packet();
-		int ret = Recv(&response);
-		if (ret < 0) {
-			ERROR_LOG(Log::Matching, "Failed to read response -0x%04x", -ret);
-			return false;
-		}*/
-		auto response = take_pending_request(reqId);
-		if (response.error != (u8)ErrorType::NoError)
-			return response.error;
-
-		/*int i;
-		std::string hexdata = "";
-		for (i = 0; i < response.size(); i++) {
-			char const c = response[i];
-			hexdata += hex_chars[(c & 0xF0) >> 4];
-			hexdata += hex_chars[(c & 0x0F) >> 0];
-		}
-		INFO_LOG(Log::Matching, "NPAgent::Recv('%s')", hexdata.c_str());*/
 		return true;
 	}
-	int RPCNAgent::GetServers(SceNpCommunicationId npTitleId) {
+	bool RPCNAgent::Login_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError)
+			return false;
+		resp.stream = new vec_stream(resp.data, 1);
+
+		auto name = resp.stream->get_string(false);
+		memcpy(&online_name.data, name.c_str(),
+			std::min<size_t>(49, name.length()));
+		auto avatar = resp.stream->get_string(false);
+		memcpy(&avatar_url.data, avatar.c_str(),
+			std::min<size_t>(127, avatar.length()));
+		user_id.store(resp.stream->get<s64>());
+
+		NpSetNpId(g_Config.sInfraNpId);
+
+		return true;
+	}
+
+	int RPCNAgent::GetServers(SceNpCommunicationId npTitleId, std::optional<NpCallback> cb) {
 		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 
 		Packet packet = Packet();
@@ -525,16 +508,38 @@ namespace net {
 
 		auto reqId = generate_uid();
 		packet.Pack(CommandType::GetServerList, reqId);
+		bool isBlocking = true;
+		if (cb)
+			isBlocking = false;
+
+		BlockingCB slot{};
+		if (isBlocking) {
+			cb = {
+				[&slot](NpResponse resp) {
+					std::lock_guard<std::mutex> lk(slot.m);
+					slot.response = resp;
+					slot.done = true;
+					slot.cv.notify_one();
+				}, 
+				10*1000*1000
+			};
+		}
+		pending[reqId] = std::move(*cb);
 
 		INFO_LOG(Log::Matching, "Sending Server List Request: %llu", reqId);
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::Matching, "Unable to Send, returning Empty");
-			return SCE_NP_MATCHING2_ERROR_SERVER_NOT_FOUND;
+			return SCE_NP_MATCHING2_ERROR_CONNECTION_CLOSED_BY_SERVER;
 		}
 
-		auto resp = take_pending_request(reqId);
+		if (isBlocking) {
+			std::unique_lock<std::mutex> lk(slot.m);
+			slot.cv.wait(lk, [&]{ return slot.done; });
+			return slot.response.value;
+		}
+		/*auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return resp.error;
 		resp.stream = new vec_stream(resp.data, 1);
@@ -566,26 +571,83 @@ namespace net {
 			npServer->servers.clear();
 			ERROR_LOG(Log::Matching, "Malformed reply to GetServerList command");
 			return SCE_NP_MATCHING2_ERROR_CONNECTION_CLOSED_BY_SERVER;
-		}
+		}*/
 		//serversPtr->emplace(1, net::CreateNPAgent(net::NPAgentType::RPCN, 1, "rpcn.revurb.us", 31313, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
 		//serversPtr->emplace(2, net::CreateNPAgent(net::NPAgentType::RPCN, 2, "rpcn.revurb.us", 3657, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
 		return SCE_NP_MATCHING2_OKAY;
 	}
-	u64 RPCNAgent::GetNetworkTime() {
+	int RPCNAgent::GetServers_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError)
+			return -resp.error;
+		resp.stream = new vec_stream(resp.data, 1);
+
+		u16 num_servs = resp.stream->get<u16>();
+
+		INFO_LOG(Log::Matching, "%d servers returned", num_servs);
+		selected = nullptr;
+		if (npServer)
+			npServer->servers.clear();
+		for (u16 i = 0; i < num_servs; i++)
+		{
+			NPServerInfo server{};
+			server.nptype = NPAgentType::RPCN;
+			server.id = resp.stream->get<SceNpMatching2ServerId>();
+			//server.num = i+1;
+			server.host = this->host_;
+			server.port = this->port_;
+			server.status = SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE;
+
+			INFO_LOG(Log::Matching, " - ID: %d", server.id);
+			//INFO_LOG(Log::Matching, " - Num: %d", server.num);
+			INFO_LOG(Log::Matching, " - Availability: %d", server.status);
+
+			npServer->servers.push_back(server);
+			//serversPtr->emplace(server_id, net::CreateNPAgent(net::NPAgentType::RPCN, server_id, this->host_, this->port_, SCE_NP_MATCHING2_SERVER_STATUS_AVAILABLE));
+		}
+		if (resp.stream->is_error()) {
+			npServer->servers.clear();
+			ERROR_LOG(Log::Matching, "Malformed reply to GetServerList command");
+			return SCE_NP_MATCHING2_ERROR_CONNECTION_CLOSED_BY_SERVER;
+		}
+		return SCE_NP_MATCHING2_OKAY;
+	}
+
+	u64 RPCNAgent::GetNetworkTime(std::optional<NpCallback> cb) {
 		Packet packet = Packet();
 
 		auto reqId = generate_uid();
 		packet.Pack(CommandType::GetNetworkTime, reqId);
+		bool isBlocking = true;
+		if (cb)
+			isBlocking = false;
+
+		BlockingCB slot{};
+		if (isBlocking) {
+			cb = NpCallback();
+			cb->callback = [&slot](NpResponse resp) {
+				std::lock_guard<std::mutex> lk(slot.m);
+				slot.response = resp;
+				slot.done = true;
+				slot.cv.notify_one();
+			};
+			cb->timeout = 10*1000*1000;
+		}
+		pending[reqId] = std::move(*cb);
 
 		INFO_LOG(Log::Matching, "Sending Get Network Time Request");
 
 		bool flushed = Send(&packet, 5.0, &cancelled);
 		if (!flushed) {
 			ERROR_LOG(Log::Matching, "Unable to Send, returning Empty");
-			return -1;
+			return false;
 		}
 
-		auto resp = take_pending_request(reqId);
+		if (isBlocking) {
+			std::unique_lock<std::mutex> lk(slot.m);
+			slot.cv.wait(lk, [&]{ return slot.done; });
+			return slot.response.value;
+		}
+		/*auto resp = take_pending_request(reqId);
 		if (resp.error != (u8)ErrorType::NoError)
 			return -2;
 		resp.stream = new vec_stream(resp.data, 1);
@@ -596,8 +658,24 @@ namespace net {
 			ERROR_LOG(Log::Matching, "Malformed reply to GetNetworkTime command");
 			return -3;
 		}
+		return tick;*/
+		return true;
+	}
+	u64 RPCNAgent::GetNetworkTime_Reply(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, RPCNResponse resp) {
+		if (resp.error != (u8)ErrorType::NoError)
+			return 0;
+		resp.stream = new vec_stream(resp.data, 1);
+
+		u64 tick = resp.stream->get<u64>();
+
+		if (resp.stream->is_error()) {
+			ERROR_LOG(Log::sceNet, "Malformed reply to GetNetworkTime command");
+			resp.error = (u8)ErrorType::Malformed;
+			return 0;
+		}
 		return tick;
 	}
+
 	int RPCNAgent::GetWorldInfo(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId reqId, int server_id, SceNpCommunicationId npTitleId) {
 		memcpy(&this->commId, &npTitleId, sizeof(SceNpCommunicationId));
 
