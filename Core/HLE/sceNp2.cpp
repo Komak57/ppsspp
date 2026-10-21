@@ -160,7 +160,7 @@ int InvokeAsyncCallbacks() {
 	npMatching2Events.pop_front();
 
 	if (!Memory::IsValidAddress(event.handler.cb.ptr)) {
-		WARN_LOG(Log::sceNp2, "NpMatching2ProcessEvents - Nothing to Callback to for %s", EventToString(event.event_type).c_str());
+		WARN_LOG(Log::sceNp2, "InvokeAsyncCallbacks - Nothing to Callback to for %s", EventToString(event.event_type).c_str());
 		return 0;
 	}
 	switch (event.handler.event_type) {
@@ -562,60 +562,6 @@ int notifySignalingHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMembe
 
 	__NpMatching2WakeThread();
 	return 0;
-}
-
-/* Event Processor
- * @note There is some complex logging in here, but it just validates the callback address and executes
- * @note This is triggered from sceNet
- */
-bool NpMatching2ProcessEvents() {
-	// if (npMatching2Events.empty()) {
-	// 	return false;
-	// }
-
-	// // Consume latest event
-	// auto& event = npMatching2Events.front();
-	// npMatching2Events.pop_front();
-
-
-	// if (!Memory::IsValidAddress(event.handler.cb.ptr)) {
-	// 	WARN_LOG(Log::sceNp2, "NpMatching2ProcessEvents - Nothing to Callback to for %s", EventToString(event.event_type).c_str());
-	// 	return false;
-	// }
-	// switch (event.handler.event_type) {
-	// 	// combine the callback parameters with the request based on the event type
-	// case SCE_NP_MATCHING2_REQUEST_EVENT:
-	// 	NOTICE_LOG(Log::sceNp2, "SceNpMatching2RequestCallback - %s_%08x(ctxId: %d, reqId: %d, event: %d, error: %08x, dataPtr: %08x, cbArgPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
-	// 		event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]);
-	// 	break;
-	// case SCE_NP_MATCHING2_ROOM_EVENT:
-	// 	NOTICE_LOG(Log::sceNp2, "SceNpMatching2RoomEventCallback - %s_%08x(ctxId: %d, roomId: %llu, memberId: %d, requestEvent: %08x, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
-	// 		event.args[0], ((u64)event.args[1] | (u64)event.args[2] >> 32), event.args[3], event.args[4], event.args[5], event.args[6]);
-	// 	break;
-	// case SCE_NP_MATCHING2_ROOM_MSG_EVENT:
-	// 	NOTICE_LOG(Log::sceNp2, "SceNpMatching2RoomMessageCallback - %s_%08x(ctxId: %d, roomId: %llu, param_4: %d, memberId: %d, event: %08x, dataPtr: %08x, argPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
-	// 		event.args[0], ((u64)event.args[1] | (u64)event.args[2] >> 32), event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
-	// 	break;
-	// case SCE_NP_MATCHING2_LOBBY_EVENT:
-	// 	ERROR_LOG(Log::sceNp2, "UNIMPLEMENTED SceNpMatching2LobbyEventCallback - %s_%08x(ctxId: %d)", EventToString(event.event_type).c_str(), event.handler.cb.ptr, event.args[0]);
-	// 	return false;
-	// case SCE_NP_MATCHING2_LOBBY_MSG_EVENT:
-	// 	ERROR_LOG(Log::sceNp2, "UNIMPLEMENTED SceNpMatching2LobbyMessageCallback - %s_%08x(ctxId: %d)", EventToString(event.event_type).c_str(), event.handler.cb.ptr, event.args[0]);
-	// 	return false;
-	// case SCE_NP_MATCHING2_SIGNALING_EVENT:
-	// 	NOTICE_LOG(Log::sceNp2, "SceNpMatching2SignalingCallback - %s_%08x(ctxId: %d, roomId: %llu, conn_state: %d, memberId: %d, event: %08x, error_code: %08x, cbArgsPtr: %08x)", EventToString(event.event_type).c_str(), event.handler.cb.ptr,
-	// 		event.args[0], ((u64)event.args[1] | (u64)event.args[2] >> 32), event.args[3], event.args[4], event.args[5], event.args[6], event.args[7]);
-	// 	break;
-	// default:
-	// 	ERROR_LOG(Log::sceNp2, "UNHANDLED Callback Type %d - FUN_%08x(ctxId: %d)", event.event_type, event.handler.cb.ptr, event.args[0]);
-	// 	_dbg_assert_(false);
-	// 	return false;
-	// }
-	// //DEBUG_LOG(Log::sceNp2, "NpMatching2Callback [HandlerID=%i][EventID=%04x][State=%04x][ArgsPtr=%08x]", it->first, event, stat, event.handler.argument);
-	// if (Memory::IsValidAddress(event.handler.cb.ptr))
-	// 	hleEnqueueCall(event.handler.cb.ptr, event.argc, event.args);
-	// return true;
-	return false;
 }
 
 static inline u32 AllocUser(u32 size, bool fromTop, const char* name) {

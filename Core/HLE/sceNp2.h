@@ -143,7 +143,6 @@ int notifyRequestHandler(SceNpMatching2ContextId ctxId, SceNpMatching2RequestId 
 int notifyRoomMessageHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, RPCNMatching2RequestEvent requestEvent, u32 dataPtr);
 int notifyRoomEventHandler(SceNpMatching2RoomId roomId, SceNpMatching2RoomMemberId memberId, SceNpMatching2Event event, u32 dataPtr);
 int notifySignalingHandler(SceNpMatching2RoomId room_id, SceNpMatching2RoomMemberId memberId, u32 conn_state, SceNpMatching2Event event, s32 errorCode);
-bool NpMatching2ProcessEvents();
 
 void __Np2Init();
 void __Np2Shutdown();

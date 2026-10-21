@@ -185,7 +185,8 @@ void PSPNetconfDialog::UpdateSelectConnection() {
 		const float y = listY + row * rowH;
 		std::string label;
 		if (row == 0) {
-			label = di->T("[New Connection]");
+			label = di->T("New Connection");
+			label = "[" + label + "]";
 		} else {
 			const NetApctlConfig *conf = NetApctlGetConf(row);  // row index == confId
 			label = conf ? conf->cnf_name : "?";

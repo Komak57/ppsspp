@@ -728,7 +728,7 @@ static int sceNpManagerSigninUpdateGetStatus() {
 	}
 
 	std::string* creds = NpGetLogin();
-	int ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str());
+	int ret = npServer->Login(creds[0].c_str(), creds[2].c_str(), creds[1].c_str(), std::nullopt);
 
 	/* 0 == Network Busy
 	*  1 == Network Busy

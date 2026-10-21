@@ -53,7 +53,6 @@
 #include "Core/HLE/sceNet.h"
 #include "Core/HLE/sceNetApctl.h"
 #include "Core/HLE/sceNp.h"
-#include "Core/HLE/sceNp2.h"
 #include "Core/HLE/sceNetInet.h"
 #include "Core/HLE/sceNetResolver.h"
 #include "Core/HLE/NetAdhocCommon.h"
@@ -845,7 +844,6 @@ void __NetApctlCallbacks()
 {
 	std::lock_guard<std::recursive_mutex> apctlGuard(apctlEvtMtx);
 	std::lock_guard<std::recursive_mutex> npAuthGuard(npAuthEvtMtx);
-	std::lock_guard<std::recursive_mutex> npMatching2Guard(npMatching2EvtMtx);
 	hleSkipDeadbeef();
 	int delayus = 10000;
 
@@ -853,12 +851,6 @@ void __NetApctlCallbacks()
 	if (NpAuthProcessEvents()) {
 		delayus = (adhocEventDelay + adhocExtraDelay);
 	}
-
-	// NpMatching2 callbacks are processed in the SceNpMatching2 thread
-	// Temporarily borrowing APctl thread for NpMatching2 callbacks for testing purpose
-	// if (NpMatching2ProcessEvents()) {
-	// 	delayus = (adhocEventDelay + adhocExtraDelay);
-	// }
 
 	// How AP works probably like this: Game use sceNetApctl function -> sceNetApctl let the hardware know and do their's thing and have a new State -> Let the game know the resulting State through Event on their handler
 	if (!apctlEvents.empty()) {
@@ -1820,7 +1812,7 @@ int sceNetApctlConnect(int confId) {
     int err = hleCall(sceUtility, int, sceUtilityCheckNetParam, confId);      		// profile must EXIST in the registry
     if (err < 0) { return hleLogError(Log::sceNet, err); }  // netparam error returned DIRECTLY
 
-	// Is this confId is the index to the scanning's result data or sceNetApctlGetBSSDescIDListUser result?
+	// Is this confId the index to the scanning's result data or sceNetApctlGetBSSDescIDListUser result?
     netApctlInfoId = confId;						// mailbox global
     // sceKernelSetEventFlag(g_apctlEvf, 1);		// wake the apctl thread
 	
@@ -1830,21 +1822,6 @@ int sceNetApctlConnect(int confId) {
 	}
 	__UpdateApctlHandlers(0, PSP_NET_APCTL_STATE_JOINING, PSP_NET_APCTL_EVENT_CONNECT_REQUEST, 0);
 
-	// if (!g_Config.bEnableWlan)
-	// 	return hleLogError(Log::sceNet, SCE_NET_APCTL_ERROR_WLAN_SWITCH_OFF);
-
-	// if (netApctlState != PSP_NET_APCTL_STATE_DISCONNECTED)
-	// 	return hleLogError(Log::sceNet, SCE_NET_APCTL_ERROR_NOT_DISCONNECTED);
-
-	// netApctlInfoId = confId;
-
-
-	// if (netApctlState == PSP_NET_APCTL_STATE_DISCONNECTED) {
-	// 	__UpdateApctlHandlers(0, PSP_NET_APCTL_STATE_JOINING, PSP_NET_APCTL_EVENT_CONNECT_REQUEST, 0);
-	// }
-
-	// hleDelayResult(0, "give time to init/cleanup", adhocEventDelayMS * 1000);
-	// TODO: Blocks current thread and wait for a state change to prevent user-triggered connection attempt from causing events to piles up
 	return hleLogInfo(Log::sceNet, 0, "Connect(%i) = %i", confId, ret);
 }
 
