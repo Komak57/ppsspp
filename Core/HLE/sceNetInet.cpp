@@ -109,7 +109,11 @@ static const int NETINET_RESUME_POLL_US = 200;
 // the idle 200us only on EWOULDBLOCK restores that throttle while keeping data
 // delivery immediate (50us), so packet ordering is unaffected. Tunable: raise
 // NETINET_IDLE_POLL_US if a weak device still storms.
-static const int NETINET_OP_PACING_US = 50;
+#ifdef DEBUG
+static const int NETINET_OP_PACING_US = 100;
+#else
+static const int NETINET_OP_PACING_US = 33;
+#endif
 static const int NETINET_IDLE_POLL_US = 200;
 
 // Sentinel a park op's run() returns to mean "made progress but not done, keep
