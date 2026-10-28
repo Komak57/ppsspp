@@ -1194,7 +1194,7 @@ namespace net {
             // Register the peer DOWN into sceNetInet's session table so its socket
             // layer routes traffic to this address as P2P - without sceNetInet ever
             // knowing the signaling layer exists.
-            RegisterSessionPeer(si->addr, si->port);
+            RegisterSessionPeer(si->addr, htons(si->port));
 
             notifySignalingHandler(si->room_id, si->member_id, si->conn_status, SCE_NP_MATCHING2_SIGNALING_EVENT_Established, error_code);
 

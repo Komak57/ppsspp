@@ -109,11 +109,7 @@ static const int NETINET_RESUME_POLL_US = 200;
 // the idle 200us only on EWOULDBLOCK restores that throttle while keeping data
 // delivery immediate (50us), so packet ordering is unaffected. Tunable: raise
 // NETINET_IDLE_POLL_US if a weak device still storms.
-#ifdef DEBUG
 static const int NETINET_OP_PACING_US = 100;
-#else
-static const int NETINET_OP_PACING_US = 33;
-#endif
 static const int NETINET_IDLE_POLL_US = 200;
 
 // Sentinel a park op's run() returns to mean "made progress but not done, keep
@@ -446,6 +442,7 @@ bool netInetInited = false;
 static std::mutex g_sessionPeerLock;
 static std::unordered_map<u32, u16> g_sessionPeers;  // addr -> port (0 = any)
 
+// Register peer using network-order port
 void RegisterSessionPeer(u32 addr, u16 port) {
 	if (!addr)
 		return;
@@ -463,6 +460,15 @@ bool IsSessionPeer(u32 addr) {
 		return false;
 	std::lock_guard<std::mutex> guard(g_sessionPeerLock);
 	return g_sessionPeers.find(addr) != g_sessionPeers.end();
+}
+
+// Returns network-order port, or 0 if peer doesn't exist
+u16 GetSessionPeerPort(u32 addr) {
+	if (!addr)
+		return 0;
+	std::lock_guard<std::mutex> guard(g_sessionPeerLock);
+	auto it = g_sessionPeers.find(addr);
+	return it != g_sessionPeers.end() ? it->second : 0;
 }
 
 void __NetInetShutdown()

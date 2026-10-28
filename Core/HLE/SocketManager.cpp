@@ -346,10 +346,17 @@ void SocketManager::RetransmitSweep() {
 				flags.c_str(), inet_ntoa(vpkt.src.virt.addr), ntohs(vpkt.src.virt.port), ntohs(vpkt.src.virt.vport),
 				ip2str(vpkt.dst.virt.addr).c_str(), ntohs(vpkt.dst.virt.port), ntohs(vpkt.dst.virt.vport));
 
+			if (!IsSessionPeer(vpkt.dst.host.sin_addr.s_addr)) {
+				WARN_LOG(Log::sceNet, "NetworkDemultiplexer: Peer %s Not Found, Nowhere to send", ip2str(vpkt.dst.host.sin_addr).c_str());
+				pkt.last_sent_us = now_us;
+				pkt.sent_count++;
+				return false;
+			}
+
 			auto [_len, _data] = vpkt.Pack(vpkt.dst);
 			// Physical delivery goes to the peer's real UDP endpoint (the game vport).
 			sockaddr_in phys = vpkt.dst.host;
-			phys.sin_port = vpkt.dst.virt.vport;
+			phys.sin_port = GetSessionPeerPort(vpkt.dst.host.sin_addr.s_addr);
 			int ret = ::sendto(p2p_sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
 			if (ret < 0)
 				ERROR_LOG(Log::sceNet, "NetworkDemultiplexer: retransmit sendto failed");
@@ -1287,8 +1294,13 @@ int InetSocket::Send_Reliable(const char* buf, int len, int flags, const SceNetI
 	// Flip port/vport for physical delivery: the datagram must reach the peer's
 	// REAL UDP endpoint - their DCCP master, i.e. the game vport (3658) - while the
 	// game port (12000/ephemeral) rides in the vport header + ext header for routing.
+	if (!IsSessionPeer(dest.host.sin_addr.s_addr)) {
+		WARN_LOG(Log::sceNet, "send::RELIABLE: Peer %s Not Found, Nowhere to send", ip2str(dest.host.sin_addr).c_str());
+		tx_seq++;
+		return (int)len;
+	}
 	sockaddr_in phys = dest.host;
-	phys.sin_port = dest.virt.vport;
+	phys.sin_port = GetSessionPeerPort(dest.host.sin_addr.s_addr);
 	int ret = ::sendto(p2p_sock, _data.get(), _len, 0, (const sockaddr*)&phys, sizeof(sockaddr_in));
 	if (ret < 0)
 		return hleLogError(Log::sceNet, ret, "send::RELIABLE: Failed to send to peer");
@@ -1512,8 +1524,13 @@ int InetSocket::Shutdown_Reliable(int how) {
 	// Physical delivery goes to the peer's real UDP endpoint (the game vport, 3658) - dst.host's
 	// sin_port aliases dst.virt.port (the destination GAME port, e.g. 12000), which nothing is
 	// physically listening on. Mirrors Send_Reliable's phys construction.
+	if (!IsSessionPeer(dst.host.sin_addr.s_addr)) {
+		WARN_LOG(Log::sceNet, "send::RELIABLE: Peer %s Not Found, Nowhere to send", ip2str(dst.host.sin_addr).c_str());
+		tx_seq++;
+		return 0;
+	}
 	sockaddr_in phys = dst.host;
-	phys.sin_port = dst.virt.vport;
+	phys.sin_port = GetSessionPeerPort(dst.host.sin_addr.s_addr);
 	int ret = ::sendto(p2p_sock, _data.get(), _len, 0, (struct sockaddr*)&phys, sizeof(sockaddr_in));
 	if (ret < 0)
 		ERROR_LOG(Log::sceNet, "shutdown::RELIABLE: Failed to send FIN");

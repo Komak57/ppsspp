@@ -62,6 +62,7 @@ void Register_sceNetInet();
 void RegisterSessionPeer(u32 addr, u16 port);
 void UnregisterSessionPeer(u32 addr);
 bool IsSessionPeer(u32 addr);
+u16 GetSessionPeerPort(u32 addr);
 
 void __NetInetShutdown();
 // CoreTiming event used to apply async-op results on the emu thread (worker
